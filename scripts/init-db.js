@@ -138,7 +138,7 @@ async function migrateDatabase(connStr, dbName) {
         razorpay_signature VARCHAR(255),
         shipment_id VARCHAR(255),
         awb_number VARCHAR(255),
-        courier_name VARCHAR(255) DEFAULT 'Speed Post / Express',
+        courier_name VARCHAR(255) DEFAULT 'ST Courier Express',
         tracking_url TEXT,
         estimated_delivery VARCHAR(100),
         invoice_number VARCHAR(255),

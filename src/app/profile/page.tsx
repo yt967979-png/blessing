@@ -446,7 +446,7 @@ export default function ProfilePage() {
                           </div>
                           <div className="text-emerald-600 flex items-center gap-1 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
                             <Truck className="w-3.5 h-3.5" />
-                            <span>{o.courierStatus || 'Shipped via Shiprocket'}</span>
+                            <span>{o.courierStatus || 'Shipped via ST Courier Express'}</span>
                           </div>
                         </div>
 

@@ -198,7 +198,7 @@ export default function CartPage() {
                   </div>
                   <div className="flex items-center gap-2 text-slate-600 font-medium">
                     <Truck className="w-4 h-4 text-blue-600" />
-                    <span>Express Dispatch via Shiprocket</span>
+                    <span>Express Dispatch via ST Courier</span>
                   </div>
                 </div>
               </div>

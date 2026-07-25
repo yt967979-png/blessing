@@ -594,7 +594,7 @@ export default function AdminPage() {
                         <Truck className="w-4 h-4 text-amber-400 flex-shrink-0" />
                         <input
                           type="text"
-                          placeholder="Tracking Number (e.g. TN-POST-984210)"
+                          placeholder="ST Courier Docket No (e.g. STC-TN-984210)"
                           value={shiprocketAwbInput[o.orderId] || ''}
                           onChange={(e) =>
                             setShiprocketAwbInput({
