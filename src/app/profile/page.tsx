@@ -82,21 +82,32 @@ export default function ProfilePage() {
     localStorage.setItem('bpg_user_addresses', JSON.stringify(updatedList));
   };
 
-  // Save updated user profile info dynamically
-  const handleSaveProfile = (e: React.FormEvent) => {
+  // Save updated user profile info to Railway PostgreSQL
+  const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
 
-    const updatedUser = {
-      ...user,
-      name,
-      email,
-      phone,
-    };
-
-    loginUser(updatedUser);
-    setIsEditing(false);
-    showToast('✓ Profile details updated successfully!');
+    try {
+      const res = await fetch('/api/auth', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, name, phone }),
+      });
+      const data = await res.json();
+      if (data.error) {
+        showToast('⚠️ ' + data.error);
+        return;
+      }
+      // Update local session with DB-returned data
+      loginUser({ ...user, name: data.name || name, phone: data.phone || phone }, [], [], []);
+      setIsEditing(false);
+      showToast('✓ Profile saved to Database successfully!');
+    } catch {
+      // Fallback: save locally if offline
+      loginUser({ ...user, name, phone }, [], [], []);
+      setIsEditing(false);
+      showToast('✓ Profile updated (offline).');
+    }
   };
 
   // Dynamic Add Address

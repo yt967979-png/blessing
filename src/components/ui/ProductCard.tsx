@@ -8,7 +8,7 @@ import { Product } from '@/lib/products';
 import { useStore } from '@/context/StoreContext';
 
 export const ProductCard = ({ product }: { product: Product }) => {
-  const { wishlist, toggleWishlist, addToCart, setQuickViewProduct, setIsCheckoutOpen } = useStore();
+  const { wishlist, toggleWishlist, addToCart, setQuickViewProduct, setIsCheckoutOpen, user, setIsAuthOpen } = useStore();
   const [isHovered, setIsHovered] = useState(false);
 
   const isWishlisted = wishlist.includes(product.id);
@@ -126,7 +126,10 @@ export const ProductCard = ({ product }: { product: Product }) => {
       {/* Action Buttons: Add to Cart & Buy Now */}
       <div className="grid grid-cols-2 gap-1.5">
         <button
-          onClick={() => addToCart(product)}
+          onClick={() => {
+            if (!user) { setIsAuthOpen(true); return; }
+            addToCart(product);
+          }}
           className="bg-[#0044AA] hover:bg-[#001B3A] text-white font-extrabold text-[11px] py-2.5 rounded-xl flex items-center justify-center gap-1 transition-colors uppercase tracking-wider shadow-xs cursor-pointer"
         >
           <ShoppingBag className="w-3.5 h-3.5 text-amber-400" />
@@ -135,6 +138,7 @@ export const ProductCard = ({ product }: { product: Product }) => {
 
         <button
           onClick={() => {
+            if (!user) { setIsAuthOpen(true); return; }
             addToCart(product);
             setIsCheckoutOpen(true);
           }}

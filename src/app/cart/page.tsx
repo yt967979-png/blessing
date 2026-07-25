@@ -12,7 +12,7 @@ import { CartDrawer } from '@/components/cart/CartDrawer';
 import { Modals } from '@/components/modals/Modals';
 
 export default function CartPage() {
-  const { cart, updateQty, removeFromCart, cartTotal, setIsCheckoutOpen } = useStore();
+  const { cart, updateQty, removeFromCart, cartTotal, setIsCheckoutOpen, user, setIsAuthOpen } = useStore();
   const [pincode, setPincode] = useState('600012');
   const [pincodeChecked, setPincodeChecked] = useState(true);
 
@@ -185,7 +185,10 @@ export default function CartPage() {
                 )}
 
                 <button
-                  onClick={() => setIsCheckoutOpen(true)}
+                  onClick={() => {
+                    if (!user) { setIsAuthOpen(true); return; }
+                    setIsCheckoutOpen(true);
+                  }}
                   className="w-full bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-[#001B3A] font-extrabold text-xs py-3.5 rounded-xl shadow-md uppercase tracking-wider transition-colors"
                 >
                   PROCEED TO CHECKOUT

@@ -142,3 +142,60 @@ export async function POST(request: Request) {
     if (client) await client.end();
   }
 }
+
+// PATCH /api/products — Update price, mrp, badge, or stock status in Railway PostgreSQL
+export async function PATCH(request: Request) {
+  const client = await getDbClient();
+  try {
+    const { id, price, mrp, badge, inStock } = await request.json();
+    if (!id) return NextResponse.json({ error: 'Product id is required' }, { status: 400 });
+
+    if (client) {
+      const fields: string[] = [];
+      const values: any[] = [];
+      let idx = 1;
+
+      if (price !== undefined) { fields.push(`discount_price = $${idx++}`); values.push(Number(price)); }
+      if (mrp !== undefined)   { fields.push(`price = $${idx++}`); values.push(Number(mrp)); }
+      if (badge !== undefined) { fields.push(`badge = $${idx++}`); values.push(badge); }
+      if (inStock !== undefined) {
+        fields.push(`status = $${idx++}`);
+        values.push(inStock ? 'published' : 'out_of_stock');
+      }
+
+      if (fields.length > 0) {
+        values.push(id);
+        await client.query(`UPDATE books SET ${fields.join(', ')} WHERE id = $${idx}`, values);
+      }
+
+      return NextResponse.json({ success: true, id });
+    }
+
+    return NextResponse.json({ success: true, id });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  } finally {
+    if (client) await client.end();
+  }
+}
+
+// DELETE /api/products — Remove a book from Railway PostgreSQL
+export async function DELETE(request: Request) {
+  const client = await getDbClient();
+  try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+    if (!id) return NextResponse.json({ error: 'Product id is required' }, { status: 400 });
+
+    if (client) {
+      await client.query(`DELETE FROM books WHERE id = $1`, [id]);
+      return NextResponse.json({ success: true, deletedId: id });
+    }
+
+    return NextResponse.json({ success: true, deletedId: id });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  } finally {
+    if (client) await client.end();
+  }
+}

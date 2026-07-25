@@ -166,3 +166,32 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
+
+// PATCH /api/auth — Update user profile (name, phone) in Railway PostgreSQL
+export async function PATCH(request: Request) {
+  try {
+    const { userId, name, phone } = await request.json();
+    if (!userId) return NextResponse.json({ error: 'userId is required' }, { status: 400 });
+
+    const client = await getDbClient();
+    if (!client) {
+      return NextResponse.json({ name, phone });
+    }
+
+    try {
+      await client.query(
+        `UPDATE users SET name = COALESCE($1, name), phone = COALESCE($2, phone) WHERE id = $3`,
+        [name || null, phone || null, String(userId)]
+      );
+      const res = await client.query(`SELECT name, phone FROM users WHERE id = $1`, [String(userId)]);
+      await client.end();
+      const updated = res.rows[0] || {};
+      return NextResponse.json({ name: updated.name || name, phone: updated.phone || phone });
+    } catch (err: any) {
+      if (client) await client.end();
+      return NextResponse.json({ error: err.message }, { status: 500 });
+    }
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}

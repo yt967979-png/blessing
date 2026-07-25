@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, NextRequest } from 'next/server';
 import { getDbClient } from '@/lib/db';
 
 export async function GET(request: Request) {
@@ -130,6 +130,40 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({ orderId: orderNumber, totalAmount, status: 'Packed & Dispatched' }, { status: 201 });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  } finally {
+    if (client) await client.end();
+  }
+}
+
+// PATCH /api/orders — Admin updates order status + AWB docket number
+export async function PATCH(request: NextRequest) {
+  let client: any = null;
+  try {
+    const { orderId, status, awbNumber } = await request.json();
+    if (!orderId || !status) {
+      return NextResponse.json({ error: 'orderId and status are required' }, { status: 400 });
+    }
+
+    const db = await import('@/lib/db');
+    client = await db.getDbClient();
+
+    await client.query(
+      `UPDATE orders SET status = $1, awb_number = COALESCE($2, awb_number), updated_at = NOW() WHERE order_number = $3 OR id = $3`,
+      [status, awbNumber || null, orderId]
+    );
+
+    // Add timeline event
+    const timelineId = `tl-${Date.now()}`;
+    try {
+      await client.query(
+        `INSERT INTO order_timeline (id, order_id, status, remarks) VALUES ($1, (SELECT id FROM orders WHERE order_number = $2 OR id::text = $2 LIMIT 1), $3, $4)`,
+        [timelineId, orderId, status, `Status updated by admin to: ${status}`]
+      );
+    } catch (_) {}
+
+    return NextResponse.json({ success: true, orderId, status });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   } finally {
