@@ -26,14 +26,19 @@ export const AnnouncementBar = () => {
           </span>
         </div>
         <div className="flex items-center gap-4 ml-auto font-medium">
-          <button className="flex items-center gap-1 hover:text-amber-400 transition-colors">
+          <a
+            href="https://wa.me/919840418228?text=Hello%20Blessing%20Power%20Guide%20Support"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1 hover:text-amber-400 transition-colors cursor-pointer"
+          >
             <HelpCircle className="w-3.5 h-3.5" />
             <span>Help</span>
-          </button>
+          </a>
           <span className="text-slate-700">|</span>
           <button
             onClick={() => setIsTrackOpen(true)}
-            className="flex items-center gap-1 hover:text-amber-400 transition-colors"
+            className="flex items-center gap-1 hover:text-amber-400 transition-colors cursor-pointer"
           >
             <MapPin className="w-3.5 h-3.5" />
             <span>Track Order</span>
@@ -50,7 +55,7 @@ export const AnnouncementBar = () => {
           ) : (
             <button
               onClick={() => setIsAuthOpen(true)}
-              className="flex items-center gap-1 hover:text-amber-400 transition-colors"
+              className="flex items-center gap-1 hover:text-amber-400 transition-colors cursor-pointer"
             >
               <User className="w-3.5 h-3.5" />
               <span>Login / Register</span>

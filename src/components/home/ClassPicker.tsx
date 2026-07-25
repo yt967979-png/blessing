@@ -7,8 +7,16 @@ import { useStore } from '@/context/StoreContext';
 export const ClassPicker = () => {
   const { selectedClass, setSelectedClass, setSelectedCategory } = useStore();
 
+  const handleSelectClass = (cls: string) => {
+    setSelectedClass(cls);
+    setSelectedCategory('all');
+
+    const elem = document.getElementById('products');
+    if (elem) elem.scrollIntoView({ behavior: 'smooth' });
+  };
+
   return (
-    <section className="py-10 bg-slate-50">
+    <section className="py-10 bg-slate-50 border-t border-slate-200">
       <div className="max-w-7xl mx-auto px-4">
         <div className="text-center mb-8">
           <h2 className="font-heading font-extrabold text-2xl md:text-3xl text-[#001B3A] uppercase tracking-wide inline-flex items-center gap-4">
@@ -24,11 +32,8 @@ export const ClassPicker = () => {
             return (
               <button
                 key={cls}
-                onClick={() => {
-                  setSelectedClass(cls);
-                  setSelectedCategory('all');
-                }}
-                className={`p-5 rounded-xl border-2 text-center transition-all duration-200 ${
+                onClick={() => handleSelectClass(cls)}
+                className={`p-5 rounded-xl border-2 text-center transition-all duration-200 cursor-pointer ${
                   CLASS_COLORS[cls]
                 } ${
                   isSelected

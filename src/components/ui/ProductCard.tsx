@@ -44,7 +44,7 @@ export const ProductCard = ({ product }: { product: Product }) => {
           e.stopPropagation();
           toggleWishlist(product.id);
         }}
-        className="absolute top-3 right-3 z-10 w-8 h-8 rounded-full bg-white/95 backdrop-blur-xs border border-slate-200 flex items-center justify-center shadow-xs hover:bg-red-50 hover:border-red-400 transition-colors"
+        className="absolute top-3 right-3 z-10 w-8 h-8 rounded-full bg-white/95 backdrop-blur-xs border border-slate-200 flex items-center justify-center shadow-xs hover:bg-red-50 hover:border-red-400 transition-colors cursor-pointer"
       >
         <Heart
           className={`w-4 h-4 ${
@@ -71,7 +71,7 @@ export const ProductCard = ({ product }: { product: Product }) => {
             e.stopPropagation();
             setQuickViewProduct(product);
           }}
-          className="absolute inset-x-3 bottom-2 bg-[#001B3A]/90 hover:bg-[#001B3A] text-white text-[11px] font-extrabold py-1.5 rounded-lg text-center flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-all duration-200 backdrop-blur-xs"
+          className="absolute inset-x-3 bottom-2 bg-[#001B3A]/90 hover:bg-[#001B3A] text-white text-[11px] font-extrabold py-1.5 rounded-lg text-center flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-all duration-200 backdrop-blur-xs cursor-pointer"
         >
           <Eye className="w-3.5 h-3.5 text-amber-400" />
           <span>QUICK VIEW</span>
@@ -133,10 +133,10 @@ export const ProductCard = ({ product }: { product: Product }) => {
       <div className="grid grid-cols-2 gap-1.5">
         <button
           onClick={() => addToCart(product)}
-          className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-extrabold text-[11px] py-2 rounded-xl flex items-center justify-center gap-1 transition-colors uppercase tracking-wider"
+          className="bg-[#0044AA] hover:bg-[#001B3A] text-white font-extrabold text-[11px] py-2.5 rounded-xl flex items-center justify-center gap-1 transition-colors uppercase tracking-wider shadow-xs cursor-pointer"
         >
-          <ShoppingBag className="w-3 h-3 text-blue-600" />
-          <span>CART</span>
+          <ShoppingBag className="w-3.5 h-3.5 text-amber-400" />
+          <span>ADD TO CART</span>
         </button>
 
         <button
@@ -144,9 +144,9 @@ export const ProductCard = ({ product }: { product: Product }) => {
             addToCart(product);
             setIsCheckoutOpen(true);
           }}
-          className="bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-[#001B3A] font-extrabold text-[11px] py-2 rounded-xl flex items-center justify-center gap-1 transition-all shadow-xs uppercase tracking-wider"
+          className="bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-[#001B3A] font-extrabold text-[11px] py-2.5 rounded-xl flex items-center justify-center gap-1 transition-all shadow-xs uppercase tracking-wider cursor-pointer"
         >
-          <Zap className="w-3 h-3 text-[#001B3A]" />
+          <Zap className="w-3.5 h-3.5 text-[#001B3A]" />
           <span>BUY NOW</span>
         </button>
       </div>

@@ -12,11 +12,12 @@ import {
   ChevronLeft,
   ChevronRight,
   Award,
+  Book,
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 
 export const HeroSection = () => {
-  const { products } = useStore();
+  const { products, setSelectedClass, setSelectedCategory } = useStore();
   const [activeSlide, setActiveSlide] = useState(0);
 
   // Dynamically generate slides based on Database Products if available
@@ -24,7 +25,7 @@ export const HeroSection = () => {
 
   const slides = heroProducts.length > 0 ? heroProducts.map((p) => ({
     tag: `${p.cls} STANDARD • ${p.badge}`,
-    titleLine1: 'EXAM READY STUDY GUIDE',
+    titleLine1: 'SCORE HIGH MARKS WITH',
     titleLine2: p.title.toUpperCase(),
     subtitle: p.description,
     badge: p.badge,
@@ -50,6 +51,11 @@ export const HeroSection = () => {
   const prevSlide = () => setActiveSlide((prev) => (prev - 1 + slides.length) % slides.length);
 
   const currentSlide = slides[activeSlide] || slides[0];
+
+  const scrollToProducts = () => {
+    const elem = document.getElementById('products');
+    if (elem) elem.scrollIntoView({ behavior: 'smooth' });
+  };
 
   return (
     <section className="relative bg-gradient-to-br from-[#001226] via-[#002B5B] to-[#003D8F] text-white overflow-hidden py-12 md:py-16">
@@ -91,10 +97,10 @@ export const HeroSection = () => {
                 <div className="flex flex-wrap gap-4 mb-8">
                   {[
                     { icon: FileCheck, label: 'Important Questions' },
-                    { icon: BookOpen, label: 'Chapter Notes' },
-                    { icon: FileText, label: 'Model Papers' },
-                    { icon: Hourglass, label: 'Previous Q&A' },
-                    { icon: Target, label: '100% Exam Ready' },
+                    { icon: BookOpen, label: 'Chapter-wise Notes' },
+                    { icon: FileText, label: 'Model Question Papers' },
+                    { icon: Hourglass, label: 'Previous Year Questions' },
+                    { icon: Target, label: '100% Exam Oriented' },
                   ].map((feat, idx) => (
                     <div key={idx} className="flex flex-col items-center gap-1">
                       <div className="w-10 h-10 rounded-full bg-amber-400/10 border border-amber-400/30 flex items-center justify-center text-amber-300">
@@ -107,15 +113,25 @@ export const HeroSection = () => {
                   ))}
                 </div>
 
-                {/* CTA Buttons */}
-                <div className="flex items-center gap-4">
-                  <a
-                    href="#products"
-                    className="inline-flex items-center gap-2 bg-gradient-to-r from-[#F0C14B] to-[#D4A843] text-[#001B3A] font-extrabold text-sm px-8 py-3.5 rounded-xl shadow-lg hover:shadow-amber-500/20 hover:-translate-y-0.5 transition-all uppercase tracking-wider"
+                {/* CTA Buttons (Matching Reference Design) */}
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    onClick={scrollToProducts}
+                    className="inline-flex items-center gap-2 bg-gradient-to-r from-[#F0C14B] to-[#D4A843] text-[#001B3A] font-extrabold text-sm px-8 py-3.5 rounded-xl shadow-lg hover:shadow-amber-500/20 hover:-translate-y-0.5 transition-all uppercase tracking-wider cursor-pointer"
                   >
-                    <span>EXPLORE BOOKS</span>
+                    <span>SHOP NOW</span>
                     <ArrowRight className="w-4 h-4" />
-                  </a>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setSelectedCategory('guide');
+                      scrollToProducts();
+                    }}
+                    className="inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 border border-white/30 text-white font-extrabold text-sm px-8 py-3.5 rounded-xl transition-all uppercase tracking-wider cursor-pointer backdrop-blur-xs"
+                  >
+                    <span>VIEW GUIDES</span>
+                  </button>
                 </div>
               </motion.div>
             </AnimatePresence>
