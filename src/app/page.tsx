@@ -8,8 +8,6 @@ import { HeroSection } from '@/components/home/HeroSection';
 import { ClassPicker } from '@/components/home/ClassPicker';
 import { ProductGrid } from '@/components/home/ProductGrid';
 import { WhyChoose } from '@/components/home/WhyChoose';
-import { StatsSection } from '@/components/home/StatsSection';
-import { PromoSection } from '@/components/home/PromoSection';
 import { FAQSection } from '@/components/home/FAQSection';
 import { TrustBar } from '@/components/home/TrustBar';
 import { Footer } from '@/components/layout/Footer';
@@ -29,8 +27,6 @@ export default function Home() {
       <ClassPicker />
       <ProductGrid />
       <WhyChoose />
-      <StatsSection />
-      <PromoSection />
       <FAQSection />
       <TrustBar />
       <Footer />
