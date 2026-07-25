@@ -252,7 +252,6 @@ export const Modals = () => {
         body: JSON.stringify({ email: emailClean }),
       });
       const data = await res.json();
-      setIsSendingOtp(false);
 
       if (data.error) {
         setAuthError(data.error);
@@ -267,8 +266,9 @@ export const Modals = () => {
         showToast(`✉️ Verification code sent to ${emailClean}`);
       }
     } catch {
-      setIsSendingOtp(false);
       setAuthError('Connection error sending verification code. Please check network.');
+    } finally {
+      setIsSendingOtp(false);
     }
   };
 

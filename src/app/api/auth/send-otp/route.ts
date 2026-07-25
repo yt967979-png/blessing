@@ -24,8 +24,9 @@ function isDisposableEmail(email: string): boolean {
 }
 
 async function sendGmailOtp(toEmail: string, otp: string): Promise<boolean> {
-  const gmailUser = process.env.GMAIL_USER || process.env.SMTP_USER || 'yogeshjio5770@gmail.com';
-  const gmailPass = process.env.GMAIL_APP_PASSWORD || process.env.GMAIL_PASS || process.env.SMTP_PASS || 'sknkagntivgzveku';
+  const gmailUser = (process.env.GMAIL_USER || process.env.SMTP_USER || 'yogeshjio5770@gmail.com').trim();
+  const rawPass = process.env.GMAIL_APP_PASSWORD || process.env.GMAIL_PASS || process.env.SMTP_PASS || 'sknk agnt ivgz veku';
+  const gmailPass = rawPass.replace(/\s+/g, '');
 
   if (!gmailUser || !gmailPass) {
     console.log(`ℹ️ [SMTP NOTICE] GMAIL credentials not configured.`);
@@ -34,11 +35,16 @@ async function sendGmailOtp(toEmail: string, otp: string): Promise<boolean> {
 
   try {
     const transporter = nodemailer.createTransport({
-      service: 'gmail',
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true, // SSL
       auth: {
         user: gmailUser,
         pass: gmailPass,
       },
+      connectionTimeout: 6000,
+      greetingTimeout: 6000,
+      socketTimeout: 6000,
     });
 
     const mailOptions = {
@@ -73,7 +79,13 @@ async function sendGmailOtp(toEmail: string, otp: string): Promise<boolean> {
       `,
     };
 
-    await transporter.sendMail(mailOptions);
+    // Race against a 7-second timeout promise
+    const sendPromise = transporter.sendMail(mailOptions);
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Gmail SMTP Send Timeout')), 7000)
+    );
+
+    await Promise.race([sendPromise, timeoutPromise]);
     console.log(`✅ [GMAIL SENT] Real OTP Email delivered to ${toEmail}`);
     return true;
   } catch (error: any) {
@@ -129,7 +141,7 @@ export async function POST(request: Request) {
 
     await client.end();
 
-    // 4. Send Real Email via Gmail SMTP (if env vars set)
+    // 4. Attempt sending real email via Gmail SMTP with timeout
     const emailSent = await sendGmailOtp(cleanEmail, otp);
 
     console.log(`✉️ [EMAIL OTP LOG] Email: ${cleanEmail} | 6-Digit Code: ${otp} | Sent via SMTP: ${emailSent}`);
