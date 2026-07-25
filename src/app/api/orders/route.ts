@@ -35,23 +35,38 @@ export async function GET(request: Request) {
 
       const res = await client.query(query, params);
 
-      const mapped = res.rows.map((o: any) => ({
-        orderId: o.order_number || o.id,
-        customerName: o.user_id || 'Student Customer',
-        customerPhone: o.shipping_address ? JSON.parse(typeof o.shipping_address === 'string' ? o.shipping_address : '{}')?.phone || '9840418228' : '9840418228',
-        address: o.shipping_address ? (typeof o.shipping_address === 'string' ? o.shipping_address : o.shipping_address.address || 'Medavakkam High Road') : 'Medavakkam High Road',
-        city: 'Chennai',
-        totalAmount: Number(o.total_amount || 360),
-        paymentMethod: o.payment_method || 'Razorpay UPI',
-        paymentStatus: o.payment_status || 'PAID',
-        courierStatus: o.order_status || 'In-Transit',
-        trackingNumber: o.awb_number || 'STC-TN-984210',
-        courierName: o.courier_name || 'ST Courier Express',
-        items: Array.isArray(o.items) && o.items.length > 0
-          ? o.items
-          : [{ id: 'bpg-101', title: '10th Standard Mathematics Exam Power Guide Book', qty: 1, price: 360 }],
-        createdAt: new Date(o.ordered_at || Date.now()).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
-      }));
+      const mapped = res.rows.map((o: any) => {
+        let addrObj: any = {};
+        if (o.shipping_address) {
+          if (typeof o.shipping_address === 'object') {
+            addrObj = o.shipping_address;
+          } else if (typeof o.shipping_address === 'string') {
+            try {
+              addrObj = JSON.parse(o.shipping_address);
+            } catch (e) {
+              addrObj = { address: o.shipping_address };
+            }
+          }
+        }
+
+        return {
+          orderId: o.order_number || o.id,
+          customerName: addrObj.name || o.user_id || 'Student Customer',
+          customerPhone: addrObj.phone || '9840418228',
+          address: addrObj.address || 'Medavakkam High Road',
+          city: addrObj.city || 'Chennai',
+          totalAmount: Number(o.total_amount || 360),
+          paymentMethod: o.payment_method || 'Razorpay UPI',
+          paymentStatus: o.payment_status || 'PAID',
+          courierStatus: o.order_status || 'In-Transit',
+          trackingNumber: o.awb_number || 'STC-TN-984210',
+          courierName: o.courier_name || 'ST Courier Express',
+          items: Array.isArray(o.items) && o.items.length > 0
+            ? o.items
+            : [{ id: 'bpg-101', title: '10th Standard Mathematics Exam Power Guide Book', qty: 1, price: 360 }],
+          createdAt: new Date(o.ordered_at || Date.now()).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
+        };
+      });
 
       return NextResponse.json(mapped);
     }
