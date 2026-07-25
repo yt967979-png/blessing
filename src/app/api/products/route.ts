@@ -1,14 +1,12 @@
 import { NextResponse } from 'next/server';
-import { getDbClient, defaultSeedBooks } from '@/lib/db';
+import { getDbClient } from '@/lib/db';
 
 export async function GET(request: Request) {
   const client = await getDbClient();
-  let searchParam: string | null = null;
   try {
     const { searchParams } = new URL(request.url);
     const cls = searchParams.get('cls');
     const search = searchParams.get('search');
-    searchParam = search;
 
     if (client) {
       let sql = 'SELECT * FROM books WHERE 1=1';
@@ -30,7 +28,7 @@ export async function GET(request: Request) {
 
       const res = await client.query(sql, params);
 
-      if (res.rows && res.rows.length > 0) {
+      if (res.rows) {
         const mapped = res.rows.map((d: any) => {
           const calculatedDiscount = d.price && d.discount_price
             ? Math.round(((d.price - d.discount_price) / d.price) * 100)
@@ -71,40 +69,7 @@ export async function GET(request: Request) {
     if (client) await client.end();
   }
 
-  // Fallback map default seed books
-  let mappedSeed = defaultSeedBooks.map((b) => ({
-    id: b.id,
-    slug: b.slug,
-    title: b.title,
-    subtitle: `${b.subject} Guide`,
-    cls: b.title.includes('12th') ? '12th' : '10th',
-    category: b.category_id === 'cat-combos' ? 'combo' : 'guide',
-    subject: b.subject,
-    price: b.discount_price,
-    mrp: b.price,
-    discount: Math.round(((b.price - b.discount_price) / b.price) * 100),
-    rating: 4.9,
-    reviews: 142,
-    badge: b.category_id === 'cat-combos' ? 'SUPER COMBO' : 'BESTSELLER',
-    badgeColor: 'bg-blue-600',
-    image: b.cover_image,
-    hoverImage: b.cover_image,
-    description: b.description,
-    features: ['Solved Papers', 'Chapter Notes'],
-    inStock: true,
-  }));
-
-  if (searchParam && searchParam.trim()) {
-    const term = searchParam.trim().toLowerCase();
-    mappedSeed = mappedSeed.filter(
-      (b) =>
-        b.title.toLowerCase().includes(term) ||
-        b.subject.toLowerCase().includes(term) ||
-        b.cls.toLowerCase().includes(term)
-    );
-  }
-
-  return NextResponse.json(mappedSeed);
+  return NextResponse.json([]);
 }
 
 export async function POST(request: Request) {

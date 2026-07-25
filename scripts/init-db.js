@@ -261,6 +261,60 @@ async function migrateDatabase(connStr, dbName) {
   }
 }
 
+const crypto = require('crypto');
+
+function hashPassword(password) {
+  return crypto.createHash('sha256').update(`${password}bpg_salt_2026`).digest('hex');
+}
+
+// ─── ADMIN CREDENTIALS ─────────────────────────────────────────────────────────
+const ADMIN_USERS = [
+  {
+    id: 'admin-bpg-001',
+    name: 'Yogesh Admin',
+    email: 'yogeshjio5770@gmail.com',
+    phone: '9840418228',
+    password: 'Admin@BPG2026',
+    role: 'admin',
+  },
+];
+// ───────────────────────────────────────────────────────────────────────────────
+
+async function seedAdmin(connStr, dbName) {
+  const client = new Client({
+    connectionString: connStr,
+    ssl: isSsl ? { rejectUnauthorized: false } : false,
+  });
+
+  try {
+    await client.connect();
+
+    for (const admin of ADMIN_USERS) {
+      const existing = await client.query(
+        'SELECT id FROM users WHERE LOWER(email) = $1',
+        [admin.email.toLowerCase()]
+      );
+
+      if (existing.rows.length === 0) {
+        const passwordHash = hashPassword(admin.password);
+        await client.query(
+          `INSERT INTO users (id, name, email, phone, password_hash, role, email_verified, status)
+           VALUES ($1, $2, $3, $4, $5, $6, TRUE, 'active')`,
+          [admin.id, admin.name, admin.email, admin.phone, passwordHash, admin.role]
+        );
+        console.log(`✅ [ADMIN SEEDED] ${admin.email} → role: ${admin.role}`);
+      } else {
+        console.log(`ℹ️ [ADMIN EXISTS] ${admin.email} already in database — skipping.`);
+      }
+    }
+
+    await client.end();
+  } catch (err) {
+    console.error(`❌ Admin seed error [${dbName}]:`, err.message);
+    if (client) await client.end();
+  }
+}
+
 async function main() {
   // 1. Migrate target DATABASE_URL
   const targetDbName = connectionString.split('/').pop().split('?')[0] || 'target_db';
@@ -271,6 +325,19 @@ async function main() {
     const postgresConnStr = connectionString.replace('/railway', '/postgres');
     await migrateDatabase(postgresConnStr, 'postgres');
   }
+
+  // 3. Seed admin user
+  await seedAdmin(connectionString, targetDbName);
+  console.log('');
+  console.log('🔑 ═══════════════════════════════════════════════════');
+  console.log('🔑  ADMIN LOGIN CREDENTIALS (Save These!)');
+  console.log('🔑 ═══════════════════════════════════════════════════');
+  ADMIN_USERS.forEach(a => {
+    console.log(`🔑  Email   : ${a.email}`);
+    console.log(`🔑  Password: ${a.password}`);
+    console.log(`🔑  Role    : ${a.role}`);
+  });
+  console.log('🔑 ═══════════════════════════════════════════════════');
 }
 
 main();

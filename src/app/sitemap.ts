@@ -1,15 +1,24 @@
 import { MetadataRoute } from 'next';
-import { defaultSeedBooks } from '@/lib/db';
+import { getDbClient } from '@/lib/db';
 
-export default function sitemap(): MetadataRoute.Sitemap {
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://blessing-production.up.railway.app';
 
-  const productUrls = defaultSeedBooks.map((product) => ({
-    url: `${baseUrl}/products/${product.slug}`,
-    lastModified: new Date(),
-    changeFrequency: 'weekly' as const,
-    priority: 0.8,
-  }));
+  let productUrls: any[] = [];
+
+  try {
+    const client = await getDbClient();
+    if (client) {
+      const res = await client.query('SELECT slug FROM books WHERE status = $1', ['published']);
+      await client.end();
+      productUrls = (res.rows || []).map((product: any) => ({
+        url: `${baseUrl}/products/${product.slug}`,
+        lastModified: new Date(),
+        changeFrequency: 'weekly' as const,
+        priority: 0.8,
+      }));
+    }
+  } catch (err) {}
 
   return [
     {
