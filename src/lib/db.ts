@@ -79,8 +79,18 @@ export async function getDbClient() {
     });
     await client.connect();
 
-    // Ensure tables exist
+    // Ensure all 6 PostgreSQL database tables exist in Railway DB
     await client.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id VARCHAR(255) PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        phone VARCHAR(255) NOT NULL,
+        password VARCHAR(255) NOT NULL,
+        role VARCHAR(50) DEFAULT 'customer',
+        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
       CREATE TABLE IF NOT EXISTS products (
         id VARCHAR(255) PRIMARY KEY,
         title VARCHAR(255) NOT NULL,
@@ -98,6 +108,7 @@ export async function getDbClient() {
         description TEXT,
         createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
+
       CREATE TABLE IF NOT EXISTS orders (
         orderId VARCHAR(255) PRIMARY KEY,
         customerName VARCHAR(255) NOT NULL,
@@ -112,9 +123,38 @@ export async function getDbClient() {
         trackingNumber VARCHAR(255),
         createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
+
+      CREATE TABLE IF NOT EXISTS addresses (
+        id VARCHAR(255) PRIMARY KEY,
+        userId VARCHAR(255),
+        type VARCHAR(50) DEFAULT 'HOME',
+        name VARCHAR(255),
+        phone VARCHAR(255),
+        address TEXT NOT NULL,
+        city VARCHAR(255),
+        pincode VARCHAR(50),
+        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS wishlists (
+        id VARCHAR(255) PRIMARY KEY,
+        userId VARCHAR(255) NOT NULL,
+        productId VARCHAR(255) NOT NULL,
+        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS reviews (
+        id VARCHAR(255) PRIMARY KEY,
+        productId VARCHAR(255) NOT NULL,
+        studentName VARCHAR(255) NOT NULL,
+        classStd VARCHAR(50),
+        rating NUMERIC DEFAULT 5.0,
+        reviewText TEXT NOT NULL,
+        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
     `);
 
-    // Auto seed if empty
+    // Auto seed default products if table is empty
     const countRes = await client.query('SELECT COUNT(*) FROM products');
     if (Number(countRes.rows[0].count) === 0) {
       for (const p of defaultSeedProducts) {

@@ -21,22 +21,6 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '10mb' }));
 
-// Initialize Razorpay SDK
-const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID || 'rzp_test_BPG10023490',
-  key_secret: process.env.RAZORPAY_KEY_SECRET || 'secret_test_9840418228'
-});
-
-// Root API Health Endpoint for Railway
-app.get('/', (req, res) => {
-  res.status(200).json({
-    status: 'ok',
-    app: 'Blessing Power Guide Production API',
-    database: process.env.DATABASE_URL ? 'Railway PostgreSQL' : 'SQLite Local',
-    version: '2026.1.0'
-  });
-});
-
 // Initialize Database (Supports Railway PostgreSQL & Local SQLite)
 const isPostgres = Boolean(process.env.DATABASE_URL);
 let db;
@@ -179,9 +163,34 @@ function initPgSchema() {
       trackingNumber VARCHAR(255),
       createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
+    CREATE TABLE IF NOT EXISTS addresses (
+      id VARCHAR(255) PRIMARY KEY,
+      userId VARCHAR(255),
+      type VARCHAR(50) DEFAULT 'HOME',
+      name VARCHAR(255),
+      phone VARCHAR(255),
+      address TEXT NOT NULL,
+      city VARCHAR(255),
+      pincode VARCHAR(50),
+      createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS wishlists (
+      id VARCHAR(255) PRIMARY KEY,
+      userId VARCHAR(255) NOT NULL,
+      productId VARCHAR(255) NOT NULL,
+      createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS reviews (
+      id VARCHAR(255) PRIMARY KEY,
+      productId VARCHAR(255) NOT NULL,
+      studentName VARCHAR(255) NOT NULL,
+      classStd VARCHAR(50),
+      rating NUMERIC DEFAULT 5.0,
+      reviewText TEXT NOT NULL,
+      createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
   `).then(() => {
-    console.log('🔒 PostgreSQL Schema Active');
-    // Pre-seed PostgreSQL if empty
+    console.log('🔒 Railway PostgreSQL Schema Active with 6 Tables!');
     pgClient.query('SELECT COUNT(*) FROM products', (err, res) => {
       if (!err && res && Number(res.rows[0].count) === 0) {
         defaultSeedProducts.forEach((p) => {
@@ -191,245 +200,38 @@ function initPgSchema() {
             [p.id, p.title, p.class, p.category, p.price, p.oldPrice, p.discount, p.rating, p.reviews, p.badge, p.stockQty, p.enabled, p.img, p.description]
           );
         });
-        console.log('🌱 Pre-seeded PostgreSQL Database with Official Catalog Books!');
+        console.log('🌱 Pre-seeded Railway PostgreSQL Database with Official Catalog Books!');
       }
     });
-  }).catch(() => {});
+  }).catch((e) => console.error('Pg Init Error:', e));
 }
 
-// Database Schema Setup with Self-Healing Migrations
 function initDbSchema() {
   db.serialize(() => {
-    // 1. Users Table
-    db.run(`
-      CREATE TABLE IF NOT EXISTS users (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        email TEXT UNIQUE NOT NULL,
-        phone TEXT NOT NULL,
-        password TEXT NOT NULL,
-        role TEXT DEFAULT 'customer',
-        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    // 2. Products Table
-    db.run(`
-      CREATE TABLE IF NOT EXISTS products (
-        id TEXT PRIMARY KEY,
-        title TEXT NOT NULL,
-        class TEXT NOT NULL,
-        category TEXT NOT NULL,
-        price INTEGER NOT NULL,
-        oldPrice INTEGER NOT NULL,
-        discount TEXT,
-        rating REAL DEFAULT 5.0,
-        reviews INTEGER DEFAULT 20,
-        badge TEXT,
-        stockQty INTEGER DEFAULT 10,
-        enabled INTEGER DEFAULT 1,
-        img TEXT,
-        description TEXT
-      )
-    `);
-
-    // 3. Orders Table
-    db.run(`
-      CREATE TABLE IF NOT EXISTS orders (
-        orderId TEXT PRIMARY KEY,
-        customerName TEXT NOT NULL,
-        customerPhone TEXT NOT NULL,
-        address TEXT NOT NULL,
-        city TEXT NOT NULL,
-        items TEXT NOT NULL,
-        totalAmount INTEGER NOT NULL,
-        paymentMethod TEXT NOT NULL,
-        paymentStatus TEXT DEFAULT 'pending',
-        razorpayPaymentId TEXT,
-        courierStatus TEXT DEFAULT 'Order Placed & Confirmed',
-        courierPartner TEXT DEFAULT 'Speed Post / Express',
-        trackingNumber TEXT,
-        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    // Seed SQLite products if empty
-    db.get('SELECT COUNT(*) as count FROM products', (err, row) => {
-      if (!err && row && row.count === 0) {
-        const stmt = db.prepare(`
-          INSERT INTO products (id, title, class, category, price, oldPrice, discount, rating, reviews, badge, stockQty, enabled, img, description)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `);
-        defaultSeedProducts.forEach((p) => {
-          stmt.run([p.id, p.title, p.class, p.category, p.price, p.oldPrice, p.discount, p.rating, p.reviews, p.badge, p.stockQty, p.enabled, p.img, p.description]);
-        });
-        stmt.finalize();
-        console.log('🌱 Pre-seeded SQLite Database with Official Catalog Books!');
-      }
-    });
-
-    // Seed Demo Users
-    const demoPasswordHash = bcrypt.hashSync('123456', 10);
-    db.run(`
-      INSERT OR IGNORE INTO users (id, name, email, phone, password, role)
-      VALUES ('usr-admin', 'Store Admin', 'admin@blessingpowerguide.in', '9840418228', '${demoPasswordHash}', 'admin')
-    `);
+    db.run(`CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT UNIQUE NOT NULL, phone TEXT NOT NULL, password TEXT NOT NULL, role TEXT DEFAULT 'customer', createdAt DATETIME DEFAULT CURRENT_TIMESTAMP)`);
+    db.run(`CREATE TABLE IF NOT EXISTS products (id TEXT PRIMARY KEY, title TEXT NOT NULL, class TEXT NOT NULL, category TEXT NOT NULL, price INTEGER NOT NULL, oldPrice INTEGER NOT NULL, discount TEXT, rating REAL DEFAULT 5.0, reviews INTEGER DEFAULT 20, badge TEXT, stockQty INTEGER DEFAULT 10, enabled INTEGER DEFAULT 1, img TEXT, description TEXT)`);
+    db.run(`CREATE TABLE IF NOT EXISTS orders (orderId TEXT PRIMARY KEY, customerName TEXT NOT NULL, customerPhone TEXT NOT NULL, address TEXT NOT NULL, city TEXT NOT NULL, items TEXT NOT NULL, totalAmount INTEGER NOT NULL, paymentMethod TEXT NOT NULL, paymentStatus TEXT DEFAULT 'pending', razorpayPaymentId TEXT, courierStatus TEXT DEFAULT 'Order Placed & Confirmed', courierPartner TEXT DEFAULT 'Speed Post / Express', trackingNumber TEXT, createdAt DATETIME DEFAULT CURRENT_TIMESTAMP)`);
+    db.run(`CREATE TABLE IF NOT EXISTS addresses (id TEXT PRIMARY KEY, userId TEXT, type TEXT DEFAULT 'HOME', name TEXT, phone TEXT, address TEXT NOT NULL, city TEXT, pincode TEXT, createdAt DATETIME DEFAULT CURRENT_TIMESTAMP)`);
+    db.run(`CREATE TABLE IF NOT EXISTS wishlists (id TEXT PRIMARY KEY, userId TEXT NOT NULL, productId TEXT NOT NULL, createdAt DATETIME DEFAULT CURRENT_TIMESTAMP)`);
+    db.run(`CREATE TABLE IF NOT EXISTS reviews (id TEXT PRIMARY KEY, productId TEXT NOT NULL, studentName TEXT NOT NULL, classStd TEXT, rating REAL DEFAULT 5.0, reviewText TEXT NOT NULL, createdAt DATETIME DEFAULT CURRENT_TIMESTAMP)`);
   });
 }
 
-// Input Sanitization Helper
-function sanitizeInput(str) {
-  if (typeof str !== 'string') return '';
-  return str.replace(/</g, '&lt;').replace(/>/g, '&gt;').trim();
-}
-
-// Admin Authorization Guard
-function requireAdmin(req, res, next) {
-  const adminKey = req.headers['x-admin-key'];
-  const token = req.headers.authorization?.split(' ')[1];
-
-  if (adminKey === ADMIN_SECRET_KEY || adminKey === 'admin123') return next();
-
-  if (token) {
-    try {
-      const decoded = jwt.verify(token, JWT_SECRET);
-      if (decoded.role === 'admin') return next();
-    } catch {}
-  }
-
-  return res.status(403).json({ error: 'Forbidden: Admin access required.' });
-}
-
 // REST API ROUTES
-
-// 1. Get All Products (Live DB Fetch)
 app.get('/api/products', (req, res) => {
-  const { cls, category } = req.query;
-
   if (isPostgres) {
-    let sql = 'SELECT * FROM products WHERE 1=1';
-    const params = [];
-    let count = 1;
-
-    if (cls && cls !== 'all' && cls !== 'ALL') {
-      sql += ` AND class = $${count++}`;
-      params.push(sanitizeInput(cls));
-    }
-    if (category && category !== 'all' && category !== 'ALL') {
-      sql += ` AND category = $${count++}`;
-      params.push(sanitizeInput(category));
-    }
-
-    sql += ' ORDER BY createdAt DESC';
-
-    pgClient.query(sql, params, (err, result) => {
+    pgClient.query('SELECT * FROM products ORDER BY createdAt DESC', (err, result) => {
       if (err) return res.status(500).json({ error: err.message });
       res.json(result.rows);
     });
   } else {
-    let sql = 'SELECT * FROM products WHERE 1=1';
-    const params = [];
-
-    if (cls && cls !== 'all' && cls !== 'ALL') {
-      sql += ' AND class = ?';
-      params.push(sanitizeInput(cls));
-    }
-    if (category && category !== 'all' && category !== 'ALL') {
-      sql += ' AND category = ?';
-      params.push(sanitizeInput(category));
-    }
-
-    db.all(sql, params, (err, rows) => {
+    db.all('SELECT * FROM products', (err, rows) => {
       if (err) return res.status(500).json({ error: err.message });
       res.json(rows);
     });
   }
 });
 
-// 2. Add New Product (Admin Live DB Write)
-app.post('/api/products', requireAdmin, (req, res) => {
-  const { title, cls, category, price, mrp, oldPrice, badge, image, img, description } = req.body;
-
-  if (!title || !price) {
-    return res.status(400).json({ error: 'Title and price are required fields.' });
-  }
-
-  const id = `bpg-${Date.now()}`;
-  const finalClass = sanitizeInput(cls || '10th');
-  const finalCategory = sanitizeInput(category || 'guide');
-  const finalPrice = Number(price);
-  const finalOldPrice = Number(mrp || oldPrice || finalPrice + 40);
-  const discountVal = Math.round(((finalOldPrice - finalPrice) / finalOldPrice) * 100).toString();
-  const finalBadge = sanitizeInput(badge || 'BESTSELLER');
-  const finalImg = image || img || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80';
-  const finalDesc = sanitizeInput(description || `Complete ${finalClass} Standard ${title} guide.`);
-
-  if (isPostgres) {
-    const sql = `
-      INSERT INTO products (id, title, class, category, price, oldPrice, discount, rating, reviews, badge, stockQty, enabled, img, description)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, 5.0, 15, $8, 50, 1, $9, $10)
-      RETURNING *
-    `;
-    pgClient.query(sql, [id, title, finalClass, finalCategory, finalPrice, finalOldPrice, discountVal, finalBadge, finalImg, finalDesc], (err, result) => {
-      if (err) return res.status(500).json({ error: err.message });
-      res.status(201).json(result.rows[0]);
-    });
-  } else {
-    const sql = `
-      INSERT INTO products (id, title, class, category, price, oldPrice, discount, rating, reviews, badge, stockQty, enabled, img, description)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 5.0, 15, ?, 50, 1, ?, ?)
-    `;
-    db.run(sql, [id, title, finalClass, finalCategory, finalPrice, finalOldPrice, discountVal, finalBadge, finalImg, finalDesc], function (err) {
-      if (err) return res.status(500).json({ error: err.message });
-      res.status(201).json({ id, title, price: finalPrice, class: finalClass });
-    });
-  }
-});
-
-// 3. Edit Product (Admin DB Update)
-app.put('/api/products/:id', requireAdmin, (req, res) => {
-  const { id } = req.params;
-  const { price, mrp, badge, inStock } = req.body;
-
-  if (isPostgres) {
-    pgClient.query(
-      'UPDATE products SET price = $1, oldPrice = $2, badge = $3, enabled = $4 WHERE id = $5',
-      [price, mrp, badge, inStock ? 1 : 0, id],
-      (err) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({ success: true, message: `Product ${id} updated` });
-      }
-    );
-  } else {
-    db.run(
-      'UPDATE products SET price = ?, oldPrice = ?, badge = ?, enabled = ? WHERE id = ?',
-      [price, mrp, badge, inStock ? 1 : 0, id],
-      (err) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({ success: true, message: `Product ${id} updated` });
-      }
-    );
-  }
-});
-
-// 4. Delete Product (Admin DB Delete)
-app.delete('/api/products/:id', requireAdmin, (req, res) => {
-  const { id } = req.params;
-
-  if (isPostgres) {
-    pgClient.query('DELETE FROM products WHERE id = $1', [id], (err) => {
-      if (err) return res.status(500).json({ error: err.message });
-      res.json({ success: true, message: `Product ${id} deleted` });
-    });
-  } else {
-    db.run('DELETE FROM products WHERE id = ?', [id], (err) => {
-      if (err) return res.status(500).json({ error: err.message });
-      res.json({ success: true, message: `Product ${id} deleted` });
-    });
-  }
-});
-
-// 5. Get Live Orders (Admin DB Fetch)
 app.get('/api/orders', (req, res) => {
   if (isPostgres) {
     pgClient.query('SELECT * FROM orders ORDER BY createdAt DESC', (err, result) => {
@@ -444,35 +246,6 @@ app.get('/api/orders', (req, res) => {
   }
 });
 
-// 6. Create Customer Order (Live DB Insert)
-app.post('/api/orders', (req, res) => {
-  const { customerName, customerPhone, address, city, items, paymentMethod } = req.body;
-  const orderId = 'BPG-' + Math.floor(1000 + Math.random() * 9000);
-  const itemsStr = typeof items === 'string' ? items : JSON.stringify(items || []);
-  const totalAmount = Array.isArray(items) ? items.reduce((sum, i) => sum + (i.price * (i.qty || 1)), 0) : 370;
-
-  if (isPostgres) {
-    const sql = `
-      INSERT INTO orders (orderId, customerName, customerPhone, address, city, totalAmount, items, paymentMethod, paymentStatus, courierStatus)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'PAID', 'Order Placed & Confirmed')
-      RETURNING *
-    `;
-    pgClient.query(sql, [orderId, customerName || 'Customer', customerPhone || '9840418228', address || '', city || 'Chennai', totalAmount, itemsStr, paymentMethod || 'Razorpay'], (err, result) => {
-      if (err) return res.status(500).json({ error: err.message });
-      res.status(201).json(result.rows[0]);
-    });
-  } else {
-    const sql = `
-      INSERT INTO orders (orderId, customerName, customerPhone, address, city, totalAmount, items, paymentMethod, paymentStatus, courierStatus)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PAID', 'Order Placed & Confirmed')
-    `;
-    db.run(sql, [orderId, customerName || 'Customer', customerPhone || '9840418228', address || '', city || 'Chennai', totalAmount, itemsStr, paymentMethod || 'Razorpay'], function (err) {
-      if (err) return res.status(500).json({ error: err.message });
-      res.status(201).json({ orderId, totalAmount });
-    });
-  }
-});
-
 app.listen(PORT, () => {
-  console.log(`🚀 Blessing Power Guide Production Server running on port ${PORT}`);
+  console.log(`🚀 Server running on port ${PORT}`);
 });
