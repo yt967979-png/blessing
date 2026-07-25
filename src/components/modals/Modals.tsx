@@ -95,6 +95,7 @@ export const Modals = () => {
   const [authForm, setAuthForm] = useState({ name: '', email: '', phone: '', password: '' });
   const [confirmPassword, setConfirmPassword] = useState('');
   const [otpCode, setOtpCode] = useState('');
+  const [activeOtpPreview, setActiveOtpPreview] = useState<string | null>(null);
   const [otpSentMsg, setOtpSentMsg] = useState<string | null>(null);
   const [isSendingOtp, setIsSendingOtp] = useState(false);
   const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
@@ -261,7 +262,8 @@ export const Modals = () => {
       setRegisterStep('otp');
       setOtpSentMsg(`A 6-digit verification code has been sent to ${emailClean}.`);
       if (data.previewOtp) {
-        showToast(`✉️ Verification code sent to ${emailClean}! (OTP Code: ${data.previewOtp})`);
+        setActiveOtpPreview(data.previewOtp);
+        showToast(`✉️ OTP sent to ${emailClean}! (Code: ${data.previewOtp})`);
       } else {
         showToast(`✉️ Verification code sent to ${emailClean}`);
       }
@@ -829,6 +831,26 @@ export const Modals = () => {
                         </div>
                         <p className="text-[11px] leading-relaxed text-blue-700">{otpSentMsg}</p>
                       </div>
+
+                      {activeOtpPreview && (
+                        <div
+                          onClick={() => setOtpCode(activeOtpPreview)}
+                          className="bg-amber-50 border border-amber-300 rounded-xl p-3 text-xs text-amber-900 flex items-center justify-between cursor-pointer hover:bg-amber-100/80 transition-all shadow-xs"
+                        >
+                          <div>
+                            <span className="font-bold text-[10px] uppercase text-amber-700 block">
+                              🔑 Verification Code (Generated OTP)
+                            </span>
+                            <span className="font-mono font-black text-amber-950 text-base tracking-widest">
+                              {activeOtpPreview}
+                            </span>
+                          </div>
+                          <span className="bg-amber-200 hover:bg-amber-300 text-amber-950 font-black text-[10px] px-2.5 py-1.5 rounded-lg transition-colors flex items-center gap-1">
+                            <Sparkles className="w-3 h-3 text-amber-700" />
+                            <span>1-CLICK AUTOFILL</span>
+                          </span>
+                        </div>
+                      )}
 
                       <div>
                         <label className="block font-bold text-slate-700 mb-1.5">Enter 6-Digit Verification Code (OTP) *</label>
