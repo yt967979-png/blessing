@@ -113,7 +113,7 @@ export const Modals = () => {
       id: Date.now(),
       type: newAddr.type || 'HOME',
       name: newAddr.name,
-      phone: newAddr.phone || user?.phone || '9840418228',
+      phone: newAddr.phone || user?.phone || '',
       address: newAddr.address,
       city: newAddr.city || 'Chennai',
       pincode: newAddr.pincode,
@@ -145,7 +145,7 @@ export const Modals = () => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             customerName: selectedAddress.name || user?.name || 'Customer',
-            customerPhone: selectedAddress.phone || user?.phone || '9840418228',
+            customerPhone: selectedAddress.phone || user?.phone || '',
             address: selectedAddress.address,
             city: selectedAddress.city || 'Chennai',
             items: cart.map((i) => ({ id: i.id, title: i.title, qty: i.qty, price: i.price })),
@@ -182,7 +182,7 @@ export const Modals = () => {
             prefill: {
               name: selectedAddress.name || user?.name || '',
               email: user?.email || '',
-              contact: selectedAddress.phone || user?.phone || '9840418228',
+              contact: selectedAddress.phone || user?.phone || '',
             },
             theme: { color: '#001B3A' },
             handler: function (response: any) {
@@ -220,9 +220,9 @@ export const Modals = () => {
         id: 999,
         name: 'Store Admin',
         email: 'admin@blessingpowerguide.in',
-        phone: '9840418228',
+        phone: '',
       };
-      loginUser(adminUser);
+      loginUser(adminUser, [], [], []);
       setIsAuthOpen(false);
       router.push('/admin');
       return;
@@ -248,16 +248,32 @@ export const Modals = () => {
       }
     }
 
-    const newUser = {
-      id: Date.now(),
-      name: authForm.name || emailClean.split('@')[0],
-      email: emailClean,
-      phone: authForm.phone || '9840418228',
-    };
-
-    loginUser(newUser);
-    setIsAuthOpen(false);
-    showToast(`✓ Account created & logged in permanently as ${newUser.name}`);
+    // All auth goes through Railway PostgreSQL API
+    setAuthError(null);
+    fetch('/api/auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: authMode,
+        email: emailClean,
+        password: passwordClean,
+        name: authForm.name || emailClean.split('@')[0],
+        phone: authForm.phone || '',
+      }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.error) {
+          setAuthError(data.error);
+          return;
+        }
+        loginUser(data.user, data.cart || [], data.wishlist || [], data.addresses || []);
+        setIsAuthOpen(false);
+        showToast(`✓ ${authMode === 'register' ? 'Account created!' : 'Logged in!'} Welcome, ${data.user.name}`);
+      })
+      .catch(() => {
+        setAuthError('Connection error. Please check your internet and try again.');
+      });
   };
 
   return (

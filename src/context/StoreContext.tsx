@@ -112,37 +112,51 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   // Initial Load from Backend Database + LocalStorage Persistence
   useEffect(() => {
-    // 1. Check LocalStorage Cache
-    const cachedProducts = localStorage.getItem(LOCAL_PRODUCTS_KEY);
-    if (cachedProducts) {
-      try {
-        const parsed = JSON.parse(cachedProducts);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setProducts(parsed);
-        }
-      } catch (e) {}
-    }
-
-    // 2. Fetch Live from Database (Railway PostgreSQL)
+    // 1. Fetch Live Products from Railway PostgreSQL
     fetch('/api/products')
       .then((res) => res.json())
       .then((data) => {
         if (Array.isArray(data) && data.length > 0) {
           setProducts(data);
           localStorage.setItem(LOCAL_PRODUCTS_KEY, JSON.stringify(data));
+        } else {
+          // fallback to cached if DB returned empty
+          const cached = localStorage.getItem(LOCAL_PRODUCTS_KEY);
+          if (cached) {
+            try {
+              const parsed = JSON.parse(cached);
+              if (Array.isArray(parsed) && parsed.length > 0) setProducts(parsed);
+            } catch (e) {}
+          }
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        const cached = localStorage.getItem(LOCAL_PRODUCTS_KEY);
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached);
+            if (Array.isArray(parsed) && parsed.length > 0) setProducts(parsed);
+          } catch (e) {}
+        }
+      });
 
-    // Cart & User restore
-    const savedCart = localStorage.getItem('bpg_cart_next');
-    if (savedCart) setCart(JSON.parse(savedCart));
-
+    // Restore user session from localStorage
     const savedUser = localStorage.getItem('bpg_user_next');
-    if (savedUser) setUser(JSON.parse(savedUser));
+    if (savedUser) {
+      try {
+        const u = JSON.parse(savedUser);
+        setUser(u);
+        // Only restore cart if user is logged in
+        const savedCart = localStorage.getItem('bpg_cart_next');
+        if (savedCart) {
+          try { setCart(JSON.parse(savedCart)); } catch (e) {}
+        }
+      } catch (e) {}
+    }
+    // No user => cart stays empty (don't restore guest cart)
   }, []);
 
-  // Cross-Device Sync Trigger to Railway PostgreSQL
+  // Cross-Device Sync Trigger to Railway PostgreSQL (only when logged in)
   useEffect(() => {
     if (user && user.id) {
       fetch('/api/user/sync', {
@@ -157,10 +171,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, [cart, wishlist, user]);
 
-  // Save Cart to LocalStorage
+  // Save Cart to LocalStorage only when user is logged in
   useEffect(() => {
-    localStorage.setItem('bpg_cart_next', JSON.stringify(cart));
-  }, [cart]);
+    if (user) {
+      localStorage.setItem('bpg_cart_next', JSON.stringify(cart));
+    }
+  }, [cart, user]);
 
   // Save Products to LocalStorage cache whenever updated
   useEffect(() => {
@@ -227,7 +243,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setUser(userData);
     localStorage.setItem('bpg_user_next', JSON.stringify(userData));
 
-    if (Array.isArray(restoredCart) && restoredCart.length > 0) {
+    if (Array.isArray(restoredCart)) {
       setCart(restoredCart);
       localStorage.setItem('bpg_cart_next', JSON.stringify(restoredCart));
     }
@@ -236,7 +252,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setWishlist(restoredWishlist);
     }
 
-    if (Array.isArray(restoredAddresses) && restoredAddresses.length > 0) {
+    if (Array.isArray(restoredAddresses)) {
       localStorage.setItem('bpg_user_addresses', JSON.stringify(restoredAddresses));
     }
 
@@ -245,7 +261,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const logoutUser = () => {
     setUser(null);
+    setCart([]);
+    setWishlist([]);
     localStorage.removeItem('bpg_user_next');
+    localStorage.removeItem('bpg_cart_next');
+    localStorage.removeItem('bpg_user_addresses');
     showToast('Logged out successfully');
   };
 
