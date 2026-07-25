@@ -111,34 +111,18 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setTimeout(() => setToast(null), 3000);
   };
 
-  // Initial Load from Backend Database + LocalStorage Persistence
+  // Initial Load from Backend Database
   useEffect(() => {
-    // 1. Fetch Live Products from Railway PostgreSQL
+    // Fetch Live Products from Railway PostgreSQL
     fetch('/api/products')
       .then((res) => res.json())
       .then((data) => {
-        if (Array.isArray(data) && data.length > 0) {
+        if (Array.isArray(data)) {
           setProducts(data);
-          localStorage.setItem(LOCAL_PRODUCTS_KEY, JSON.stringify(data));
-        } else {
-          // fallback to cached if DB returned empty
-          const cached = localStorage.getItem(LOCAL_PRODUCTS_KEY);
-          if (cached) {
-            try {
-              const parsed = JSON.parse(cached);
-              if (Array.isArray(parsed) && parsed.length > 0) setProducts(parsed);
-            } catch (e) {}
-          }
         }
       })
       .catch(() => {
-        const cached = localStorage.getItem(LOCAL_PRODUCTS_KEY);
-        if (cached) {
-          try {
-            const parsed = JSON.parse(cached);
-            if (Array.isArray(parsed) && parsed.length > 0) setProducts(parsed);
-          } catch (e) {}
-        }
+        setProducts([]);
       });
 
     // Restore user session from localStorage & verify with Railway PostgreSQL DB
