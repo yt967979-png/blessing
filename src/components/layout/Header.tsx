@@ -47,23 +47,23 @@ export const Header = () => {
 
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-xs">
-      <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-4 md:gap-8">
+      <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-3 md:gap-8">
         {/* Logo */}
-        <Link href="/" className="flex items-center gap-2.5 flex-shrink-0 group">
-          <div className="w-11 h-11 bg-gradient-to-br from-[#001B3A] to-[#003B73] border-2 border-[#D4A843] rounded-xl flex items-center justify-center font-bold text-2xl text-[#F0C14B] shadow-md group-hover:scale-105 transition-transform">
+        <Link href="/" className="flex items-center gap-2 flex-shrink-0 group">
+          <div className="w-9 h-9 sm:w-11 sm:h-11 bg-gradient-to-br from-[#001B3A] to-[#003B73] border-2 border-[#D4A843] rounded-xl flex items-center justify-center font-bold text-xl sm:text-2xl text-[#F0C14B] shadow-md group-hover:scale-105 transition-transform">
             B
           </div>
           <div>
-            <h1 className="font-bold text-lg text-[#001B3A] tracking-tight leading-tight">
+            <h1 className="font-bold text-sm sm:text-lg text-[#001B3A] tracking-tight leading-tight">
               BLESSING POWER GUIDE
             </h1>
-            <p className="text-[10px] text-blue-600 font-semibold tracking-wider uppercase">
+            <p className="text-[9px] sm:text-[10px] text-blue-600 font-semibold tracking-wider uppercase">
               Your Success, Our Mission
             </p>
           </div>
         </Link>
 
-        {/* Live Instant Search Bar */}
+        {/* Live Instant Search Bar (Desktop/Tablet) */}
         <div className="flex-1 max-w-xl hidden sm:block relative">
           <div className="flex border-2 border-slate-200 rounded-xl overflow-hidden focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-100 transition-all bg-white">
             <select
@@ -136,23 +136,23 @@ export const Header = () => {
         </div>
 
         {/* Header Actions */}
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
           {/* Admin Panel Quick Access Button */}
           {user && user.role === 'admin' && (
             <Link
               href="/admin"
-              className="bg-[#001B3A] hover:bg-blue-600 text-amber-400 font-extrabold text-[11px] px-3 py-1.5 rounded-xl transition-all shadow-xs flex items-center gap-1.5 border border-amber-400/30"
+              className="bg-[#001B3A] hover:bg-blue-600 text-amber-400 font-extrabold text-[10px] sm:text-[11px] px-2.5 sm:px-3 py-1.5 rounded-xl transition-all shadow-xs flex items-center gap-1 border border-amber-400/30"
             >
               <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
-              <span className="hidden sm:inline">ADMIN PANEL</span>
+              <span>ADMIN</span>
             </Link>
           )}
 
-          {/* User Account Button: Direct Link to /profile when logged in */}
+          {/* User Account Button */}
           {user ? (
             <Link
               href="/profile"
-              className="p-2 rounded-xl text-slate-700 hover:bg-slate-100 transition-colors flex flex-col items-center gap-0.5"
+              className="p-1.5 sm:p-2 rounded-xl text-slate-700 hover:bg-slate-100 transition-colors flex flex-col items-center gap-0.5"
             >
               <User className="w-5 h-5 text-blue-600" />
               <span className="text-[10px] font-semibold hidden md:block">
@@ -162,7 +162,7 @@ export const Header = () => {
           ) : (
             <button
               onClick={() => setIsAuthOpen(true)}
-              className="p-2 rounded-xl text-slate-700 hover:bg-slate-100 transition-colors flex flex-col items-center gap-0.5"
+              className="p-1.5 sm:p-2 rounded-xl text-slate-700 hover:bg-slate-100 transition-colors flex flex-col items-center gap-0.5 cursor-pointer"
             >
               <User className="w-5 h-5 text-slate-700" />
               <span className="text-[10px] font-semibold hidden md:block">Account</span>
@@ -172,7 +172,7 @@ export const Header = () => {
           {/* Wishlist Button */}
           <Link
             href="/profile"
-            className="relative p-2 rounded-xl text-slate-700 hover:bg-slate-100 transition-colors flex flex-col items-center gap-0.5"
+            className="relative p-1.5 sm:p-2 rounded-xl text-slate-700 hover:bg-slate-100 transition-colors flex flex-col items-center gap-0.5"
           >
             <Heart
               className={`w-5 h-5 ${
@@ -190,7 +190,7 @@ export const Header = () => {
           {/* Cart Button */}
           <button
             onClick={() => setIsCartOpen(true)}
-            className="relative p-2 rounded-xl text-slate-700 hover:bg-slate-100 transition-colors flex flex-col items-center gap-0.5"
+            className="relative p-1.5 sm:p-2 rounded-xl text-slate-700 hover:bg-slate-100 transition-colors flex flex-col items-center gap-0.5 cursor-pointer"
           >
             <ShoppingBag className="w-5 h-5 text-slate-700" />
             {cartCount > 0 && (
@@ -200,6 +200,66 @@ export const Header = () => {
             )}
             <span className="text-[10px] font-semibold hidden md:block">Cart</span>
           </button>
+        </div>
+      </div>
+
+      {/* Mobile Touch-Friendly Search Input Bar (Visible on Phones < 640px) */}
+      <div className="px-4 pb-2.5 sm:hidden bg-white border-t border-slate-100">
+        <div className="relative">
+          <div className="flex border border-slate-300 rounded-xl overflow-hidden focus-within:border-blue-600 bg-slate-50">
+            <input
+              type="text"
+              placeholder="Search 6th-12th guides, question banks..."
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setShowSearchDropdown(true);
+              }}
+              onFocus={() => setShowSearchDropdown(true)}
+              onBlur={() => setTimeout(() => setShowSearchDropdown(false), 200)}
+              className="w-full px-3 py-2 text-xs outline-none bg-transparent"
+            />
+            <button className="bg-blue-600 text-white px-3 flex items-center justify-center">
+              <Search className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          {/* Mobile Instant Dropdown */}
+          {showSearchDropdown && searchQuery.trim().length > 0 && (
+            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-2xl z-50 overflow-hidden text-xs">
+              {filteredSearch.length > 0 ? (
+                <div className="divide-y divide-slate-100">
+                  {filteredSearch.map((p) => (
+                    <div
+                      key={p.id}
+                      onClick={() => {
+                        router.push(`/products/${p.slug}`);
+                        setShowSearchDropdown(false);
+                      }}
+                      className="p-2.5 hover:bg-blue-50/60 cursor-pointer flex items-center gap-3 transition-colors"
+                    >
+                      <img
+                        src={p.image}
+                        alt={p.title}
+                        className="w-8 h-8 object-contain rounded bg-slate-100 p-0.5"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="font-bold text-[#001B3A] truncate">{p.title}</div>
+                        <div className="text-[10px] text-slate-500">
+                          {p.cls} • ₹{p.price}
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-bold text-blue-600">VIEW</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-3 text-center text-slate-500 text-[11px]">
+                  No matching books found
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </header>

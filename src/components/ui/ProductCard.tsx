@@ -130,10 +130,10 @@ export const ProductCard = ({ product }: { product: Product }) => {
             if (!user) { setIsAuthOpen(true); return; }
             addToCart(product);
           }}
-          className="bg-[#0044AA] hover:bg-[#001B3A] text-white font-extrabold text-[11px] py-2.5 rounded-xl flex items-center justify-center gap-1 transition-colors uppercase tracking-wider shadow-xs cursor-pointer"
+          className="bg-[#0044AA] hover:bg-[#001B3A] text-white font-extrabold text-[10px] sm:text-[11px] py-2.5 rounded-xl flex items-center justify-center gap-1 transition-colors uppercase tracking-wider shadow-xs cursor-pointer px-1 min-w-0"
         >
-          <ShoppingBag className="w-3.5 h-3.5 text-amber-400" />
-          <span>ADD TO CART</span>
+          <ShoppingBag className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+          <span className="truncate">ADD TO CART</span>
         </button>
 
         <button
@@ -142,10 +142,10 @@ export const ProductCard = ({ product }: { product: Product }) => {
             addToCart(product);
             setIsCheckoutOpen(true);
           }}
-          className="bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-[#001B3A] font-extrabold text-[11px] py-2.5 rounded-xl flex items-center justify-center gap-1 transition-all shadow-xs uppercase tracking-wider cursor-pointer"
+          className="bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-[#001B3A] font-extrabold text-[10px] sm:text-[11px] py-2.5 rounded-xl flex items-center justify-center gap-1 transition-all shadow-xs uppercase tracking-wider cursor-pointer px-1 min-w-0"
         >
-          <Zap className="w-3.5 h-3.5 text-[#001B3A]" />
-          <span>BUY NOW</span>
+          <Zap className="w-3.5 h-3.5 text-[#001B3A] flex-shrink-0" />
+          <span className="truncate">BUY NOW</span>
         </button>
       </div>
     </motion.div>
