@@ -50,7 +50,7 @@ export const Modals = () => {
     showToast,
   } = useStore();
 
-  // Saved Addresses (Flipkart Style)
+  // Saved Addresses
   const [savedAddresses, setSavedAddresses] = useState<any[]>([]);
   const [selectedAddrId, setSelectedAddrId] = useState<number | 'new'>('new');
 
@@ -274,7 +274,7 @@ export const Modals = () => {
         )}
       </AnimatePresence>
 
-      {/* Flipkart Style Checkout Modal */}
+      {/* Checkout Modal */}
       <AnimatePresence>
         {isCheckoutOpen && (
           <div
@@ -540,7 +540,7 @@ export const Modals = () => {
         )}
       </AnimatePresence>
 
-      {/* World-Class Premium Flipkart / Amazon Auth Modal */}
+      {/* Authentication Modal */}
       <AnimatePresence>
         {isAuthOpen && (
           <div

@@ -183,7 +183,7 @@ export default function ProfilePage() {
 
       <div className="max-w-7xl mx-auto px-4 py-8 flex-1 w-full">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          {/* Flipkart / Amazon Style Dynamic Sidebar Navigation */}
+          {/* Dynamic Account Sidebar Navigation */}
           <div className="lg:col-span-4 space-y-4">
             {/* Dynamic User Header Box */}
             <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex items-center gap-4">
