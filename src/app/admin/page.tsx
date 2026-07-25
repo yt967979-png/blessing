@@ -614,65 +614,92 @@ export default function AdminPage() {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-slate-300">
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-slate-300">
                       <div>
                         <span className="text-slate-500 font-bold uppercase block text-[10px]">
-                          Customer Name & Address
+                          Customer & Address
                         </span>
                         <span className="font-bold text-white">{o.customerName}</span>
                         <p className="text-[11px] text-slate-400">
-                          {o.address}, {o.city}
+                          {o.address}{o.city ? `, ${o.city}` : ''}
                         </p>
+                        {o.customerPhone && (
+                          <span className="text-[11px] font-bold text-blue-400 block mt-0.5">
+                            📱 +91 {o.customerPhone}
+                          </span>
+                        )}
                       </div>
                       <div>
                         <span className="text-slate-500 font-bold uppercase block text-[10px]">
-                          Total Order Amount
+                          Order Details
                         </span>
-                        <span className="font-black text-amber-400 text-sm">₹{o.totalAmount}</span>
+                        <span className="font-black text-amber-400 text-sm block">₹{o.totalAmount}</span>
+                        <span className="text-[11px] text-slate-400">
+                          {o.items?.length || 1} Item(s) • {o.createdAt}
+                        </span>
                       </div>
                       <div>
                         <span className="text-slate-500 font-bold uppercase block text-[10px]">
                           Current Status
                         </span>
-                        <span className="font-bold text-emerald-400">{o.courierStatus}</span>
+                        <span className="font-bold text-emerald-400 block">{o.courierStatus}</span>
+                        {o.trackingNumber ? (
+                          <span className="text-[11px] font-mono text-amber-300 font-bold">
+                            AWB: {o.trackingNumber}
+                          </span>
+                        ) : (
+                          <span className="text-[10px] bg-amber-400/20 text-amber-300 px-2 py-0.5 rounded font-bold">
+                            AWB NOT ASSIGNED YET
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex flex-col justify-center">
+                        <button
+                          onClick={() => {
+                            const autoAwb = 'STC-TN-' + Math.floor(100000 + Math.random() * 900000);
+                            setShiprocketAwbInput({ ...shiprocketAwbInput, [o.orderId]: autoAwb });
+                          }}
+                          className="text-[10px] text-amber-400 hover:text-amber-300 font-bold underline mb-1 text-left cursor-pointer"
+                        >
+                          ⚡ Auto-Generate ST Courier Docket
+                        </button>
                       </div>
                     </div>
 
-                    <div className="bg-slate-900 border border-slate-700 rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                      <div className="flex items-center gap-2 flex-wrap">
+                    <div className="bg-slate-900 border border-slate-700 rounded-xl p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                      <div className="flex items-center gap-2 flex-wrap flex-1">
                         <Truck className="w-4 h-4 text-amber-400 flex-shrink-0" />
                         <input
                           type="text"
-                          placeholder="ST Courier Docket No (e.g. STC-TN-984210)"
-                          value={shiprocketAwbInput[o.orderId] || ''}
+                          placeholder="Enter ST Courier Docket No (e.g. STC-TN-984210)..."
+                          value={shiprocketAwbInput[o.orderId] ?? o.trackingNumber ?? ''}
                           onChange={(e) =>
                             setShiprocketAwbInput({
                               ...shiprocketAwbInput,
                               [o.orderId]: e.target.value,
                             })
                           }
-                          className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-white text-xs outline-none focus:border-amber-400 uppercase w-56"
+                          className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-xs outline-none focus:border-amber-400 uppercase flex-1 min-w-[200px]"
                         />
                         <select
-                          value={orderStatuses[o.orderId] || o.courierStatus || 'Order Confirmed'}
+                          value={orderStatuses[o.orderId] || o.courierStatus || 'Shipped via ST Courier'}
                           onChange={(e) => setOrderStatuses({ ...orderStatuses, [o.orderId]: e.target.value })}
-                          className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-white text-xs outline-none focus:border-amber-400"
+                          className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-xs outline-none focus:border-amber-400 font-bold"
                         >
-                          <option>Order Confirmed</option>
-                          <option>Packed &amp; Ready</option>
-                          <option>Packed &amp; Dispatched</option>
-                          <option>Out for Delivery</option>
-                          <option>Delivered</option>
-                          <option>Returned</option>
+                          <option value="Order Placed">Order Placed</option>
+                          <option value="Packed &amp; Dispatched">Packed &amp; Dispatched</option>
+                          <option value="Shipped via ST Courier">Shipped via ST Courier</option>
+                          <option value="Out for Delivery">Out for Delivery</option>
+                          <option value="Delivered">Delivered</option>
                         </select>
                       </div>
 
                       <button
                         onClick={() => handleDispatchOrder(o.orderId)}
-                        className="bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-extrabold text-xs px-5 py-2.5 rounded-xl shadow-md uppercase tracking-wider flex items-center gap-1.5"
+                        className="w-full sm:w-auto bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-black text-xs px-5 py-2.5 rounded-xl shadow-md uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
                       >
                         <Send className="w-3.5 h-3.5" />
-                        <span>SAVE STATUS → DB</span>
+                        <span>ACCEPT ORDER &amp; ASSIGN AWB</span>
                       </button>
                     </div>
                   </div>

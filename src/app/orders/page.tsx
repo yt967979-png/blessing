@@ -265,7 +265,7 @@ export default function OrdersPage() {
                 </div>
 
                 <a
-                  href="https://stcourier.com"
+                  href={searchedOrderData.trackingUrl || (searchedOrderData.trackingNumber ? `https://stcourier.com/track/shipment?docket=${searchedOrderData.trackingNumber}` : 'https://stcourier.com')}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="w-full sm:w-auto bg-amber-400 hover:bg-amber-500 text-[#001B3A] font-extrabold text-xs px-5 py-3 rounded-xl transition-all shadow-md flex items-center justify-center gap-2 whitespace-nowrap"
