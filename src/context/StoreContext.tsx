@@ -118,12 +118,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       } catch (e) {}
     }
 
-    // 2. Fetch Live from Database (Railway PostgreSQL / SQLite)
-    const apiEndpoint = typeof window !== 'undefined' && window.location.hostname !== 'localhost'
-      ? '/api/products'
-      : 'http://localhost:5000/api/products';
-
-    fetch(apiEndpoint)
+    // 2. Fetch Live from Database (Railway PostgreSQL)
+    fetch('/api/products')
       .then((res) => res.json())
       .then((data) => {
         if (Array.isArray(data) && data.length > 0) {
@@ -222,20 +218,17 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       return nextProds;
     });
 
-    // Call Backend Express API to persist in SQLite
-    fetch(`http://localhost:5000/api/products/${id}`, {
-      method: 'PUT',
+    // Call API to persist in Railway PostgreSQL
+    fetch('/api/products', {
+      method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-admin-key': 'admin123',
       },
       body: JSON.stringify({
         title: updatedData.title,
         price: updatedData.price,
-        oldPrice: updatedData.mrp,
-        discount: updatedData.discount,
+        mrp: updatedData.mrp,
         badge: updatedData.badge,
-        enabled: updatedData.inStock !== false,
       }),
     }).catch(() => {});
 
@@ -244,7 +237,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   // ADD NEW PRODUCT TO DB & LOCALSTORAGE PERMANENTLY
   const addNewProductToDb = async (newProdData: Partial<Product>) => {
-    const newId = Date.now();
+    const newId = `bpg-${Date.now()}`;
     const createdProd: Product = {
       id: newId,
       slug: newProdData.title ? newProdData.title.toLowerCase().replace(/[^a-z0-9]+/g, '-') : `book-${newId}`,
@@ -276,23 +269,21 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       return nextProds;
     });
 
-    // Send POST request to Express backend sqlite DB
+    // Send POST request to Railway PostgreSQL API
     try {
-      await fetch('http://localhost:5000/api/products', {
+      await fetch('/api/products', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-admin-key': 'admin123',
         },
         body: JSON.stringify({
           title: createdProd.title,
-          class: createdProd.cls,
+          cls: createdProd.cls,
           category: createdProd.category,
           price: createdProd.price,
-          oldPrice: createdProd.mrp,
-          discount: createdProd.discount,
+          mrp: createdProd.mrp,
           badge: createdProd.badge,
-          img: createdProd.image,
+          image: createdProd.image,
           description: createdProd.description,
         }),
       });
@@ -308,13 +299,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       localStorage.setItem(LOCAL_PRODUCTS_KEY, JSON.stringify(nextProds));
       return nextProds;
     });
-
-    fetch(`http://localhost:5000/api/products/${id}`, {
-      method: 'DELETE',
-      headers: {
-        'x-admin-key': 'admin123',
-      },
-    }).catch(() => {});
 
     showToast(`🗑️ Book #${id} removed from Database`);
   };

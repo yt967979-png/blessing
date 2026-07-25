@@ -1,5 +1,5 @@
 // API helper for backend server communication with HMAC signature validation
-const API_BASE = 'http://localhost:5000/api';
+const API_BASE = '/api';
 
 export async function fetchProducts() {
   try {

@@ -34,7 +34,7 @@ export default function OrdersPage() {
     if (!searchOrder.trim()) return;
 
     try {
-      const res = await fetch(`http://localhost:5000/api/orders/track/${searchOrder.trim()}`);
+      const res = await fetch('/api/orders');
       if (res.ok) {
         const data = await res.json();
         setSearchedOrderData(data);

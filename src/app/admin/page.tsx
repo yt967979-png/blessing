@@ -49,11 +49,7 @@ export default function AdminPage() {
 
   const loadLiveOrders = async () => {
     try {
-      const apiEndpoint = window.location.hostname !== 'localhost'
-        ? '/api/orders'
-        : 'http://localhost:5000/api/orders';
-
-      const res = await fetch(apiEndpoint, {
+      const res = await fetch('/api/orders', {
         headers: { 'x-admin-key': 'admin123' },
       });
       if (res.ok) {

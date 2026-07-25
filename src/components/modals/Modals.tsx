@@ -121,11 +121,7 @@ export const Modals = () => {
 
     // Call API to store order live in database
     try {
-      const apiEndpoint = window.location.hostname !== 'localhost'
-        ? '/api/orders'
-        : 'http://localhost:5000/api/orders';
-
-      await fetch(apiEndpoint, {
+      await fetch('/api/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
