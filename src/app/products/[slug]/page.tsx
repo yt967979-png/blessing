@@ -314,6 +314,24 @@ export default function ProductDetailPage({
         )}
       </div>
 
+      {/* Sticky Mobile Touch Action Bar (< 640px) */}
+      <div className="fixed bottom-0 inset-x-0 bg-white/95 backdrop-blur-md border-t border-slate-200 p-3 z-40 sm:hidden flex items-center gap-2 shadow-2xl">
+        <button
+          onClick={() => toggleWishlist(product.id)}
+          className="p-3 rounded-xl border border-slate-300 text-slate-700 bg-slate-50 flex-shrink-0"
+        >
+          <Heart className={`w-5 h-5 ${isWishlisted ? 'text-red-500 fill-red-500' : 'text-slate-400'}`} />
+        </button>
+
+        <button
+          onClick={() => addToCart(product)}
+          className="flex-1 bg-[#0044AA] hover:bg-[#001B3A] text-white font-extrabold text-xs py-3.5 rounded-xl flex items-center justify-center gap-1.5 shadow-md uppercase tracking-wider cursor-pointer"
+        >
+          <ShoppingBag className="w-4 h-4 text-amber-400" />
+          <span>ADD TO CART</span>
+        </button>
+      </div>
+
       <Footer />
       <CartDrawer />
       <Modals />
