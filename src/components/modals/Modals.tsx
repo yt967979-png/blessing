@@ -427,12 +427,12 @@ export const Modals = () => {
                   </div>
                 )}
 
-                {/* Flipkart Assured & Payment Method */}
+                {/* Quality & Payment Method */}
                 <div className="pt-2">
                   <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-center justify-between text-xs mb-3">
                     <div className="flex items-center gap-2 text-emerald-800 font-bold">
                       <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                      <span>Flipkart Assured • 100% Original Book Guarantee</span>
+                      <span>100% Original Book Guarantee</span>
                     </div>
                     <span className="text-[10px] bg-emerald-600 text-white font-extrabold px-2 py-0.5 rounded">FREE EXPRESS DELIVERY</span>
                   </div>
