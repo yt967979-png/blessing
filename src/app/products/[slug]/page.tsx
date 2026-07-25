@@ -11,7 +11,6 @@ import {
   CheckCircle,
   ChevronRight,
 } from 'lucide-react';
-import { PRODUCTS } from '@/lib/products';
 import { useStore } from '@/context/StoreContext';
 import { Header } from '@/components/layout/Header';
 import { NavBar } from '@/components/layout/NavBar';
@@ -28,12 +27,27 @@ export default function ProductDetailPage({
 }) {
   const resolvedParams = use(params);
   const { products, addToCart, toggleWishlist, wishlist } = useStore();
-
-  const currentProducts = products.length > 0 ? products : PRODUCTS;
-  const product = currentProducts.find((p) => p.slug === resolvedParams.slug) || currentProducts[0];
-
-  const [activeImg, setActiveImg] = useState(product?.image || '');
+  const [dbProduct, setDbProduct] = useState<any>(null);
   const [dbReviews, setDbReviews] = useState<any[]>([]);
+
+  useEffect(() => {
+    async function fetchProduct() {
+      try {
+        const res = await fetch(`/api/products`);
+        if (res.ok) {
+          const list = await res.json();
+          if (Array.isArray(list)) {
+            const found = list.find((p: any) => p.slug === resolvedParams.slug) || list[0];
+            setDbProduct(found);
+          }
+        }
+      } catch (err) {}
+    }
+    fetchProduct();
+  }, [resolvedParams.slug]);
+
+  const product = dbProduct || products.find((p: any) => p.slug === resolvedParams.slug) || products[0];
+  const [activeImg, setActiveImg] = useState(product?.image || '');
 
   useEffect(() => {
     if (product?.image) {
@@ -61,7 +75,7 @@ export default function ProductDetailPage({
   if (!product) return null;
 
   const isWishlisted = wishlist.includes(product.id);
-  const relatedProducts = currentProducts.filter((p) => p.id !== product.id).slice(0, 4);
+  const relatedProducts = products.filter((p: any) => p.id !== product.id).slice(0, 4);
 
   const checkPincode = (e: React.FormEvent) => {
     e.preventDefault();
@@ -178,7 +192,7 @@ export default function ProductDetailPage({
                 KEY FEATURES & HIGHLIGHTS
               </h4>
               <div className="grid grid-cols-2 gap-2 text-xs text-slate-700">
-                {product.features.map((feat, idx) => (
+                {product.features?.map((feat: string, idx: number) => (
                   <div key={idx} className="flex items-center gap-2">
                     <CheckCircle className="w-4 h-4 text-emerald-600" />
                     <span>{feat}</span>
