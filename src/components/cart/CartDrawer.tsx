@@ -1,0 +1,169 @@
+'use client';
+
+import React from 'react';
+import Link from 'next/link';
+import { motion, AnimatePresence } from 'framer-motion';
+import { ShoppingBag, X, Truck, Plus, Minus, ArrowRight } from 'lucide-react';
+import { useStore } from '@/context/StoreContext';
+
+export const CartDrawer = () => {
+  const {
+    cart,
+    isCartOpen,
+    setIsCartOpen,
+    updateQty,
+    cartTotal,
+    setIsCheckoutOpen,
+  } = useStore();
+
+  const freeDeliveryThreshold = 499;
+  const amountForFreeDelivery = Math.max(0, freeDeliveryThreshold - cartTotal);
+  const deliveryProgress = Math.min(100, (cartTotal / freeDeliveryThreshold) * 100);
+
+  return (
+    <AnimatePresence>
+      {isCartOpen && (
+        <>
+          {/* Overlay */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setIsCartOpen(false)}
+            className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50"
+          />
+
+          {/* Drawer */}
+          <motion.div
+            initial={{ x: '100%' }}
+            animate={{ x: 0 }}
+            exit={{ x: '100%' }}
+            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+            className="fixed top-0 right-0 h-full w-full max-w-md bg-white z-50 shadow-2xl flex flex-col"
+          >
+            {/* Header */}
+            <div className="bg-[#001B3A] text-white p-4 flex justify-between items-center">
+              <h3 className="font-heading font-extrabold text-base flex items-center gap-2">
+                <ShoppingBag className="w-5 h-5 text-amber-400" />
+                <span>Shopping Cart ({cart.reduce((a, b) => a + b.qty, 0)})</span>
+              </h3>
+              <button
+                onClick={() => setIsCartOpen(false)}
+                className="text-slate-300 hover:text-white p-1 rounded-full hover:bg-white/10 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Dynamic Free Delivery Bar */}
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-3 border-b border-blue-100 text-xs">
+              <div className="flex items-center gap-2 text-blue-900 font-bold mb-1.5">
+                <Truck className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                {amountForFreeDelivery === 0 ? (
+                  <span className="text-emerald-700">🎉 Congratulations! You unlocked FREE Express Delivery!</span>
+                ) : (
+                  <span>Add ₹{amountForFreeDelivery} more for FREE Express Delivery!</span>
+                )}
+              </div>
+              <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-amber-400 to-emerald-500 transition-all duration-300"
+                  style={{ width: `${deliveryProgress}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Body */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {cart.length === 0 ? (
+                <div className="text-center py-16 text-slate-400">
+                  <ShoppingBag className="w-16 h-16 mx-auto mb-3 opacity-20 text-blue-600" />
+                  <h4 className="font-heading font-black text-base text-slate-700">
+                    Your cart is empty
+                  </h4>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Explore 6th-12th guide books and add items to your cart.
+                  </p>
+                </div>
+              ) : (
+                cart.map((item) => (
+                  <div
+                    key={item.id}
+                    className="flex gap-3 pb-3 border-b border-slate-100 items-center"
+                  >
+                    <img
+                      src={item.image}
+                      alt={item.title}
+                      className="w-14 h-14 object-contain bg-slate-50 border border-slate-200 rounded-xl p-1 flex-shrink-0"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-heading font-bold text-xs text-[#001B3A] truncate">
+                        {item.title}
+                      </h4>
+                      <div className="font-extrabold text-sm text-slate-900 mt-0.5">
+                        ₹{item.price * item.qty}
+                        <span className="text-[10px] text-slate-400 font-normal ml-1">
+                          (₹{item.price} each)
+                        </span>
+                      </div>
+
+                      {/* Quantity Controls */}
+                      <div className="flex items-center gap-2 mt-2">
+                        <button
+                          onClick={() => updateQty(item.id, -1)}
+                          className="w-6 h-6 rounded-lg bg-slate-100 border border-slate-200 text-slate-700 font-bold flex items-center justify-center hover:bg-slate-200"
+                        >
+                          <Minus className="w-3 h-3" />
+                        </button>
+                        <span className="text-xs font-bold text-slate-800 w-4 text-center">
+                          {item.qty}
+                        </span>
+                        <button
+                          onClick={() => updateQty(item.id, 1)}
+                          className="w-6 h-6 rounded-lg bg-slate-100 border border-slate-200 text-slate-700 font-bold flex items-center justify-center hover:bg-slate-200"
+                        >
+                          <Plus className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Footer */}
+            {cart.length > 0 && (
+              <div className="bg-slate-50 border-t border-slate-200 p-4 space-y-3">
+                <div className="flex justify-between items-center font-black text-base text-[#001B3A]">
+                  <span>Total Payable:</span>
+                  <span className="text-xl">₹{cartTotal}</span>
+                </div>
+
+                <button
+                  onClick={() => {
+                    setIsCartOpen(false);
+                    setIsCheckoutOpen(true);
+                  }}
+                  className="w-full bg-gradient-to-r from-amber-400 to-amber-500 text-[#001B3A] font-extrabold text-xs py-3.5 rounded-xl shadow-md hover:shadow-lg transition-all uppercase tracking-wider text-center"
+                >
+                  PROCEED TO CHECKOUT
+                </button>
+
+                <div className="text-center pt-1">
+                  <Link
+                    href="/cart"
+                    onClick={() => setIsCartOpen(false)}
+                    className="text-xs font-bold text-blue-600 hover:underline inline-flex items-center gap-1"
+                  >
+                    <span>View Full Cart Page</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
+                </div>
+              </div>
+            )}
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  );
+};

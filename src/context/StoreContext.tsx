@@ -1,0 +1,391 @@
+'use client';
+
+import React, { createContext, useContext, useState, useEffect } from 'react';
+
+export interface Product {
+  id: number;
+  slug: string;
+  title: string;
+  subtitle: string;
+  cls: string;
+  category: 'guide' | 'combo' | 'question-bank';
+  subject: string;
+  price: number;
+  mrp: number;
+  discount: number;
+  rating: number;
+  reviews: number;
+  badge: string;
+  badgeColor: string;
+  image: string;
+  hoverImage?: string;
+  description: string;
+  features: string[];
+  inStock: boolean;
+  isNew?: boolean;
+  isBestSeller?: boolean;
+  isTrending?: boolean;
+}
+
+export interface CartItem extends Product {
+  qty: number;
+}
+
+export interface UserData {
+  id: number | string;
+  name: string;
+  email: string;
+  phone?: string;
+  token?: string;
+}
+
+interface StoreContextType {
+  products: Product[];
+  cart: CartItem[];
+  wishlist: number[];
+  user: UserData | null;
+  toast: string | null;
+  searchQuery: string;
+  setSearchQuery: (q: string) => void;
+  selectedClass: string;
+  setSelectedClass: (c: string) => void;
+  selectedCategory: string;
+  setSelectedCategory: (cat: string) => void;
+  quickViewProduct: Product | null;
+  setQuickViewProduct: (p: Product | null) => void;
+  isCartOpen: boolean;
+  setIsCartOpen: (open: boolean) => void;
+  isCheckoutOpen: boolean;
+  setIsCheckoutOpen: (open: boolean) => void;
+  isTrackOpen: boolean;
+  setIsTrackOpen: (open: boolean) => void;
+  isAuthOpen: boolean;
+  setIsAuthOpen: (open: boolean) => void;
+  isProfileOpen: boolean;
+  setIsProfileOpen: (open: boolean) => void;
+  addToCart: (product: Product, qty?: number) => void;
+  updateQty: (id: number, delta: number) => void;
+  removeFromCart: (id: number) => void;
+  clearCart: () => void;
+  toggleWishlist: (id: number) => void;
+  loginUser: (u: UserData) => void;
+  logoutUser: () => void;
+  updateProductInDb: (id: number, updatedData: Partial<Product>) => void;
+  addNewProductToDb: (newProdData: Partial<Product>) => void;
+  deleteProductFromDb: (id: number) => void;
+  cartTotal: number;
+  cartCount: number;
+  showToast: (msg: string) => void;
+}
+
+const StoreContext = createContext<StoreContextType | undefined>(undefined);
+
+const LOCAL_PRODUCTS_KEY = 'bpg_products_db_persistent_v3';
+
+export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [wishlist, setWishlist] = useState<number[]>([]);
+  const [user, setUser] = useState<UserData | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedClass, setSelectedClass] = useState('ALL');
+  const [selectedCategory, setSelectedCategory] = useState('ALL');
+
+  const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
+  const [isCartOpen, setIsCartOpen] = useState(false);
+  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [isTrackOpen, setIsTrackOpen] = useState(false);
+  const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  // Initial Load from Backend Database + LocalStorage Persistence
+  useEffect(() => {
+    // 1. Check LocalStorage Cache
+    const cachedProducts = localStorage.getItem(LOCAL_PRODUCTS_KEY);
+    if (cachedProducts) {
+      try {
+        const parsed = JSON.parse(cachedProducts);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setProducts(parsed);
+        }
+      } catch (e) {}
+    }
+
+    // 2. Fetch Live from SQLite Backend Database
+    fetch('http://localhost:5000/api/products')
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          const mapped: Product[] = data.map((d: any) => ({
+            id: Number(d.id.toString().replace(/[^0-9]/g, '')) || Date.now(),
+            slug: d.id,
+            title: d.title,
+            subtitle: `${d.class || '10th'} Standard Guide`,
+            cls: d.class || '10th',
+            category: (d.category === 'combo' ? 'combo' : d.category === 'question-bank' ? 'question-bank' : 'guide') as any,
+            subject: 'State Board',
+            price: Number(d.price),
+            mrp: Number(d.oldPrice || d.price + 40),
+            discount: Number(d.discount || 20),
+            rating: Number(d.rating || 5.0),
+            reviews: Number(d.reviews || 10),
+            badge: d.badge || 'BESTSELLER',
+            badgeColor: 'bg-blue-600',
+            image: d.img || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80',
+            hoverImage: d.img || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80',
+            description: d.description || 'Complete guide book for exam success.',
+            features: ['Solved Papers', 'Chapter Notes'],
+            inStock: Boolean(d.enabled ?? true),
+          }));
+
+          setProducts(mapped);
+          localStorage.setItem(LOCAL_PRODUCTS_KEY, JSON.stringify(mapped));
+        }
+      })
+      .catch(() => {});
+
+    // Cart & User restore
+    const savedCart = localStorage.getItem('bpg_cart_next');
+    if (savedCart) setCart(JSON.parse(savedCart));
+
+    const savedUser = localStorage.getItem('bpg_user_next');
+    if (savedUser) setUser(JSON.parse(savedUser));
+  }, []);
+
+  // Save Cart to LocalStorage
+  useEffect(() => {
+    localStorage.setItem('bpg_cart_next', JSON.stringify(cart));
+  }, [cart]);
+
+  // Save Products to LocalStorage cache whenever updated
+  useEffect(() => {
+    if (products.length > 0) {
+      localStorage.setItem(LOCAL_PRODUCTS_KEY, JSON.stringify(products));
+    }
+  }, [products]);
+
+  const addToCart = (product: Product, qty = 1) => {
+    setCart((prev) => {
+      const existing = prev.find((item) => item.id === product.id);
+      if (existing) {
+        return prev.map((item) =>
+          item.id === product.id ? { ...item, qty: item.qty + qty } : item
+        );
+      }
+      return [...prev, { ...product, qty }];
+    });
+    showToast(`✓ Added "${product.title}" to cart`);
+  };
+
+  const updateQty = (id: number, delta: number) => {
+    setCart((prev) =>
+      prev
+        .map((item) => {
+          if (item.id === id) {
+            const newQty = item.qty + delta;
+            return newQty > 0 ? { ...item, qty: newQty } : null;
+          }
+          return item;
+        })
+        .filter(Boolean) as CartItem[]
+    );
+  };
+
+  const removeFromCart = (id: number) => {
+    setCart((prev) => prev.filter((item) => item.id !== id));
+  };
+
+  const clearCart = () => setCart([]);
+
+  const toggleWishlist = (id: number) => {
+    setWishlist((prev) => {
+      if (prev.includes(id)) {
+        showToast('Item removed from wishlist');
+        return prev.filter((item) => item !== id);
+      } else {
+        showToast('❤️ Added to wishlist');
+        return [...prev, id];
+      }
+    });
+  };
+
+  const loginUser = (userData: UserData) => {
+    setUser(userData);
+    localStorage.setItem('bpg_user_next', JSON.stringify(userData));
+    showToast(`Welcome back, ${userData.name}!`);
+  };
+
+  const logoutUser = () => {
+    setUser(null);
+    localStorage.removeItem('bpg_user_next');
+    showToast('Logged out successfully');
+  };
+
+  // UPDATE PRODUCT IN DB & LOCALSTORAGE
+  const updateProductInDb = (id: number, updatedData: Partial<Product>) => {
+    setProducts((prev) => {
+      const nextProds = prev.map((p) => (p.id === id ? { ...p, ...updatedData } : p));
+      localStorage.setItem(LOCAL_PRODUCTS_KEY, JSON.stringify(nextProds));
+      return nextProds;
+    });
+
+    // Call Backend Express API to persist in SQLite
+    fetch(`http://localhost:5000/api/products/${id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-admin-key': 'admin123',
+      },
+      body: JSON.stringify({
+        title: updatedData.title,
+        price: updatedData.price,
+        oldPrice: updatedData.mrp,
+        discount: updatedData.discount,
+        badge: updatedData.badge,
+        enabled: updatedData.inStock !== false,
+      }),
+    }).catch(() => {});
+
+    showToast(`✓ Product #${id} saved permanently to Database!`);
+  };
+
+  // ADD NEW PRODUCT TO DB & LOCALSTORAGE PERMANENTLY
+  const addNewProductToDb = async (newProdData: Partial<Product>) => {
+    const newId = Date.now();
+    const createdProd: Product = {
+      id: newId,
+      slug: newProdData.title ? newProdData.title.toLowerCase().replace(/[^a-z0-9]+/g, '-') : `book-${newId}`,
+      title: newProdData.title || 'New Guide Book',
+      subtitle: `${newProdData.cls || '10th'} Standard Guide`,
+      cls: newProdData.cls || '10th',
+      category: newProdData.category || 'guide',
+      subject: newProdData.subject || 'State Board',
+      price: Number(newProdData.price) || 190,
+      mrp: Number(newProdData.mrp) || 240,
+      discount: Number(newProdData.discount) || 20,
+      rating: 5.0,
+      reviews: 1,
+      badge: newProdData.badge || 'NEW',
+      badgeColor: 'bg-emerald-600',
+      image: newProdData.image || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80',
+      hoverImage: newProdData.image || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80',
+      description: newProdData.description || 'Quality guide book for TN Board / CBSE exams.',
+      features: ['Model Question Papers', 'Previous Year Questions', 'Chapter-wise Notes'],
+      inStock: true,
+      isNew: true,
+      isBestSeller: true,
+      isTrending: true,
+    };
+
+    setProducts((prev) => {
+      const nextProds = [createdProd, ...prev];
+      localStorage.setItem(LOCAL_PRODUCTS_KEY, JSON.stringify(nextProds));
+      return nextProds;
+    });
+
+    // Send POST request to Express backend sqlite DB
+    try {
+      await fetch('http://localhost:5000/api/products', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-key': 'admin123',
+        },
+        body: JSON.stringify({
+          title: createdProd.title,
+          class: createdProd.cls,
+          category: createdProd.category,
+          price: createdProd.price,
+          oldPrice: createdProd.mrp,
+          discount: createdProd.discount,
+          badge: createdProd.badge,
+          img: createdProd.image,
+          description: createdProd.description,
+        }),
+      });
+    } catch (err) {}
+
+    showToast(`🎉 Book "${createdProd.title}" saved permanently to Database!`);
+  };
+
+  // DELETE PRODUCT FROM DB & LOCALSTORAGE
+  const deleteProductFromDb = (id: number) => {
+    setProducts((prev) => {
+      const nextProds = prev.filter((p) => p.id !== id);
+      localStorage.setItem(LOCAL_PRODUCTS_KEY, JSON.stringify(nextProds));
+      return nextProds;
+    });
+
+    fetch(`http://localhost:5000/api/products/${id}`, {
+      method: 'DELETE',
+      headers: {
+        'x-admin-key': 'admin123',
+      },
+    }).catch(() => {});
+
+    showToast(`🗑️ Book #${id} removed from Database`);
+  };
+
+  const cartTotal = cart.reduce((acc, item) => acc + item.price * item.qty, 0);
+  const cartCount = cart.reduce((acc, item) => acc + item.qty, 0);
+
+  return (
+    <StoreContext.Provider
+      value={{
+        products,
+        cart,
+        wishlist,
+        user,
+        toast,
+        searchQuery,
+        setSearchQuery,
+        selectedClass,
+        setSelectedClass,
+        selectedCategory,
+        setSelectedCategory,
+        quickViewProduct,
+        setQuickViewProduct,
+        isCartOpen,
+        setIsCartOpen,
+        isCheckoutOpen,
+        setIsCheckoutOpen,
+        isTrackOpen,
+        setIsTrackOpen,
+        isAuthOpen,
+        setIsAuthOpen,
+        isProfileOpen,
+        setIsProfileOpen,
+        addToCart,
+        updateQty,
+        removeFromCart,
+        clearCart,
+        toggleWishlist,
+        loginUser,
+        logoutUser,
+        updateProductInDb,
+        addNewProductToDb,
+        deleteProductFromDb,
+        cartTotal,
+        cartCount,
+        showToast,
+      }}
+    >
+      {children}
+    </StoreContext.Provider>
+  );
+};
+
+export const useStore = () => {
+  const context = useContext(StoreContext);
+  if (!context) {
+    throw new Error('useStore must be used within a StoreProvider');
+  }
+  return context;
+};
