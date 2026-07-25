@@ -12,9 +12,6 @@ export async function POST(request: Request) {
     }
 
     const client = await getDbClient();
-    if (!client) {
-      return NextResponse.json({ message: 'DB offline, local state kept.' });
-    }
 
     try {
       // 1. Sync Cart
