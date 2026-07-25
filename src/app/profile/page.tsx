@@ -67,7 +67,7 @@ export default function ProfilePage() {
 
   // Fetch live orders from backend database
   useEffect(() => {
-    fetch('http://localhost:5000/api/orders')
+    fetch('/api/orders')
       .then((res) => res.json())
       .then((data) => {
         if (Array.isArray(data)) {
