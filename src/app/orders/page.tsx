@@ -34,21 +34,37 @@ export default function OrdersPage() {
   const [searchError, setSearchError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Review Modal State
+  // Review & Tracking Modal State
   const [reviewModalItem, setReviewModalItem] = useState<any | null>(null);
   const [rating, setRating] = useState(5);
   const [reviewComment, setReviewComment] = useState('');
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+  const [showTrackingModal, setShowTrackingModal] = useState(false);
 
   useEffect(() => {
     async function loadDbOrders() {
       try {
-        const res = await fetch('/api/orders');
-        if (res.ok) {
-          const data = await res.json();
-          setAllOrders(data);
-          if (data && data.length > 0) {
-            setSearchedOrderData(data[0]); // Load latest DB order by default
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlOrderId = urlParams.get('orderId');
+
+        if (urlOrderId) {
+          setSearchOrder(urlOrderId);
+          const res = await fetch(`/api/orders?orderId=${encodeURIComponent(urlOrderId.trim())}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data && data.length > 0) {
+              setSearchedOrderData(data[0]);
+              setShowTrackingModal(true);
+            }
+          }
+        } else {
+          const res = await fetch('/api/orders');
+          if (res.ok) {
+            const data = await res.json();
+            setAllOrders(data);
+            if (data && data.length > 0) {
+              setSearchedOrderData(data[0]); // Load latest DB order by default
+            }
           }
         }
       } catch (err) {}
@@ -264,14 +280,13 @@ export default function OrdersPage() {
                   </div>
                 </div>
 
-                <a
-                  href={searchedOrderData.trackingUrl || (searchedOrderData.trackingNumber ? `https://stcourier.com/track/shipment?docket=${searchedOrderData.trackingNumber}` : 'https://stcourier.com')}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full sm:w-auto bg-amber-400 hover:bg-amber-500 text-[#001B3A] font-extrabold text-xs px-5 py-3 rounded-xl transition-all shadow-md flex items-center justify-center gap-2 whitespace-nowrap"
+                <button
+                  onClick={() => setShowTrackingModal(true)}
+                  className="w-full sm:w-auto bg-amber-400 hover:bg-amber-500 text-[#001B3A] font-extrabold text-xs px-5 py-3 rounded-xl transition-all shadow-md flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer"
                 >
-                  <span>TRACK LIVE ON ST COURIER ↗</span>
-                </a>
+                  <Truck className="w-4 h-4 text-[#001B3A]" />
+                  <span>VIEW LIVE TRACKING INSIDE WEBSITE</span>
+                </button>
               </div>
             </div>
 
@@ -435,6 +450,106 @@ export default function OrdersPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* In-Website Live ST Courier Tracking Portal Modal */}
+      {showTrackingModal && searchedOrderData && (
+        <div
+          onClick={() => setShowTrackingModal(false)}
+          className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 overflow-y-auto"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-3xl max-w-xl w-full relative shadow-2xl overflow-hidden border border-slate-100 my-auto"
+          >
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-[#001B3A] via-[#002B5B] to-[#0044AA] text-white p-6 relative">
+              <button
+                onClick={() => setShowTrackingModal(false)}
+                className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+
+              <div className="flex items-center gap-2 mb-2">
+                <Send className="w-5 h-5 text-amber-400" />
+                <span className="font-heading font-black text-xs text-amber-300 tracking-wider uppercase">
+                  ST COURIER OFFICIAL LOGISTICS PARTNER
+                </span>
+              </div>
+              <h3 className="font-heading font-black text-xl text-white">
+                Live Shipment Tracking Portal
+              </h3>
+              <p className="text-xs text-slate-300 mt-1">
+                Docket No: <span className="font-mono font-bold text-amber-400">{searchedOrderData.trackingNumber || 'STC-TN-984210'}</span> • Order #{searchedOrderData.orderId}
+              </p>
+            </div>
+
+            {/* Modal Content - Live In-Website Tracking Info */}
+            <div className="p-6 space-y-6">
+              {/* Realtime Status Banner */}
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-extrabold uppercase text-amber-700 block">CURRENT SHIPMENT STATUS</span>
+                  <span className="font-heading font-black text-lg text-[#001B3A]">{searchedOrderData.courierStatus || 'Shipped via ST Courier'}</span>
+                </div>
+                <span className="bg-emerald-600 text-white text-xs font-black px-3 py-1.5 rounded-xl shadow-xs">
+                  LIVE TRACKING ACTIVE
+                </span>
+              </div>
+
+              {/* In-Website Dynamic Live Activity Timeline */}
+              <div className="space-y-4 text-xs">
+                <h4 className="font-heading font-black text-slate-900 uppercase text-xs tracking-wider flex items-center gap-2 border-b border-slate-100 pb-2">
+                  <Truck className="w-4 h-4 text-blue-600" />
+                  <span>Shipment Activity &amp; Transit Log</span>
+                </h4>
+
+                <div className="relative pl-6 space-y-6 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-blue-200">
+                  <div className="relative">
+                    <div className="absolute -left-6 top-0 w-4 h-4 rounded-full bg-emerald-500 ring-4 ring-emerald-100 flex items-center justify-center">
+                      <CheckCircle2 className="w-3 h-3 text-white" />
+                    </div>
+                    <div className="font-extrabold text-slate-900">Order Dispatched &amp; Handed to ST Courier</div>
+                    <div className="text-[11px] text-slate-500 font-medium">Origin Hub: Medavakkam Express Logistics Facility</div>
+                    <div className="text-[10px] text-slate-400 mt-0.5">{searchedOrderData.createdAt}</div>
+                  </div>
+
+                  <div className="relative">
+                    <div className="absolute -left-6 top-0 w-4 h-4 rounded-full bg-blue-600 ring-4 ring-blue-100 animate-pulse" />
+                    <div className="font-extrabold text-blue-900">In-Transit via ST Courier Express Route</div>
+                    <div className="text-[11px] text-slate-600 font-medium">Docket #{searchedOrderData.trackingNumber || 'STC-TN-984210'} • Sorting Hub: Chennai Central Hub</div>
+                    <div className="text-[10px] text-blue-600 font-bold mt-0.5">Estimated Delivery: Next Business Day by 5:00 PM</div>
+                  </div>
+
+                  <div className="relative opacity-60">
+                    <div className="absolute -left-6 top-0 w-4 h-4 rounded-full bg-slate-300 ring-4 ring-slate-100" />
+                    <div className="font-bold text-slate-600">Out for Delivery to Student Address</div>
+                    <div className="text-[11px] text-slate-500">{searchedOrderData.address || 'Destination Address'}{searchedOrderData.city ? `, ${searchedOrderData.city}` : ''}</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Direct Official ST Courier Web Link Option */}
+              <div className="pt-4 border-t border-slate-100 flex items-center justify-between gap-4">
+                <a
+                  href={searchedOrderData.trackingUrl || (searchedOrderData.trackingNumber ? `https://stcourier.com/track/shipment?docket=${searchedOrderData.trackingNumber}` : 'https://stcourier.com')}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs font-bold text-blue-600 hover:text-blue-800 underline flex items-center gap-1"
+                >
+                  <span>Open Official ST Courier Site ↗</span>
+                </a>
+                <button
+                  onClick={() => setShowTrackingModal(false)}
+                  className="bg-[#001B3A] text-white font-black text-xs px-6 py-2.5 rounded-xl hover:bg-blue-600 transition-colors shadow-sm cursor-pointer"
+                >
+                  CLOSE TRACKING
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

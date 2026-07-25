@@ -459,10 +459,11 @@ export default function ProfilePage() {
                             </div>
                           </div>
                           <Link
-                            href="/orders"
-                            className="bg-[#001B3A] hover:bg-blue-600 text-white font-bold text-xs px-4 py-2 rounded-xl transition-colors"
+                            href={`/orders?orderId=${o.orderId}`}
+                            className="bg-[#001B3A] hover:bg-blue-600 text-white font-bold text-xs px-4 py-2 rounded-xl transition-colors flex items-center gap-1.5"
                           >
-                            TRACK ORDER
+                            <Truck className="w-3.5 h-3.5 text-amber-400" />
+                            <span>VIEW LIVE TRACKING</span>
                           </Link>
                         </div>
                       </div>
