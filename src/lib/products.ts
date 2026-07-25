@@ -1,6 +1,6 @@
 // Product data and types for Blessing Power Guide
 export interface Product {
-  id: number;
+  id: string | number;
   slug: string;
   title: string;
   subtitle: string;

@@ -1,69 +1,100 @@
 import { Client } from 'pg';
 
-export const defaultSeedProducts = [
+export const defaultSeedCategories = [
+  { id: 'cat-6th', name: '6th Standard Guides', slug: '6th-std', parent_category: null },
+  { id: 'cat-7th', name: '7th Standard Guides', slug: '7th-std', parent_category: null },
+  { id: 'cat-8th', name: '8th Standard Guides', slug: '8th-std', parent_category: null },
+  { id: 'cat-9th', name: '9th Standard Guides', slug: '9th-std', parent_category: null },
+  { id: 'cat-10th', name: '10th Standard Guides', slug: '10th-std', parent_category: null },
+  { id: 'cat-11th', name: '11th Standard Guides', slug: '11th-std', parent_category: null },
+  { id: 'cat-12th', name: '12th Standard Guides', slug: '12th-std', parent_category: null },
+  { id: 'cat-combos', name: '5-Subject Super Combos', slug: 'combos', parent_category: null },
+];
+
+export const defaultSeedBooks = [
   {
     id: 'bpg-101',
     title: '10th Standard Mathematics Master Guide',
-    cls: '10th',
-    category: 'guide',
-    price: 180,
-    mrp: 220,
-    discount: 18,
-    rating: 4.9,
-    reviews: 142,
-    badge: 'BESTSELLER',
-    badgeColor: 'bg-blue-600',
-    image: 'https://images.unsplash.com/photo-1606326608606-aa0b62935f2b?auto=format&fit=crop&w=400&q=80',
+    slug: '10th-maths-master-guide',
+    isbn: '978-81-984041-0-1',
+    author: 'Blessing Expert Mathematics Panel',
+    publisher: 'Blessing Pathway Education (OPC) Pvt Ltd',
+    edition: '2026 Edition',
+    language: 'English & Tamil',
+    subject: 'Mathematics',
+    category_id: 'cat-10th',
     description: 'Complete 10th Maths guide with chapter-wise solved model question papers for State Board.',
-    inStock: true,
+    price: 220,
+    discount_price: 180,
+    stock: 50,
+    pages: 320,
+    weight: '450g',
+    cover_image: 'https://images.unsplash.com/photo-1606326608606-aa0b62935f2b?auto=format&fit=crop&w=400&q=80',
+    status: 'published',
+    featured: true,
   },
   {
     id: 'bpg-102',
     title: '10th Standard Science Guide (Physics, Chem, Bio)',
-    cls: '10th',
-    category: 'guide',
-    price: 190,
-    mrp: 240,
-    discount: 21,
-    rating: 4.8,
-    reviews: 98,
-    badge: 'TOP RATED',
-    badgeColor: 'bg-blue-600',
-    image: 'https://images.unsplash.com/photo-1532012197267-da84d127e765?auto=format&fit=crop&w=400&q=80',
+    slug: '10th-science-master-guide',
+    isbn: '978-81-984041-0-2',
+    author: 'Blessing Science Faculty Panel',
+    publisher: 'Blessing Pathway Education (OPC) Pvt Ltd',
+    edition: '2026 Edition',
+    language: 'English & Tamil',
+    subject: 'Science',
+    category_id: 'cat-10th',
     description: 'Comprehensive 10th Science study guide covering diagrams, formulas and solved Q&A.',
-    inStock: true,
+    price: 240,
+    discount_price: 190,
+    stock: 45,
+    pages: 280,
+    weight: '420g',
+    cover_image: 'https://images.unsplash.com/photo-1532012197267-da84d127e765?auto=format&fit=crop&w=400&q=80',
+    status: 'published',
+    featured: true,
   },
   {
     id: 'bpg-103',
     title: '12th Standard Physics Master Guide (Model Q&A Papers)',
-    cls: '12th',
-    category: 'guide',
-    price: 210,
-    mrp: 260,
-    discount: 19,
-    rating: 5.0,
-    reviews: 215,
-    badge: 'HIGH MARKS',
-    badgeColor: 'bg-blue-600',
-    image: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80',
+    slug: '12th-physics-master-guide',
+    isbn: '978-81-984041-0-3',
+    author: 'Blessing Senior Physics Panel',
+    publisher: 'Blessing Pathway Education (OPC) Pvt Ltd',
+    edition: '2026 Edition',
+    language: 'English',
+    subject: 'Physics',
+    category_id: 'cat-12th',
     description: 'High-score 12th Physics master guide covering numerical problems and board exam papers.',
-    inStock: true,
+    price: 260,
+    discount_price: 210,
+    stock: 60,
+    pages: 350,
+    weight: '500g',
+    cover_image: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80',
+    status: 'published',
+    featured: true,
   },
   {
     id: 'bpg-104',
     title: '10th Standard All-in-One 5 Subject Super Combo Pack',
-    cls: '10th',
-    category: 'combo',
-    price: 790,
-    mrp: 1050,
-    discount: 25,
-    rating: 4.9,
-    reviews: 320,
-    badge: 'SUPER COMBO',
-    badgeColor: 'bg-blue-600',
-    image: 'https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?auto=format&fit=crop&w=400&q=80',
+    slug: '10th-5-subject-super-combo',
+    isbn: '978-81-984041-0-4',
+    author: 'Blessing Multi-Subject Board',
+    publisher: 'Blessing Pathway Education (OPC) Pvt Ltd',
+    edition: '2026 Edition',
+    language: 'Tamil & English',
+    subject: 'All 5 Subjects',
+    category_id: 'cat-combos',
     description: 'Save ₹260 with the Complete 10th Standard 5-Book Bundle (Maths, Science, Social, Tamil, English).',
-    inStock: true,
+    price: 1050,
+    discount_price: 790,
+    stock: 30,
+    pages: 1400,
+    weight: '2100g',
+    cover_image: 'https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?auto=format&fit=crop&w=400&q=80',
+    status: 'published',
+    featured: true,
   },
 ];
 
@@ -79,89 +110,228 @@ export async function getDbClient() {
     });
     await client.connect();
 
-    // Ensure all 6 PostgreSQL database tables exist in Railway DB
+    // Create Full 17-Table Relational Database Schema
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
         id VARCHAR(255) PRIMARY KEY,
         name VARCHAR(255) NOT NULL,
         email VARCHAR(255) UNIQUE NOT NULL,
         phone VARCHAR(255) NOT NULL,
-        password VARCHAR(255) NOT NULL,
+        password_hash VARCHAR(255) NOT NULL,
+        google_id VARCHAR(255),
+        email_verified BOOLEAN DEFAULT FALSE,
+        profile_image TEXT,
         role VARCHAR(50) DEFAULT 'customer',
-        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        status VARCHAR(50) DEFAULT 'active',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
 
-      CREATE TABLE IF NOT EXISTS products (
+      CREATE TABLE IF NOT EXISTS categories (
+        id VARCHAR(255) PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        slug VARCHAR(255) UNIQUE NOT NULL,
+        image TEXT,
+        parent_category VARCHAR(255),
+        status VARCHAR(50) DEFAULT 'active'
+      );
+
+      CREATE TABLE IF NOT EXISTS books (
         id VARCHAR(255) PRIMARY KEY,
         title VARCHAR(255) NOT NULL,
-        class VARCHAR(50) NOT NULL,
-        category VARCHAR(50) NOT NULL,
-        price NUMERIC NOT NULL,
-        oldPrice NUMERIC,
-        discount NUMERIC,
-        rating NUMERIC DEFAULT 5.0,
-        reviews INT DEFAULT 10,
-        badge VARCHAR(50),
-        stockQty INT DEFAULT 20,
-        enabled INT DEFAULT 1,
-        img TEXT,
+        slug VARCHAR(255) UNIQUE NOT NULL,
+        isbn VARCHAR(100),
+        author VARCHAR(255) DEFAULT 'Blessing Editorial Board',
+        publisher VARCHAR(255) DEFAULT 'Blessing Pathway Education',
+        edition VARCHAR(50) DEFAULT '2026 Edition',
+        language VARCHAR(50) DEFAULT 'Tamil / English',
+        semester VARCHAR(50),
+        department VARCHAR(50),
+        subject VARCHAR(100),
+        category_id VARCHAR(255) REFERENCES categories(id) ON DELETE SET NULL,
         description TEXT,
-        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        price NUMERIC NOT NULL,
+        discount_price NUMERIC,
+        stock INT DEFAULT 50,
+        pages INT DEFAULT 240,
+        weight VARCHAR(50) DEFAULT '400g',
+        cover_image TEXT,
+        status VARCHAR(50) DEFAULT 'published',
+        featured BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
 
-      CREATE TABLE IF NOT EXISTS orders (
-        orderId VARCHAR(255) PRIMARY KEY,
-        customerName VARCHAR(255) NOT NULL,
-        customerPhone VARCHAR(255) NOT NULL,
-        address TEXT,
-        city VARCHAR(255),
-        totalAmount NUMERIC NOT NULL,
-        items TEXT NOT NULL,
-        paymentMethod VARCHAR(50) DEFAULT 'Razorpay',
-        paymentStatus VARCHAR(50) DEFAULT 'PAID',
-        courierStatus VARCHAR(255) DEFAULT 'Order Placed & Confirmed',
-        trackingNumber VARCHAR(255),
-        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      CREATE TABLE IF NOT EXISTS book_images (
+        id VARCHAR(255) PRIMARY KEY,
+        book_id VARCHAR(255) REFERENCES books(id) ON DELETE CASCADE,
+        image_url TEXT NOT NULL,
+        display_order INT DEFAULT 0
       );
 
       CREATE TABLE IF NOT EXISTS addresses (
         id VARCHAR(255) PRIMARY KEY,
-        userId VARCHAR(255),
-        type VARCHAR(50) DEFAULT 'HOME',
-        name VARCHAR(255),
-        phone VARCHAR(255),
-        address TEXT NOT NULL,
-        city VARCHAR(255),
-        pincode VARCHAR(50),
-        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        user_id VARCHAR(255) REFERENCES users(id) ON DELETE CASCADE,
+        full_name VARCHAR(255) NOT NULL,
+        phone VARCHAR(255) NOT NULL,
+        address_line1 TEXT NOT NULL,
+        address_line2 TEXT,
+        city VARCHAR(255) NOT NULL,
+        district VARCHAR(255),
+        state VARCHAR(255) DEFAULT 'Tamil Nadu',
+        country VARCHAR(255) DEFAULT 'India',
+        pincode VARCHAR(50) NOT NULL,
+        landmark VARCHAR(255),
+        is_default BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
 
-      CREATE TABLE IF NOT EXISTS wishlists (
+      CREATE TABLE IF NOT EXISTS cart (
         id VARCHAR(255) PRIMARY KEY,
-        userId VARCHAR(255) NOT NULL,
-        productId VARCHAR(255) NOT NULL,
-        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        user_id VARCHAR(255) UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS cart_items (
+        id VARCHAR(255) PRIMARY KEY,
+        cart_id VARCHAR(255) REFERENCES cart(id) ON DELETE CASCADE,
+        book_id VARCHAR(255) REFERENCES books(id) ON DELETE CASCADE,
+        quantity INT DEFAULT 1,
+        price NUMERIC NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS wishlist (
+        id VARCHAR(255) PRIMARY KEY,
+        user_id VARCHAR(255) REFERENCES users(id) ON DELETE CASCADE,
+        book_id VARCHAR(255) REFERENCES books(id) ON DELETE CASCADE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS orders (
+        id VARCHAR(255) PRIMARY KEY,
+        order_number VARCHAR(255) UNIQUE NOT NULL,
+        user_id VARCHAR(255),
+        address_id VARCHAR(255),
+        subtotal NUMERIC NOT NULL,
+        discount NUMERIC DEFAULT 0,
+        shipping_charge NUMERIC DEFAULT 0,
+        tax NUMERIC DEFAULT 0,
+        total_amount NUMERIC NOT NULL,
+        payment_method VARCHAR(50) DEFAULT 'Razorpay',
+        payment_status VARCHAR(50) DEFAULT 'Pending',
+        order_status VARCHAR(50) DEFAULT 'Confirmed',
+        razorpay_order_id VARCHAR(255),
+        razorpay_payment_id VARCHAR(255),
+        razorpay_signature VARCHAR(255),
+        shipment_id VARCHAR(255),
+        awb_number VARCHAR(255),
+        courier_name VARCHAR(255) DEFAULT 'Speed Post / Express',
+        tracking_url TEXT,
+        estimated_delivery VARCHAR(100),
+        invoice_number VARCHAR(255),
+        ordered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS order_items (
+        id VARCHAR(255) PRIMARY KEY,
+        order_id VARCHAR(255) REFERENCES orders(id) ON DELETE CASCADE,
+        book_id VARCHAR(255),
+        book_title VARCHAR(255) NOT NULL,
+        book_price NUMERIC NOT NULL,
+        quantity INT NOT NULL,
+        subtotal NUMERIC NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS payments (
+        id VARCHAR(255) PRIMARY KEY,
+        order_id VARCHAR(255) REFERENCES orders(id) ON DELETE CASCADE,
+        payment_gateway VARCHAR(50) DEFAULT 'Razorpay',
+        payment_id VARCHAR(255),
+        transaction_id VARCHAR(255),
+        amount NUMERIC NOT NULL,
+        currency VARCHAR(10) DEFAULT 'INR',
+        status VARCHAR(50) DEFAULT 'SUCCESS',
+        paid_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS order_timeline (
+        id VARCHAR(255) PRIMARY KEY,
+        order_id VARCHAR(255) REFERENCES orders(id) ON DELETE CASCADE,
+        status VARCHAR(50) NOT NULL,
+        remarks TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
 
       CREATE TABLE IF NOT EXISTS reviews (
         id VARCHAR(255) PRIMARY KEY,
-        productId VARCHAR(255) NOT NULL,
-        studentName VARCHAR(255) NOT NULL,
-        classStd VARCHAR(50),
+        user_id VARCHAR(255),
+        book_id VARCHAR(255) REFERENCES books(id) ON DELETE CASCADE,
         rating NUMERIC DEFAULT 5.0,
-        reviewText TEXT NOT NULL,
-        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        review TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS coupons (
+        id VARCHAR(255) PRIMARY KEY,
+        code VARCHAR(50) UNIQUE NOT NULL,
+        discount_type VARCHAR(20) DEFAULT 'percentage',
+        discount_value NUMERIC NOT NULL,
+        minimum_amount NUMERIC DEFAULT 0,
+        expiry_date TIMESTAMP,
+        usage_limit INT DEFAULT 100,
+        status VARCHAR(50) DEFAULT 'active'
+      );
+
+      CREATE TABLE IF NOT EXISTS notifications (
+        id VARCHAR(255) PRIMARY KEY,
+        user_id VARCHAR(255) NOT NULL,
+        title VARCHAR(255) NOT NULL,
+        message TEXT NOT NULL,
+        is_read BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS contact_messages (
+        id VARCHAR(255) PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        email VARCHAR(255) NOT NULL,
+        phone VARCHAR(255) NOT NULL,
+        message TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS settings (
+        id VARCHAR(50) PRIMARY KEY DEFAULT 'main',
+        site_name VARCHAR(255) DEFAULT 'BLESSING POWER GUIDE',
+        support_email VARCHAR(255) DEFAULT 'blessingpowerguide@gmail.com',
+        support_phone VARCHAR(255) DEFAULT '+91 98404 18228',
+        razorpay_key VARCHAR(255) DEFAULT 'rzp_test_BPG10023490',
+        shiprocket_token TEXT,
+        shipping_charge NUMERIC DEFAULT 0,
+        tax_percentage NUMERIC DEFAULT 0
       );
     `);
 
-    // Auto seed default products if table is empty
-    const countRes = await client.query('SELECT COUNT(*) FROM products');
-    if (Number(countRes.rows[0].count) === 0) {
-      for (const p of defaultSeedProducts) {
+    // Pre-seed Categories if empty
+    const catRes = await client.query('SELECT COUNT(*) FROM categories');
+    if (Number(catRes.rows[0].count) === 0) {
+      for (const c of defaultSeedCategories) {
         await client.query(
-          `INSERT INTO products (id, title, class, category, price, oldPrice, discount, rating, reviews, badge, stockQty, enabled, img, description)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
-          [p.id, p.title, p.cls, p.category, p.price, p.mrp, p.discount.toString(), p.rating, p.reviews, p.badge, 50, 1, p.image, p.description]
+          `INSERT INTO categories (id, name, slug, parent_category) VALUES ($1, $2, $3, $4)`,
+          [c.id, c.name, c.slug, c.parent_category]
+        );
+      }
+    }
+
+    // Pre-seed Books if empty
+    const bookRes = await client.query('SELECT COUNT(*) FROM books');
+    if (Number(bookRes.rows[0].count) === 0) {
+      for (const b of defaultSeedBooks) {
+        await client.query(
+          `INSERT INTO books (id, title, slug, isbn, author, publisher, edition, language, subject, category_id, description, price, discount_price, stock, pages, weight, cover_image, status, featured)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
+          [b.id, b.title, b.slug, b.isbn, b.author, b.publisher, b.edition, b.language, b.subject, b.category_id, b.description, b.price, b.discount_price, b.stock, b.pages, b.weight, b.cover_image, b.status, b.featured]
         );
       }
     }

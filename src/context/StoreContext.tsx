@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
 export interface Product {
-  id: number;
+  id: string | number;
   slug: string;
   title: string;
   subtitle: string;
@@ -42,7 +42,7 @@ export interface UserData {
 interface StoreContextType {
   products: Product[];
   cart: CartItem[];
-  wishlist: number[];
+  wishlist: (string | number)[];
   user: UserData | null;
   toast: string | null;
   searchQuery: string;
@@ -64,15 +64,15 @@ interface StoreContextType {
   isProfileOpen: boolean;
   setIsProfileOpen: (open: boolean) => void;
   addToCart: (product: Product, qty?: number) => void;
-  updateQty: (id: number, delta: number) => void;
-  removeFromCart: (id: number) => void;
+  updateQty: (id: string | number, delta: number) => void;
+  removeFromCart: (id: string | number) => void;
   clearCart: () => void;
-  toggleWishlist: (id: number) => void;
+  toggleWishlist: (id: string | number) => void;
   loginUser: (u: UserData) => void;
   logoutUser: () => void;
-  updateProductInDb: (id: number, updatedData: Partial<Product>) => void;
+  updateProductInDb: (id: string | number, updatedData: Partial<Product>) => void;
   addNewProductToDb: (newProdData: Partial<Product>) => void;
-  deleteProductFromDb: (id: number) => void;
+  deleteProductFromDb: (id: string | number) => void;
   cartTotal: number;
   cartCount: number;
   showToast: (msg: string) => void;
@@ -85,7 +85,7 @@ const LOCAL_PRODUCTS_KEY = 'bpg_products_db_persistent_v3';
 export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [products, setProducts] = useState<Product[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [wishlist, setWishlist] = useState<number[]>([]);
+  const [wishlist, setWishlist] = useState<(string | number)[]>([]);
   const [user, setUser] = useState<UserData | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -118,35 +118,17 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       } catch (e) {}
     }
 
-    // 2. Fetch Live from SQLite Backend Database
-    fetch('http://localhost:5000/api/products')
+    // 2. Fetch Live from Database (Railway PostgreSQL / SQLite)
+    const apiEndpoint = typeof window !== 'undefined' && window.location.hostname !== 'localhost'
+      ? '/api/products'
+      : 'http://localhost:5000/api/products';
+
+    fetch(apiEndpoint)
       .then((res) => res.json())
       .then((data) => {
         if (Array.isArray(data) && data.length > 0) {
-          const mapped: Product[] = data.map((d: any) => ({
-            id: Number(d.id.toString().replace(/[^0-9]/g, '')) || Date.now(),
-            slug: d.id,
-            title: d.title,
-            subtitle: `${d.class || '10th'} Standard Guide`,
-            cls: d.class || '10th',
-            category: (d.category === 'combo' ? 'combo' : d.category === 'question-bank' ? 'question-bank' : 'guide') as any,
-            subject: 'State Board',
-            price: Number(d.price),
-            mrp: Number(d.oldPrice || d.price + 40),
-            discount: Number(d.discount || 20),
-            rating: Number(d.rating || 5.0),
-            reviews: Number(d.reviews || 10),
-            badge: d.badge || 'BESTSELLER',
-            badgeColor: 'bg-blue-600',
-            image: d.img || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80',
-            hoverImage: d.img || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80',
-            description: d.description || 'Complete guide book for exam success.',
-            features: ['Solved Papers', 'Chapter Notes'],
-            inStock: Boolean(d.enabled ?? true),
-          }));
-
-          setProducts(mapped);
-          localStorage.setItem(LOCAL_PRODUCTS_KEY, JSON.stringify(mapped));
+          setProducts(data);
+          localStorage.setItem(LOCAL_PRODUCTS_KEY, JSON.stringify(data));
         }
       })
       .catch(() => {});
@@ -171,20 +153,24 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, [products]);
 
-  const addToCart = (product: Product, qty = 1) => {
+  const addToCart = (product: Product, qty: number = 1) => {
     setCart((prev) => {
       const existing = prev.find((item) => item.id === product.id);
+      let updated: CartItem[];
       if (existing) {
-        return prev.map((item) =>
+        updated = prev.map((item) =>
           item.id === product.id ? { ...item, qty: item.qty + qty } : item
         );
+      } else {
+        updated = [...prev, { ...product, qty }];
       }
-      return [...prev, { ...product, qty }];
+      localStorage.setItem('bpg_cart_next', JSON.stringify(updated));
+      return updated;
     });
-    showToast(`✓ Added "${product.title}" to cart`);
+    showToast(`✓ Added "${product.title}" to cart!`);
   };
 
-  const updateQty = (id: number, delta: number) => {
+  const updateQty = (id: string | number, delta: number) => {
     setCart((prev) =>
       prev
         .map((item) => {
@@ -198,13 +184,13 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     );
   };
 
-  const removeFromCart = (id: number) => {
+  const removeFromCart = (id: string | number) => {
     setCart((prev) => prev.filter((item) => item.id !== id));
   };
 
   const clearCart = () => setCart([]);
 
-  const toggleWishlist = (id: number) => {
+  const toggleWishlist = (id: string | number) => {
     setWishlist((prev) => {
       if (prev.includes(id)) {
         showToast('Item removed from wishlist');
@@ -229,7 +215,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   // UPDATE PRODUCT IN DB & LOCALSTORAGE
-  const updateProductInDb = (id: number, updatedData: Partial<Product>) => {
+  const updateProductInDb = (id: string | number, updatedData: Partial<Product>) => {
     setProducts((prev) => {
       const nextProds = prev.map((p) => (p.id === id ? { ...p, ...updatedData } : p));
       localStorage.setItem(LOCAL_PRODUCTS_KEY, JSON.stringify(nextProds));
@@ -316,7 +302,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   // DELETE PRODUCT FROM DB & LOCALSTORAGE
-  const deleteProductFromDb = (id: number) => {
+  const deleteProductFromDb = (id: string | number) => {
     setProducts((prev) => {
       const nextProds = prev.filter((p) => p.id !== id);
       localStorage.setItem(LOCAL_PRODUCTS_KEY, JSON.stringify(nextProds));

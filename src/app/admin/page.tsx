@@ -26,7 +26,7 @@ import { useStore } from '@/context/StoreContext';
 export default function AdminPage() {
   const { products, updateProductInDb, addNewProductToDb, deleteProductFromDb, showToast } = useStore();
   const [activeTab, setActiveTab] = useState<'catalog' | 'orders'>('catalog');
-  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<string | number | null>(null);
 
   // Edit form state
   const [editPrice, setEditPrice] = useState(0);
@@ -94,7 +94,7 @@ export default function AdminPage() {
     setEditBadge(p.badge);
   };
 
-  const saveProductChanges = (id: number) => {
+  const saveProductChanges = (id: string | number) => {
     const calculatedDiscount = Math.round(((editMrp - editPrice) / editMrp) * 100);
     updateProductInDb(id, {
       price: Number(editPrice),
@@ -131,7 +131,7 @@ export default function AdminPage() {
     loadLiveOrders();
   };
 
-  const toggleStock = (id: number, currentStock: boolean) => {
+  const toggleStock = (id: string | number, currentStock: boolean) => {
     updateProductInDb(id, { inStock: !currentStock });
     showToast(`✓ Product Stock status updated in Database`);
   };
