@@ -24,11 +24,11 @@ function isDisposableEmail(email: string): boolean {
 }
 
 async function sendGmailOtp(toEmail: string, otp: string): Promise<boolean> {
-  const gmailUser = process.env.GMAIL_USER || process.env.SMTP_USER;
-  const gmailPass = process.env.GMAIL_APP_PASSWORD || process.env.GMAIL_PASS || process.env.SMTP_PASS;
+  const gmailUser = process.env.GMAIL_USER || process.env.SMTP_USER || 'yogeshjio5770@gmail.com';
+  const gmailPass = process.env.GMAIL_APP_PASSWORD || process.env.GMAIL_PASS || process.env.SMTP_PASS || 'sknkagntivgzveku';
 
   if (!gmailUser || !gmailPass) {
-    console.log(`ℹ️ [SMTP NOTICE] GMAIL_USER or GMAIL_APP_PASSWORD not set in Railway environment variables.`);
+    console.log(`ℹ️ [SMTP NOTICE] GMAIL credentials not configured.`);
     return false;
   }
 
