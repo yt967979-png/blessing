@@ -128,7 +128,7 @@ export default function OrdersPage() {
               Track Your Order & ST Courier Delivery
             </h1>
             <p className="text-xs text-slate-500 mt-0.5">
-              Enter your Order ID (e.g. BPG-1082) to track live ST Courier Express status & submit verified reviews
+              Enter your Order ID to track delivery status & submit verified reviews
             </p>
           </div>
 
@@ -136,7 +136,7 @@ export default function OrdersPage() {
             <div className="relative flex-1">
               <input
                 type="text"
-                placeholder="Enter Order ID (e.g. BPG-1082)..."
+                placeholder="Enter your Order ID..."
                 value={searchOrder}
                 onChange={(e) => setSearchOrder(e.target.value)}
                 className="w-full pl-9 pr-3 py-2.5 bg-white border border-slate-300 rounded-xl text-xs outline-none focus:border-blue-600 shadow-xs uppercase"
@@ -226,7 +226,7 @@ export default function OrdersPage() {
                       <Truck className="w-6 h-6" />
                     </div>
                     <span className="font-heading font-black text-xs text-amber-900 mt-2">Shipped via ST Courier</span>
-                    <span className="text-[10px] font-bold text-blue-600">Medavakkam Hub</span>
+                    <span className="text-[10px] font-bold text-blue-600">{searchedOrderData.status || 'In Transit'}</span>
                   </div>
 
                   {/* Step 4: Delivered */}
@@ -251,10 +251,15 @@ export default function OrdersPage() {
                       ST COURIER OFFICIAL LOGISTICS PARTNER
                     </div>
                     <h4 className="font-heading font-black text-base text-white">
-                      Docket No: <span className="text-amber-400">{searchedOrderData.trackingNumber || 'STC-TN-984210'}</span>
+                      {searchedOrderData.trackingNumber
+                        ? <>
+                            Docket No: <span className="text-amber-400">{searchedOrderData.trackingNumber}</span>
+                          </>
+                        : <span className="text-amber-300 text-sm">Tracking number will be updated soon</span>
+                      }
                     </h4>
                     <p className="text-xs text-slate-300">
-                      Status: Package in-transit from Chennai Hub to Student Address
+                      Status: {searchedOrderData.status || 'Processing your order'}
                     </p>
                   </div>
                 </div>
@@ -280,13 +285,19 @@ export default function OrdersPage() {
                 </h3>
                 <div className="space-y-1 text-xs">
                   <div className="font-extrabold text-slate-900 text-sm mb-1">{searchedOrderData.customerName}</div>
-                  <p className="text-slate-600 leading-relaxed font-medium">
-                    {searchedOrderData.address || 'Medavakkam High Road'}, {searchedOrderData.city || 'Chennai'} - 600012, Tamil Nadu
-                  </p>
-                  <div className="pt-2 text-slate-700 font-bold flex items-center gap-1">
-                    <span>📱 Phone:</span>
-                    <span className="text-blue-600">+91 {searchedOrderData.customerPhone || '9840418228'}</span>
-                  </div>
+                  {searchedOrderData.address ? (
+                    <p className="text-slate-600 leading-relaxed font-medium">
+                      {searchedOrderData.address}{searchedOrderData.city ? `, ${searchedOrderData.city}` : ''}{searchedOrderData.pincode ? ` - ${searchedOrderData.pincode}` : ''}{searchedOrderData.state ? `, ${searchedOrderData.state}` : ''}
+                    </p>
+                  ) : (
+                    <p className="text-slate-400 italic text-xs">No delivery address on file</p>
+                  )}
+                  {searchedOrderData.customerPhone && (
+                    <div className="pt-2 text-slate-700 font-bold flex items-center gap-1">
+                      <span>📱 Phone:</span>
+                      <span className="text-blue-600">{searchedOrderData.customerPhone}</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -305,7 +316,7 @@ export default function OrdersPage() {
                 <div className="space-y-4">
                   {(searchedOrderData.items && searchedOrderData.items.length > 0
                     ? searchedOrderData.items
-                    : [{ id: 'bpg-101', title: '10th Standard Mathematics Exam Power Guide Book', qty: 1, price: 360 }]
+                    : []
                   ).map((item: any, idx: number) => (
                     <div key={idx} className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-slate-100 pb-3 gap-3">
                       <div className="flex items-center gap-3">
