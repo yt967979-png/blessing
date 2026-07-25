@@ -50,9 +50,9 @@ export default function OrdersPage() {
         totalAmount: 370,
         paymentMethod: 'Razorpay UPI / COD',
         paymentStatus: 'PAID',
-        courierStatus: 'Dispatched & Shipped via Shiprocket',
-        courierPartner: 'Shiprocket Express',
-        trackingNumber: 'SR-TN-984210',
+        courierStatus: 'Dispatched & Shipped via ST Courier',
+        courierPartner: 'ST Courier Express Air & Surface',
+        trackingNumber: 'STC-TN-984210',
         createdAt: '25 July 2026',
       });
     }
@@ -80,23 +80,23 @@ export default function OrdersPage() {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
           <div>
             <h1 className="font-heading font-black text-2xl md:text-3xl text-[#001B3A]">
-              Track Your Order & Shipment Status
+              Track Your Order & ST Courier Status
             </h1>
             <p className="text-xs text-slate-500 mt-0.5">
-              Enter your Order ID (from checkout or SMS/WhatsApp) to track live Shiprocket delivery status
+              Enter your Order ID (from checkout or SMS/WhatsApp) to track live ST Courier delivery status
             </p>
           </div>
 
           <form onSubmit={handleSearchOrder} className="flex gap-2 w-full sm:w-80">
             <div className="relative flex-1">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
-                placeholder="Enter Order ID (e.g. BPG-1082)..."
+                placeholder="Enter Order ID (e.g. BPG-1082)"
                 value={searchOrder}
                 onChange={(e) => setSearchOrder(e.target.value)}
-                className="w-full pl-9 pr-3 py-2.5 bg-white border border-slate-300 rounded-xl text-xs outline-none focus:border-blue-600 shadow-xs uppercase"
+                className="w-full pl-9 pr-3 py-2.5 bg-white border border-slate-300 rounded-xl text-xs outline-none focus:border-blue-600 uppercase font-semibold"
               />
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
             </div>
             <button
               type="submit"
@@ -147,11 +147,12 @@ export default function OrdersPage() {
               </div>
             </div>
 
-            {/* Shiprocket Delivery Timeline */}
-            <div className="bg-gradient-to-br from-slate-50 to-blue-50/40 border border-slate-200 rounded-2xl p-6">
+            {/* ST Courier Delivery Progress */}
+            <div className="bg-gradient-to-br from-slate-50 to-red-50/40 border border-slate-200 rounded-2xl p-6">
               <div className="flex justify-between items-center mb-6">
-                <h4 className="font-heading font-black text-xs text-[#001B3A] uppercase tracking-wider">
-                  SHIPROCKET LIVE DELIVERY PROGRESS
+                <h4 className="font-heading font-black text-xs text-[#001B3A] uppercase tracking-wider flex items-center gap-1.5">
+                  <span className="bg-red-600 text-white px-2 py-0.5 rounded text-[10px] font-black">ST COURIER</span>
+                  <span>LIVE DELIVERY PROGRESS</span>
                 </h4>
                 <span className="bg-emerald-100 text-emerald-800 text-[10px] font-black px-2.5 py-1 rounded-full uppercase">
                   {searchedOrderData.courierStatus}
@@ -183,13 +184,20 @@ export default function OrdersPage() {
 
                 {/* Step 3: In Transit */}
                 <div className="flex items-start gap-3">
-                  <div className="w-9 h-9 rounded-full bg-amber-400 text-[#001B3A] flex items-center justify-center font-bold text-xs flex-shrink-0 shadow-sm animate-pulse">
+                  <div className="w-9 h-9 rounded-full bg-red-600 text-white flex items-center justify-center font-bold text-xs flex-shrink-0 shadow-sm animate-pulse">
                     <Send className="w-5 h-5" />
                   </div>
                   <div>
-                    <h5 className="font-extrabold text-xs text-amber-800">Shipped via Shiprocket</h5>
-                    <span className="text-[10px] text-slate-600 font-bold block">{searchedOrderData.courierPartner || 'Shiprocket Courier'}</span>
-                    <div className="text-[10px] font-black text-blue-600">AWB: {searchedOrderData.trackingNumber || 'SR-TN-984210'}</div>
+                    <h5 className="font-extrabold text-xs text-red-800">Shipped via ST Courier</h5>
+                    <span className="text-[10px] text-slate-600 font-bold block">{searchedOrderData.courierPartner || 'ST Courier Express'}</span>
+                    <a
+                      href={`https://stcourier.com/track/tracking/${searchedOrderData.trackingNumber || 'STC-TN-984210'}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[10px] font-black text-red-600 hover:underline block"
+                    >
+                      AWB: {searchedOrderData.trackingNumber || 'STC-TN-984210'} 🔗
+                    </a>
                   </div>
                 </div>
 
@@ -200,7 +208,7 @@ export default function OrdersPage() {
                   </div>
                   <div>
                     <h5 className="font-bold text-xs text-slate-700">Delivered</h5>
-                    <span className="text-[10px] text-slate-400">Estimated 2-3 days</span>
+                    <span className="text-[10px] text-slate-400">Estimated 24-48 Hours</span>
                   </div>
                 </div>
               </div>
@@ -213,7 +221,7 @@ export default function OrdersPage() {
               Enter Your Order ID to Track
             </h3>
             <p className="text-xs text-slate-500 max-w-sm mx-auto">
-              When you place an order, you will receive an Order ID (e.g. BPG-1082). Enter it above to see live Shiprocket tracking!
+              When you place an order, you will receive an Order ID (e.g. BPG-1082). Enter it above to see live ST Courier tracking!
             </p>
           </div>
         )}

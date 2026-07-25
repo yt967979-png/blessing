@@ -31,10 +31,10 @@ export const ProductCard = ({ product }: { product: Product }) => {
           {product.badge}
         </span>
 
-        {/* Flipkart Assured Badge */}
-        <span className="bg-[#0044AA] text-white text-[8px] font-black px-1.5 py-0.5 rounded flex items-center gap-0.5 shadow-2xs">
-          <ShieldCheck className="w-2.5 h-2.5 text-amber-400" />
-          <span>F-ASSURED</span>
+        {/* ST Courier Badge */}
+        <span className="bg-red-600 text-white text-[8px] font-black px-1.5 py-0.5 rounded flex items-center gap-0.5 shadow-2xs">
+          <Truck className="w-2.5 h-2.5 text-amber-300" />
+          <span>ST COURIER</span>
         </span>
       </div>
 

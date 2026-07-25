@@ -122,8 +122,8 @@ export default function AdminPage() {
   };
 
   const handleDispatchOrder = async (orderId: string) => {
-    const trackingNo = shiprocketAwbInput[orderId] || `TN-POST-${Math.floor(100000 + Math.random() * 900000)}`;
-    showToast(`🎉 Order #${orderId} accepted! Tracking Number: ${trackingNo}. Saved to Database.`);
+    const trackingNo = shiprocketAwbInput[orderId] || `STC-TN-${Math.floor(100000 + Math.random() * 900000)}`;
+    showToast(`🎉 Order #${orderId} accepted! ST Courier AWB: ${trackingNo}. Saved to Database.`);
     loadLiveOrders();
   };
 
@@ -594,7 +594,7 @@ export default function AdminPage() {
                         <Truck className="w-4 h-4 text-amber-400 flex-shrink-0" />
                         <input
                           type="text"
-                          placeholder="Tracking Number (e.g. TN-POST-984210)"
+                          placeholder="ST Courier AWB (e.g. STC-TN-984210)"
                           value={shiprocketAwbInput[o.orderId] || ''}
                           onChange={(e) =>
                             setShiprocketAwbInput({

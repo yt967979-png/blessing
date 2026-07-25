@@ -194,11 +194,11 @@ export default function CartPage() {
                 <div className="pt-2 text-[11px] text-slate-500 space-y-2 border-t border-slate-100">
                   <div className="flex items-center gap-2 text-slate-700 font-bold">
                     <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                    <span>Flipkart Assured • 100% Original Book Guarantee</span>
+                    <span>Blessing Verified • 100% Original Publication</span>
                   </div>
                   <div className="flex items-center gap-2 text-slate-600 font-medium">
-                    <Truck className="w-4 h-4 text-blue-600" />
-                    <span>Express Dispatch via Shiprocket</span>
+                    <Truck className="w-4 h-4 text-red-600" />
+                    <span>Express Dispatch via ST Courier</span>
                   </div>
                 </div>
               </div>
