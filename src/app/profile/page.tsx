@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   User,
   Package,
@@ -17,8 +18,8 @@ import {
   Plus,
   Trash2,
   Gift,
-  Bell,
-  Lock,
+  AlertCircle,
+  ShoppingBag,
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { Header } from '@/components/layout/Header';
@@ -29,41 +30,92 @@ import { CartDrawer } from '@/components/cart/CartDrawer';
 import { Modals } from '@/components/modals/Modals';
 
 export default function ProfilePage() {
-  const { user, logoutUser, wishlist, products, showToast } = useStore();
+  const router = useRouter();
+  const { user, loginUser, logoutUser, wishlist, products, showToast, setIsAuthOpen } = useStore();
   const [activeTab, setActiveTab] = useState<
     'profile' | 'orders' | 'addresses' | 'wishlist' | 'payments' | 'coupons'
   >('profile');
 
-  // Edit profile state
+  // Dynamic user edit form state
   const [isEditing, setIsEditing] = useState(false);
-  const [name, setName] = useState(user?.name || 'M. Karthik');
-  const [email, setEmail] = useState(user?.email || 'student@gmail.com');
-  const [phone, setPhone] = useState(user?.phone || '9840418228');
+  const [name, setName] = useState(user?.name || '');
+  const [email, setEmail] = useState(user?.email || '');
+  const [phone, setPhone] = useState(user?.phone || '');
 
-  // Address Manager
-  const [addresses, setAddresses] = useState([
-    {
-      id: 1,
-      type: 'HOME',
-      name: 'M. Karthik',
-      phone: '9840418228',
-      address: 'No. 45, Medavakkam High Rd, Agaramthen',
-      city: 'Chennai',
-      pincode: '600012',
-      isDefault: true,
-    },
-    {
-      id: 2,
-      type: 'WORK',
-      name: 'M. Karthik',
-      phone: '9840418228',
-      address: 'No. 12, Trust Square Street, Medavakkam',
-      city: 'Chennai',
-      pincode: '600012',
-      isDefault: false,
-    },
-  ]);
+  // Dynamic User Addresses (saved in localStorage)
+  const [addresses, setAddresses] = useState<any[]>([]);
 
+  // Live Orders fetched from API
+  const [liveOrders, setLiveOrders] = useState<any[]>([]);
+
+  // Sync state when user logs in/out or updates profile
+  useEffect(() => {
+    if (user) {
+      setName(user.name);
+      setEmail(user.email);
+      setPhone(user.phone || '');
+    }
+  }, [user]);
+
+  // Restore & Save Addresses in LocalStorage dynamically
+  useEffect(() => {
+    const saved = localStorage.getItem('bpg_user_addresses');
+    if (saved) {
+      try {
+        setAddresses(JSON.parse(saved));
+      } catch (e) {}
+    } else if (user) {
+      const initial = [
+        {
+          id: 1,
+          type: 'HOME',
+          name: user.name,
+          phone: user.phone || '9840418228',
+          address: 'No. 12, Ganesh Apartment, Agaramthen',
+          city: 'Chennai',
+          pincode: '600012',
+        },
+      ];
+      setAddresses(initial);
+      localStorage.setItem('bpg_user_addresses', JSON.stringify(initial));
+    }
+  }, [user]);
+
+  // Fetch live orders from backend database
+  useEffect(() => {
+    fetch('http://localhost:5000/api/orders')
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setLiveOrders(data);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const saveAddressesToStorage = (updatedList: any[]) => {
+    setAddresses(updatedList);
+    localStorage.setItem('bpg_user_addresses', JSON.stringify(updatedList));
+  };
+
+  // Save updated user profile info dynamically
+  const handleSaveProfile = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+
+    const updatedUser = {
+      ...user,
+      name,
+      email,
+      phone,
+    };
+
+    loginUser(updatedUser);
+    setIsEditing(false);
+    showToast('✓ Profile details updated successfully!');
+  };
+
+  // Dynamic Add Address
   const [showAddAddrForm, setShowAddAddrForm] = useState(false);
   const [newAddrType, setNewAddrType] = useState('HOME');
   const [newAddrName, setNewAddrName] = useState('');
@@ -72,35 +124,59 @@ export default function ProfilePage() {
   const [newAddrCity, setNewAddrCity] = useState('');
   const [newAddrPincode, setNewAddrPincode] = useState('');
 
-  const handleSaveProfile = (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsEditing(false);
-    showToast('✓ Profile information updated successfully!');
-  };
-
   const handleAddAddress = (e: React.FormEvent) => {
     e.preventDefault();
     const created = {
       id: Date.now(),
       type: newAddrType,
-      name: newAddrName || name,
-      phone: newAddrPhone || phone,
+      name: newAddrName || user?.name || 'Customer',
+      phone: newAddrPhone || user?.phone || '',
       address: newAddrText,
       city: newAddrCity || 'Chennai',
       pincode: newAddrPincode || '600012',
-      isDefault: false,
     };
-    setAddresses([...addresses, created]);
+    const updated = [...addresses, created];
+    saveAddressesToStorage(updated);
     setShowAddAddrForm(false);
-    showToast('✓ New delivery address added!');
+    setNewAddrText('');
+    showToast('✓ Delivery address added!');
   };
 
   const handleDeleteAddress = (id: number) => {
-    setAddresses(addresses.filter((a) => a.id !== id));
+    const updated = addresses.filter((a) => a.id !== id);
+    saveAddressesToStorage(updated);
     showToast('🗑️ Address deleted');
   };
 
   const wishlistedProducts = products.filter((p) => wishlist.includes(p.id));
+
+  // If user is not logged in, prompt sign in box
+  if (!user) {
+    return (
+      <main className="min-h-screen bg-slate-50 flex flex-col">
+        <AnnouncementBar />
+        <Header />
+        <NavBar />
+        <div className="max-w-md mx-auto my-16 p-8 bg-white border border-slate-200 rounded-3xl shadow-xl text-center space-y-4">
+          <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mx-auto border border-blue-200">
+            <User className="w-8 h-8" />
+          </div>
+          <h2 className="font-heading font-black text-xl text-[#001B3A]">Please Sign In to Access Profile</h2>
+          <p className="text-xs text-slate-500 leading-relaxed">
+            Log in to manage your profile settings, view active orders, and access saved addresses.
+          </p>
+          <button
+            onClick={() => setIsAuthOpen(true)}
+            className="w-full bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-[#001B3A] font-extrabold text-xs py-3.5 rounded-xl uppercase tracking-wider shadow-md transition-all"
+          >
+            LOGIN / REGISTER NOW
+          </button>
+        </div>
+        <Footer />
+        <Modals />
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-slate-50 flex flex-col">
@@ -111,7 +187,9 @@ export default function ProfilePage() {
       {/* Breadcrumb */}
       <div className="bg-white border-b border-slate-200 py-3">
         <div className="max-w-7xl mx-auto px-4 text-xs font-semibold text-slate-500 flex items-center gap-2">
-          <Link href="/" className="hover:text-blue-600">Home</Link>
+          <Link href="/" className="hover:text-blue-600">
+            Home
+          </Link>
           <ChevronRight className="w-3.5 h-3.5" />
           <span className="text-slate-900">My Account</span>
         </div>
@@ -119,17 +197,23 @@ export default function ProfilePage() {
 
       <div className="max-w-7xl mx-auto px-4 py-8 flex-1 w-full">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          {/* Flipkart / Amazon Style Navigation Sidebar */}
+          {/* Flipkart / Amazon Style Dynamic Sidebar Navigation */}
           <div className="lg:col-span-4 space-y-4">
-            {/* User Header Box */}
+            {/* Dynamic User Header Box */}
             <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex items-center gap-4">
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#001B3A] to-[#003B73] text-amber-400 font-extrabold text-2xl flex items-center justify-center shadow-md">
-                {(user?.name || 'K')[0]}
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#001B3A] to-[#003B73] text-amber-400 font-extrabold text-2xl flex items-center justify-center shadow-md uppercase">
+                {user.name[0]}
               </div>
-              <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Hello,</span>
-                <h3 className="font-heading font-black text-lg text-[#001B3A]">{user?.name || 'M. Karthik'}</h3>
-                <span className="text-xs text-blue-600 font-semibold">{user?.email || 'student@gmail.com'}</span>
+              <div className="min-w-0">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  Hello,
+                </span>
+                <h3 className="font-heading font-black text-lg text-[#001B3A] truncate">
+                  {user.name}
+                </h3>
+                <span className="text-xs text-blue-600 font-semibold truncate block">
+                  {user.email}
+                </span>
               </div>
             </div>
 
@@ -160,7 +244,7 @@ export default function ProfilePage() {
               >
                 <div className="flex items-center gap-3">
                   <Package className="w-4 h-4 text-amber-500" />
-                  <span>My Orders & Live Tracking</span>
+                  <span>My Orders & Live Tracking ({liveOrders.length})</span>
                 </div>
                 <ChevronRight className="w-4 h-4 text-slate-400" />
               </button>
@@ -175,7 +259,7 @@ export default function ProfilePage() {
               >
                 <div className="flex items-center gap-3">
                   <MapPin className="w-4 h-4 text-emerald-600" />
-                  <span>Manage Delivery Addresses</span>
+                  <span>Delivery Addresses ({addresses.length})</span>
                 </div>
                 <ChevronRight className="w-4 h-4 text-slate-400" />
               </button>
@@ -228,7 +312,10 @@ export default function ProfilePage() {
 
             {/* Logout Card */}
             <button
-              onClick={logoutUser}
+              onClick={() => {
+                logoutUser();
+                router.push('/');
+              }}
               className="w-full bg-white border border-red-200 hover:bg-red-50 text-red-600 font-bold text-xs p-4 rounded-2xl flex items-center justify-center gap-2 shadow-xs transition-colors"
             >
               <LogOut className="w-4 h-4" />
@@ -236,15 +323,19 @@ export default function ProfilePage() {
             </button>
           </div>
 
-          {/* Right Main Content Panel */}
+          {/* Right Main Dynamic Content Panel */}
           <div className="lg:col-span-8">
             {/* 1. Personal Information */}
             {activeTab === 'profile' && (
               <div className="bg-white border border-slate-200 rounded-2xl p-6 md:p-8 shadow-xs space-y-6">
                 <div className="flex justify-between items-center pb-4 border-b border-slate-100">
                   <div>
-                    <h2 className="font-heading font-black text-xl text-[#001B3A]">Personal Info & Security</h2>
-                    <p className="text-xs text-slate-500">Manage your account details and password</p>
+                    <h2 className="font-heading font-black text-xl text-[#001B3A]">
+                      Personal Info & Security
+                    </h2>
+                    <p className="text-xs text-slate-500">
+                      Manage your account details, phone, and email address
+                    </p>
                   </div>
                   {!isEditing ? (
                     <button
@@ -270,26 +361,30 @@ export default function ProfilePage() {
                       <label className="block font-bold text-slate-700 mb-1">Full Name</label>
                       <input
                         type="text"
+                        required
                         disabled={!isEditing}
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         className={`w-full px-3.5 py-2.5 rounded-xl border outline-none ${
                           isEditing
-                            ? 'border-blue-600 bg-white text-slate-900'
+                            ? 'border-blue-600 bg-white text-slate-900 font-semibold'
                             : 'border-slate-200 bg-slate-50 text-slate-600'
                         }`}
                       />
                     </div>
                     <div>
-                      <label className="block font-bold text-slate-700 mb-1">Mobile Number (WhatsApp)</label>
+                      <label className="block font-bold text-slate-700 mb-1">
+                        Mobile Number (WhatsApp)
+                      </label>
                       <input
                         type="tel"
                         disabled={!isEditing}
+                        placeholder="Add your mobile number"
                         value={phone}
                         onChange={(e) => setPhone(e.target.value)}
                         className={`w-full px-3.5 py-2.5 rounded-xl border outline-none ${
                           isEditing
-                            ? 'border-blue-600 bg-white text-slate-900'
+                            ? 'border-blue-600 bg-white text-slate-900 font-semibold'
                             : 'border-slate-200 bg-slate-50 text-slate-600'
                         }`}
                       />
@@ -300,12 +395,13 @@ export default function ProfilePage() {
                     <label className="block font-bold text-slate-700 mb-1">Email Address</label>
                     <input
                       type="email"
+                      required
                       disabled={!isEditing}
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       className={`w-full px-3.5 py-2.5 rounded-xl border outline-none ${
                         isEditing
-                          ? 'border-blue-600 bg-white text-slate-900'
+                          ? 'border-blue-600 bg-white text-slate-900 font-semibold'
                           : 'border-slate-200 bg-slate-50 text-slate-600'
                       }`}
                     />
@@ -329,8 +425,12 @@ export default function ProfilePage() {
               <div className="bg-white border border-slate-200 rounded-2xl p-6 md:p-8 shadow-xs">
                 <div className="flex justify-between items-center mb-6 pb-4 border-b border-slate-100">
                   <div>
-                    <h2 className="font-heading font-black text-xl text-[#001B3A]">My Orders & Tracking</h2>
-                    <p className="text-xs text-slate-500">Track live shipments and download tax invoices</p>
+                    <h2 className="font-heading font-black text-xl text-[#001B3A]">
+                      My Orders & Live Tracking
+                    </h2>
+                    <p className="text-xs text-slate-500">
+                      Track live shipments and download tax invoices
+                    </p>
                   </div>
                   <Link
                     href="/orders"
@@ -341,37 +441,52 @@ export default function ProfilePage() {
                   </Link>
                 </div>
 
-                <div className="border border-slate-200 rounded-2xl p-5 space-y-4">
-                  <div className="flex flex-wrap justify-between items-center gap-2 pb-3 border-b border-slate-100 text-xs font-bold text-slate-700">
-                    <div>
-                      <span>Order ID: </span>
-                      <span className="text-amber-600 font-extrabold">BPG-1082</span>
-                    </div>
-                    <div className="text-emerald-600 flex items-center gap-1 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
-                      <Truck className="w-3.5 h-3.5" />
-                      <span>Shipped via Shiprocket</span>
-                    </div>
+                {liveOrders.length === 0 ? (
+                  <div className="py-12 text-center text-slate-400">
+                    <Package className="w-12 h-12 mx-auto mb-2 opacity-30 text-amber-500" />
+                    <p className="text-xs font-bold text-slate-600">No active orders placed yet</p>
                   </div>
+                ) : (
+                  <div className="space-y-4">
+                    {liveOrders.map((o) => (
+                      <div
+                        key={o.orderId}
+                        className="border border-slate-200 rounded-2xl p-5 hover:border-slate-300 transition-all space-y-4"
+                      >
+                        <div className="flex flex-wrap justify-between items-center gap-2 pb-3 border-b border-slate-100 text-xs font-bold text-slate-700">
+                          <div>
+                            <span>Order ID: </span>
+                            <span className="text-amber-600 font-extrabold">{o.orderId}</span>
+                          </div>
+                          <div className="text-emerald-600 flex items-center gap-1 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                            <Truck className="w-3.5 h-3.5" />
+                            <span>{o.courierStatus || 'Shipped via Shiprocket'}</span>
+                          </div>
+                        </div>
 
-                  <div className="flex items-center gap-4">
-                    <img
-                      src="https://images.unsplash.com/photo-1606326608606-aa0b62935f2b?auto=format&fit=crop&w=400&q=80"
-                      alt="Book"
-                      className="w-16 h-16 object-contain bg-slate-50 border border-slate-200 rounded-xl p-1"
-                    />
-                    <div className="flex-1 text-xs">
-                      <h4 className="font-heading font-extrabold text-slate-900">10th Standard Mathematics Guide</h4>
-                      <p className="text-slate-500 mt-0.5">TN State Board • Express Delivery</p>
-                      <div className="font-black text-sm text-[#001B3A] mt-1">₹370 Total</div>
-                    </div>
-                    <Link
-                      href="/orders"
-                      className="bg-[#001B3A] hover:bg-blue-600 text-white font-bold text-xs px-4 py-2 rounded-xl transition-colors"
-                    >
-                      TRACK ORDER
-                    </Link>
+                        <div className="flex items-center gap-4">
+                          <div className="flex-1 text-xs">
+                            <h4 className="font-heading font-extrabold text-slate-900">
+                              {o.items?.[0]?.title || 'Guide Book Package'}
+                            </h4>
+                            <p className="text-slate-500 mt-0.5">
+                              Deliver to: {o.customerName} ({o.city})
+                            </p>
+                            <div className="font-black text-sm text-[#001B3A] mt-1">
+                              ₹{o.totalAmount} Total
+                            </div>
+                          </div>
+                          <Link
+                            href="/orders"
+                            className="bg-[#001B3A] hover:bg-blue-600 text-white font-bold text-xs px-4 py-2 rounded-xl transition-colors"
+                          >
+                            TRACK ORDER
+                          </Link>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                </div>
+                )}
               </div>
             )}
 
@@ -380,8 +495,12 @@ export default function ProfilePage() {
               <div className="bg-white border border-slate-200 rounded-2xl p-6 md:p-8 shadow-xs space-y-6">
                 <div className="flex justify-between items-center pb-4 border-b border-slate-100">
                   <div>
-                    <h2 className="font-heading font-black text-xl text-[#001B3A]">Manage Delivery Addresses</h2>
-                    <p className="text-xs text-slate-500">Save your addresses for fast 1-click checkout</p>
+                    <h2 className="font-heading font-black text-xl text-[#001B3A]">
+                      Manage Delivery Addresses
+                    </h2>
+                    <p className="text-xs text-slate-500">
+                      Save your addresses for fast 1-click checkout
+                    </p>
                   </div>
                   <button
                     onClick={() => setShowAddAddrForm(!showAddAddrForm)}
@@ -393,7 +512,10 @@ export default function ProfilePage() {
                 </div>
 
                 {showAddAddrForm && (
-                  <form onSubmit={handleAddAddress} className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-3 text-xs">
+                  <form
+                    onSubmit={handleAddAddress}
+                    className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-3 text-xs"
+                  >
                     <div className="flex gap-3">
                       {['HOME', 'WORK', 'OTHER'].map((type) => (
                         <button
@@ -465,7 +587,10 @@ export default function ProfilePage() {
 
                 <div className="space-y-4">
                   {addresses.map((addr) => (
-                    <div key={addr.id} className="border border-blue-200 bg-blue-50/40 rounded-2xl p-5 text-xs space-y-2 relative">
+                    <div
+                      key={addr.id}
+                      className="border border-blue-200 bg-blue-50/40 rounded-2xl p-5 text-xs space-y-2 relative"
+                    >
                       <div className="flex justify-between items-center">
                         <div className="flex items-center gap-2">
                           <span className="bg-blue-600 text-white text-[10px] font-black px-2 py-0.5 rounded uppercase">
@@ -496,7 +621,9 @@ export default function ProfilePage() {
               <div className="bg-white border border-slate-200 rounded-2xl p-6 md:p-8 shadow-xs">
                 <div className="flex justify-between items-center mb-6 pb-4 border-b border-slate-100">
                   <div>
-                    <h2 className="font-heading font-black text-xl text-[#001B3A]">My Wishlist ({wishlistedProducts.length})</h2>
+                    <h2 className="font-heading font-black text-xl text-[#001B3A]">
+                      My Wishlist ({wishlistedProducts.length})
+                    </h2>
                     <p className="text-xs text-slate-500 font-medium">Your saved guide books</p>
                   </div>
                 </div>
@@ -510,7 +637,11 @@ export default function ProfilePage() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {wishlistedProducts.map((p) => (
                       <div key={p.id} className="border border-slate-200 rounded-xl p-3 flex gap-3 items-center">
-                        <img src={p.image} alt={p.title} className="w-14 h-14 object-contain bg-slate-50 border border-slate-200 rounded-lg p-1" />
+                        <img
+                          src={p.image}
+                          alt={p.title}
+                          className="w-14 h-14 object-contain bg-slate-50 border border-slate-200 rounded-lg p-1"
+                        />
                         <div className="flex-1 min-w-0 text-xs">
                           <h4 className="font-bold text-[#001B3A] truncate">{p.title}</h4>
                           <div className="font-black text-slate-900 mt-0.5">₹{p.price}</div>
@@ -525,16 +656,20 @@ export default function ProfilePage() {
             {/* 5. Payments */}
             {activeTab === 'payments' && (
               <div className="bg-white border border-slate-200 rounded-2xl p-6 md:p-8 shadow-xs text-xs space-y-4">
-                <h2 className="font-heading font-black text-xl text-[#001B3A] pb-4 border-b border-slate-100">Saved Payment Methods</h2>
+                <h2 className="font-heading font-black text-xl text-[#001B3A] pb-4 border-b border-slate-100">
+                  Saved Payment Methods
+                </h2>
                 <div className="border border-slate-200 rounded-xl p-4 flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <CreditCard className="w-5 h-5 text-blue-600" />
                     <div>
                       <div className="font-bold text-slate-900">Google Pay / PhonePe UPI</div>
-                      <div className="text-[11px] text-slate-500">9840418228@upi</div>
+                      <div className="text-[11px] text-slate-500">{user.phone || '9840418228'}@upi</div>
                     </div>
                   </div>
-                  <span className="text-[10px] font-bold bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded border border-emerald-200">VERIFIED</span>
+                  <span className="text-[10px] font-bold bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded border border-emerald-200">
+                    VERIFIED
+                  </span>
                 </div>
               </div>
             )}
@@ -542,17 +677,27 @@ export default function ProfilePage() {
             {/* 6. Coupons */}
             {activeTab === 'coupons' && (
               <div className="bg-white border border-slate-200 rounded-2xl p-6 md:p-8 shadow-xs text-xs space-y-4">
-                <h2 className="font-heading font-black text-xl text-[#001B3A] pb-4 border-b border-slate-100">Coupons & Rewards Wallet</h2>
+                <h2 className="font-heading font-black text-xl text-[#001B3A] pb-4 border-b border-slate-100">
+                  Coupons & Rewards Wallet
+                </h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-xl p-4">
-                    <span className="text-[10px] font-extrabold text-amber-800 bg-amber-200 px-2 py-0.5 rounded uppercase">PROMO CODE</span>
+                    <span className="text-[10px] font-extrabold text-amber-800 bg-amber-200 px-2 py-0.5 rounded uppercase">
+                      PROMO CODE
+                    </span>
                     <h4 className="font-black text-base text-[#001B3A] mt-1">STUDENT10</h4>
-                    <p className="text-slate-600 text-[11px] mt-0.5">Get Extra 10% OFF on all guide book orders above ₹300</p>
+                    <p className="text-slate-600 text-[11px] mt-0.5">
+                      Get Extra 10% OFF on all guide book orders above ₹300
+                    </p>
                   </div>
                   <div className="bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200 rounded-xl p-4">
-                    <span className="text-[10px] font-extrabold text-emerald-800 bg-emerald-200 px-2 py-0.5 rounded uppercase">SUPER COMBO</span>
+                    <span className="text-[10px] font-extrabold text-emerald-800 bg-emerald-200 px-2 py-0.5 rounded uppercase">
+                      SUPER COMBO
+                    </span>
                     <h4 className="font-black text-base text-[#001B3A] mt-1">COMBO25</h4>
-                    <p className="text-slate-600 text-[11px] mt-0.5">Get 25% OFF on 5-Subject Super Combo Book Bundles</p>
+                    <p className="text-slate-600 text-[11px] mt-0.5">
+                      Get 25% OFF on 5-Subject Super Combo Book Bundles
+                    </p>
                   </div>
                 </div>
               </div>
