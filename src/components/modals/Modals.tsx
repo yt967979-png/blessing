@@ -390,6 +390,9 @@ export const Modals = () => {
         loginUser(data.user, data.cart || [], data.wishlist || [], data.addresses || []);
         setIsAuthOpen(false);
         showToast(`✓ Logged in! Welcome back, ${data.user.name}`);
+        if (data.user?.role === 'admin') {
+          router.push('/admin');
+        }
       })
       .catch(() => {
         setAuthError('Connection error. Please check your internet and try again.');

@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Search, Heart, ShoppingBag, User } from 'lucide-react';
+import { Search, Heart, ShoppingBag, User, ShieldCheck } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 
 export const Header = () => {
@@ -137,6 +137,17 @@ export const Header = () => {
 
         {/* Header Actions */}
         <div className="flex items-center gap-2 flex-shrink-0">
+          {/* Admin Panel Quick Access Button */}
+          {user && user.role === 'admin' && (
+            <Link
+              href="/admin"
+              className="bg-[#001B3A] hover:bg-blue-600 text-amber-400 font-extrabold text-[11px] px-3 py-1.5 rounded-xl transition-all shadow-xs flex items-center gap-1.5 border border-amber-400/30"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden sm:inline">ADMIN PANEL</span>
+            </Link>
+          )}
+
           {/* User Account Button: Direct Link to /profile when logged in */}
           {user ? (
             <Link

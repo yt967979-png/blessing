@@ -37,6 +37,7 @@ export interface UserData {
   email: string;
   phone?: string;
   token?: string;
+  role?: string;
 }
 
 interface StoreContextType {

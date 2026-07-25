@@ -218,6 +218,19 @@ export default function ProfilePage() {
 
             {/* Navigation Tabs */}
             <div className="bg-white border border-slate-200 rounded-2xl p-2 shadow-xs text-xs font-bold divide-y divide-slate-100">
+              {user && user.role === 'admin' && (
+                <Link
+                  href="/admin"
+                  className="w-full text-left px-4 py-3.5 rounded-xl flex items-center justify-between transition-colors bg-gradient-to-r from-[#001B3A] to-[#002B5B] text-amber-400 hover:brightness-110"
+                >
+                  <div className="flex items-center gap-3">
+                    <ShieldCheck className="w-4 h-4 text-amber-400" />
+                    <span>Open Admin Dashboard</span>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-amber-400" />
+                </Link>
+              )}
+
               <button
                 onClick={() => setActiveTab('profile')}
                 className={`w-full text-left px-4 py-3.5 rounded-xl flex items-center justify-between transition-colors ${
