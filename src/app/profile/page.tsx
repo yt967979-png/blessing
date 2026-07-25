@@ -32,9 +32,7 @@ import { Modals } from '@/components/modals/Modals';
 export default function ProfilePage() {
   const router = useRouter();
   const { user, loginUser, logoutUser, wishlist, products, showToast, setIsAuthOpen } = useStore();
-  const [activeTab, setActiveTab] = useState<
-    'profile' | 'orders' | 'addresses' | 'wishlist' | 'payments' | 'coupons'
-  >('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'orders' | 'addresses' | 'wishlist'>('profile');
 
   // Dynamic user edit form state
   const [isEditing, setIsEditing] = useState(false);
@@ -261,36 +259,6 @@ export default function ProfilePage() {
                 <div className="flex items-center gap-3">
                   <Heart className="w-4 h-4 text-red-500" />
                   <span>My Wishlist ({wishlist.length})</span>
-                </div>
-                <ChevronRight className="w-4 h-4 text-slate-400" />
-              </button>
-
-              <button
-                onClick={() => setActiveTab('payments')}
-                className={`w-full text-left px-4 py-3.5 rounded-xl flex items-center justify-between transition-colors ${
-                  activeTab === 'payments'
-                    ? 'bg-blue-50 text-blue-700 font-black'
-                    : 'text-slate-700 hover:bg-slate-50'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <CreditCard className="w-4 h-4 text-purple-600" />
-                  <span>Saved Payment Methods</span>
-                </div>
-                <ChevronRight className="w-4 h-4 text-slate-400" />
-              </button>
-
-              <button
-                onClick={() => setActiveTab('coupons')}
-                className={`w-full text-left px-4 py-3.5 rounded-xl flex items-center justify-between transition-colors ${
-                  activeTab === 'coupons'
-                    ? 'bg-blue-50 text-blue-700 font-black'
-                    : 'text-slate-700 hover:bg-slate-50'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <Gift className="w-4 h-4 text-orange-500" />
-                  <span>Coupons & Rewards Wallet</span>
                 </div>
                 <ChevronRight className="w-4 h-4 text-slate-400" />
               </button>
@@ -653,55 +621,6 @@ export default function ProfilePage() {
               </div>
             )}
 
-            {/* 5. Payments */}
-            {activeTab === 'payments' && (
-              <div className="bg-white border border-slate-200 rounded-2xl p-6 md:p-8 shadow-xs text-xs space-y-4">
-                <h2 className="font-heading font-black text-xl text-[#001B3A] pb-4 border-b border-slate-100">
-                  Saved Payment Methods
-                </h2>
-                <div className="border border-slate-200 rounded-xl p-4 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <CreditCard className="w-5 h-5 text-blue-600" />
-                    <div>
-                      <div className="font-bold text-slate-900">Google Pay / PhonePe UPI</div>
-                      <div className="text-[11px] text-slate-500">{user.phone || '9840418228'}@upi</div>
-                    </div>
-                  </div>
-                  <span className="text-[10px] font-bold bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded border border-emerald-200">
-                    VERIFIED
-                  </span>
-                </div>
-              </div>
-            )}
-
-            {/* 6. Coupons */}
-            {activeTab === 'coupons' && (
-              <div className="bg-white border border-slate-200 rounded-2xl p-6 md:p-8 shadow-xs text-xs space-y-4">
-                <h2 className="font-heading font-black text-xl text-[#001B3A] pb-4 border-b border-slate-100">
-                  Coupons & Rewards Wallet
-                </h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-xl p-4">
-                    <span className="text-[10px] font-extrabold text-amber-800 bg-amber-200 px-2 py-0.5 rounded uppercase">
-                      PROMO CODE
-                    </span>
-                    <h4 className="font-black text-base text-[#001B3A] mt-1">STUDENT10</h4>
-                    <p className="text-slate-600 text-[11px] mt-0.5">
-                      Get Extra 10% OFF on all guide book orders above ₹300
-                    </p>
-                  </div>
-                  <div className="bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200 rounded-xl p-4">
-                    <span className="text-[10px] font-extrabold text-emerald-800 bg-emerald-200 px-2 py-0.5 rounded uppercase">
-                      SUPER COMBO
-                    </span>
-                    <h4 className="font-black text-base text-[#001B3A] mt-1">COMBO25</h4>
-                    <p className="text-slate-600 text-[11px] mt-0.5">
-                      Get 25% OFF on 5-Subject Super Combo Book Bundles
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </div>

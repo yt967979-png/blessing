@@ -2,7 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { CheckCircle, Award, Truck, HelpCircle, MapPin, User, UserCheck } from 'lucide-react';
+import { HelpCircle, MapPin, User, UserCheck } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 
 export const AnnouncementBar = () => {
@@ -10,29 +10,15 @@ export const AnnouncementBar = () => {
 
   return (
     <div className="bg-[#001226] text-slate-300 text-xs py-2 border-b border-slate-800">
-      <div className="max-w-7xl mx-auto px-4 flex justify-between items-center">
-        <div className="hidden md:flex items-center gap-6 font-medium">
-          <span className="flex items-center gap-1.5 hover:text-amber-400 transition-colors">
-            <CheckCircle className="w-3.5 h-3.5 text-amber-400" />
-            Trusted by 10,000+ Students
-          </span>
-          <span className="flex items-center gap-1.5 hover:text-amber-400 transition-colors">
-            <Award className="w-3.5 h-3.5 text-amber-400" />
-            Quality Guides for Better Results
-          </span>
-          <span className="flex items-center gap-1.5 hover:text-amber-400 transition-colors">
-            <Truck className="w-3.5 h-3.5 text-amber-400" />
-            Fast Delivery Across India
-          </span>
-        </div>
-        <div className="flex items-center gap-4 ml-auto font-medium">
+      <div className="max-w-7xl mx-auto px-4 flex justify-end items-center">
+        <div className="flex items-center gap-4 font-medium">
           <a
             href="https://wa.me/919840418228?text=Hello%20Blessing%20Power%20Guide%20Support"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-1 hover:text-amber-400 transition-colors cursor-pointer"
           >
-            <HelpCircle className="w-3.5 h-3.5" />
+            <HelpCircle className="w-3.5 h-3.5 text-amber-400" />
             <span>Help</span>
           </a>
           <span className="text-slate-700">|</span>
@@ -40,7 +26,7 @@ export const AnnouncementBar = () => {
             onClick={() => setIsTrackOpen(true)}
             className="flex items-center gap-1 hover:text-amber-400 transition-colors cursor-pointer"
           >
-            <MapPin className="w-3.5 h-3.5" />
+            <MapPin className="w-3.5 h-3.5 text-amber-400" />
             <span>Track Order</span>
           </button>
           <span className="text-slate-700">|</span>
@@ -57,7 +43,7 @@ export const AnnouncementBar = () => {
               onClick={() => setIsAuthOpen(true)}
               className="flex items-center gap-1 hover:text-amber-400 transition-colors cursor-pointer"
             >
-              <User className="w-3.5 h-3.5" />
+              <User className="w-3.5 h-3.5 text-amber-400" />
               <span>Login / Register</span>
             </button>
           )}
