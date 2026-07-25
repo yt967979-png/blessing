@@ -3,19 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import {
-  Search,
-  Heart,
-  ShoppingBag,
-  User,
-  Package,
-  MapPin,
-  Gift,
-  LogOut,
-  ChevronDown,
-  ShieldCheck,
-  CreditCard,
-} from 'lucide-react';
+import { Search, Heart, ShoppingBag, User } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 
 export const Header = () => {
@@ -31,12 +19,10 @@ export const Header = () => {
     setIsCartOpen,
     setIsAuthOpen,
     user,
-    logoutUser,
     setQuickViewProduct,
   } = useStore();
 
   const [showSearchDropdown, setShowSearchDropdown] = useState(false);
-  const [showUserDropdown, setShowUserDropdown] = useState(false);
 
   // Filter products live for instant search dropdown
   const queryText = (searchQuery || '').trim();
@@ -151,83 +137,26 @@ export const Header = () => {
 
         {/* Header Actions */}
         <div className="flex items-center gap-2 flex-shrink-0">
-          {/* Flipkart / Amazon Style Account Dropdown Button */}
-          <div className="relative">
-            <button
-              onClick={handleAccountClick}
-              onMouseEnter={() => user && setShowUserDropdown(true)}
-              className="p-2 rounded-xl text-slate-700 hover:bg-slate-100 transition-colors flex flex-col items-center gap-0.5 relative group"
+          {/* User Account Button: Direct Link to /profile when logged in */}
+          {user ? (
+            <Link
+              href="/profile"
+              className="p-2 rounded-xl text-slate-700 hover:bg-slate-100 transition-colors flex flex-col items-center gap-0.5"
             >
-              <User className={`w-5 h-5 ${user ? 'text-blue-600' : 'text-slate-700'}`} />
-              <span className="text-[10px] font-semibold hidden md:flex items-center gap-0.5">
-                {user ? user.name.split(' ')[0] : 'Account'}
-                {user && <ChevronDown className="w-3 h-3 text-slate-500" />}
+              <User className="w-5 h-5 text-blue-600" />
+              <span className="text-[10px] font-semibold hidden md:block">
+                {user.name.split(' ')[0]}
               </span>
+            </Link>
+          ) : (
+            <button
+              onClick={() => setIsAuthOpen(true)}
+              className="p-2 rounded-xl text-slate-700 hover:bg-slate-100 transition-colors flex flex-col items-center gap-0.5"
+            >
+              <User className="w-5 h-5 text-slate-700" />
+              <span className="text-[10px] font-semibold hidden md:block">Account</span>
             </button>
-
-            {/* Hover / Click Flipkart Account Dropdown Card */}
-            {user && showUserDropdown && (
-              <div
-                onMouseLeave={() => setShowUserDropdown(false)}
-                className="absolute top-full right-0 w-64 bg-white border border-slate-200 rounded-2xl shadow-2xl z-50 p-3 text-xs space-y-1"
-              >
-                <div className="p-3 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl mb-2 border border-blue-100">
-                  <div className="font-black text-[#001B3A]">{user.name}</div>
-                  <div className="text-[11px] text-blue-600 font-semibold">{user.email}</div>
-                  <div className="text-[10px] text-slate-500 font-medium">📱 {user.phone}</div>
-                </div>
-
-                <Link
-                  href="/profile"
-                  onClick={() => setShowUserDropdown(false)}
-                  className="flex items-center gap-2.5 px-3 py-2 rounded-lg font-bold text-slate-700 hover:bg-blue-50 hover:text-blue-600 transition-colors"
-                >
-                  <User className="w-4 h-4 text-blue-600" />
-                  <span>My Profile & Settings</span>
-                </Link>
-
-                <Link
-                  href="/orders"
-                  onClick={() => setShowUserDropdown(false)}
-                  className="flex items-center gap-2.5 px-3 py-2 rounded-lg font-bold text-slate-700 hover:bg-amber-50 hover:text-amber-600 transition-colors"
-                >
-                  <Package className="w-4 h-4 text-amber-500" />
-                  <span>My Orders & Tracking</span>
-                </Link>
-
-                <Link
-                  href="/profile"
-                  onClick={() => setShowUserDropdown(false)}
-                  className="flex items-center gap-2.5 px-3 py-2 rounded-lg font-bold text-slate-700 hover:bg-emerald-50 hover:text-emerald-600 transition-colors"
-                >
-                  <MapPin className="w-4 h-4 text-emerald-600" />
-                  <span>Delivery Addresses</span>
-                </Link>
-
-                <Link
-                  href="/profile"
-                  onClick={() => setShowUserDropdown(false)}
-                  className="flex items-center gap-2.5 px-3 py-2 rounded-lg font-bold text-slate-700 hover:bg-orange-50 hover:text-orange-600 transition-colors"
-                >
-                  <Gift className="w-4 h-4 text-orange-500" />
-                  <span>Coupons & Rewards</span>
-                </Link>
-
-                <div className="border-t border-slate-100 pt-1 mt-1">
-                  <button
-                    onClick={() => {
-                      logoutUser();
-                      setShowUserDropdown(false);
-                    }}
-                    className="w-full text-left flex items-center gap-2.5 px-3 py-2 rounded-lg font-bold text-red-600 hover:bg-red-50 transition-colors"
-                  >
-                    <LogOut className="w-4 h-4" />
-                    <span>Logout Account</span>
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
+          )}
 
           {/* Wishlist Button */}
           <Link

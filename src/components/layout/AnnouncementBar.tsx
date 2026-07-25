@@ -1,11 +1,12 @@
 'use client';
 
 import React from 'react';
+import Link from 'next/link';
 import { CheckCircle, Award, Truck, HelpCircle, MapPin, User, UserCheck } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 
 export const AnnouncementBar = () => {
-  const { user, setIsTrackOpen, setIsAuthOpen, setIsProfileOpen } = useStore();
+  const { user, setIsTrackOpen, setIsAuthOpen } = useStore();
 
   return (
     <div className="bg-[#001226] text-slate-300 text-xs py-2 border-b border-slate-800">
@@ -39,13 +40,13 @@ export const AnnouncementBar = () => {
           </button>
           <span className="text-slate-700">|</span>
           {user ? (
-            <button
-              onClick={() => setIsProfileOpen(true)}
+            <Link
+              href="/profile"
               className="flex items-center gap-1.5 text-amber-400 font-semibold hover:underline"
             >
               <UserCheck className="w-3.5 h-3.5" />
               <span>{user.name}</span>
-            </button>
+            </Link>
           ) : (
             <button
               onClick={() => setIsAuthOpen(true)}
