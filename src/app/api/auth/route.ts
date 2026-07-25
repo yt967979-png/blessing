@@ -6,6 +6,38 @@ function hashPassword(password: string): string {
   return crypto.createHash('sha256').update(password + 'bpg_salt_2026').digest('hex');
 }
 
+// GET /api/auth?userId=xxx — Verify if user account exists in Railway PostgreSQL DB
+export async function GET(request: Request) {
+  let client: any = null;
+  try {
+    const { searchParams } = new URL(request.url);
+    const userId = searchParams.get('userId');
+    const email = searchParams.get('email');
+
+    if (!userId && !email) {
+      return NextResponse.json({ error: 'userId or email is required' }, { status: 400 });
+    }
+
+    client = await getDbClient();
+    let res;
+    if (userId) {
+      res = await client.query('SELECT id, name, email, phone FROM users WHERE id = $1', [String(userId)]);
+    } else {
+      res = await client.query('SELECT id, name, email, phone FROM users WHERE LOWER(email) = $1', [String(email).toLowerCase().trim()]);
+    }
+    await client.end();
+
+    if (res.rows.length === 0) {
+      return NextResponse.json({ exists: false, error: 'USER_NOT_FOUND' }, { status: 404 });
+    }
+
+    return NextResponse.json({ exists: true, user: res.rows[0] });
+  } catch (err: any) {
+    if (client) { try { await client.end(); } catch (_) {} }
+    return NextResponse.json({ error: 'Database connection failed' }, { status: 503 });
+  }
+}
+
 // POST /api/auth — Register or Login via Railway PostgreSQL ONLY
 export async function POST(request: Request) {
   let client: any = null;

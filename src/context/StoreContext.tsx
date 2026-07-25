@@ -140,16 +140,38 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }
       });
 
-    // Restore user session from localStorage
+    // Restore user session from localStorage & verify with Railway PostgreSQL DB
     const savedUser = localStorage.getItem('bpg_user_next');
     if (savedUser) {
       try {
         const u = JSON.parse(savedUser);
-        setUser(u);
-        // Only restore cart if user is logged in
-        const savedCart = localStorage.getItem('bpg_cart_next');
-        if (savedCart) {
-          try { setCart(JSON.parse(savedCart)); } catch (e) {}
+        if (u && u.id) {
+          setUser(u);
+          // Verify with Railway PostgreSQL DB if account still exists
+          fetch(`/api/auth?userId=${u.id}`)
+            .then((res) => {
+              if (res.status === 404) {
+                // Account missing in DB -> Auto logout!
+                setUser(null);
+                setCart([]);
+                setWishlist([]);
+                localStorage.removeItem('bpg_user_next');
+                localStorage.removeItem('bpg_cart_next');
+                localStorage.removeItem('bpg_user_addresses');
+              } else {
+                // User valid -> restore cart
+                const savedCart = localStorage.getItem('bpg_cart_next');
+                if (savedCart) {
+                  try { setCart(JSON.parse(savedCart)); } catch (e) {}
+                }
+              }
+            })
+            .catch(() => {
+              const savedCart = localStorage.getItem('bpg_cart_next');
+              if (savedCart) {
+                try { setCart(JSON.parse(savedCart)); } catch (e) {}
+              }
+            });
         }
       } catch (e) {}
     }
@@ -167,7 +189,19 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           cart,
           wishlist,
         }),
-      }).catch(() => {});
+      })
+        .then((res) => {
+          if (res.status === 404) {
+            // User deleted/missing in Railway DB -> Auto Logout
+            setUser(null);
+            setCart([]);
+            setWishlist([]);
+            localStorage.removeItem('bpg_user_next');
+            localStorage.removeItem('bpg_cart_next');
+            localStorage.removeItem('bpg_user_addresses');
+          }
+        })
+        .catch(() => {});
     }
   }, [cart, wishlist, user]);
 

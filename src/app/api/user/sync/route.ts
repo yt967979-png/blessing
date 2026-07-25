@@ -14,6 +14,13 @@ export async function POST(request: Request) {
     const client = await getDbClient();
 
     try {
+      // 0. Verify user exists in Railway PostgreSQL DB
+      const userCheck = await client.query('SELECT id FROM users WHERE id = $1', [String(userId)]);
+      if (userCheck.rows.length === 0) {
+        await client.end();
+        return NextResponse.json({ error: 'USER_NOT_FOUND', message: 'User account not found in database.' }, { status: 404 });
+      }
+
       // 1. Sync Cart
       if (Array.isArray(cart)) {
         const cartId = `cart-${userId}`;
