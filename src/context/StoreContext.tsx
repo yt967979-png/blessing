@@ -68,7 +68,12 @@ interface StoreContextType {
   removeFromCart: (id: string | number) => void;
   clearCart: () => void;
   toggleWishlist: (id: string | number) => void;
-  loginUser: (u: UserData) => void;
+  loginUser: (
+    u: UserData,
+    restoredCart?: CartItem[],
+    restoredWishlist?: (string | number)[],
+    restoredAddresses?: any[]
+  ) => void;
   logoutUser: () => void;
   updateProductInDb: (id: string | number, updatedData: Partial<Product>) => void;
   addNewProductToDb: (newProdData: Partial<Product>) => void;
@@ -137,6 +142,21 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (savedUser) setUser(JSON.parse(savedUser));
   }, []);
 
+  // Cross-Device Sync Trigger to Railway PostgreSQL
+  useEffect(() => {
+    if (user && user.id) {
+      fetch('/api/user/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          cart,
+          wishlist,
+        }),
+      }).catch(() => {});
+    }
+  }, [cart, wishlist, user]);
+
   // Save Cart to LocalStorage
   useEffect(() => {
     localStorage.setItem('bpg_cart_next', JSON.stringify(cart));
@@ -198,10 +218,29 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     });
   };
 
-  const loginUser = (userData: UserData) => {
+  const loginUser = (
+    userData: UserData,
+    restoredCart?: CartItem[],
+    restoredWishlist?: (string | number)[],
+    restoredAddresses?: any[]
+  ) => {
     setUser(userData);
     localStorage.setItem('bpg_user_next', JSON.stringify(userData));
-    showToast(`Welcome back, ${userData.name}!`);
+
+    if (Array.isArray(restoredCart) && restoredCart.length > 0) {
+      setCart(restoredCart);
+      localStorage.setItem('bpg_cart_next', JSON.stringify(restoredCart));
+    }
+
+    if (Array.isArray(restoredWishlist)) {
+      setWishlist(restoredWishlist);
+    }
+
+    if (Array.isArray(restoredAddresses) && restoredAddresses.length > 0) {
+      localStorage.setItem('bpg_user_addresses', JSON.stringify(restoredAddresses));
+    }
+
+    showToast(`✓ Account Synced! Welcome back, ${userData.name}!`);
   };
 
   const logoutUser = () => {
