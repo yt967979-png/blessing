@@ -362,11 +362,50 @@ export const Modals = () => {
     }
 
     if (authMode === 'register') {
-      if (registerStep === 'details') {
-        handleSendOtp(e);
-      } else {
-        handleVerifyOtpAndRegister(e);
+      if (!authForm.name || authForm.name.trim().length < 2) {
+        setAuthError('Please enter your full name.');
+        return;
       }
+      if (!authForm.phone || authForm.phone.trim().length < 10) {
+        setAuthError('Please enter a valid 10-digit mobile number.');
+        return;
+      }
+      if (!authForm.password || authForm.password.length < 8) {
+        setAuthError('Password must be at least 8 characters long.');
+        return;
+      }
+      if (authForm.password !== confirmPassword) {
+        setAuthError('Passwords do not match.');
+        return;
+      }
+
+      setIsSendingOtp(true);
+      fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'register',
+          email: emailClean,
+          password: passwordClean,
+          name: authForm.name.trim(),
+          phone: authForm.phone.trim(),
+        }),
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          setIsSendingOtp(false);
+          if (data.error) {
+            setAuthError(data.error);
+            return;
+          }
+          loginUser(data.user, data.cart || [], data.wishlist || [], data.addresses || []);
+          setIsAuthOpen(false);
+          showToast(`🎉 Account created successfully! Welcome, ${data.user.name}`);
+        })
+        .catch(() => {
+          setIsSendingOtp(false);
+          setAuthError('Server error creating account. Please try again.');
+        });
       return;
     }
 
@@ -1043,8 +1082,8 @@ export const Modals = () => {
                           <span>SIGN IN TO ACCOUNT</span>
                         ) : (
                           <>
-                            <Mail className="w-4 h-4" />
-                            <span>{isSendingOtp ? 'SENDING CODE...' : 'SEND 6-DIGIT VERIFICATION CODE'}</span>
+                            <User className="w-4 h-4" />
+                            <span>{isSendingOtp ? 'CREATING ACCOUNT...' : 'CREATE ACCOUNT'}</span>
                           </>
                         )}
                       </button>
@@ -1055,7 +1094,7 @@ export const Modals = () => {
                 {/* Cloudflare Security Badge */}
                 <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-center gap-1.5 text-[10px] text-slate-400 font-semibold">
                   <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Secured by Cloudflare Turnstile & Email Verification</span>
+                  <span>Secured by 256-Bit SSL Encryption</span>
                 </div>
               </div>
             </motion.div>
