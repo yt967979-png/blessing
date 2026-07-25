@@ -101,12 +101,21 @@ export const defaultSeedBooks = [
 let isSchemaInitialized = false;
 
 export async function getDbClient() {
-  const connectionString = process.env.DATABASE_URL;
+  let connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.DATABASE_PUBLIC_URL;
+
+  if (!connectionString && process.env.PGHOST && process.env.PGUSER && process.env.PGPASSWORD) {
+    const host = process.env.PGHOST;
+    const user = process.env.PGUSER;
+    const pass = process.env.PGPASSWORD;
+    const db = process.env.PGDATABASE || 'railway';
+    const port = process.env.PGPORT || 5432;
+    connectionString = `postgresql://${user}:${pass}@${host}:${port}/${db}`;
+  }
 
   if (connectionString) {
     const client = new Client({
       connectionString,
-      ssl: connectionString.includes('railway') || connectionString.includes('render')
+      ssl: connectionString.includes('railway') || connectionString.includes('render') || connectionString.includes('rlwy.net')
         ? { rejectUnauthorized: false }
         : false,
     });
