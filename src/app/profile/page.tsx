@@ -65,17 +65,21 @@ export default function ProfilePage() {
     }
   }, [user]);
 
-  // Fetch live orders from backend database
+  // Fetch live orders for logged-in user from backend database
   useEffect(() => {
-    fetch('/api/orders')
-      .then((res) => res.json())
-      .then((data) => {
-        if (Array.isArray(data)) {
-          setLiveOrders(data);
-        }
-      })
-      .catch(() => {});
-  }, []);
+    if (user && user.id) {
+      fetch(`/api/orders?userId=${user.id}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (Array.isArray(data)) {
+            setLiveOrders(data);
+          }
+        })
+        .catch(() => {});
+    } else {
+      setLiveOrders([]);
+    }
+  }, [user]);
 
   const saveAddressesToStorage = (updatedList: any[]) => {
     setAddresses(updatedList);

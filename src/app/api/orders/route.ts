@@ -6,6 +6,7 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const orderNumberParam = searchParams.get('orderId');
+    const userIdParam = searchParams.get('userId');
 
     if (client) {
       let query = `
@@ -25,10 +26,20 @@ export async function GET(request: Request) {
         LEFT JOIN order_items oi ON o.id = oi.order_id
       `;
       let params: any[] = [];
+      let whereClauses: string[] = [];
 
       if (orderNumberParam) {
-        query += ` WHERE o.order_number = $1 OR o.id = $1`;
         params.push(orderNumberParam);
+        whereClauses.push(`(o.order_number = $${params.length} OR o.id = $${params.length})`);
+      }
+
+      if (userIdParam) {
+        params.push(userIdParam);
+        whereClauses.push(`(o.user_id = $${params.length} OR o.user_id = (SELECT email FROM users WHERE id = $${params.length} LIMIT 1))`);
+      }
+
+      if (whereClauses.length > 0) {
+        query += ` WHERE ${whereClauses.join(' AND ')}`;
       }
 
       query += ` GROUP BY o.id ORDER BY o.ordered_at DESC`;
@@ -51,19 +62,17 @@ export async function GET(request: Request) {
 
         return {
           orderId: o.order_number || o.id,
-          customerName: addrObj.name || o.user_id || 'Student Customer',
-          customerPhone: addrObj.phone || '9840418228',
-          address: addrObj.address || 'Medavakkam High Road',
-          city: addrObj.city || 'Chennai',
-          totalAmount: Number(o.total_amount || 360),
-          paymentMethod: o.payment_method || 'Razorpay UPI',
-          paymentStatus: o.payment_status || 'PAID',
-          courierStatus: o.order_status || 'In-Transit',
-          trackingNumber: o.awb_number || 'STC-TN-984210',
+          customerName: addrObj.name || o.user_id || 'Customer',
+          customerPhone: addrObj.phone || '',
+          address: addrObj.address || '',
+          city: addrObj.city || '',
+          totalAmount: Number(o.total_amount || 0),
+          paymentMethod: o.payment_method || 'Razorpay',
+          paymentStatus: o.payment_status || 'Pending',
+          courierStatus: o.order_status || 'Confirmed',
+          trackingNumber: o.awb_number || '',
           courierName: o.courier_name || 'ST Courier Express',
-          items: Array.isArray(o.items) && o.items.length > 0
-            ? o.items
-            : [{ id: 'bpg-101', title: '10th Standard Mathematics Exam Power Guide Book', qty: 1, price: 360 }],
+          items: Array.isArray(o.items) ? o.items : [],
           createdAt: new Date(o.ordered_at || Date.now()).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
         };
       });

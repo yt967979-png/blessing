@@ -267,31 +267,10 @@ async function migrateDatabase(connStr, dbName) {
       ON CONFLICT (id) DO NOTHING;
     `);
 
-    // Seed Sample User
-    await client.query(`
-      INSERT INTO users (id, name, email, phone, password_hash, role, status) VALUES
-      ('usr-seed-101', 'Karthik M (Student)', 'student@example.com', '9840418228', '8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918', 'customer', 'active')
-      ON CONFLICT (id) DO NOTHING;
-    `);
-
-    // Seed Sample Order
-    const sampleAddress = JSON.stringify({
-      name: 'Karthik M',
-      phone: '9840418228',
-      address: 'Medavakkam High Road',
-      city: 'Chennai',
-      pincode: '600012',
-    });
-    await client.query(`
-      INSERT INTO orders (id, order_number, user_id, subtotal, total_amount, payment_method, payment_status, order_status, courier_name, awb_number, shipping_address) VALUES
-      ('ord-seed-101', 'BPG-1082', 'Karthik M', 360, 360, 'Razorpay UPI', 'PAID', 'Packed & Dispatched', 'ST Courier Express', 'STC-TN-984210', '${sampleAddress}')
-      ON CONFLICT (id) DO NOTHING;
-    `);
-
     // Seed Sample Review
     await client.query(`
       INSERT INTO reviews (id, user_name, rating, review, book_id) VALUES
-      ('rev-seed-1', 'Karthik M (10th Standard)', 5, 'Scored 96/100 in Maths State Board exam after studying with Blessing Power Guide!', 'bpg-101')
+      ('rev-seed-1', 'Student Customer (10th Standard)', 5, 'Scored high marks in Maths State Board exam after studying with Blessing Power Guide!', 'bpg-101')
       ON CONFLICT (id) DO NOTHING;
     `);
 
