@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -51,27 +51,21 @@ export const Modals = () => {
   } = useStore();
 
   // Saved Addresses (Flipkart Style)
-  const [selectedAddrId, setSelectedAddrId] = useState<number | 'new'>(1);
-  const [savedAddresses, setSavedAddresses] = useState([
-    {
-      id: 1,
-      type: 'HOME',
-      name: 'M. Karthik',
-      phone: '9840418228',
-      address: 'No. 45, Medavakkam High Rd, Agaramthen',
-      city: 'Chennai',
-      pincode: '600012',
-    },
-    {
-      id: 2,
-      type: 'WORK',
-      name: 'M. Karthik',
-      phone: '9840418228',
-      address: 'Trust Square Street, Medavakkam',
-      city: 'Chennai',
-      pincode: '600012',
-    },
-  ]);
+  const [savedAddresses, setSavedAddresses] = useState<any[]>([]);
+  const [selectedAddrId, setSelectedAddrId] = useState<number | 'new'>('new');
+
+  useEffect(() => {
+    const saved = localStorage.getItem('bpg_user_addresses');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setSavedAddresses(parsed);
+          setSelectedAddrId(parsed[0].id);
+        }
+      } catch (e) {}
+    }
+  }, [isCheckoutOpen]);
 
   // New Address Form
   const [newAddr, setNewAddr] = useState({
@@ -108,17 +102,35 @@ export const Modals = () => {
       return;
     }
 
+    if (selectedAddrId === 'new') {
+      const createdAddr = {
+        id: Date.now(),
+        type: newAddr.type || 'HOME',
+        name: newAddr.name,
+        phone: newAddr.phone || user?.phone || '',
+        address: newAddr.address,
+        city: newAddr.city || 'Chennai',
+        pincode: newAddr.pincode,
+      };
+      const updatedList = [...savedAddresses, createdAddr];
+      setSavedAddresses(updatedList);
+      localStorage.setItem('bpg_user_addresses', JSON.stringify(updatedList));
+    }
+
     const orderId = 'BPG-' + Math.floor(1000 + Math.random() * 9000);
-    const trackingNo = 'SR-TN-' + Math.floor(100000 + Math.random() * 900000);
 
     // Call API to store order live in database
     try {
-      await fetch('http://localhost:5000/api/orders', {
+      const apiEndpoint = window.location.hostname !== 'localhost'
+        ? '/api/orders'
+        : 'http://localhost:5000/api/orders';
+
+      await fetch(apiEndpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          customerName: selectedAddress.name || 'Customer',
-          customerPhone: selectedAddress.phone || '9840418228',
+          customerName: selectedAddress.name || user?.name || 'Customer',
+          customerPhone: selectedAddress.phone || user?.phone || '9840418228',
           address: selectedAddress.address,
           city: selectedAddress.city || 'Chennai',
           items: cart.map((i) => ({ id: i.id, title: i.title, qty: i.qty, price: i.price })),

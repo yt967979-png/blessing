@@ -64,20 +64,6 @@ export default function ProfilePage() {
       try {
         setAddresses(JSON.parse(saved));
       } catch (e) {}
-    } else if (user) {
-      const initial = [
-        {
-          id: 1,
-          type: 'HOME',
-          name: user.name,
-          phone: user.phone || '9840418228',
-          address: 'No. 12, Ganesh Apartment, Agaramthen',
-          city: 'Chennai',
-          pincode: '600012',
-        },
-      ];
-      setAddresses(initial);
-      localStorage.setItem('bpg_user_addresses', JSON.stringify(initial));
     }
   }, [user]);
 
@@ -585,34 +571,48 @@ export default function ProfilePage() {
                   </form>
                 )}
 
-                <div className="space-y-4">
-                  {addresses.map((addr) => (
-                    <div
-                      key={addr.id}
-                      className="border border-blue-200 bg-blue-50/40 rounded-2xl p-5 text-xs space-y-2 relative"
+                {addresses.length === 0 ? (
+                  <div className="py-12 text-center text-slate-400 border border-dashed border-slate-200 rounded-2xl p-6">
+                    <MapPin className="w-12 h-12 mx-auto mb-2 opacity-30 text-emerald-600" />
+                    <p className="text-xs font-bold text-slate-700">No delivery addresses saved yet</p>
+                    <p className="text-[11px] text-slate-500 mt-0.5 mb-4">Click + ADD ADDRESS to save your shipping address for fast 1-click checkout.</p>
+                    <button
+                      onClick={() => setShowAddAddrForm(true)}
+                      className="bg-blue-600 hover:bg-[#001B3A] text-white font-extrabold text-xs px-5 py-2.5 rounded-xl uppercase tracking-wider shadow-sm transition-colors"
                     >
-                      <div className="flex justify-between items-center">
-                        <div className="flex items-center gap-2">
-                          <span className="bg-blue-600 text-white text-[10px] font-black px-2 py-0.5 rounded uppercase">
-                            {addr.type}
-                          </span>
-                          <span className="font-extrabold text-slate-900">{addr.name}</span>
-                          <span className="text-slate-500">• {addr.phone}</span>
-                        </div>
+                      + ADD YOUR FIRST ADDRESS
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {addresses.map((addr) => (
+                      <div
+                        key={addr.id}
+                        className="border border-blue-200 bg-blue-50/40 rounded-2xl p-5 text-xs space-y-2 relative"
+                      >
+                        <div className="flex justify-between items-center">
+                          <div className="flex items-center gap-2">
+                            <span className="bg-blue-600 text-white text-[10px] font-black px-2 py-0.5 rounded uppercase">
+                              {addr.type}
+                            </span>
+                            <span className="font-extrabold text-slate-900">{addr.name}</span>
+                            <span className="text-slate-500">• {addr.phone}</span>
+                          </div>
 
-                        <button
-                          onClick={() => handleDeleteAddress(addr.id)}
-                          className="text-red-500 hover:text-red-700"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                          <button
+                            onClick={() => handleDeleteAddress(addr.id)}
+                            className="text-red-500 hover:text-red-700"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <p className="text-slate-700 leading-relaxed font-medium">
+                          {addr.address}, {addr.city} — {addr.pincode}
+                        </p>
                       </div>
-                      <p className="text-slate-700 leading-relaxed font-medium">
-                        {addr.address}, {addr.city} — {addr.pincode}
-                      </p>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
