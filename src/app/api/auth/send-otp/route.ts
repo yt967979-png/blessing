@@ -74,12 +74,15 @@ async function sendGmailOtp(toEmail: string, otp: string): Promise<boolean> {
           html: buildOtpHtml(otp),
         }),
       });
+      const resBody = await res.json().catch(() => ({}));
       if (res.ok) {
-        console.log(`✅ [RESEND API SENT] Real Email delivered to ${toEmail}`);
+        console.log(`✅ [RESEND API SENT] Real Email delivered to ${toEmail} | id: ${resBody.id}`);
         return true;
+      } else {
+        console.error(`❌ [RESEND API FAILED] status=${res.status}`, JSON.stringify(resBody));
       }
     } catch (e: any) {
-      console.error('Resend API error:', e.message);
+      console.error('Resend API exception:', e.message);
     }
   }
 
