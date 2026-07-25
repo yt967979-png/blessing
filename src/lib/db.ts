@@ -98,6 +98,8 @@ export const defaultSeedBooks = [
   },
 ];
 
+let isSchemaInitialized = false;
+
 export async function getDbClient() {
   const connectionString = process.env.DATABASE_URL;
 
@@ -109,6 +111,9 @@ export async function getDbClient() {
         : false,
     });
     await client.connect();
+
+    if (!isSchemaInitialized) {
+      isSchemaInitialized = true;
 
     // Create Full 17-Table Relational Database Schema
     await client.query(`
@@ -334,6 +339,7 @@ export async function getDbClient() {
           [b.id, b.title, b.slug, b.isbn, b.author, b.publisher, b.edition, b.language, b.subject, b.category_id, b.description, b.price, b.discount_price, b.stock, b.pages, b.weight, b.cover_image, b.status, b.featured]
         );
       }
+    }
     }
 
     return client;

@@ -2,11 +2,11 @@ import { NextResponse } from 'next/server';
 import { getDbClient } from '@/lib/db';
 
 export async function GET(request: Request) {
+  const client = await getDbClient();
   try {
     const { searchParams } = new URL(request.url);
     const orderNumberParam = searchParams.get('orderId');
 
-    const client = await getDbClient();
     if (client) {
       let query = `
         SELECT o.*,
@@ -34,7 +34,6 @@ export async function GET(request: Request) {
       query += ` GROUP BY o.id ORDER BY o.ordered_at DESC`;
 
       const res = await client.query(query, params);
-      await client.end();
 
       const mapped = res.rows.map((o: any) => ({
         orderId: o.order_number || o.id,
@@ -58,12 +57,15 @@ export async function GET(request: Request) {
     }
   } catch (err: any) {
     console.error('Error fetching orders from DB:', err.message);
+  } finally {
+    if (client) await client.end();
   }
 
   return NextResponse.json([]);
 }
 
 export async function POST(request: Request) {
+  const client = await getDbClient();
   try {
     const body = await request.json();
     const { customerName, customerPhone, address, city, items, paymentMethod, paymentStatus, razorpayPaymentId } = body;
@@ -81,7 +83,6 @@ export async function POST(request: Request) {
       pincode: '600012',
     });
 
-    const client = await getDbClient();
     if (client) {
       // 1. Insert Order into PostgreSQL orders table
       const sqlOrder = `
@@ -110,12 +111,13 @@ export async function POST(request: Request) {
         [timelineId, id]
       );
 
-      await client.end();
       return NextResponse.json({ orderId: orderNumber, totalAmount, status: 'Packed & Dispatched', trackingNumber: awbNumber }, { status: 201 });
     }
 
     return NextResponse.json({ orderId: orderNumber, totalAmount, status: 'Packed & Dispatched' }, { status: 201 });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
+  } finally {
+    if (client) await client.end();
   }
 }
