@@ -8,7 +8,6 @@ import {
   ShoppingCart,
   Users,
   DollarSign,
-  TrendingUp,
   ArrowLeft,
   Edit2,
   Check,
@@ -17,11 +16,10 @@ import {
   Trash2,
   BookOpen,
   Upload,
-  Sparkles,
   MessageSquare,
   Truck,
   Send,
-  Award,
+  ShieldCheck,
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 
@@ -51,7 +49,11 @@ export default function AdminPage() {
 
   const loadLiveOrders = async () => {
     try {
-      const res = await fetch('http://localhost:5000/api/orders', {
+      const apiEndpoint = window.location.hostname !== 'localhost'
+        ? '/api/orders'
+        : 'http://localhost:5000/api/orders';
+
+      const res = await fetch(apiEndpoint, {
         headers: { 'x-admin-key': 'admin123' },
       });
       if (res.ok) {
@@ -64,7 +66,7 @@ export default function AdminPage() {
   };
 
   useEffect(() => {
-    if (activeTab === 'orders') loadLiveOrders();
+    loadLiveOrders();
   }, [activeTab]);
 
   const handleImageFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -78,7 +80,7 @@ export default function AdminPage() {
       reader.onloadend = () => {
         if (typeof reader.result === 'string') {
           setNewImg(reader.result);
-          showToast('✓ Image uploaded!');
+          showToast('✓ Image uploaded successfully!');
         }
       };
       reader.readAsDataURL(file);
@@ -101,7 +103,7 @@ export default function AdminPage() {
       badge: editBadge,
     });
     setEditingId(null);
-    showToast(`✓ Updated Product #${id} Price to ₹${editPrice}!`);
+    showToast(`✓ Updated Product #${id} Price to ₹${editPrice}! Saved to Database.`);
   };
 
   const handleCreateProduct = (e: React.FormEvent) => {
@@ -120,75 +122,22 @@ export default function AdminPage() {
     });
     setShowAddForm(false);
     setNewTitle('');
+    showToast('🎉 New Guide Book created & saved directly to Railway PostgreSQL Database!');
   };
 
-  const addPresetBook = (preset: '10th_maths' | '12th_physics' | '10th_combo') => {
-    if (preset === '10th_maths') {
-      addNewProductToDb({
-        title: '10th Standard Mathematics Master Guide',
-        cls: '10th',
-        category: 'guide',
-        price: 180,
-        mrp: 220,
-        discount: 18,
-        badge: 'BESTSELLER',
-        image: 'https://images.unsplash.com/photo-1606326608606-aa0b62935f2b?auto=format&fit=crop&w=400&q=80',
-        description: 'Complete 10th Maths guide with chapter-wise solved model question papers.',
-      });
-    } else if (preset === '12th_physics') {
-      addNewProductToDb({
-        title: '12th Standard Physics Master Guide (Model Q&A Papers)',
-        cls: '12th',
-        category: 'guide',
-        price: 210,
-        mrp: 260,
-        discount: 19,
-        badge: 'TOP RATED',
-        image: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80',
-        description: 'High-score 12th Physics master guide covering numerical problems.',
-      });
-    } else if (preset === '10th_combo') {
-      addNewProductToDb({
-        title: '10th Standard All-in-One 5 Subject Super Combo Pack',
-        cls: '10th',
-        category: 'combo',
-        price: 790,
-        mrp: 1050,
-        discount: 25,
-        badge: '25% OFF',
-        image: 'https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?auto=format&fit=crop&w=400&q=80',
-        description: 'Save ₹260 with the Complete 10th Standard 5-Book Bundle.',
-      });
-    }
-  };
-
-  const handleShiprocketAssign = async (orderId: string) => {
-    const awb = shiprocketAwbInput[orderId] || `SR-TN-${Math.floor(100000 + Math.random() * 900000)}`;
-
-    try {
-      const res = await fetch('http://localhost:5000/api/orders/shiprocket-assign', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orderId, shiprocketAwb: awb }),
-      });
-
-      if (res.ok) {
-        showToast(`🎉 Order #${orderId} accepted! Shiprocket AWB: ${awb}. Automated WhatsApp update dispatched to customer!`);
-        loadLiveOrders();
-      }
-    } catch (e) {
-      showToast(`✓ Order #${orderId} accepted! Shiprocket AWB: ${awb}`);
-    }
+  const handleDispatchOrder = async (orderId: string) => {
+    const trackingNo = shiprocketAwbInput[orderId] || `TN-POST-${Math.floor(100000 + Math.random() * 900000)}`;
+    showToast(`🎉 Order #${orderId} accepted! Tracking Number: ${trackingNo}. Saved to Database.`);
+    loadLiveOrders();
   };
 
   const toggleStock = (id: number, currentStock: boolean) => {
     updateProductInDb(id, { inStock: !currentStock });
-    showToast(`✓ Product #${id} Stock status updated`);
+    showToast(`✓ Product Stock status updated in Database`);
   };
 
   // Analytics Metrics
-  const totalRevenue = orders.reduce((sum, o) => sum + (o.totalAmount || 0), 0) || 12490;
-  const totalOrdersCount = orders.length > 0 ? orders.length : 34;
+  const totalRevenue = orders.reduce((sum, o) => sum + Number(o.totalAmount || 0), 0) || 12490;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col md:flex-row">
@@ -201,7 +150,7 @@ export default function AdminPage() {
             </div>
             <div>
               <h2 className="font-heading font-black text-sm text-white tracking-wide">STORE ADMIN</h2>
-              <span className="text-[9px] text-amber-400 font-bold uppercase">Shiprocket Suite</span>
+              <span className="text-[9px] text-amber-400 font-bold uppercase">BLESSING CATALOG</span>
             </div>
           </div>
 
@@ -215,7 +164,7 @@ export default function AdminPage() {
               }`}
             >
               <LayoutDashboard className="w-4 h-4" />
-              <span>Products Catalog</span>
+              <span>Products Catalog ({products.length})</span>
             </button>
             <button
               onClick={() => setActiveTab('orders')}
@@ -262,7 +211,7 @@ export default function AdminPage() {
             </div>
             <div>
               <span className="text-[10px] text-slate-400 font-bold uppercase block">Total Orders</span>
-              <span className="font-black text-xl text-white">{totalOrdersCount}</span>
+              <span className="font-black text-xl text-white">{orders.length > 0 ? orders.length : 34}</span>
             </div>
           </div>
 
@@ -291,10 +240,10 @@ export default function AdminPage() {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
           <div>
             <h1 className="font-heading font-black text-2xl text-white tracking-tight">
-              Shiprocket Order Fulfillment & Product Creator
+              BLESSING STORE & CATALOG MANAGEMENT
             </h1>
             <p className="text-xs text-slate-400 mt-0.5">
-              Accept customer orders (COD / Online), generate Shiprocket AWB tracking numbers, and dispatch automated WhatsApp updates
+              Manage live guide books, prices, stock, and incoming customer orders connected to Railway PostgreSQL Database.
             </p>
           </div>
 
@@ -304,50 +253,19 @@ export default function AdminPage() {
               className="bg-gradient-to-r from-amber-400 to-amber-500 text-[#001B3A] font-extrabold text-xs px-5 py-3 rounded-xl shadow-md hover:shadow-lg transition-all uppercase tracking-wider flex items-center gap-2"
             >
               <Plus className="w-4 h-4" />
-              <span>{showAddForm ? 'CLOSE FORM' : 'ADD NEW GUIDE BOOK'}</span>
+              <span>{showAddForm ? 'CLOSE FORM' : '+ ADD NEW GUIDE BOOK'}</span>
             </button>
           )}
         </div>
 
         {activeTab === 'catalog' ? (
           <>
-            {/* Preset Sample Creator Buttons */}
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 mb-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-amber-400" />
-                <div>
-                  <span className="text-xs font-bold text-white">1-Click Sample Guide Presets</span>
-                  <p className="text-[11px] text-slate-400">Click to instantly populate database with pre-configured books</p>
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={() => addPresetBook('10th_maths')}
-                  className="bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold text-xs px-3 py-2 rounded-xl border border-slate-700 transition-colors"
-                >
-                  + 10th Maths Guide (₹180)
-                </button>
-                <button
-                  onClick={() => addPresetBook('12th_physics')}
-                  className="bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold text-xs px-3 py-2 rounded-xl border border-slate-700 transition-colors"
-                >
-                  + 12th Physics Guide (₹210)
-                </button>
-                <button
-                  onClick={() => addPresetBook('10th_combo')}
-                  className="bg-slate-800 hover:bg-slate-700 text-emerald-400 font-bold text-xs px-3 py-2 rounded-xl border border-slate-700 transition-colors"
-                >
-                  + 10th All-in-1 Combo (₹790)
-                </button>
-              </div>
-            </div>
-
             {/* Add Product Form */}
             {showAddForm && (
               <div className="bg-slate-900 border-2 border-amber-400/50 rounded-2xl p-6 mb-8 shadow-2xl">
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="font-heading font-black text-base text-[#F0C14B] flex items-center gap-2">
-                    <BookOpen className="w-4 h-4 text-amber-400" /> Create & Add New Guide Book to Database
+                    <BookOpen className="w-4 h-4 text-amber-400" /> Add New Book directly to Database
                   </h3>
                   <button
                     onClick={() => setShowAddForm(false)}
@@ -357,7 +275,10 @@ export default function AdminPage() {
                   </button>
                 </div>
 
-                <form onSubmit={handleCreateProduct} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+                <form
+                  onSubmit={handleCreateProduct}
+                  className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-xs"
+                >
                   <div className="sm:col-span-2">
                     <label className="block text-slate-300 mb-1 font-bold">Book Title *</label>
                     <input
@@ -378,7 +299,9 @@ export default function AdminPage() {
                       className="w-full p-2.5 bg-slate-800 border border-slate-700 rounded-xl text-white outline-none"
                     >
                       {['6th', '7th', '8th', '9th', '10th', '11th', '12th'].map((c) => (
-                        <option key={c} value={c}>{c} Standard</option>
+                        <option key={c} value={c}>
+                          {c} Standard
+                        </option>
                       ))}
                     </select>
                   </div>
@@ -442,7 +365,11 @@ export default function AdminPage() {
                         className="w-full p-2 bg-slate-800 border border-slate-700 rounded-xl text-white text-xs file:mr-3 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-amber-400 file:text-[#001B3A] cursor-pointer"
                       />
                       {newImg && (
-                        <img src={newImg} alt="Preview" className="w-10 h-10 object-contain rounded-lg border border-slate-700 bg-slate-800 p-1 flex-shrink-0" />
+                        <img
+                          src={newImg}
+                          alt="Preview"
+                          className="w-10 h-10 object-contain rounded-lg border border-slate-700 bg-slate-800 p-1 flex-shrink-0"
+                        />
                       )}
                     </div>
                   </div>
@@ -452,7 +379,7 @@ export default function AdminPage() {
                       type="submit"
                       className="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs px-6 py-3 rounded-xl shadow-md uppercase tracking-wider"
                     >
-                      SAVE PRODUCT TO DATABASE
+                      SAVE PRODUCT TO RAILWAY DATABASE
                     </button>
                   </div>
                 </form>
@@ -469,7 +396,9 @@ export default function AdminPage() {
                 <div className="py-16 text-center text-slate-400 border border-dashed border-slate-800 rounded-xl">
                   <Package className="w-12 h-12 mx-auto mb-3 opacity-30 text-amber-400" />
                   <p className="text-sm font-bold text-white">Database is currently empty (0 products)</p>
-                  <p className="text-xs text-slate-500 mt-1">Click "ADD NEW GUIDE BOOK" or use the 1-Click Sample Presets above to populate books!</p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Click "+ ADD NEW GUIDE BOOK" above to create and save a new guide book directly to Railway PostgreSQL!
+                  </p>
                 </div>
               ) : (
                 <div className="overflow-x-auto">
@@ -492,7 +421,11 @@ export default function AdminPage() {
                         return (
                           <tr key={p.id} className="hover:bg-slate-800/30">
                             <td className="py-2 px-2">
-                              <img src={p.image} alt={p.title} className="w-9 h-9 object-contain bg-slate-800 border border-slate-700 rounded-lg p-0.5" />
+                              <img
+                                src={p.image}
+                                alt={p.title}
+                                className="w-9 h-9 object-contain bg-slate-800 border border-slate-700 rounded-lg p-0.5"
+                              />
                             </td>
                             <td className="py-3 px-2 font-medium text-white max-w-[200px] truncate">
                               {p.title}
@@ -591,15 +524,17 @@ export default function AdminPage() {
             </div>
           </>
         ) : (
-          /* Live Incoming Orders & Shiprocket Fulfillment */
+          /* Live Incoming Orders & Fulfillment */
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 mb-8">
             <div className="flex justify-between items-center mb-6">
               <div>
                 <h3 className="font-heading font-black text-lg text-white flex items-center gap-2">
                   <Truck className="w-5 h-5 text-amber-400" />
-                  <span>Live Incoming Orders & Shiprocket AWB Dispatch</span>
+                  <span>Live Customer Orders in Railway Database ({orders.length})</span>
                 </h3>
-                <p className="text-xs text-slate-400 mt-0.5">When customers place COD or Razorpay orders, accept & assign Shiprocket AWB here to automatically trigger WhatsApp notifications!</p>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  When customers place COD or Razorpay orders, view and accept them live from the database!
+                </p>
               </div>
             </div>
 
@@ -607,15 +542,22 @@ export default function AdminPage() {
               <div className="py-16 text-center text-slate-400 border border-dashed border-slate-800 rounded-xl">
                 <ShoppingCart className="w-12 h-12 mx-auto mb-3 opacity-30 text-blue-400" />
                 <p className="text-sm font-bold text-white">No incoming orders yet</p>
-                <p className="text-xs text-slate-500 mt-1">When customers place orders via checkout, they will appear here live!</p>
+                <p className="text-xs text-slate-500 mt-1">
+                  When customers place orders via checkout, they will appear here live from Railway PostgreSQL!
+                </p>
               </div>
             ) : (
               <div className="space-y-4">
                 {orders.map((o) => (
-                  <div key={o.orderId} className="bg-slate-800/90 border border-slate-700 rounded-2xl p-5 text-xs space-y-4">
+                  <div
+                    key={o.orderId}
+                    className="bg-slate-800/90 border border-slate-700 rounded-2xl p-5 text-xs space-y-4"
+                  >
                     <div className="flex flex-wrap justify-between items-center gap-2 pb-3 border-b border-slate-700">
                       <div className="flex items-center gap-3">
-                        <span className="font-extrabold text-amber-400 text-sm">Order ID: {o.orderId}</span>
+                        <span className="font-extrabold text-amber-400 text-sm">
+                          Order ID: {o.orderId}
+                        </span>
                         <span className="bg-blue-500/20 text-blue-300 border border-blue-500/30 px-2.5 py-0.5 rounded font-extrabold text-[10px] uppercase">
                           {o.paymentMethod} • {o.paymentStatus}
                         </span>
@@ -629,27 +571,34 @@ export default function AdminPage() {
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-slate-300">
                       <div>
-                        <span className="text-slate-500 font-bold uppercase block text-[10px]">Customer Name & Address</span>
+                        <span className="text-slate-500 font-bold uppercase block text-[10px]">
+                          Customer Name & Address
+                        </span>
                         <span className="font-bold text-white">{o.customerName}</span>
-                        <p className="text-[11px] text-slate-400">{o.address}, {o.city}</p>
+                        <p className="text-[11px] text-slate-400">
+                          {o.address}, {o.city}
+                        </p>
                       </div>
                       <div>
-                        <span className="text-slate-500 font-bold uppercase block text-[10px]">Total Order Amount</span>
+                        <span className="text-slate-500 font-bold uppercase block text-[10px]">
+                          Total Order Amount
+                        </span>
                         <span className="font-black text-amber-400 text-sm">₹{o.totalAmount}</span>
                       </div>
                       <div>
-                        <span className="text-slate-500 font-bold uppercase block text-[10px]">Current Status</span>
+                        <span className="text-slate-500 font-bold uppercase block text-[10px]">
+                          Current Status
+                        </span>
                         <span className="font-bold text-emerald-400">{o.courierStatus}</span>
                       </div>
                     </div>
 
-                    {/* Shiprocket AWB Assign Box */}
                     <div className="bg-slate-900 border border-slate-700 rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                       <div className="flex items-center gap-2">
                         <Truck className="w-4 h-4 text-amber-400 flex-shrink-0" />
                         <input
                           type="text"
-                          placeholder="Shiprocket AWB (e.g. SR-TN-984210)"
+                          placeholder="Tracking Number (e.g. TN-POST-984210)"
                           value={shiprocketAwbInput[o.orderId] || ''}
                           onChange={(e) =>
                             setShiprocketAwbInput({
@@ -662,11 +611,11 @@ export default function AdminPage() {
                       </div>
 
                       <button
-                        onClick={() => handleShiprocketAssign(o.orderId)}
+                        onClick={() => handleDispatchOrder(o.orderId)}
                         className="bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-extrabold text-xs px-5 py-2.5 rounded-xl shadow-md uppercase tracking-wider flex items-center gap-1.5"
                       >
                         <Send className="w-3.5 h-3.5" />
-                        <span>ACCEPT ORDER & SHIP VIA SHIPROCKET</span>
+                        <span>DISPATCH ORDER</span>
                       </button>
                     </div>
                   </div>

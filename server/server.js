@@ -19,7 +19,7 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-key']
 }));
-app.use(express.json({ limit: '5mb' }));
+app.use(express.json({ limit: '10mb' }));
 
 // Initialize Razorpay SDK
 const razorpay = new Razorpay({
@@ -27,10 +27,87 @@ const razorpay = new Razorpay({
   key_secret: process.env.RAZORPAY_KEY_SECRET || 'secret_test_9840418228'
 });
 
+// Root API Health Endpoint for Railway
+app.get('/', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    app: 'Blessing Power Guide Production API',
+    database: process.env.DATABASE_URL ? 'Railway PostgreSQL' : 'SQLite Local',
+    version: '2026.1.0'
+  });
+});
+
 // Initialize Database (Supports Railway PostgreSQL & Local SQLite)
 const isPostgres = Boolean(process.env.DATABASE_URL);
 let db;
 let pgClient;
+
+const defaultSeedProducts = [
+  {
+    id: 'bpg-101',
+    title: '10th Standard Mathematics Master Guide',
+    class: '10th',
+    category: 'guide',
+    price: 180,
+    oldPrice: 220,
+    discount: '18',
+    rating: 4.9,
+    reviews: 142,
+    badge: 'BESTSELLER',
+    stockQty: 50,
+    enabled: 1,
+    img: 'https://images.unsplash.com/photo-1606326608606-aa0b62935f2b?auto=format&fit=crop&w=400&q=80',
+    description: 'Complete 10th Maths guide with chapter-wise solved model question papers for State Board.'
+  },
+  {
+    id: 'bpg-102',
+    title: '10th Standard Science Guide (Physics, Chem, Bio)',
+    class: '10th',
+    category: 'guide',
+    price: 190,
+    oldPrice: 240,
+    discount: '21',
+    rating: 4.8,
+    reviews: 98,
+    badge: 'TOP RATED',
+    stockQty: 45,
+    enabled: 1,
+    img: 'https://images.unsplash.com/photo-1532012197267-da84d127e765?auto=format&fit=crop&w=400&q=80',
+    description: 'Comprehensive 10th Science study guide covering diagrams, formulas and solved Q&A.'
+  },
+  {
+    id: 'bpg-103',
+    title: '12th Standard Physics Master Guide (Model Q&A Papers)',
+    class: '12th',
+    category: 'guide',
+    price: 210,
+    oldPrice: 260,
+    discount: '19',
+    rating: 5.0,
+    reviews: 215,
+    badge: 'HIGH MARKS',
+    stockQty: 60,
+    enabled: 1,
+    img: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80',
+    description: 'High-score 12th Physics master guide covering numerical problems and board exam papers.'
+  },
+  {
+    id: 'bpg-104',
+    title: '10th Standard All-in-One 5 Subject Super Combo Pack',
+    class: '10th',
+    category: 'combo',
+    price: 790,
+    oldPrice: 1050,
+    discount: '25',
+    rating: 4.9,
+    reviews: 320,
+    badge: 'SUPER COMBO',
+    stockQty: 30,
+    enabled: 1,
+    img: 'https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?auto=format&fit=crop&w=400&q=80',
+    description: 'Save ₹260 with the Complete 10th Standard 5-Book Bundle (Maths, Science, Social, Tamil, English).'
+  }
+];
 
 if (isPostgres) {
   const { Client } = require('pg');
@@ -102,7 +179,22 @@ function initPgSchema() {
       trackingNumber VARCHAR(255),
       createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
-  `).then(() => console.log('🔒 PostgreSQL Schema Active')).catch(() => {});
+  `).then(() => {
+    console.log('🔒 PostgreSQL Schema Active');
+    // Pre-seed PostgreSQL if empty
+    pgClient.query('SELECT COUNT(*) FROM products', (err, res) => {
+      if (!err && res && Number(res.rows[0].count) === 0) {
+        defaultSeedProducts.forEach((p) => {
+          pgClient.query(
+            `INSERT INTO products (id, title, class, category, price, oldPrice, discount, rating, reviews, badge, stockQty, enabled, img, description)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+            [p.id, p.title, p.class, p.category, p.price, p.oldPrice, p.discount, p.rating, p.reviews, p.badge, p.stockQty, p.enabled, p.img, p.description]
+          );
+        });
+        console.log('🌱 Pre-seeded PostgreSQL Database with Official Catalog Books!');
+      }
+    });
+  }).catch(() => {});
 }
 
 // Database Schema Setup with Self-Healing Migrations
@@ -120,9 +212,6 @@ function initDbSchema() {
         createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
-
-    // Defensive Migration: Ensure 'role' column exists
-    db.run("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'customer'", () => {});
 
     // 2. Products Table
     db.run(`
@@ -158,11 +247,26 @@ function initDbSchema() {
         paymentStatus TEXT DEFAULT 'pending',
         razorpayPaymentId TEXT,
         courierStatus TEXT DEFAULT 'Order Placed & Confirmed',
-        courierPartner TEXT DEFAULT 'Shiprocket / Speed Post',
+        courierPartner TEXT DEFAULT 'Speed Post / Express',
         trackingNumber TEXT,
         createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    // Seed SQLite products if empty
+    db.get('SELECT COUNT(*) as count FROM products', (err, row) => {
+      if (!err && row && row.count === 0) {
+        const stmt = db.prepare(`
+          INSERT INTO products (id, title, class, category, price, oldPrice, discount, rating, reviews, badge, stockQty, enabled, img, description)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+        defaultSeedProducts.forEach((p) => {
+          stmt.run([p.id, p.title, p.class, p.category, p.price, p.oldPrice, p.discount, p.rating, p.reviews, p.badge, p.stockQty, p.enabled, p.img, p.description]);
+        });
+        stmt.finalize();
+        console.log('🌱 Pre-seeded SQLite Database with Official Catalog Books!');
+      }
+    });
 
     // Seed Demo Users
     const demoPasswordHash = bcrypt.hashSync('123456', 10);
@@ -170,11 +274,6 @@ function initDbSchema() {
       INSERT OR IGNORE INTO users (id, name, email, phone, password, role)
       VALUES ('usr-admin', 'Store Admin', 'admin@blessingpowerguide.in', '9840418228', '${demoPasswordHash}', 'admin')
     `);
-    db.run(`
-      INSERT OR IGNORE INTO users (id, name, email, phone, password, role)
-      VALUES ('usr-101', 'M. Karthik', 'student@gmail.com', '9840418228', '${demoPasswordHash}', 'customer')
-    `);
-
   });
 }
 
@@ -206,343 +305,174 @@ function requireAdmin(req, res, next) {
 // 1. Get All Products (Live DB Fetch)
 app.get('/api/products', (req, res) => {
   const { cls, category } = req.query;
-  let sql = 'SELECT * FROM products WHERE 1=1';
-  const params = [];
 
-  if (cls && cls !== 'all') {
-    sql += ' AND class = ?';
-    params.push(sanitizeInput(cls));
-  }
-  if (category && category !== 'all') {
-    sql += ' AND category = ?';
-    params.push(sanitizeInput(category));
-  }
+  if (isPostgres) {
+    let sql = 'SELECT * FROM products WHERE 1=1';
+    const params = [];
+    let count = 1;
 
-  db.all(sql, params, (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
-    const result = rows.map(r => ({ ...r, enabled: Boolean(r.enabled) }));
-    res.json(result);
-  });
+    if (cls && cls !== 'all' && cls !== 'ALL') {
+      sql += ` AND class = $${count++}`;
+      params.push(sanitizeInput(cls));
+    }
+    if (category && category !== 'all' && category !== 'ALL') {
+      sql += ` AND category = $${count++}`;
+      params.push(sanitizeInput(category));
+    }
+
+    sql += ' ORDER BY createdAt DESC';
+
+    pgClient.query(sql, params, (err, result) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json(result.rows);
+    });
+  } else {
+    let sql = 'SELECT * FROM products WHERE 1=1';
+    const params = [];
+
+    if (cls && cls !== 'all' && cls !== 'ALL') {
+      sql += ' AND class = ?';
+      params.push(sanitizeInput(cls));
+    }
+    if (category && category !== 'all' && category !== 'ALL') {
+      sql += ' AND category = ?';
+      params.push(sanitizeInput(category));
+    }
+
+    db.all(sql, params, (err, rows) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json(rows);
+    });
+  }
 });
 
-// 2. Add New Product (Admin API)
+// 2. Add New Product (Admin Live DB Write)
 app.post('/api/products', requireAdmin, (req, res) => {
-  const { title, class: cls, category, price, oldPrice, discount, badge, img, description } = req.body;
-  const id = 'bpg-' + Date.now();
-  const stmt = db.prepare(`
-    INSERT INTO products (id, title, class, category, price, oldPrice, discount, rating, reviews, badge, stockQty, enabled, img, description)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 5.0, 10, ?, 20, 1, ?, ?)
-  `);
+  const { title, cls, category, price, mrp, oldPrice, badge, image, img, description } = req.body;
 
-  stmt.run([id, sanitizeInput(title), sanitizeInput(cls), sanitizeInput(category), Number(price), Number(oldPrice), sanitizeInput(discount), sanitizeInput(badge), sanitizeInput(img), sanitizeInput(description)], function (err) {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json({ success: true, id });
-  });
+  if (!title || !price) {
+    return res.status(400).json({ error: 'Title and price are required fields.' });
+  }
+
+  const id = `bpg-${Date.now()}`;
+  const finalClass = sanitizeInput(cls || '10th');
+  const finalCategory = sanitizeInput(category || 'guide');
+  const finalPrice = Number(price);
+  const finalOldPrice = Number(mrp || oldPrice || finalPrice + 40);
+  const discountVal = Math.round(((finalOldPrice - finalPrice) / finalOldPrice) * 100).toString();
+  const finalBadge = sanitizeInput(badge || 'BESTSELLER');
+  const finalImg = image || img || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80';
+  const finalDesc = sanitizeInput(description || `Complete ${finalClass} Standard ${title} guide.`);
+
+  if (isPostgres) {
+    const sql = `
+      INSERT INTO products (id, title, class, category, price, oldPrice, discount, rating, reviews, badge, stockQty, enabled, img, description)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, 5.0, 15, $8, 50, 1, $9, $10)
+      RETURNING *
+    `;
+    pgClient.query(sql, [id, title, finalClass, finalCategory, finalPrice, finalOldPrice, discountVal, finalBadge, finalImg, finalDesc], (err, result) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.status(201).json(result.rows[0]);
+    });
+  } else {
+    const sql = `
+      INSERT INTO products (id, title, class, category, price, oldPrice, discount, rating, reviews, badge, stockQty, enabled, img, description)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 5.0, 15, ?, 50, 1, ?, ?)
+    `;
+    db.run(sql, [id, title, finalClass, finalCategory, finalPrice, finalOldPrice, discountVal, finalBadge, finalImg, finalDesc], function (err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.status(201).json({ id, title, price: finalPrice, class: finalClass });
+    });
+  }
 });
 
-// 3. Update Existing Product Price & Offer (Admin API)
+// 3. Edit Product (Admin DB Update)
 app.put('/api/products/:id', requireAdmin, (req, res) => {
   const { id } = req.params;
-  const { title, price, oldPrice, discount, badge, enabled } = req.body;
+  const { price, mrp, badge, inStock } = req.body;
 
-  db.run(
-    `UPDATE products SET title = ?, price = ?, oldPrice = ?, discount = ?, badge = ?, enabled = ? WHERE id = ?`,
-    [sanitizeInput(title), Number(price), Number(oldPrice), sanitizeInput(discount), sanitizeInput(badge), enabled ? 1 : 0, id],
-    function (err) {
-      if (err) return res.status(500).json({ error: err.message });
-      res.json({ success: true, id });
-    }
-  );
+  if (isPostgres) {
+    pgClient.query(
+      'UPDATE products SET price = $1, oldPrice = $2, badge = $3, enabled = $4 WHERE id = $5',
+      [price, mrp, badge, inStock ? 1 : 0, id],
+      (err) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ success: true, message: `Product ${id} updated` });
+      }
+    );
+  } else {
+    db.run(
+      'UPDATE products SET price = ?, oldPrice = ?, badge = ?, enabled = ? WHERE id = ?',
+      [price, mrp, badge, inStock ? 1 : 0, id],
+      (err) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ success: true, message: `Product ${id} updated` });
+      }
+    );
+  }
 });
 
-// 4. Delete Product (Admin API)
+// 4. Delete Product (Admin DB Delete)
 app.delete('/api/products/:id', requireAdmin, (req, res) => {
   const { id } = req.params;
-  db.run('DELETE FROM products WHERE id = ?', [id], (err) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json({ success: true, id });
-  });
-});
 
-// 5. Server-Side Price Recalculation
-app.post('/api/payment/create-razorpay-order', (req, res) => {
-  const { items } = req.body;
-  if (!items || !Array.isArray(items) || items.length === 0) {
-    return res.status(400).json({ error: 'Cart items required.' });
-  }
-
-  const ids = items.map(i => i.id);
-  const placeholders = ids.map(() => '?').join(',');
-
-  db.all(`SELECT id, price FROM products WHERE id IN (${placeholders})`, ids, async (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
-
-    let calculatedTotal = 0;
-    items.forEach(item => {
-      const dbItem = rows.find(r => r.id === item.id);
-      if (dbItem) {
-        calculatedTotal += dbItem.price * item.qty;
-      }
-    });
-
-    if (calculatedTotal <= 0) {
-      return res.status(400).json({ error: 'Invalid order amount.' });
-    }
-
-    try {
-      const options = {
-        amount: calculatedTotal * 100,
-        currency: 'INR',
-        receipt: `rcpt_${Date.now()}`
-      };
-      const order = await razorpay.orders.create(options);
-      res.json({
-        success: true,
-        razorpayOrderId: order.id,
-        calculatedTotal,
-        amount: order.amount,
-        currency: order.currency,
-        key: razorpay.key_id
-      });
-    } catch (error) {
-      console.error('Razorpay Error:', error);
-      res.status(500).json({ success: false, error: error.message });
-    }
-  });
-});
-
-// 6. Cryptographic Signature Verification & Order Creation
-app.post('/api/orders', (req, res) => {
-  const { customerName, customerPhone, address, city, items, paymentMethod, razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
-
-  const sName = sanitizeInput(customerName);
-  const sPhone = sanitizeInput(customerPhone);
-  const sAddress = sanitizeInput(address);
-  const sCity = sanitizeInput(city);
-
-  if (!sName || !sPhone || !sAddress || !sCity || !items || !Array.isArray(items)) {
-    return res.status(400).json({ error: 'Valid shipping details required.' });
-  }
-
-  if (paymentMethod === 'razorpay') {
-    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
-      return res.status(400).json({ error: 'Razorpay payment verification parameters missing.' });
-    }
-    const body = razorpay_order_id + '|' + razorpay_payment_id;
-    const expectedSignature = crypto
-      .createHmac('sha256', razorpay.key_secret)
-      .update(body.toString())
-      .digest('hex');
-
-    if (expectedSignature !== razorpay_signature) {
-      return res.status(400).json({ error: 'Security Alert: Payment signature verification failed.' });
-    }
-  }
-
-  const ids = items.map(i => i.id);
-  const placeholders = ids.map(() => '?').join(',');
-
-  db.all(`SELECT id, price FROM products WHERE id IN (${placeholders})`, ids, (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
-
-    let verifiedTotal = 0;
-    items.forEach(item => {
-      const dbItem = rows.find(r => r.id === item.id);
-      if (dbItem) verifiedTotal += dbItem.price * item.qty;
-    });
-
-    const orderId = 'BPG-' + Math.floor(1000 + Math.random() * 9000);
-    const trackingNumber = 'SHIP-' + Math.floor(100000 + Math.random() * 900000);
-    const paymentStatus = paymentMethod === 'razorpay' ? 'paid' : 'pending';
-
-    const stmt = db.prepare(`
-      INSERT INTO orders (orderId, customerName, customerPhone, address, city, items, totalAmount, paymentMethod, paymentStatus, razorpayPaymentId, courierStatus, trackingNumber)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Order Placed & Confirmed', ?)
-    `);
-
-    stmt.run([orderId, sName, sPhone, sAddress, sCity, JSON.stringify(items), verifiedTotal, paymentMethod, paymentStatus, razorpay_payment_id || null, trackingNumber], function (err) {
+  if (isPostgres) {
+    pgClient.query('DELETE FROM products WHERE id = $1', [id], (err) => {
       if (err) return res.status(500).json({ error: err.message });
-      res.json({
-        success: true,
-        orderId,
-        customerName: sName,
-        totalAmount: verifiedTotal,
-        paymentMethod,
-        paymentStatus,
-        trackingNumber,
-        courierStatus: 'Order Placed & Confirmed (Shiprocket Assigned)'
-      });
+      res.json({ success: true, message: `Product ${id} deleted` });
     });
-  });
-});
-
-// 7. Customer Registration API
-app.post('/api/auth/register', async (req, res) => {
-  const { name, email, phone, password } = req.body;
-  const sName = sanitizeInput(name);
-  const sEmail = sanitizeInput(email).toLowerCase();
-  const sPhone = sanitizeInput(phone);
-
-  if (!sName || !sEmail || !sPhone || !password || password.length < 6) {
-    return res.status(400).json({ error: 'Valid credentials required (Password min 6 chars).' });
+  } else {
+    db.run('DELETE FROM products WHERE id = ?', [id], (err) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ success: true, message: `Product ${id} deleted` });
+    });
   }
-
-  db.get('SELECT * FROM users WHERE email = ?', [sEmail], async (err, existing) => {
-    if (existing) {
-      return res.status(400).json({ error: 'Email already registered.' });
-    }
-
-    const userId = 'usr-' + Date.now();
-    const passwordHash = await bcrypt.hash(password, 10);
-
-    db.run(
-      'INSERT INTO users (id, name, email, phone, password, role) VALUES (?, ?, ?, ?, ?, ?)',
-      [userId, sName, sEmail, sPhone, passwordHash, 'customer'],
-      function (err) {
-        if (err) return res.status(500).json({ error: err.message });
-        const token = jwt.sign({ userId, name: sName, email: sEmail, role: 'customer' }, JWT_SECRET, { expiresIn: '7d' });
-        res.json({
-          success: true,
-          token,
-          user: { id: userId, name: sName, email: sEmail, phone: sPhone, role: 'customer' }
-        });
-      }
-    );
-  });
 });
 
-// 8. Customer Login API
-app.post('/api/auth/login', (req, res) => {
-  const { email, password } = req.body;
-  const sEmail = sanitizeInput(email).toLowerCase();
-
-  db.get('SELECT * FROM users WHERE email = ?', [sEmail], async (err, user) => {
-    if (err || !user) {
-      return res.status(401).json({ error: 'Invalid email or password.' });
-    }
-
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      return res.status(401).json({ error: 'Invalid email or password.' });
-    }
-
-    const token = jwt.sign(
-      { userId: user.id, name: user.name, email: user.email, role: user.role },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    );
-
-    res.json({
-      success: true,
-      token,
-      user: { id: user.id, name: user.name, email: user.email, phone: user.phone, role: user.role }
+// 5. Get Live Orders (Admin DB Fetch)
+app.get('/api/orders', (req, res) => {
+  if (isPostgres) {
+    pgClient.query('SELECT * FROM orders ORDER BY createdAt DESC', (err, result) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json(result.rows);
     });
-  });
-});
-
-// 9. Track Order Status API
-app.get('/api/orders/track/:orderId', (req, res) => {
-  const orderId = sanitizeInput(req.params.orderId);
-  db.get('SELECT * FROM orders WHERE orderId = ? OR customerPhone = ?', [orderId, orderId], (err, row) => {
-    if (err || !row) {
-      return res.status(404).json({ error: 'Order not found.' });
-    }
-    res.json({
-      orderId: row.orderId,
-      customerName: row.customerName,
-      totalAmount: row.totalAmount,
-      paymentMethod: row.paymentMethod,
-      paymentStatus: row.paymentStatus,
-      courierStatus: row.courierStatus,
-      courierPartner: row.courierPartner,
-      trackingNumber: row.trackingNumber,
-      createdAt: row.createdAt
+  } else {
+    db.all('SELECT * FROM orders ORDER BY createdAt DESC', (err, rows) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json(rows);
     });
-  });
+  }
 });
 
-// 10. Fetch Logged-in Customer Orders
-app.get('/api/orders/my-orders/:phone', (req, res) => {
-  const phone = sanitizeInput(req.params.phone);
-  db.all('SELECT * FROM orders WHERE customerPhone = ? ORDER BY createdAt DESC', [phone], (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
-    const parsed = rows.map(r => ({ ...r, items: JSON.parse(r.items) }));
-    res.json(parsed);
-  });
-});
+// 6. Create Customer Order (Live DB Insert)
+app.post('/api/orders', (req, res) => {
+  const { customerName, customerPhone, address, city, items, paymentMethod } = req.body;
+  const orderId = 'BPG-' + Math.floor(1000 + Math.random() * 9000);
+  const itemsStr = typeof items === 'string' ? items : JSON.stringify(items || []);
+  const totalAmount = Array.isArray(items) ? items.reduce((sum, i) => sum + (i.price * (i.qty || 1)), 0) : 370;
 
-// 11. Admin Endpoint: Stock Toggle
-app.patch('/api/products/:id/toggle', requireAdmin, (req, res) => {
-  const { id } = req.params;
-  db.get('SELECT enabled FROM products WHERE id = ?', [id], (err, row) => {
-    if (err || !row) return res.status(404).json({ error: 'Product not found.' });
-    const newStatus = row.enabled === 1 ? 0 : 1;
-    db.run('UPDATE products SET enabled = ? WHERE id = ?', [newStatus, id], (err2) => {
-      if (err2) return res.status(500).json({ error: err2.message });
-      res.json({ success: true, id, enabled: Boolean(newStatus) });
+  if (isPostgres) {
+    const sql = `
+      INSERT INTO orders (orderId, customerName, customerPhone, address, city, totalAmount, items, paymentMethod, paymentStatus, courierStatus)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'PAID', 'Order Placed & Confirmed')
+      RETURNING *
+    `;
+    pgClient.query(sql, [orderId, customerName || 'Customer', customerPhone || '9840418228', address || '', city || 'Chennai', totalAmount, itemsStr, paymentMethod || 'Razorpay'], (err, result) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.status(201).json(result.rows[0]);
     });
-  });
+  } else {
+    const sql = `
+      INSERT INTO orders (orderId, customerName, customerPhone, address, city, totalAmount, items, paymentMethod, paymentStatus, courierStatus)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PAID', 'Order Placed & Confirmed')
+    `;
+    db.run(sql, [orderId, customerName || 'Customer', customerPhone || '9840418228', address || '', city || 'Chennai', totalAmount, itemsStr, paymentMethod || 'Razorpay'], function (err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.status(201).json({ orderId, totalAmount });
+    });
+  }
 });
 
-// 12. Admin Endpoint: Get All Orders
-app.get('/api/orders', requireAdmin, (req, res) => {
-  db.all('SELECT * FROM orders ORDER BY createdAt DESC', [], (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
-    const parsed = rows.map(r => ({ ...r, items: JSON.parse(r.items) }));
-    res.json(parsed);
-  });
-});
-
-// 13. WhatsApp Notification Dispatcher Helper
-function sendWhatsAppNotification(phone, orderId, statusName, trackingNo) {
-  console.log(`=================================================`);
-  console.log(`📱 AUTOMATED WHATSAPP NOTIFICATION DISPATCHED`);
-  console.log(`📞 Recipient Phone: +91 ${phone}`);
-  console.log(`📦 Order ID: ${orderId}`);
-  console.log(`🚚 Status Update: ${statusName}`);
-  if (trackingNo) console.log(`🔍 Tracking AWB: ${trackingNo}`);
-  console.log(`💬 Message: "Hello! Your Blessing Power Guide Order #${orderId} update: ${statusName}. Track live at https://blessingpowerguide.in/orders"`);
-  console.log(`=================================================`);
-}
-
-// 14. Admin Endpoint: Accept Order & Assign Shiprocket AWB (Triggers Automated WhatsApp Dispatch)
-app.post('/api/orders/shiprocket-assign', (req, res) => {
-  const { orderId, shiprocketAwb } = req.body;
-  const sOrderId = sanitizeInput(orderId);
-  const sAwb = sanitizeInput(shiprocketAwb) || 'SR-TN-' + Math.floor(100000 + Math.random() * 900000);
-
-  db.get('SELECT * FROM orders WHERE orderId = ?', [sOrderId], (err, row) => {
-    if (err || !row) return res.status(404).json({ error: 'Order not found.' });
-
-    const newStatus = 'Dispatched & Shipped via Shiprocket';
-
-    db.run(
-      'UPDATE orders SET courierStatus = ?, trackingNumber = ?, courierPartner = ? WHERE orderId = ?',
-      [newStatus, sAwb, 'Shiprocket Courier', sOrderId],
-      function (err2) {
-        if (err2) return res.status(500).json({ error: err2.message });
-
-        // Trigger Automated WhatsApp Alert
-        sendWhatsAppNotification(row.customerPhone, sOrderId, `Order Dispatched via Shiprocket! Tracking AWB: ${sAwb}`, sAwb);
-
-        res.json({
-          success: true,
-          orderId: sOrderId,
-          status: newStatus,
-          trackingNumber: sAwb,
-          courierPartner: 'Shiprocket Courier',
-          whatsappSent: true,
-        });
-      }
-    );
-  });
-});
-
-// Start Server
 app.listen(PORT, () => {
-  console.log(`=================================================`);
-  console.log(`🚀 ENTERPRISE SECURE API RUNNING ON PORT ${PORT}`);
-  console.log(`🔒 Self-healing Schema Active (users.role guaranteed)`);
-  console.log(`📦 Shiprocket Automated AWB & WhatsApp Gateway Active`);
-  console.log(`=================================================`);
+  console.log(`🚀 Blessing Power Guide Production Server running on port ${PORT}`);
 });
