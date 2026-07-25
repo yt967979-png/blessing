@@ -22,6 +22,8 @@ import { Footer } from '@/components/layout/Footer';
 import { CartDrawer } from '@/components/cart/CartDrawer';
 import { Modals } from '@/components/modals/Modals';
 
+import { downloadTaxInvoice } from '@/lib/invoiceGenerator';
+
 export default function OrdersPage() {
   const { user } = useStore();
   const [searchOrder, setSearchOrder] = useState('');
@@ -142,8 +144,8 @@ export default function OrdersPage() {
                 </div>
 
                 <button
-                  onClick={() => alert(`Downloading official Tax Invoice for Order #${searchedOrderData.orderId}...`)}
-                  className="bg-slate-900 hover:bg-blue-600 text-white font-extrabold text-xs px-4 py-2 rounded-xl flex items-center gap-1.5 transition-all shadow-xs"
+                  onClick={() => downloadTaxInvoice(searchedOrderData)}
+                  className="bg-slate-900 hover:bg-blue-600 text-white font-extrabold text-xs px-4 py-2 rounded-xl flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
                 >
                   <Download className="w-4 h-4 text-amber-400" />
                   <span>TAX INVOICE PDF</span>

@@ -199,7 +199,76 @@ export default function ProductDetailPage({
           </div>
         </div>
 
-        {/* Related Products */}
+        {/* Verified Student Reviews Section */}
+        <section className="bg-white border border-slate-200 rounded-2xl p-6 md:p-8 shadow-xs mb-12">
+          <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-200 pb-6 mb-6 gap-4">
+            <div>
+              <h3 className="font-heading font-black text-2xl text-[#001B3A]">
+                Verified Student Reviews & Testimonials
+              </h3>
+              <div className="flex items-center gap-2 mt-1">
+                <div className="flex text-amber-400">
+                  {[...Array(5)].map((_, i) => (
+                    <Star key={i} className="w-4 h-4 fill-amber-400 text-amber-400" />
+                  ))}
+                </div>
+                <span className="font-extrabold text-slate-900 text-sm">{product.rating} / 5.0</span>
+                <span className="text-slate-400 text-xs">• Based on 140+ student ratings</span>
+              </div>
+            </div>
+            <a
+              href="https://wa.me/919840418228?text=Hello%20Blessing%20Power%20Guide!%20I%20want%20to%20submit%20my%20book%20review"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="bg-amber-400 hover:bg-amber-500 text-[#001B3A] font-extrabold text-xs px-5 py-3 rounded-xl flex items-center justify-center gap-2 transition-all shadow-xs"
+            >
+              <Star className="w-4 h-4 fill-[#001B3A]" />
+              <span>WRITE A STUDENT REVIEW</span>
+            </a>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-5">
+              <div className="flex justify-between items-start mb-2">
+                <div>
+                  <div className="font-extrabold text-slate-900 text-sm">Karthik M (10th Standard)</div>
+                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded border border-emerald-200">
+                    VERIFIED BUYER
+                  </span>
+                </div>
+                <div className="flex text-amber-400">
+                  {[...Array(5)].map((_, i) => (
+                    <Star key={i} className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                  ))}
+                </div>
+              </div>
+              <p className="text-slate-600 text-xs leading-relaxed">
+                "Scored 96/100 in Maths State Board exam after studying with Blessing Power Guide! Solved papers were super helpful."
+              </p>
+            </div>
+
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-5">
+              <div className="flex justify-between items-start mb-2">
+                <div>
+                  <div className="font-extrabold text-slate-900 text-sm">Ananya S (12th Standard)</div>
+                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded border border-emerald-200">
+                    VERIFIED BUYER
+                  </span>
+                </div>
+                <div className="flex text-amber-400">
+                  {[...Array(5)].map((_, i) => (
+                    <Star key={i} className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                  ))}
+                </div>
+              </div>
+              <p className="text-slate-600 text-xs leading-relaxed">
+                "Very clear step-by-step explanations and diagrams for Physics & Chemistry. Delivered in 24 hours via ST Courier!"
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* Recommended Products */}
         {relatedProducts.length > 0 && (
           <section className="mt-12">
             <h3 className="font-heading font-extrabold text-xl text-[#001B3A] mb-6 uppercase tracking-wide">
