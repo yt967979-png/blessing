@@ -736,53 +736,104 @@ export const Modals = () => {
         )}
       </AnimatePresence>
 
-      {/* User Profile Modal */}
+      {/* User Profile Quick Menu Modal */}
       <AnimatePresence>
         {isProfileOpen && user && (
           <div
             onClick={() => setIsProfileOpen(false)}
-            className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4"
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4"
           >
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
-              className="bg-white rounded-2xl p-6 max-w-sm w-full relative shadow-2xl text-xs"
+              className="bg-white rounded-3xl p-6 max-w-sm w-full relative shadow-2xl text-xs overflow-hidden"
             >
               <button
                 onClick={() => setIsProfileOpen(false)}
-                className="absolute top-3 right-3 w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200"
+                className="absolute top-4 right-4 w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200"
               >
                 <X className="w-4 h-4" />
               </button>
 
-              <h3 className="font-heading font-extrabold text-lg text-[#001B3A] mb-3">
-                👤 My Profile Account
-              </h3>
-
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2 mb-4">
-                <div>
-                  <span className="font-bold text-slate-500">Name:</span> {user.name}
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#001B3A] to-[#003B73] text-amber-400 font-extrabold text-xl flex items-center justify-center shadow-md">
+                  {user.name[0]}
                 </div>
                 <div>
-                  <span className="font-bold text-slate-500">Email:</span> {user.email}
-                </div>
-                <div>
-                  <span className="font-bold text-slate-500">Phone:</span> {user.phone}
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Signed in as</span>
+                  <h3 className="font-heading font-black text-base text-[#001B3A]">{user.name}</h3>
+                  <span className="text-[11px] text-blue-600 font-semibold">{user.email}</span>
                 </div>
               </div>
 
-              <button
-                onClick={() => {
-                  logoutUser();
-                  setIsProfileOpen(false);
-                }}
-                className="w-full bg-red-500 hover:bg-red-600 text-white font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-2 shadow-sm transition-colors"
-              >
-                <LogOut className="w-4 h-4" />
-                <span>LOGOUT</span>
-              </button>
+              <div className="space-y-1 mb-4">
+                <button
+                  onClick={() => {
+                    setIsProfileOpen(false);
+                    router.push('/profile');
+                  }}
+                  className="w-full text-left flex items-center justify-between p-3 rounded-xl bg-slate-50 hover:bg-blue-50/60 transition-colors font-bold text-slate-800"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <User className="w-4 h-4 text-blue-600" />
+                    <span>Personal Info & Settings</span>
+                  </div>
+                  <Tag className="w-3.5 h-3.5 text-slate-400" />
+                </button>
+
+                <button
+                  onClick={() => {
+                    setIsProfileOpen(false);
+                    router.push('/orders');
+                  }}
+                  className="w-full text-left flex items-center justify-between p-3 rounded-xl bg-slate-50 hover:bg-amber-50/60 transition-colors font-bold text-slate-800"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Truck className="w-4 h-4 text-amber-500" />
+                    <span>My Orders & Live Tracking</span>
+                  </div>
+                  <Tag className="w-3.5 h-3.5 text-slate-400" />
+                </button>
+
+                <button
+                  onClick={() => {
+                    setIsProfileOpen(false);
+                    router.push('/profile');
+                  }}
+                  className="w-full text-left flex items-center justify-between p-3 rounded-xl bg-slate-50 hover:bg-emerald-50/60 transition-colors font-bold text-slate-800"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <MapPin className="w-4 h-4 text-emerald-600" />
+                    <span>Manage Delivery Addresses</span>
+                  </div>
+                  <Tag className="w-3.5 h-3.5 text-slate-400" />
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                <button
+                  onClick={() => {
+                    setIsProfileOpen(false);
+                    router.push('/profile');
+                  }}
+                  className="w-full bg-[#001B3A] hover:bg-blue-600 text-white font-extrabold text-xs py-3 rounded-xl shadow-md uppercase tracking-wider transition-colors"
+                >
+                  OPEN FULL ACCOUNT DASHBOARD
+                </button>
+
+                <button
+                  onClick={() => {
+                    logoutUser();
+                    setIsProfileOpen(false);
+                  }}
+                  className="w-full bg-white border border-red-200 hover:bg-red-50 text-red-600 font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-2 shadow-2xs transition-colors"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span>LOGOUT FROM ACCOUNT</span>
+                </button>
+              </div>
             </motion.div>
           </div>
         )}
