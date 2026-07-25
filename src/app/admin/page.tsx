@@ -133,7 +133,7 @@ export default function AdminPage() {
   };
 
   // Analytics Metrics
-  const totalRevenue = orders.reduce((sum, o) => sum + Number(o.totalAmount || 0), 0) || 12490;
+  const totalRevenue = orders.reduce((sum, o) => sum + Number(o.totalAmount || 0), 0);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col md:flex-row">
@@ -207,7 +207,7 @@ export default function AdminPage() {
             </div>
             <div>
               <span className="text-[10px] text-slate-400 font-bold uppercase block">Total Orders</span>
-              <span className="font-black text-xl text-white">{orders.length > 0 ? orders.length : 34}</span>
+              <span className="font-black text-xl text-white">{orders.length}</span>
             </div>
           </div>
 

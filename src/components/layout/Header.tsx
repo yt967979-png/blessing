@@ -106,7 +106,7 @@ export const Header = () => {
                     <div
                       key={p.id}
                       onClick={() => {
-                        setQuickViewProduct(p);
+                        router.push(`/products/${p.slug}`);
                         setShowSearchDropdown(false);
                       }}
                       className="p-3 hover:bg-blue-50/60 cursor-pointer flex items-center gap-3 transition-colors"

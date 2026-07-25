@@ -2,71 +2,77 @@ import { NextResponse } from 'next/server';
 import { getDbClient, defaultSeedBooks } from '@/lib/db';
 
 export async function GET(request: Request) {
+  const client = await getDbClient();
+  let searchParam: string | null = null;
   try {
     const { searchParams } = new URL(request.url);
     const cls = searchParams.get('cls');
-    const category = searchParams.get('category');
-
-    const client = await getDbClient();
+    const search = searchParams.get('search');
+    searchParam = search;
 
     if (client) {
-      try {
-        let sql = 'SELECT * FROM books WHERE 1=1';
-        const params: any[] = [];
-        let count = 1;
+      let sql = 'SELECT * FROM books WHERE 1=1';
+      const params: any[] = [];
+      let count = 1;
 
-        if (cls && cls !== 'all' && cls !== 'ALL') {
-          sql += ` AND title LIKE $${count++}`;
-          params.push(`%${cls}%`);
-        }
+      if (cls && cls !== 'all' && cls !== 'ALL') {
+        sql += ` AND title ILIKE $${count++}`;
+        params.push(`%${cls}%`);
+      }
 
-        sql += ' ORDER BY created_at DESC';
+      if (search && search.trim()) {
+        sql += ` AND (title ILIKE $${count} OR subject ILIKE $${count} OR description ILIKE $${count})`;
+        params.push(`%${search.trim()}%`);
+        count++;
+      }
 
-        const res = await client.query(sql, params);
-        await client.end();
+      sql += ' ORDER BY created_at DESC';
 
-        if (res.rows && res.rows.length > 0) {
-          const mapped = res.rows.map((d: any) => {
-            const calculatedDiscount = d.price && d.discount_price
-              ? Math.round(((d.price - d.discount_price) / d.price) * 100)
-              : 20;
+      const res = await client.query(sql, params);
 
-            const isCombo = d.category_id === 'cat-combos' || d.title.toLowerCase().includes('combo');
-            const classMatch = d.title.match(/(6th|7th|8th|9th|10th|11th|12th)/i);
-            const extractedClass = classMatch ? classMatch[0] : '10th';
+      if (res.rows && res.rows.length > 0) {
+        const mapped = res.rows.map((d: any) => {
+          const calculatedDiscount = d.price && d.discount_price
+            ? Math.round(((d.price - d.discount_price) / d.price) * 100)
+            : 20;
 
-            return {
-              id: d.id,
-              slug: d.slug || d.id,
-              title: d.title,
-              subtitle: `${extractedClass} Standard Guide`,
-              cls: extractedClass,
-              category: isCombo ? 'combo' : 'guide',
-              subject: d.subject || 'State Board',
-              price: Number(d.discount_price || d.price),
-              mrp: Number(d.price),
-              discount: calculatedDiscount,
-              rating: 5.0,
-              reviews: 120,
-              badge: isCombo ? 'SUPER COMBO' : 'BESTSELLER',
-              badgeColor: 'bg-blue-600',
-              image: d.cover_image || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80',
-              hoverImage: d.cover_image || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80',
-              description: d.description || 'Complete guide book for exam success.',
-              features: ['Solved Papers', 'Chapter Notes'],
-              inStock: d.stock > 0,
-            };
-          });
-          return NextResponse.json(mapped);
-        }
-      } catch (e) {
-        if (client) await client.end();
+          const isCombo = d.category_id === 'cat-combos' || d.title.toLowerCase().includes('combo');
+          const classMatch = d.title.match(/(6th|7th|8th|9th|10th|11th|12th)/i);
+          const extractedClass = classMatch ? classMatch[0] : '10th';
+
+          return {
+            id: d.id,
+            slug: d.slug || d.id,
+            title: d.title,
+            subtitle: `${extractedClass} Standard Guide`,
+            cls: extractedClass,
+            category: isCombo ? 'combo' : 'guide',
+            subject: d.subject || 'State Board',
+            price: Number(d.discount_price || d.price),
+            mrp: Number(d.price),
+            discount: calculatedDiscount,
+            rating: 5.0,
+            reviews: 120,
+            badge: isCombo ? 'SUPER COMBO' : 'BESTSELLER',
+            badgeColor: 'bg-blue-600',
+            image: d.cover_image || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80',
+            hoverImage: d.cover_image || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80',
+            description: d.description || 'Complete guide book for exam success.',
+            features: ['Solved Papers', 'Chapter Notes'],
+            inStock: d.stock > 0,
+          };
+        });
+        return NextResponse.json(mapped);
       }
     }
-  } catch (err) {}
+  } catch (err: any) {
+    console.error('Error fetching products from DB:', err.message);
+  } finally {
+    if (client) await client.end();
+  }
 
   // Fallback map default seed books
-  const mappedSeed = defaultSeedBooks.map((b) => ({
+  let mappedSeed = defaultSeedBooks.map((b) => ({
     id: b.id,
     slug: b.slug,
     title: b.title,
@@ -88,10 +94,21 @@ export async function GET(request: Request) {
     inStock: true,
   }));
 
+  if (searchParam && searchParam.trim()) {
+    const term = searchParam.trim().toLowerCase();
+    mappedSeed = mappedSeed.filter(
+      (b) =>
+        b.title.toLowerCase().includes(term) ||
+        b.subject.toLowerCase().includes(term) ||
+        b.cls.toLowerCase().includes(term)
+    );
+  }
+
   return NextResponse.json(mappedSeed);
 }
 
 export async function POST(request: Request) {
+  const client = await getDbClient();
   try {
     const body = await request.json();
     const { title, cls, category, price, mrp, badge, image, description } = body;
@@ -108,7 +125,6 @@ export async function POST(request: Request) {
     const finalImg = image || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80';
     const finalDesc = description || `Complete ${cls || '10th'} Standard ${title} guide.`;
 
-    const client = await getDbClient();
     if (client) {
       const sql = `
         INSERT INTO books (id, title, slug, category_id, price, discount_price, cover_image, description, status, featured)
@@ -116,12 +132,13 @@ export async function POST(request: Request) {
         RETURNING *
       `;
       const res = await client.query(sql, [id, title, slug, categoryId, finalPrice, finalDiscountPrice, finalImg, finalDesc]);
-      await client.end();
       return NextResponse.json(res.rows[0], { status: 201 });
     }
 
     return NextResponse.json({ id, title, price: finalDiscountPrice }, { status: 201 });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
+  } finally {
+    if (client) await client.end();
   }
 }
