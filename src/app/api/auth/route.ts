@@ -21,9 +21,9 @@ export async function GET(request: Request) {
     client = await getDbClient();
     let res;
     if (userId) {
-      res = await client.query('SELECT id, name, email, phone FROM users WHERE id = $1', [String(userId)]);
+      res = await client.query('SELECT id, name, email, phone, role FROM users WHERE id = $1', [String(userId)]);
     } else {
-      res = await client.query('SELECT id, name, email, phone FROM users WHERE LOWER(email) = $1', [String(email).toLowerCase().trim()]);
+      res = await client.query('SELECT id, name, email, phone, role FROM users WHERE LOWER(email) = $1', [String(email).toLowerCase().trim()]);
     }
     await client.end();
 
@@ -61,11 +61,6 @@ export async function POST(request: Request) {
     // REGISTER
     // ─────────────────────────────────────────────
     if (action === 'register') {
-      if (!name || String(name).trim().length < 2) {
-        return NextResponse.json({ error: 'Please enter your full name.' }, { status: 400 });
-      }
-
-      // Block if email already registered
       const existing = await client.query(
         'SELECT id FROM users WHERE LOWER(email) = $1',
         [cleanEmail]
@@ -109,7 +104,7 @@ export async function POST(request: Request) {
 
       await client.end();
       return NextResponse.json({
-        user: { id: userId, name: userName, email: cleanEmail, phone: userPhone },
+        user: { id: userId, name: userName, email: cleanEmail, phone: userPhone, role: 'customer' },
         cart: [],
         wishlist: [],
         addresses: [],
@@ -206,6 +201,7 @@ export async function POST(request: Request) {
         name: dbUser.name,
         email: dbUser.email,
         phone: dbUser.phone,
+        role: dbUser.role || 'customer',
       },
       cart: cartItems,
       wishlist: wishlistIds,
@@ -222,25 +218,20 @@ export async function PATCH(request: Request) {
   let client: any = null;
   try {
     const { userId, name, phone } = await request.json();
-    if (!userId) return NextResponse.json({ error: 'userId is required' }, { status: 400 });
+    if (!userId) {
+      return NextResponse.json({ error: 'userId is required' }, { status: 400 });
+    }
 
     client = await getDbClient();
-
     await client.query(
-      `UPDATE users SET name = COALESCE($1, name), phone = COALESCE($2, phone), updated_at = NOW() WHERE id = $3`,
-      [name || null, phone || null, String(userId)]
-    );
-
-    const res = await client.query(
-      `SELECT name, phone FROM users WHERE id = $1`,
-      [String(userId)]
+      'UPDATE users SET name = $1, phone = $2, updated_at = NOW() WHERE id = $3',
+      [String(name).trim(), String(phone).trim(), String(userId)]
     );
     await client.end();
 
-    const updated = res.rows[0] || {};
-    return NextResponse.json({ name: updated.name || name, phone: updated.phone || phone });
+    return NextResponse.json({ success: true, message: 'Profile updated in Railway PostgreSQL DB' });
   } catch (err: any) {
     if (client) { try { await client.end(); } catch (_) {} }
-    return NextResponse.json({ error: 'Database connection failed. Please try again.' }, { status: 503 });
+    return NextResponse.json({ error: 'Failed to update profile' }, { status: 500 });
   }
 }

@@ -295,8 +295,9 @@ async function seedAdmin(connStr, dbName) {
         [admin.email.toLowerCase()]
       );
 
+      const passwordHash = hashPassword(admin.password);
+
       if (existing.rows.length === 0) {
-        const passwordHash = hashPassword(admin.password);
         await client.query(
           `INSERT INTO users (id, name, email, phone, password_hash, role, email_verified, status)
            VALUES ($1, $2, $3, $4, $5, $6, TRUE, 'active')`,
@@ -304,7 +305,11 @@ async function seedAdmin(connStr, dbName) {
         );
         console.log(`✅ [ADMIN SEEDED] ${admin.email} → role: ${admin.role}`);
       } else {
-        console.log(`ℹ️ [ADMIN EXISTS] ${admin.email} already in database — skipping.`);
+        await client.query(
+          `UPDATE users SET role = 'admin', password_hash = $1 WHERE LOWER(email) = $2`,
+          [passwordHash, admin.email.toLowerCase()]
+        );
+        console.log(`✅ [ADMIN ROLE UPDATED] ${admin.email} set to role: admin`);
       }
     }
 
