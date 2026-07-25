@@ -156,6 +156,7 @@ async function migrateDatabase(connStr, dbName) {
         tracking_url TEXT,
         estimated_delivery VARCHAR(100),
         invoice_number VARCHAR(255),
+        shipping_address TEXT,
         ordered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
@@ -238,6 +239,8 @@ async function migrateDatabase(connStr, dbName) {
         shipping_charge NUMERIC DEFAULT 0,
         tax_percentage NUMERIC DEFAULT 0
       );
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_address TEXT;
+      ALTER TABLE reviews ADD COLUMN IF NOT EXISTS user_name VARCHAR(255);
     `);
 
     // Seed Categories
@@ -261,6 +264,34 @@ async function migrateDatabase(connStr, dbName) {
       ('bpg-102', '10th Standard Science Guide (Physics, Chem, Bio)', '10th-science-master-guide', '978-81-984041-0-2', 'Science', 'cat-10th', 240, 190, 45, 'https://images.unsplash.com/photo-1532012197267-da84d127e765?auto=format&fit=crop&w=400&q=80', 'Comprehensive 10th Science study guide covering diagrams, formulas and solved Q&A.'),
       ('bpg-103', '12th Standard Physics Master Guide (Model Q&A Papers)', '12th-physics-master-guide', '978-81-984041-0-3', 'Physics', 'cat-12th', 260, 210, 60, 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80', 'High-score 12th Physics master guide covering numerical problems and board exam papers.'),
       ('bpg-104', '10th Standard All-in-One 5 Subject Super Combo Pack', '10th-5-subject-super-combo', '978-81-984041-0-4', 'All 5 Subjects', 'cat-combos', 1050, 790, 30, 'https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?auto=format&fit=crop&w=400&q=80', 'Save ₹260 with the Complete 10th Standard 5-Book Bundle (Maths, Science, Social, Tamil, English).')
+      ON CONFLICT (id) DO NOTHING;
+    `);
+
+    // Seed Sample User
+    await client.query(`
+      INSERT INTO users (id, name, email, phone, password_hash, role, status) VALUES
+      ('usr-seed-101', 'Karthik M (Student)', 'student@example.com', '9840418228', '8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918', 'customer', 'active')
+      ON CONFLICT (id) DO NOTHING;
+    `);
+
+    // Seed Sample Order
+    const sampleAddress = JSON.stringify({
+      name: 'Karthik M',
+      phone: '9840418228',
+      address: 'Medavakkam High Road',
+      city: 'Chennai',
+      pincode: '600012',
+    });
+    await client.query(`
+      INSERT INTO orders (id, order_number, user_id, subtotal, total_amount, payment_method, payment_status, order_status, courier_name, awb_number, shipping_address) VALUES
+      ('ord-seed-101', 'BPG-1082', 'Karthik M', 360, 360, 'Razorpay UPI', 'PAID', 'Packed & Dispatched', 'ST Courier Express', 'STC-TN-984210', '${sampleAddress}')
+      ON CONFLICT (id) DO NOTHING;
+    `);
+
+    // Seed Sample Review
+    await client.query(`
+      INSERT INTO reviews (id, user_name, rating, review, book_id) VALUES
+      ('rev-seed-1', 'Karthik M (10th Standard)', 5, 'Scored 96/100 in Maths State Board exam after studying with Blessing Power Guide!', 'bpg-101')
       ON CONFLICT (id) DO NOTHING;
     `);
 

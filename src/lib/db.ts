@@ -253,7 +253,7 @@ export async function getDbClient() {
         courier_name VARCHAR(255) DEFAULT 'ST Courier Express',
         tracking_url TEXT,
         estimated_delivery VARCHAR(100),
-        invoice_number VARCHAR(255),
+        shipping_address TEXT,
         ordered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
@@ -268,28 +268,9 @@ export async function getDbClient() {
         subtotal NUMERIC NOT NULL
       );
 
-      CREATE TABLE IF NOT EXISTS payments (
-        id VARCHAR(255) PRIMARY KEY,
-        order_id VARCHAR(255) REFERENCES orders(id) ON DELETE CASCADE,
-        payment_gateway VARCHAR(50) DEFAULT 'Razorpay',
-        payment_id VARCHAR(255),
-        transaction_id VARCHAR(255),
-        amount NUMERIC NOT NULL,
-        currency VARCHAR(10) DEFAULT 'INR',
-        status VARCHAR(50) DEFAULT 'SUCCESS',
-        paid_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-
-      CREATE TABLE IF NOT EXISTS order_timeline (
-        id VARCHAR(255) PRIMARY KEY,
-        order_id VARCHAR(255) REFERENCES orders(id) ON DELETE CASCADE,
-        status VARCHAR(50) NOT NULL,
-        remarks TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-
       CREATE TABLE IF NOT EXISTS reviews (
         id VARCHAR(255) PRIMARY KEY,
+        user_name VARCHAR(255),
         user_id VARCHAR(255),
         book_id VARCHAR(255) REFERENCES books(id) ON DELETE CASCADE,
         rating NUMERIC DEFAULT 5.0,
@@ -297,45 +278,8 @@ export async function getDbClient() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
 
-      CREATE TABLE IF NOT EXISTS coupons (
-        id VARCHAR(255) PRIMARY KEY,
-        code VARCHAR(50) UNIQUE NOT NULL,
-        discount_type VARCHAR(20) DEFAULT 'percentage',
-        discount_value NUMERIC NOT NULL,
-        minimum_amount NUMERIC DEFAULT 0,
-        expiry_date TIMESTAMP,
-        usage_limit INT DEFAULT 100,
-        status VARCHAR(50) DEFAULT 'active'
-      );
-
-      CREATE TABLE IF NOT EXISTS notifications (
-        id VARCHAR(255) PRIMARY KEY,
-        user_id VARCHAR(255) NOT NULL,
-        title VARCHAR(255) NOT NULL,
-        message TEXT NOT NULL,
-        is_read BOOLEAN DEFAULT FALSE,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-
-      CREATE TABLE IF NOT EXISTS contact_messages (
-        id VARCHAR(255) PRIMARY KEY,
-        name VARCHAR(255) NOT NULL,
-        email VARCHAR(255) NOT NULL,
-        phone VARCHAR(255) NOT NULL,
-        message TEXT NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-
-      CREATE TABLE IF NOT EXISTS settings (
-        id VARCHAR(50) PRIMARY KEY DEFAULT 'main',
-        site_name VARCHAR(255) DEFAULT 'BLESSING POWER GUIDE',
-        support_email VARCHAR(255) DEFAULT 'blessingpowerguide@gmail.com',
-        support_phone VARCHAR(255) DEFAULT '+91 98404 18228',
-        razorpay_key VARCHAR(255) DEFAULT 'rzp_test_BPG10023490',
-        shiprocket_token TEXT,
-        shipping_charge NUMERIC DEFAULT 0,
-        tax_percentage NUMERIC DEFAULT 0
-      );
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_address TEXT;
+      ALTER TABLE reviews ADD COLUMN IF NOT EXISTS user_name VARCHAR(255);
     `);
 
     // Pre-seed Categories if empty
@@ -343,7 +287,7 @@ export async function getDbClient() {
     if (Number(catRes.rows[0].count) === 0) {
       for (const c of defaultSeedCategories) {
         await client.query(
-          `INSERT INTO categories (id, name, slug, parent_category) VALUES ($1, $2, $3, $4)`,
+          `INSERT INTO categories (id, name, slug, parent_category) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING`,
           [c.id, c.name, c.slug, c.parent_category]
         );
       }
@@ -355,7 +299,7 @@ export async function getDbClient() {
       for (const b of defaultSeedBooks) {
         await client.query(
           `INSERT INTO books (id, title, slug, isbn, author, publisher, edition, language, subject, category_id, description, price, discount_price, stock, pages, weight, cover_image, status, featured)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19) ON CONFLICT (id) DO NOTHING`,
           [b.id, b.title, b.slug, b.isbn, b.author, b.publisher, b.edition, b.language, b.subject, b.category_id, b.description, b.price, b.discount_price, b.stock, b.pages, b.weight, b.cover_image, b.status, b.featured]
         );
       }
