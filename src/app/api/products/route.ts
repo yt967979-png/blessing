@@ -11,9 +11,9 @@ export async function GET(request: Request) {
 
     if (client) {
       try {
-        let sql = 'SELECT * FROM books WHERE status = $1';
-        const params: any[] = ['published'];
-        let count = 2;
+        let sql = 'SELECT * FROM books WHERE 1=1';
+        const params: any[] = [];
+        let count = 1;
 
         if (cls && cls !== 'all' && cls !== 'ALL') {
           sql += ` AND title LIKE $${count++}`;

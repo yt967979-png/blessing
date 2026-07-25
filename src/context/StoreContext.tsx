@@ -90,8 +90,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [toast, setToast] = useState<string | null>(null);
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedClass, setSelectedClass] = useState('ALL');
-  const [selectedCategory, setSelectedCategory] = useState('ALL');
+  const [selectedClass, setSelectedClass] = useState('all');
+  const [selectedCategory, setSelectedCategory] = useState('all');
 
   const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
   const [isCartOpen, setIsCartOpen] = useState(false);

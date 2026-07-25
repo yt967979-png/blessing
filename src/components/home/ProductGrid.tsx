@@ -19,13 +19,15 @@ export const ProductGrid = () => {
 
   const filteredProducts = useMemo(() => {
     return products.filter((product) => {
-      if (selectedClass !== 'all' && product.cls !== selectedClass) return false;
-      if (selectedCategory !== 'all' && product.category !== selectedCategory)
-        return false;
+      const clsFilter = (selectedClass || 'all').toLowerCase();
+      const catFilter = (selectedCategory || 'all').toLowerCase();
+
+      if (clsFilter !== 'all' && product.cls?.toLowerCase() !== clsFilter) return false;
+      if (catFilter !== 'all' && product.category?.toLowerCase() !== catFilter) return false;
       if (
         searchQuery &&
         !product.title.toLowerCase().includes(searchQuery.toLowerCase()) &&
-        !product.subject.toLowerCase().includes(searchQuery.toLowerCase())
+        !product.subject?.toLowerCase().includes(searchQuery.toLowerCase())
       )
         return false;
       return true;
