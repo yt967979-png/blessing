@@ -94,27 +94,37 @@ export const Modals = () => {
       ? newAddr
       : savedAddresses.find((a) => a.id === selectedAddrId) || savedAddresses[0];
 
+  const handleSaveInlineAddress = (e?: React.MouseEvent) => {
+    if (e) e.preventDefault();
+    if (!newAddr.name || !newAddr.address || !newAddr.pincode) {
+      alert('Please fill out Receiver Name, Address, and Pincode.');
+      return false;
+    }
+
+    const createdAddr = {
+      id: Date.now(),
+      type: newAddr.type || 'HOME',
+      name: newAddr.name,
+      phone: newAddr.phone || user?.phone || '9840418228',
+      address: newAddr.address,
+      city: newAddr.city || 'Chennai',
+      pincode: newAddr.pincode,
+    };
+
+    const updatedList = [...savedAddresses, createdAddr];
+    setSavedAddresses(updatedList);
+    localStorage.setItem('bpg_user_addresses', JSON.stringify(updatedList));
+    setSelectedAddrId(createdAddr.id);
+    showToast('✓ Shipping address saved & selected!');
+    return true;
+  };
+
   const handlePlaceOrder = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (selectedAddrId === 'new' && (!newAddr.name || !newAddr.address || !newAddr.pincode)) {
-      alert('Please fill out all address fields.');
-      return;
-    }
-
     if (selectedAddrId === 'new') {
-      const createdAddr = {
-        id: Date.now(),
-        type: newAddr.type || 'HOME',
-        name: newAddr.name,
-        phone: newAddr.phone || user?.phone || '',
-        address: newAddr.address,
-        city: newAddr.city || 'Chennai',
-        pincode: newAddr.pincode,
-      };
-      const updatedList = [...savedAddresses, createdAddr];
-      setSavedAddresses(updatedList);
-      localStorage.setItem('bpg_user_addresses', JSON.stringify(updatedList));
+      const saved = handleSaveInlineAddress();
+      if (!saved) return;
     }
 
     const orderId = 'BPG-' + Math.floor(1000 + Math.random() * 9000);
@@ -424,6 +434,14 @@ export const Modals = () => {
                         />
                       </div>
                     </div>
+
+                    <button
+                      type="button"
+                      onClick={handleSaveInlineAddress}
+                      className="w-full bg-blue-600 hover:bg-[#001B3A] text-white font-extrabold text-xs py-2.5 rounded-lg transition-colors mt-2 shadow-xs cursor-pointer"
+                    >
+                      ✓ SAVE & USE THIS ADDRESS
+                    </button>
                   </div>
                 )}
 
