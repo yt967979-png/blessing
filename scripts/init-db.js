@@ -11,19 +11,18 @@ if (!connectionString) {
   process.exit(0);
 }
 
-console.log('⚡ Connecting to Railway PostgreSQL Database...');
+const isSsl = connectionString.includes('railway') || connectionString.includes('render');
 
-const client = new Client({
-  connectionString,
-  ssl: connectionString.includes('railway') || connectionString.includes('render')
-    ? { rejectUnauthorized: false }
-    : false,
-});
+async function migrateDatabase(connStr, dbName) {
+  console.log(`⚡ Connecting to Railway PostgreSQL [Database: ${dbName}]...`);
+  const client = new Client({
+    connectionString: connStr,
+    ssl: isSsl ? { rejectUnauthorized: false } : false,
+  });
 
-async function migrate() {
   try {
     await client.connect();
-    console.log('🔒 Executing 17-Table Schema Migration in Railway PostgreSQL...');
+    console.log(`🔒 Executing 17-Table Schema Migration in [${dbName}]...`);
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
@@ -227,8 +226,6 @@ async function migrate() {
       );
     `);
 
-    console.log('✅ All 17 Database Tables Successfully Created in Railway PostgreSQL!');
-
     // Seed Categories
     await client.query(`
       INSERT INTO categories (id, name, slug) VALUES
@@ -253,12 +250,24 @@ async function migrate() {
       ON CONFLICT (id) DO NOTHING;
     `);
 
-    console.log('🌱 Seeded Official Books and Categories into Railway PostgreSQL Database!');
+    console.log(`✅ [${dbName}] 17 Tables and Seeds Successfully Created!`);
     await client.end();
   } catch (err) {
-    console.error('❌ PostgreSQL Migration Error:', err.message);
+    console.error(`❌ [${dbName}] Migration Warning:`, err.message);
     if (client) await client.end();
   }
 }
 
-migrate();
+async function main() {
+  // 1. Migrate target DATABASE_URL
+  const targetDbName = connectionString.split('/').pop().split('?')[0] || 'target_db';
+  await migrateDatabase(connectionString, targetDbName);
+
+  // 2. Also migrate default 'postgres' database if DATABASE_URL was pointing to 'railway'
+  if (connectionString.endsWith('/railway') || connectionString.includes('/railway?')) {
+    const postgresConnStr = connectionString.replace('/railway', '/postgres');
+    await migrateDatabase(postgresConnStr, 'postgres');
+  }
+}
+
+main();
