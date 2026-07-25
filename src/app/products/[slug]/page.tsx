@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, use } from 'react';
+import React, { useState, useEffect, use } from 'react';
 import Link from 'next/link';
 import {
   Star,
@@ -33,6 +33,28 @@ export default function ProductDetailPage({
   const product = currentProducts.find((p) => p.slug === resolvedParams.slug) || currentProducts[0];
 
   const [activeImg, setActiveImg] = useState(product?.image || '');
+  const [dbReviews, setDbReviews] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (product?.image) {
+      setActiveImg(product.image);
+    }
+  }, [product?.image]);
+
+  useEffect(() => {
+    async function loadReviews() {
+      try {
+        const res = await fetch(`/api/reviews?bookId=${product.id}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            setDbReviews(data);
+          }
+        }
+      } catch (err) {}
+    }
+    loadReviews();
+  }, [product.id]);
   const [pincode, setPincode] = useState('600012');
   const [pincodeMsg, setPincodeMsg] = useState('✓ Delivery available in 2-3 business days (Express Post)');
 
@@ -228,43 +250,38 @@ export default function ProductDetailPage({
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-5">
-              <div className="flex justify-between items-start mb-2">
-                <div>
-                  <div className="font-extrabold text-slate-900 text-sm">Karthik M (10th Standard)</div>
-                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded border border-emerald-200">
-                    VERIFIED BUYER
-                  </span>
+            {(dbReviews.length > 0
+              ? dbReviews
+              : [
+                  {
+                    studentName: 'Karthik M (10th Standard)',
+                    rating: 5,
+                    comment: 'Scored 96/100 in Maths State Board exam after studying with Blessing Power Guide! Solved papers were super helpful.',
+                  },
+                  {
+                    studentName: 'Ananya S (12th Standard)',
+                    rating: 5,
+                    comment: 'Very clear step-by-step explanations and diagrams for Physics & Chemistry. Delivered in 24 hours via ST Courier!',
+                  },
+                ]
+            ).map((rev: any, idx: number) => (
+              <div key={idx} className="bg-slate-50 border border-slate-200 rounded-xl p-5">
+                <div className="flex justify-between items-start mb-2">
+                  <div>
+                    <div className="font-extrabold text-slate-900 text-sm">{rev.studentName}</div>
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded border border-emerald-200 uppercase">
+                      VERIFIED PURCHASER
+                    </span>
+                  </div>
+                  <div className="flex text-amber-400">
+                    {[...Array(rev.rating || 5)].map((_, i) => (
+                      <Star key={i} className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                    ))}
+                  </div>
                 </div>
-                <div className="flex text-amber-400">
-                  {[...Array(5)].map((_, i) => (
-                    <Star key={i} className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                  ))}
-                </div>
+                <p className="text-slate-600 text-xs leading-relaxed mt-1">"{rev.comment}"</p>
               </div>
-              <p className="text-slate-600 text-xs leading-relaxed">
-                "Scored 96/100 in Maths State Board exam after studying with Blessing Power Guide! Solved papers were super helpful."
-              </p>
-            </div>
-
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-5">
-              <div className="flex justify-between items-start mb-2">
-                <div>
-                  <div className="font-extrabold text-slate-900 text-sm">Ananya S (12th Standard)</div>
-                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded border border-emerald-200">
-                    VERIFIED BUYER
-                  </span>
-                </div>
-                <div className="flex text-amber-400">
-                  {[...Array(5)].map((_, i) => (
-                    <Star key={i} className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                  ))}
-                </div>
-              </div>
-              <p className="text-slate-600 text-xs leading-relaxed">
-                "Very clear step-by-step explanations and diagrams for Physics & Chemistry. Delivered in 24 hours via ST Courier!"
-              </p>
-            </div>
+            ))}
           </div>
         </section>
 
