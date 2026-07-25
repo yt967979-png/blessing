@@ -425,7 +425,7 @@ export const Modals = () => {
                         <input
                           type="text"
                           required
-                          placeholder="e.g. Karthik M"
+                          placeholder="e.g. Student Name"
                           value={newAddr.name}
                           onChange={(e) => setNewAddr({ ...newAddr, name: e.target.value })}
                           className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none bg-white focus:border-blue-600"
