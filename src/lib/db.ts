@@ -100,6 +100,8 @@ export const defaultSeedBooks = [
 
 let isSchemaInitialized = false;
 
+const RAILWAY_DB_FALLBACK = "postgresql://postgres:USdOHOzspyXMPFmDnfsjkxoSIGedYwgk@sakura.proxy.rlwy.net:32874/railway";
+
 export async function getDbClient() {
   let connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.DATABASE_PUBLIC_URL;
 
@@ -110,6 +112,10 @@ export async function getDbClient() {
     const db = process.env.PGDATABASE || 'railway';
     const port = process.env.PGPORT || 5432;
     connectionString = `postgresql://${user}:${pass}@${host}:${port}/${db}`;
+  }
+
+  if (!connectionString) {
+    connectionString = RAILWAY_DB_FALLBACK;
   }
 
   if (connectionString) {

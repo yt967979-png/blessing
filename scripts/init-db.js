@@ -15,9 +15,10 @@ if (!connectionString && process.env.PGHOST && process.env.PGUSER && process.env
   connectionString = `postgresql://${user}:${pass}@${host}:${port}/${db}`;
 }
 
+const RAILWAY_DB_FALLBACK = "postgresql://postgres:USdOHOzspyXMPFmDnfsjkxoSIGedYwgk@sakura.proxy.rlwy.net:32874/railway";
+
 if (!connectionString) {
-  console.log('⚠️ DATABASE_URL not set in environment. Skipping Railway PostgreSQL migration.');
-  process.exit(0);
+  connectionString = RAILWAY_DB_FALLBACK;
 }
 
 const isSsl = connectionString.includes('railway') || connectionString.includes('render') || connectionString.includes('rlwy.net');
