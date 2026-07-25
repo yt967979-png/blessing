@@ -753,7 +753,7 @@ export const Modals = () => {
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
-              className="bg-white rounded-3xl max-w-md w-full relative shadow-2xl overflow-hidden border border-slate-100"
+              className="bg-white rounded-3xl max-w-md w-full relative shadow-2xl max-h-[90vh] overflow-y-auto border border-slate-100 my-auto custom-scrollbar"
             >
               {/* Header Hero Banner */}
               <div className="bg-gradient-to-r from-[#001B3A] via-[#002B5B] to-[#0044AA] text-white p-6 relative">
