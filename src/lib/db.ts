@@ -124,6 +124,11 @@ export async function getDbClient() {
     if (!isSchemaInitialized) {
       isSchemaInitialized = true;
 
+    // Create pg_stat_statements extension for Railway Data UI panel
+    try {
+      await client.query(`CREATE EXTENSION IF NOT EXISTS pg_stat_statements;`);
+    } catch (e) {}
+
     // Create Full 17-Table Relational Database Schema
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
