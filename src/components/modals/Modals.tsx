@@ -694,7 +694,7 @@ export const Modals = () => {
                           <input
                             type="text"
                             required
-                            placeholder="e.g. Yogesh T"
+                            placeholder="e.g. Student Name"
                             value={authForm.name}
                             onChange={(e) => setAuthForm({ ...authForm, name: e.target.value })}
                             className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-blue-600 focus:bg-white transition-all font-medium"
@@ -709,7 +709,7 @@ export const Modals = () => {
                           <input
                             type="tel"
                             required
-                            placeholder="e.g. 8248345770"
+                            placeholder="e.g. 9840418228"
                             value={authForm.phone}
                             onChange={(e) => setAuthForm({ ...authForm, phone: e.target.value })}
                             className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-blue-600 focus:bg-white transition-all font-medium"
@@ -726,7 +726,7 @@ export const Modals = () => {
                       <input
                         type="email"
                         required
-                        placeholder="e.g. yt967979@gmail.com"
+                        placeholder="e.g. student@example.com"
                         value={authForm.email}
                         onChange={(e) => setAuthForm({ ...authForm, email: e.target.value })}
                         className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-blue-600 focus:bg-white transition-all font-medium"
