@@ -91,8 +91,13 @@ export const Modals = () => {
 
   // Auth form state
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+  const [registerStep, setRegisterStep] = useState<'details' | 'otp'>('details');
   const [authForm, setAuthForm] = useState({ name: '', email: '', phone: '', password: '' });
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [otpCode, setOtpCode] = useState('');
+  const [otpSentMsg, setOtpSentMsg] = useState<string | null>(null);
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -207,6 +212,127 @@ export const Modals = () => {
     await processOrderCompletion();
   };
 
+  const handleSendOtp = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setAuthError(null);
+
+    const emailClean = authForm.email.trim();
+    const passwordClean = authForm.password;
+
+    if (!isValidEmailFormat(emailClean)) {
+      setAuthError('Please enter a valid email address (e.g. user@domain.com).');
+      return;
+    }
+
+    if (isDisposableEmail(emailClean)) {
+      setAuthError('⚠️ Disposable / temporary emails are blocked for security. Please use your official email.');
+      return;
+    }
+
+    if (!isStrongPassword(passwordClean)) {
+      setAuthError('⚠️ Password must be at least 8 characters long with 1 Uppercase, 1 Lowercase, 1 Number, and 1 Special Character.');
+      return;
+    }
+
+    if (passwordClean !== confirmPassword) {
+      setAuthError('⚠️ Passwords do not match. Please re-type your confirm password accurately.');
+      return;
+    }
+
+    if (!authForm.name || authForm.name.trim().length < 2) {
+      setAuthError('Please enter your full name.');
+      return;
+    }
+
+    setIsSendingOtp(true);
+    try {
+      const res = await fetch('/api/auth/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: emailClean }),
+      });
+      const data = await res.json();
+      setIsSendingOtp(false);
+
+      if (data.error) {
+        setAuthError(data.error);
+        return;
+      }
+
+      setRegisterStep('otp');
+      setOtpSentMsg(`A 6-digit verification code has been sent to ${emailClean}.`);
+      if (data.previewOtp) {
+        showToast(`✉️ Verification code sent to ${emailClean}! (OTP Code: ${data.previewOtp})`);
+      } else {
+        showToast(`✉️ Verification code sent to ${emailClean}`);
+      }
+    } catch {
+      setIsSendingOtp(false);
+      setAuthError('Connection error sending verification code. Please check network.');
+    }
+  };
+
+  const handleVerifyOtpAndRegister = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setAuthError(null);
+
+    if (!otpCode || otpCode.trim().length < 6) {
+      setAuthError('Please enter the complete 6-digit OTP code.');
+      return;
+    }
+
+    const emailClean = authForm.email.trim();
+    const passwordClean = authForm.password;
+
+    setIsVerifyingOtp(true);
+
+    try {
+      // 1. Verify OTP with Railway PostgreSQL DB
+      const verifyRes = await fetch('/api/auth/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: emailClean, otp: otpCode.trim() }),
+      });
+      const verifyData = await verifyRes.json();
+
+      if (!verifyData.verified) {
+        setIsVerifyingOtp(false);
+        setAuthError(verifyData.error || 'Invalid or expired OTP verification code.');
+        return;
+      }
+
+      // 2. Complete Account Registration in Railway PostgreSQL DB
+      const regRes = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'register',
+          email: emailClean,
+          password: passwordClean,
+          name: authForm.name || emailClean.split('@')[0],
+          phone: authForm.phone || '',
+        }),
+      });
+      const regData = await regRes.json();
+      setIsVerifyingOtp(false);
+
+      if (regData.error) {
+        setAuthError(regData.error);
+        return;
+      }
+
+      // Login user in client state
+      loginUser(regData.user, regData.cart || [], regData.wishlist || [], regData.addresses || []);
+      setIsAuthOpen(false);
+      setRegisterStep('details');
+      setOtpCode('');
+      showToast(`🎉 Email verified & account created! Welcome, ${regData.user.name}`);
+    } catch {
+      setIsVerifyingOtp(false);
+      setAuthError('Server error completing registration. Please try again.');
+    }
+  };
+
   const handleAuthSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError(null);
@@ -234,31 +360,23 @@ export const Modals = () => {
     }
 
     if (authMode === 'register') {
-      if (isDisposableEmail(emailClean)) {
-        setAuthError('⚠️ Disposable / temporary emails are blocked for security. Please use your official email.');
-        return;
+      if (registerStep === 'details') {
+        handleSendOtp(e);
+      } else {
+        handleVerifyOtpAndRegister(e);
       }
-      if (!isStrongPassword(passwordClean)) {
-        setAuthError('⚠️ Password must be at least 8 characters long with 1 Uppercase, 1 Lowercase, 1 Number, and 1 Special Character.');
-        return;
-      }
-      if (passwordClean !== confirmPassword) {
-        setAuthError('⚠️ Passwords do not match. Please re-type your confirm password accurately.');
-        return;
-      }
+      return;
     }
 
-    // All auth goes through Railway PostgreSQL API
+    // Login Action
     setAuthError(null);
     fetch('/api/auth', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        action: authMode,
+        action: 'login',
         email: emailClean,
         password: passwordClean,
-        name: authForm.name || emailClean.split('@')[0],
-        phone: authForm.phone || '',
       }),
     })
       .then((res) => res.json())
@@ -269,7 +387,7 @@ export const Modals = () => {
         }
         loginUser(data.user, data.cart || [], data.wishlist || [], data.addresses || []);
         setIsAuthOpen(false);
-        showToast(`✓ ${authMode === 'register' ? 'Account created!' : 'Logged in!'} Welcome, ${data.user.name}`);
+        showToast(`✓ Logged in! Welcome back, ${data.user.name}`);
       })
       .catch(() => {
         setAuthError('Connection error. Please check your internet and try again.');
@@ -702,148 +820,211 @@ export const Modals = () => {
                 )}
 
                 <form onSubmit={handleAuthSubmit} className="space-y-3.5 text-xs">
-                  {authMode === 'register' && (
-                    <>
-                      <div>
-                        <label className="block font-bold text-slate-700 mb-1">Full Name *</label>
-                        <div className="relative">
-                          <input
-                            type="text"
-                            required
-                            placeholder="e.g. Student Name"
-                            value={authForm.name}
-                            onChange={(e) => setAuthForm({ ...authForm, name: e.target.value })}
-                            className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-blue-600 focus:bg-white transition-all font-medium"
-                          />
-                          <User className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                  {authMode === 'register' && registerStep === 'otp' ? (
+                    <div className="space-y-4">
+                      <div className="bg-blue-50 border border-blue-200 rounded-xl p-3.5 text-xs text-blue-800 space-y-1">
+                        <div className="font-extrabold flex items-center gap-1.5 text-blue-900">
+                          <Mail className="w-4 h-4 text-blue-600" />
+                          <span>Verify Your Email Address</span>
                         </div>
+                        <p className="text-[11px] leading-relaxed text-blue-700">{otpSentMsg}</p>
                       </div>
 
                       <div>
-                        <label className="block font-bold text-slate-700 mb-1">Mobile Number (WhatsApp) *</label>
-                        <div className="relative">
-                          <input
-                            type="tel"
-                            required
-                            placeholder="e.g. 9840418228"
-                            value={authForm.phone}
-                            onChange={(e) => setAuthForm({ ...authForm, phone: e.target.value })}
-                            className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-blue-600 focus:bg-white transition-all font-medium"
-                          />
-                          <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                        </div>
+                        <label className="block font-bold text-slate-700 mb-1.5">Enter 6-Digit Verification Code (OTP) *</label>
+                        <input
+                          type="text"
+                          maxLength={6}
+                          required
+                          placeholder="e.g. 483921"
+                          value={otpCode}
+                          onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                          className="w-full text-center tracking-[0.4em] font-mono font-black text-lg py-3 bg-slate-50 border border-blue-300 rounded-xl outline-none focus:border-blue-600 focus:bg-white transition-all text-[#001B3A]"
+                        />
                       </div>
-                    </>
-                  )}
 
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Email Address *</label>
-                    <div className="relative">
-                      <input
-                        type="email"
-                        required
-                        placeholder="e.g. student@example.com"
-                        value={authForm.email}
-                        onChange={(e) => setAuthForm({ ...authForm, email: e.target.value })}
-                        className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-blue-600 focus:bg-white transition-all font-medium"
-                      />
-                      <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Password *</label>
-                    <div className="relative">
-                      <input
-                        type={showPassword ? 'text' : 'password'}
-                        required
-                        placeholder="••••••••••••"
-                        value={authForm.password}
-                        onChange={(e) => setAuthForm({ ...authForm, password: e.target.value })}
-                        className="w-full pl-9 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-blue-600 focus:bg-white transition-all font-medium"
-                      />
-                      <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                       <button
                         type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 cursor-pointer"
+                        onClick={(e) => handleVerifyOtpAndRegister(e)}
+                        disabled={isVerifyingOtp || otpCode.length < 6}
+                        className="w-full bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-extrabold text-xs py-3.5 rounded-xl uppercase tracking-wider shadow-md transition-all disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
                       >
-                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        <ShieldCheck className="w-4 h-4" />
+                        <span>{isVerifyingOtp ? 'VERIFYING CODE...' : 'VERIFY & CREATE ACCOUNT'}</span>
                       </button>
-                    </div>
-                  </div>
 
-                  {authMode === 'register' && (
+                      <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-100">
+                        <button
+                          type="button"
+                          onClick={() => setRegisterStep('details')}
+                          className="text-slate-500 hover:text-slate-800 font-bold underline cursor-pointer"
+                        >
+                          ← Edit Details
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => handleSendOtp(e)}
+                          disabled={isSendingOtp}
+                          className="text-blue-600 hover:text-blue-800 font-extrabold cursor-pointer"
+                        >
+                          {isSendingOtp ? 'Sending...' : 'Resend Code'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
                     <>
+                      {authMode === 'register' && (
+                        <>
+                          <div>
+                            <label className="block font-bold text-slate-700 mb-1">Full Name *</label>
+                            <div className="relative">
+                              <input
+                                type="text"
+                                required
+                                placeholder="e.g. Student Name"
+                                value={authForm.name}
+                                onChange={(e) => setAuthForm({ ...authForm, name: e.target.value })}
+                                className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-blue-600 focus:bg-white transition-all font-medium"
+                              />
+                              <User className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block font-bold text-slate-700 mb-1">Mobile Number (WhatsApp) *</label>
+                            <div className="relative">
+                              <input
+                                type="tel"
+                                required
+                                placeholder="e.g. 9840418228"
+                                value={authForm.phone}
+                                onChange={(e) => setAuthForm({ ...authForm, phone: e.target.value })}
+                                className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-blue-600 focus:bg-white transition-all font-medium"
+                              />
+                              <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                            </div>
+                          </div>
+                        </>
+                      )}
+
                       <div>
-                        <label className="block font-bold text-slate-700 mb-1">Confirm Password *</label>
+                        <label className="block font-bold text-slate-700 mb-1">Email Address *</label>
                         <div className="relative">
                           <input
-                            type={showConfirmPassword ? 'text' : 'password'}
+                            type="email"
                             required
-                            placeholder="Re-type password"
-                            value={confirmPassword}
-                            onChange={(e) => setConfirmPassword(e.target.value)}
-                            className={`w-full pl-9 pr-10 py-2.5 bg-slate-50 border rounded-xl text-xs outline-none focus:bg-white transition-all font-medium ${
-                              confirmPassword && confirmPassword !== authForm.password
-                                ? 'border-red-400 focus:border-red-500'
-                                : 'border-slate-200 focus:border-blue-600'
-                            }`}
+                            placeholder="e.g. student@example.com"
+                            value={authForm.email}
+                            onChange={(e) => setAuthForm({ ...authForm, email: e.target.value })}
+                            className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-blue-600 focus:bg-white transition-all font-medium"
+                          />
+                          <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block font-bold text-slate-700 mb-1">Password *</label>
+                        <div className="relative">
+                          <input
+                            type={showPassword ? 'text' : 'password'}
+                            required
+                            placeholder="••••••••••••"
+                            value={authForm.password}
+                            onChange={(e) => setAuthForm({ ...authForm, password: e.target.value })}
+                            className="w-full pl-9 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-blue-600 focus:bg-white transition-all font-medium"
                           />
                           <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                           <button
                             type="button"
-                            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                            onClick={() => setShowPassword(!showPassword)}
                             className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 cursor-pointer"
                           >
-                            {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                            {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                           </button>
                         </div>
-                        {confirmPassword && confirmPassword !== authForm.password && (
-                          <span className="text-[10px] font-bold text-red-500 mt-0.5 block">
-                            Passwords do not match
-                          </span>
-                        )}
                       </div>
 
-                      {/* Live Password Criteria Checklist */}
-                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-1 text-[11px]">
-                        <div className="font-bold text-slate-700 mb-1 flex items-center justify-between">
-                          <span>Password Strength Checklist:</span>
-                          <span className="text-[10px] text-slate-400 font-normal">8+ Chars (1 Upper, 1 Lower, 1 Number, 1 Symbol)</span>
-                        </div>
-                        {(() => {
-                          const c = checkPasswordCriteria(authForm.password);
-                          return (
-                            <div className="grid grid-cols-2 gap-1 font-bold text-[10px]">
-                              <span className={c.minLength ? 'text-emerald-600' : 'text-slate-400'}>
-                                {c.minLength ? '✓' : '○'} Min 8 Chars
-                              </span>
-                              <span className={c.hasUpper ? 'text-emerald-600' : 'text-slate-400'}>
-                                {c.hasUpper ? '✓' : '○'} Uppercase (A-Z)
-                              </span>
-                              <span className={c.hasLower ? 'text-emerald-600' : 'text-slate-400'}>
-                                {c.hasLower ? '✓' : '○'} Lowercase (a-z)
-                              </span>
-                              <span className={c.hasNumber ? 'text-emerald-600' : 'text-slate-400'}>
-                                {c.hasNumber ? '✓' : '○'} Number (0-9)
-                              </span>
-                              <span className={c.hasSpecial ? 'text-emerald-600' : 'text-slate-400'}>
-                                {c.hasSpecial ? '✓' : '○'} Symbol (!@#$)
-                              </span>
+                      {authMode === 'register' && (
+                        <>
+                          <div>
+                            <label className="block font-bold text-slate-700 mb-1">Confirm Password *</label>
+                            <div className="relative">
+                              <input
+                                type={showConfirmPassword ? 'text' : 'password'}
+                                required
+                                placeholder="Re-type password"
+                                value={confirmPassword}
+                                onChange={(e) => setConfirmPassword(e.target.value)}
+                                className={`w-full pl-9 pr-10 py-2.5 bg-slate-50 border rounded-xl text-xs outline-none focus:bg-white transition-all font-medium ${
+                                  confirmPassword && confirmPassword !== authForm.password
+                                    ? 'border-red-400 focus:border-red-500'
+                                    : 'border-slate-200 focus:border-blue-600'
+                                }`}
+                              />
+                              <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                              <button
+                                type="button"
+                                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                                className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 cursor-pointer"
+                              >
+                                {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                              </button>
                             </div>
-                          );
-                        })()}
-                      </div>
+                            {confirmPassword && confirmPassword !== authForm.password && (
+                              <span className="text-[10px] font-bold text-red-500 mt-0.5 block">
+                                Passwords do not match
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Live Password Criteria Checklist */}
+                          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-1 text-[11px]">
+                            <div className="font-bold text-slate-700 mb-1 flex items-center justify-between">
+                              <span>Password Strength Checklist:</span>
+                              <span className="text-[10px] text-slate-400 font-normal">8+ Chars (1 Upper, 1 Lower, 1 Number, 1 Symbol)</span>
+                            </div>
+                            {(() => {
+                              const c = checkPasswordCriteria(authForm.password);
+                              return (
+                                <div className="grid grid-cols-2 gap-1 font-bold text-[10px]">
+                                  <span className={c.minLength ? 'text-emerald-600' : 'text-slate-400'}>
+                                    {c.minLength ? '✓' : '○'} Min 8 Chars
+                                  </span>
+                                  <span className={c.hasUpper ? 'text-emerald-600' : 'text-slate-400'}>
+                                    {c.hasUpper ? '✓' : '○'} Uppercase (A-Z)
+                                  </span>
+                                  <span className={c.hasLower ? 'text-emerald-600' : 'text-slate-400'}>
+                                    {c.hasLower ? '✓' : '○'} Lowercase (a-z)
+                                  </span>
+                                  <span className={c.hasNumber ? 'text-emerald-600' : 'text-slate-400'}>
+                                    {c.hasNumber ? '✓' : '○'} Number (0-9)
+                                  </span>
+                                  <span className={c.hasSpecial ? 'text-emerald-600' : 'text-slate-400'}>
+                                    {c.hasSpecial ? '✓' : '○'} Symbol (!@#$)
+                                  </span>
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        </>
+                      )}
+
+                      <button
+                        type="submit"
+                        disabled={isSendingOtp}
+                        className="w-full bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-[#001B3A] font-extrabold text-xs py-3.5 rounded-xl shadow-md uppercase tracking-wider mt-2 transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+                      >
+                        {authMode === 'login' ? (
+                          <span>SIGN IN TO ACCOUNT</span>
+                        ) : (
+                          <>
+                            <Mail className="w-4 h-4" />
+                            <span>{isSendingOtp ? 'SENDING CODE...' : 'SEND 6-DIGIT VERIFICATION CODE'}</span>
+                          </>
+                        )}
+                      </button>
                     </>
                   )}
-
-                  <button
-                    type="submit"
-                    className="w-full bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-[#001B3A] font-extrabold text-xs py-3.5 rounded-xl shadow-md uppercase tracking-wider mt-2 transition-all cursor-pointer"
-                  >
-                    {authMode === 'login' ? 'SIGN IN TO ACCOUNT' : 'CREATE ACCOUNT & REGISTER'}
-                  </button>
                 </form>
 
                 {/* Cloudflare Security Badge */}

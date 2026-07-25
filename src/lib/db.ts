@@ -277,32 +277,18 @@ export async function getDbClient() {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
+    CREATE TABLE IF NOT EXISTS email_otps (
+      id VARCHAR(255) PRIMARY KEY,
+      email VARCHAR(255) NOT NULL,
+      otp VARCHAR(10) NOT NULL,
+      expires_at TIMESTAMP NOT NULL,
+      verified BOOLEAN DEFAULT FALSE,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
     ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_address TEXT;
     ALTER TABLE reviews ADD COLUMN IF NOT EXISTS user_name VARCHAR(255);
   `);
-
-  // Pre-seed Categories if empty
-  const catRes = await client.query('SELECT COUNT(*) FROM categories');
-  if (Number(catRes.rows[0].count) === 0) {
-    for (const c of defaultSeedCategories) {
-      await client.query(
-        `INSERT INTO categories (id, name, slug, parent_category) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING`,
-        [c.id, c.name, c.slug, c.parent_category]
-      );
-    }
-  }
-
-  // Pre-seed Books if empty
-  const bookRes = await client.query('SELECT COUNT(*) FROM books');
-  if (Number(bookRes.rows[0].count) === 0) {
-    for (const b of defaultSeedBooks) {
-      await client.query(
-        `INSERT INTO books (id, title, slug, isbn, author, publisher, edition, language, subject, category_id, description, price, discount_price, stock, pages, weight, cover_image, status, featured)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19) ON CONFLICT (id) DO NOTHING`,
-        [b.id, b.title, b.slug, b.isbn, b.author, b.publisher, b.edition, b.language, b.subject, b.category_id, b.description, b.price, b.discount_price, b.stock, b.pages, b.weight, b.cover_image, b.status, b.featured]
-      );
-    }
-  }
   }
 
   return client;

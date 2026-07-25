@@ -239,42 +239,21 @@ async function migrateDatabase(connStr, dbName) {
         shipping_charge NUMERIC DEFAULT 0,
         tax_percentage NUMERIC DEFAULT 0
       );
+
+      CREATE TABLE IF NOT EXISTS email_otps (
+        id VARCHAR(255) PRIMARY KEY,
+        email VARCHAR(255) NOT NULL,
+        otp VARCHAR(10) NOT NULL,
+        expires_at TIMESTAMP NOT NULL,
+        verified BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
       ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_address TEXT;
       ALTER TABLE reviews ADD COLUMN IF NOT EXISTS user_name VARCHAR(255);
     `);
 
-    // Seed Categories
-    await client.query(`
-      INSERT INTO categories (id, name, slug) VALUES
-      ('cat-6th', '6th Standard Guides', '6th-std'),
-      ('cat-7th', '7th Standard Guides', '7th-std'),
-      ('cat-8th', '8th Standard Guides', '8th-std'),
-      ('cat-9th', '9th Standard Guides', '9th-std'),
-      ('cat-10th', '10th Standard Guides', '10th-std'),
-      ('cat-11th', '11th Standard Guides', '11th-std'),
-      ('cat-12th', '12th Standard Guides', '12th-std'),
-      ('cat-combos', '5-Subject Super Combos', 'combos')
-      ON CONFLICT (id) DO NOTHING;
-    `);
-
-    // Seed Official Books
-    await client.query(`
-      INSERT INTO books (id, title, slug, isbn, subject, category_id, price, discount_price, stock, cover_image, description) VALUES
-      ('bpg-101', '10th Standard Mathematics Master Guide', '10th-maths-master-guide', '978-81-984041-0-1', 'Mathematics', 'cat-10th', 220, 180, 50, 'https://images.unsplash.com/photo-1606326608606-aa0b62935f2b?auto=format&fit=crop&w=400&q=80', 'Complete 10th Maths guide with chapter-wise solved model question papers for State Board.'),
-      ('bpg-102', '10th Standard Science Guide (Physics, Chem, Bio)', '10th-science-master-guide', '978-81-984041-0-2', 'Science', 'cat-10th', 240, 190, 45, 'https://images.unsplash.com/photo-1532012197267-da84d127e765?auto=format&fit=crop&w=400&q=80', 'Comprehensive 10th Science study guide covering diagrams, formulas and solved Q&A.'),
-      ('bpg-103', '12th Standard Physics Master Guide (Model Q&A Papers)', '12th-physics-master-guide', '978-81-984041-0-3', 'Physics', 'cat-12th', 260, 210, 60, 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80', 'High-score 12th Physics master guide covering numerical problems and board exam papers.'),
-      ('bpg-104', '10th Standard All-in-One 5 Subject Super Combo Pack', '10th-5-subject-super-combo', '978-81-984041-0-4', 'All 5 Subjects', 'cat-combos', 1050, 790, 30, 'https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?auto=format&fit=crop&w=400&q=80', 'Save ₹260 with the Complete 10th Standard 5-Book Bundle (Maths, Science, Social, Tamil, English).')
-      ON CONFLICT (id) DO NOTHING;
-    `);
-
-    // Seed Sample Review
-    await client.query(`
-      INSERT INTO reviews (id, user_name, rating, review, book_id) VALUES
-      ('rev-seed-1', 'Student Customer (10th Standard)', 5, 'Scored high marks in Maths State Board exam after studying with Blessing Power Guide!', 'bpg-101')
-      ON CONFLICT (id) DO NOTHING;
-    `);
-
-    console.log(`✅ [${dbName}] 17 Tables and Seeds Successfully Created!`);
+    console.log(`✅ [${dbName}] 17 Tables Successfully Migrated!`);
     await client.end();
   } catch (err) {
     console.error(`❌ [${dbName}] Migration Warning:`, err.message);

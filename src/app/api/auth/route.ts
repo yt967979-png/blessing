@@ -78,6 +78,19 @@ export async function POST(request: Request) {
         );
       }
 
+      // Verify email has been verified via OTP in Railway PostgreSQL
+      const otpCheck = await client.query(
+        'SELECT verified FROM email_otps WHERE LOWER(email) = $1 AND verified = TRUE',
+        [cleanEmail]
+      );
+      if (otpCheck.rows.length === 0) {
+        await client.end();
+        return NextResponse.json(
+          { error: 'Email address has not been verified. Please send and verify OTP code first.' },
+          { status: 403 }
+        );
+      }
+
       const userId = `usr-${Date.now()}`;
       const userName = String(name).trim();
       const userPhone = String(phone || '').trim();
