@@ -22,6 +22,7 @@ import {
   ShieldCheck,
   Download,
   LogOut,
+  MapPin,
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 
@@ -975,10 +976,10 @@ export default function AdminPage() {
                       </div>
 
                       {/* 8-Stage Milestone Visual Progress Tracker */}
-                      <div className="bg-slate-900/90 border border-slate-700/80 rounded-xl p-3 space-y-2">
+                      <div className="bg-slate-900/90 border border-slate-700/80 rounded-xl p-3.5 space-y-3">
                         <div className="flex justify-between items-center text-[10px] font-extrabold uppercase">
                           <span className="text-slate-400">Order State Progress (Stage {stepIdx + 1} of 8):</span>
-                          <span className="text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30">
+                          <span className="text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded border border-emerald-500/30 font-black">
                             Current: {currentStatus}
                           </span>
                         </div>
@@ -1001,6 +1002,47 @@ export default function AdminPage() {
                               </div>
                             );
                           })}
+                        </div>
+
+                        {/* ST Courier Hub Movement Feed */}
+                        <div className="bg-slate-950 border border-slate-800 rounded-lg p-3 space-y-2 text-[11px]">
+                          <div className="flex justify-between items-center pb-1.5 border-b border-slate-800 text-[10px] uppercase font-extrabold">
+                            <span className="text-amber-400 flex items-center gap-1">
+                              <MapPin className="w-3 h-3 text-amber-400" />
+                              <span>ST COURIER LIVE HUB DISPATCH LOG</span>
+                            </span>
+                            <span className="text-emerald-400 font-mono">
+                              DOCKET: {o.trackingNumber || o.shipmentId}
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-slate-300">
+                            <div className="bg-slate-900/80 p-2 rounded-md border border-slate-800">
+                              <span className="text-[9px] text-slate-400 font-bold uppercase block">Origin Hub Dispatch:</span>
+                              <span className="font-bold text-white block truncate">Chennai Central Hub</span>
+                              <span className="text-[10px] text-emerald-400">✓ Packaged &amp; Handed to Courier</span>
+                            </div>
+
+                            <div className="bg-slate-900/80 p-2 rounded-md border border-slate-800">
+                              <span className="text-[9px] text-slate-400 font-bold uppercase block">Transit Destination Hub:</span>
+                              <span className="font-bold text-amber-300 block truncate">
+                                {o.city ? `${o.city} Sorting Hub` : 'Regional Sorting Hub'}
+                              </span>
+                              <span className="text-[10px] text-slate-400">
+                                {stepIdx >= 5 ? '✓ Arrived &amp; Dispatched' : '⏳ In Transit via Express Road'}
+                              </span>
+                            </div>
+
+                            <div className="bg-slate-900/80 p-2 rounded-md border border-slate-800">
+                              <span className="text-[9px] text-slate-400 font-bold uppercase block">Final Delivery Hub:</span>
+                              <span className="font-bold text-white block truncate">
+                                {o.city ? `${o.city} Local Branch` : 'Local Delivery Hub'}
+                              </span>
+                              <span className="text-[10px] text-blue-400">
+                                {stepIdx >= 7 ? '✅ Delivered to Student' : stepIdx >= 6 ? '🛵 Out for Delivery' : '⏳ Pending Arrival'}
+                              </span>
+                            </div>
+                          </div>
                         </div>
                       </div>
 
