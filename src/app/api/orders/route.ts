@@ -349,20 +349,13 @@ export async function PATCH(request: NextRequest) {
         } catch (_) {}
 
         if (phone) {
-          const originUrl = new URL(request.url).origin;
-          fetch(`${originUrl}/api/whatsapp`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              step: newStatus,
-              customerPhone: phone,
-              customerName: customerName,
-              orderId: orderRow.order_number || orderId,
-              totalAmount: orderRow.total_amount || 0,
-              trackingNumber: awbNumber || orderRow.awb_number || 'STC-TN-EXPRESS',
-              trackingUrl: trackingUrl || orderRow.tracking_url,
-            }),
-          }).catch(() => {});
+          try {
+            const { sendWhatsAppMessageInProcess } = await import('@/lib/whatsapp');
+            const message = `*BLESSING POWER GUIDE*\n*${newStatus.toUpperCase()}*\n\nDear *${customerName}*,\nYour order status has been updated to: *${newStatus}*.\n\n📦 *Order ID:* ${orderRow.order_number || orderId}\n🚚 *Partner:* ST Courier Express\n📍 *Docket AWB:* ${awbNumber || orderRow.awb_number || 'Pending'}\n\n👉 *Track Live:* https://blessing-production.up.railway.app/profile`;
+            await sendWhatsAppMessageInProcess(phone, message);
+          } catch (waErr: any) {
+            console.error('In-process WhatsApp dispatch error in PATCH /api/orders:', waErr.message);
+          }
         }
       }
     } catch (waErr) {
