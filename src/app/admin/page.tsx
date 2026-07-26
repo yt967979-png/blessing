@@ -92,6 +92,7 @@ export default function AdminPage() {
   // Live Orders from Database
   const [orders, setOrders] = useState<any[]>([]);
   const [shiprocketAwbInput, setShiprocketAwbInput] = useState<{ [orderId: string]: string }>({});
+  const [dispatchingOrderIds, setDispatchingOrderIds] = useState<{ [orderId: string]: boolean }>({});
   const [dbStats, setDbStats] = useState({ users: 0, books: 0 });
   const [orderStatuses, setOrderStatuses] = useState<{ [orderId: string]: string }>({});
 
@@ -1092,6 +1093,7 @@ export default function AdminPage() {
                           />
 
                           <button
+                            disabled={!!dispatchingOrderIds[o.orderId]}
                             onClick={async () => {
                               const inputVal = (shiprocketAwbInput[o.orderId] ?? (o.trackingNumber && !o.trackingNumber.startsWith('SHP-') ? o.trackingNumber : '')).trim();
                               if (!inputVal) {
@@ -1100,33 +1102,51 @@ export default function AdminPage() {
                               }
                               const awb = inputVal;
 
+                              setDispatchingOrderIds((prev) => ({ ...prev, [o.orderId]: true }));
                               showToast('⏳ Validating ST Courier Docket AWB format...');
-                              const verifyRes = await fetch(`/api/courier/track?docket=${encodeURIComponent(awb)}`);
-                              const verifyData = await verifyRes.json();
 
-                              const isPositivelyVerified = verifyRes.ok && verifyData.isValid === true && verifyData.verified === true;
+                              try {
+                                const verifyRes = await fetch(`/api/courier/track?docket=${encodeURIComponent(awb)}`);
+                                const verifyData = await verifyRes.json();
 
-                              if (!isPositivelyVerified) {
-                                const reason = verifyData.error || 'ST Courier did not confirm this docket number in their live system.';
-                                showToast(`❌ FAKE/UNVERIFIED DOCKET: ${reason}`);
-                                alert(`⚠️ ST COURIER DOCKET REJECTED!\n\n${reason}\n\nPlease enter an official active ST Courier docket number from your physical booking receipt.`);
-                                return;
+                                const isPositivelyVerified = verifyRes.ok && verifyData.isValid === true && verifyData.verified === true;
+
+                                if (!isPositivelyVerified) {
+                                  const reason = verifyData.error || 'ST Courier did not confirm this docket number in their live system.';
+                                  showToast(`❌ FAKE/UNVERIFIED DOCKET: ${reason}`);
+                                  alert(`⚠️ ST COURIER DOCKET REJECTED!\n\n${reason}\n\nPlease enter an official active ST Courier docket number from your physical booking receipt.`);
+                                  setDispatchingOrderIds((prev) => ({ ...prev, [o.orderId]: false }));
+                                  return;
+                                }
+
+                                showToast('⏳ Dispatching order & linking ST Courier AWB...');
+                                await fetch('/api/orders/timeline', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ orderId: o.orderId, status: 'HANDED_TO_ST_COURIER', awbNumber: awb }),
+                                });
+
+                                showToast(`✅ Order #${o.orderId} Dispatched via ST Courier AWB: ${awb}!`);
+                                loadLiveOrders();
+                              } catch (err: any) {
+                                showToast('❌ Dispatch request error');
+                              } finally {
+                                setDispatchingOrderIds((prev) => ({ ...prev, [o.orderId]: false }));
                               }
-
-                              showToast('⏳ Dispatching order & linking ST Courier AWB...');
-                              await fetch('/api/orders/timeline', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ orderId: o.orderId, status: 'HANDED_TO_ST_COURIER', awbNumber: awb }),
-                              });
-
-                              showToast(`✅ Order #${o.orderId} Dispatched via ST Courier AWB: ${awb}!`);
-                              loadLiveOrders();
                             }}
-                            className="w-full sm:w-auto bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white font-extrabold text-xs px-5 py-2 rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
+                            className="w-full sm:w-auto bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 disabled:opacity-50 text-white font-extrabold text-xs px-5 py-2 rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
                           >
-                            <Truck className="w-3.5 h-3.5 text-amber-300" />
-                            <span>DISPATCH WITH ST COURIER</span>
+                            {dispatchingOrderIds[o.orderId] ? (
+                              <>
+                                <span className="w-3.5 h-3.5 border-2 border-amber-300 border-t-transparent rounded-full animate-spin" />
+                                <span>DISPATCHING...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Truck className="w-3.5 h-3.5 text-amber-300" />
+                                <span>DISPATCH WITH ST COURIER</span>
+                              </>
+                            )}
                           </button>
                         </div>
                       </div>
