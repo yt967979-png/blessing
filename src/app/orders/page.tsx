@@ -79,6 +79,9 @@ function OrdersContent() {
             if (data.length > 0) {
               setSearchedOrderData(data[0]);
               setOrderSearchInput(queryOrderId);
+              if (data[0].trackingNumber && (data[0].trackingNumber.startsWith('STC') || !data[0].trackingNumber.startsWith('SHP-'))) {
+                fetch(`/api/courier/track?docket=${encodeURIComponent(data[0].trackingNumber)}`).catch(() => {});
+              }
             }
           }
         }
@@ -90,6 +93,9 @@ function OrdersContent() {
             setUserOrders(data);
             if (!queryOrderId && data.length > 0) {
               setSearchedOrderData(data[0]);
+              if (data[0].trackingNumber && (data[0].trackingNumber.startsWith('STC') || !data[0].trackingNumber.startsWith('SHP-'))) {
+                fetch(`/api/courier/track?docket=${encodeURIComponent(data[0].trackingNumber)}`).catch(() => {});
+              }
             }
           }
         }
