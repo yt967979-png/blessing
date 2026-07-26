@@ -16,6 +16,7 @@ let sock = null;
 let isConnected = false;
 let latestQr = null;
 let latestQrImage = null;
+let latestPairingCode = null;
 
 async function connectToWhatsApp() {
   const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
@@ -23,6 +24,7 @@ async function connectToWhatsApp() {
   sock = makeWASocket({
     auth: state,
     printQRInTerminal: false,
+    browser: ['Blessing Power Guide', 'Chrome', '1.0.0'],
   });
 
   sock.ev.on('creds.update', saveCreds);
@@ -54,6 +56,7 @@ async function connectToWhatsApp() {
       isConnected = true;
       latestQr = null;
       latestQrImage = null;
+      latestPairingCode = null;
       console.log('\n✅ [BAILEYS FREE WHATSAPP] Connected & Authenticated Successfully!');
       console.log('🚀 Ready to send 100% FREE UNLIMITED WhatsApp notifications with $0 fees!\n');
     }
@@ -72,19 +75,48 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  if (req.method === 'GET' && (req.url === '/status' || req.url === '/api/status')) {
+  const reqUrl = new URL(req.url, `http://127.0.0.1:${PORT}`);
+
+  if (req.method === 'GET' && (reqUrl.pathname === '/status' || reqUrl.pathname === '/api/status')) {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
-      status: isConnected ? 'CONNECTED' : 'DISCONNECTED',
+      status: isConnected ? 'CONNECTED' : latestQrImage ? 'QR_READY' : 'INITIALIZING',
+      connected: isConnected,
       qrAvailable: !!latestQrImage,
       qrImage: latestQrImage,
       qrString: latestQr,
-      message: isConnected ? 'Ready for unlimited free dispatches' : 'Scan QR code to connect',
+      pairingCode: latestPairingCode,
+      message: isConnected ? 'Ready for unlimited free dispatches' : 'Scan QR code or enter pairing code',
     }));
     return;
   }
 
-  if (req.method === 'GET' && (req.url === '/' || req.url === '/qr')) {
+  if (req.method === 'GET' && reqUrl.pathname === '/pair') {
+    const phone = reqUrl.searchParams.get('phone');
+    if (!phone) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Missing phone number query parameter' }));
+      return;
+    }
+
+    try {
+      if (sock && !isConnected) {
+        const cleanPhone = phone.replace(/\D/g, '');
+        const phoneWithCountry = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+        const code = await sock.requestPairingCode(phoneWithCountry);
+        latestPairingCode = code;
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, pairingCode: code }));
+        return;
+      }
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: e.message }));
+      return;
+    }
+  }
+
+  if (req.method === 'GET' && (reqUrl.pathname === '/' || reqUrl.pathname === '/qr')) {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     res.end(`
       <!DOCTYPE html>
@@ -94,11 +126,11 @@ const server = http.createServer(async (req, res) => {
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <style>
           body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0b132b; color: #ffffff; text-align: center; padding: 40px 20px; }
-          .card { background: #1c2541; border: 1px solid #3a506b; max-width: 450px; margin: 0 auto; padding: 30px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+          .card { background: #1c2541; border: 1px solid #3a506b; max-width: 480px; margin: 0 auto; padding: 30px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
           h1 { color: #fbbf24; font-size: 20px; margin-bottom: 8px; }
           p { color: #94a3b8; font-size: 13px; margin-bottom: 20px; }
           .qr-box { background: white; padding: 16px; border-radius: 16px; display: inline-block; margin: 15px 0; }
-          img { width: 220px; height: 220px; display: block; }
+          img { width: 240px; height: 240px; display: block; }
           .badge { display: inline-block; padding: 6px 14px; border-radius: 20px; font-weight: bold; font-size: 12px; }
           .connected { background: #10b981; color: white; }
           .pending { background: #f59e0b; color: #000; }
@@ -118,7 +150,7 @@ const server = http.createServer(async (req, res) => {
       <body>
         <div class="card">
           <h1>BLESSING WHATSAPP BOT LINKER</h1>
-          <p>Scan this QR code with your phone (WhatsApp → Linked Devices) to enable 100% FREE UNLIMITED messaging!</p>
+          <p>Scan this QR code with your phone (WhatsApp → Settings → Linked Devices) to enable 100% FREE UNLIMITED messaging!</p>
           ${isConnected ? `
             <div class="badge connected">✅ WHATSAPP CONNECTED & READY</div>
             <p style="margin-top:15px; color:#10b981; font-weight:bold;">Your WhatsApp account is active! You can now send unlimited order notifications.</p>
@@ -130,7 +162,7 @@ const server = http.createServer(async (req, res) => {
             <p style="font-size:11px; color:#cbd5e1;">Open WhatsApp on your phone → Settings → Linked Devices → Link a Device</p>
           ` : `
             <div class="badge pending">⏳ GENERATING QR CODE...</div>
-            <p style="margin-top:15px;">Please wait 5 seconds and refresh this page.</p>
+            <p style="margin-top:15px;">Please wait 3 seconds and refresh this page.</p>
           `}
         </div>
       </body>
@@ -139,7 +171,7 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  if (req.method === 'POST' && req.url === '/send') {
+  if (req.method === 'POST' && reqUrl.pathname === '/send') {
     let bodyStr = '';
     req.on('data', (chunk) => { bodyStr += chunk; });
     req.on('end', async () => {
