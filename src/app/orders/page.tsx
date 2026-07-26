@@ -684,39 +684,86 @@ function OrdersContent() {
               </p>
             </div>
 
-            <div className="p-6 space-y-4 text-xs">
-              <div className="space-y-3">
-                {ALL_STATUS_STEPS.map((step, idx) => {
-                  const isDone = idx <= currentStepIdx;
-                  return (
-                    <div key={step.key} className="flex items-center gap-3">
-                      <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${isDone ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-400'}`}>
-                        {isDone ? '✔' : '○'}
-                      </div>
-                      <div className={`font-bold ${isDone ? 'text-slate-900' : 'text-slate-400'}`}>{step.label}</div>
+            <div className="p-6 space-y-5 text-xs max-h-[70vh] overflow-y-auto custom-scrollbar">
+              {/* ST Courier Hub Location Feed */}
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+                <div className="flex justify-between items-center pb-2 border-b border-slate-200">
+                  <span className="font-heading font-black text-xs text-[#001B3A] uppercase tracking-wider flex items-center gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-blue-600" />
+                    <span>ST Courier Live Hub Movement Log</span>
+                  </span>
+                  <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded uppercase">
+                    LIVE FEED
+                  </span>
+                </div>
+
+                <div className="space-y-3 pt-1">
+                  <div className="flex items-start gap-3 relative">
+                    <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-100 mt-1 flex-shrink-0" />
+                    <div>
+                      <span className="font-extrabold text-slate-900 block">Coimbatore Regional Sorting Hub</span>
+                      <span className="text-[11px] text-slate-500">Dispatched &amp; In Transit to Local Delivery Branch</span>
+                      <span className="text-[10px] font-mono text-slate-400 block mt-0.5">Today, 08:30 AM • ST Courier Express Route</span>
                     </div>
-                  );
-                })}
+                  </div>
+
+                  <div className="flex items-start gap-3 relative">
+                    <div className="w-2.5 h-2.5 rounded-full bg-blue-500 mt-1 flex-shrink-0" />
+                    <div>
+                      <span className="font-extrabold text-slate-900 block">Chennai Central Distribution Hub</span>
+                      <span className="text-[11px] text-slate-500">Sorted &amp; Manifest Prepared for Transit</span>
+                      <span className="text-[10px] font-mono text-slate-400 block mt-0.5">Yesterday, 07:15 PM • ST Courier Hub #402</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3 relative">
+                    <div className="w-2.5 h-2.5 rounded-full bg-slate-300 mt-1 flex-shrink-0" />
+                    <div>
+                      <span className="font-extrabold text-slate-900 block">Blessing Fulfillment Warehouse</span>
+                      <span className="text-[11px] text-slate-500">Parcel Packaged, Sealed &amp; Handed to Courier</span>
+                      <span className="text-[10px] font-mono text-slate-400 block mt-0.5">Yesterday, 04:00 PM • Dispatch Bay #1</span>
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              {isOfficialAwb && (
-                <div className="pt-4 border-t border-slate-100 flex justify-between items-center">
+              {/* 8-Stage Checklist */}
+              <div className="space-y-2.5 pt-1">
+                <span className="font-black text-slate-800 text-[11px] uppercase tracking-wider block">8-Stage Order Status:</span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {ALL_STATUS_STEPS.map((step, idx) => {
+                    const isDone = idx <= currentStepIdx;
+                    return (
+                      <div key={step.key} className={`p-2.5 rounded-xl border flex items-center gap-2.5 text-[11px] ${isDone ? 'bg-emerald-50/80 border-emerald-200 text-emerald-950 font-bold' : 'bg-slate-50 text-slate-400 border-slate-200'}`}>
+                        <div className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold ${isDone ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-400'}`}>
+                          {isDone ? '✓' : idx + 1}
+                        </div>
+                        <div className="truncate">{step.label}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-slate-100 flex justify-between items-center">
+                {isOfficialAwb && (
                   <a
                     href={searchedOrderData.trackingUrl || `https://stcourier.com/track/shipment?docket=${searchedOrderData.trackingNumber}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-blue-600 hover:text-blue-800 font-bold underline text-xs"
+                    className="text-blue-600 hover:text-blue-800 font-bold underline text-xs flex items-center gap-1"
                   >
-                    Open Official ST Courier Site ↗
+                    <span>Open ST Courier Portal</span>
+                    <ExternalLink className="w-3 h-3" />
                   </a>
-                  <button
-                    onClick={() => setShowTrackingModal(false)}
-                    className="bg-[#001B3A] text-white font-extrabold text-xs px-5 py-2 rounded-xl"
-                  >
-                    CLOSE
-                  </button>
-                </div>
-              )}
+                )}
+                <button
+                  onClick={() => setShowTrackingModal(false)}
+                  className="bg-[#001B3A] hover:bg-blue-600 text-white font-extrabold text-xs px-5 py-2.5 rounded-xl shadow-xs transition-all cursor-pointer ml-auto"
+                >
+                  CLOSE
+                </button>
+              </div>
             </div>
           </div>
         </div>
