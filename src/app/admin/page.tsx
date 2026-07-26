@@ -118,13 +118,36 @@ export default function AdminPage() {
       .catch(() => {});
   }, [activeTab]);
 
-  const handleImageFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        alert('File size exceeds 5MB limit.');
+      if (file.size > 10 * 1024 * 1024) {
+        alert('File size exceeds 10MB limit.');
         return;
       }
+
+      showToast('⏳ Uploading book image...');
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('folder', 'blessing_power_guides');
+
+        const res = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          if (data.url) {
+            setNewImg(data.url);
+            showToast(data.provider === 'cloudinary' ? '☁️ Uploaded to Cloudinary!' : '✓ Image uploaded successfully!');
+            return;
+          }
+        }
+      } catch (_) {}
+
+      // Local fallback
       const reader = new FileReader();
       reader.onloadend = () => {
         if (typeof reader.result === 'string') {

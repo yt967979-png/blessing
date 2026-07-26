@@ -174,6 +174,52 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if ((req.method === 'GET' || req.method === 'POST') && (reqUrl.pathname === '/pair' || reqUrl.pathname === '/api/pair')) {
+    let bodyStr = '';
+    req.on('data', (chunk) => { bodyStr += chunk; });
+    req.on('end', async () => {
+      try {
+        let phoneParam = reqUrl.searchParams.get('phone');
+        if (!phoneParam && bodyStr) {
+          try {
+            const parsed = JSON.parse(bodyStr);
+            phoneParam = parsed.phone;
+          } catch (_) {}
+        }
+
+        const cleanPhone = (phoneParam || '').replace(/\D/g, '');
+        if (!cleanPhone || cleanPhone.length < 10) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Valid phone number is required (min 10 digits)' }));
+          return;
+        }
+
+        if (!sock) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'WhatsApp socket not initialized' }));
+          return;
+        }
+
+        const code = await sock.requestPairingCode(cleanPhone);
+        const formattedCode = code?.match(/.{1,4}/g)?.join('-') || code;
+
+        updateStateFile({
+          status: 'PAIRING_CODE_READY',
+          connected: false,
+          pairingCode: formattedCode,
+          message: `8-Digit Pairing Code Generated for ${cleanPhone}`,
+        });
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, pairingCode: formattedCode }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+    });
+    return;
+  }
+
   if (req.method === 'POST' && reqUrl.pathname === '/send') {
     let bodyStr = '';
     req.on('data', (chunk) => { bodyStr += chunk; });
