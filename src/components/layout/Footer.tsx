@@ -58,20 +58,17 @@ export const Footer = () => {
             QUICK LINKS
           </h4>
           <ul className="space-y-2 font-medium">
-            <li className="hover:text-amber-400 transition-colors cursor-pointer">
-              Home
+            <li>
+              <a href="/" className="hover:text-amber-400 transition-colors">Home</a>
             </li>
-            <li className="hover:text-amber-400 transition-colors cursor-pointer">
-              Books & Guides
+            <li>
+              <a href="/search" className="hover:text-amber-400 transition-colors">Search Catalog</a>
             </li>
-            <li className="hover:text-amber-400 transition-colors cursor-pointer">
-              6th - 12th Guides
+            <li>
+              <a href="/search?category=combo" className="hover:text-amber-400 transition-colors">Combo Offers</a>
             </li>
-            <li className="hover:text-amber-400 transition-colors cursor-pointer">
-              Combo Offers
-            </li>
-            <li className="hover:text-amber-400 transition-colors cursor-pointer">
-              About Us
+            <li>
+              <a href="/orders" className="hover:text-amber-400 transition-colors">My Orders & Tracking</a>
             </li>
           </ul>
         </div>
@@ -82,20 +79,17 @@ export const Footer = () => {
             HELP & POLICIES
           </h4>
           <ul className="space-y-2 font-medium">
-            <li className="hover:text-amber-400 transition-colors cursor-pointer">
-              Frequently Asked Questions
+            <li>
+              <a href="/shipping-policy" className="hover:text-amber-400 transition-colors">Shipping & Delivery Policy</a>
             </li>
-            <li className="hover:text-amber-400 transition-colors cursor-pointer">
-              Shipping & Delivery Policy
+            <li>
+              <a href="/shipping-policy" className="hover:text-amber-400 transition-colors">Return & Refund Policy</a>
             </li>
-            <li className="hover:text-amber-400 transition-colors cursor-pointer">
-              Return & Refund Policy
+            <li>
+              <a href="/privacy-policy" className="hover:text-amber-400 transition-colors">Privacy Policy</a>
             </li>
-            <li className="hover:text-amber-400 transition-colors cursor-pointer">
-              Privacy Policy
-            </li>
-            <li className="hover:text-amber-400 transition-colors cursor-pointer">
-              Terms & Conditions
+            <li>
+              <a href="/terms-of-service" className="hover:text-amber-400 transition-colors">Terms & Conditions</a>
             </li>
           </ul>
         </div>

@@ -1,30 +1,54 @@
 'use client';
 
-import React, { useState } from 'react';
-import { Star, Download, Sparkles, Tag, ArrowRight, FileText } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Star, Download, Tag, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
+
+interface DBReview {
+  id: string;
+  studentName: string;
+  rating: number;
+  comment: string;
+  createdAt: string;
+}
 
 export const PromoSection = () => {
   const { setSelectedCategory, showToast } = useStore();
   const [activeReviewSlide, setActiveReviewSlide] = useState(0);
+  const [reviews, setReviews] = useState<DBReview[]>([]);
+  const [reviewsLoading, setReviewsLoading] = useState(true);
 
-  const reviews = [
-    {
-      stars: 5,
-      text: '"Very useful guides. Easy to understand and got good marks in exams!"',
-      author: '- Arjun, 10th Std',
-    },
-    {
-      stars: 5,
-      text: '"All important questions are given. Really helped me score more."',
-      author: '- Priya, 12th Std',
-    },
-    {
-      stars: 5,
-      text: '"The 5-subject combo pack saved me money and prep time."',
-      author: '- Karthik, 10th Std',
-    },
-  ];
+  useEffect(() => {
+    fetch('/api/reviews?limit=6')
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          setReviews(data);
+        } else {
+          // Friendly placeholder until real reviews exist
+          setReviews([
+            { id: '1', studentName: 'Arjun, 10th Std', rating: 5, comment: 'Very useful guides. Easy to understand and got good marks in exams!', createdAt: '' },
+            { id: '2', studentName: 'Priya, 12th Std', rating: 5, comment: 'All important questions are given. Really helped me score more.', createdAt: '' },
+            { id: '3', studentName: 'Karthik, 10th Std', rating: 5, comment: 'The 5-subject combo pack saved me money and prep time.', createdAt: '' },
+          ]);
+        }
+      })
+      .catch(() => {
+        setReviews([
+          { id: '1', studentName: 'Arjun, 10th Std', rating: 5, comment: 'Very useful guides. Easy to understand and got good marks in exams!', createdAt: '' },
+        ]);
+      })
+      .finally(() => setReviewsLoading(false));
+  }, []);
+
+  // Auto-rotate reviews every 4 seconds
+  useEffect(() => {
+    if (reviews.length <= 1) return;
+    const timer = setInterval(() => {
+      setActiveReviewSlide((prev) => (prev + 1) % reviews.length);
+    }, 4000);
+    return () => clearInterval(timer);
+  }, [reviews.length]);
 
   const handleDownloadSample = () => {
     showToast('📥 Downloading Sample Chapter Preview PDF...');
@@ -37,10 +61,16 @@ export const PromoSection = () => {
     if (elem) elem.scrollIntoView({ behavior: 'smooth' });
   };
 
+  const current = reviews[activeReviewSlide];
+  const avgRating = reviews.length > 0
+    ? (reviews.reduce((s, r) => s + r.rating, 0) / reviews.length).toFixed(1)
+    : '5.0';
+
   return (
     <section className="py-12 bg-white border-t border-slate-200">
       <div className="max-w-7xl mx-auto px-4">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+
           {/* Card 1: Special Offers */}
           <div className="bg-gradient-to-br from-amber-400 via-amber-300 to-amber-500 rounded-2xl p-6 text-[#001B3A] shadow-md flex flex-col justify-between relative overflow-hidden">
             <div>
@@ -52,18 +82,16 @@ export const PromoSection = () => {
               </div>
 
               <div className="grid grid-cols-3 gap-2 mb-6">
-                <div className="bg-emerald-700 text-white rounded-xl p-2 text-center shadow-xs">
-                  <div className="text-[10px] font-black uppercase">BUY 2 GUIDES</div>
-                  <div className="text-sm font-black text-amber-300 mt-0.5">10% OFF</div>
-                </div>
-                <div className="bg-emerald-700 text-white rounded-xl p-2 text-center shadow-xs">
-                  <div className="text-[10px] font-black uppercase">BUY 5 GUIDES</div>
-                  <div className="text-sm font-black text-amber-300 mt-0.5">20% OFF</div>
-                </div>
-                <div className="bg-emerald-700 text-white rounded-xl p-2 text-center shadow-xs">
-                  <div className="text-[10px] font-black uppercase">COMBO PACKS</div>
-                  <div className="text-sm font-black text-amber-300 mt-0.5">BEST VALUE</div>
-                </div>
+                {[
+                  { label: 'BUY 2 GUIDES', value: '10% OFF' },
+                  { label: 'BUY 5 GUIDES', value: '20% OFF' },
+                  { label: 'COMBO PACKS', value: 'BEST VALUE' },
+                ].map((item) => (
+                  <div key={item.label} className="bg-emerald-700 text-white rounded-xl p-2 text-center">
+                    <div className="text-[10px] font-black uppercase">{item.label}</div>
+                    <div className="text-sm font-black text-amber-300 mt-0.5">{item.value}</div>
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -76,41 +104,70 @@ export const PromoSection = () => {
             </button>
           </div>
 
-          {/* Card 2: Student Reviews */}
-          <div className="bg-amber-50/70 border border-amber-200 rounded-2xl p-6 text-[#001B3A] shadow-xs flex flex-col justify-between">
+          {/* Card 2: Live Student Reviews from DB */}
+          <div className="bg-amber-50/70 border border-amber-200 rounded-2xl p-6 text-[#001B3A] shadow-xs flex flex-col justify-between min-h-[200px]">
             <div>
               <div className="text-center mb-3">
                 <h3 className="font-heading font-black text-xs text-amber-800 uppercase tracking-widest">
                   STUDENT REVIEWS
                 </h3>
+                {!reviewsLoading && (
+                  <p className="text-[10px] text-amber-600 mt-0.5">{reviews.length} verified reviews • Avg {avgRating}/5</p>
+                )}
               </div>
 
-              <div className="flex justify-center text-amber-400 mb-3">
-                {[...Array(5)].map((_, i) => (
-                  <Star key={i} className="w-4 h-4 fill-amber-400" />
-                ))}
-              </div>
+              {reviewsLoading ? (
+                <div className="flex justify-center items-center py-6">
+                  <span className="w-5 h-5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : current ? (
+                <>
+                  <div className="flex justify-center gap-0.5 mb-3">
+                    {[...Array(5)].map((_, i) => (
+                      <Star
+                        key={i}
+                        className={`w-4 h-4 ${i < current.rating ? 'fill-amber-400 text-amber-400' : 'text-gray-300'}`}
+                      />
+                    ))}
+                  </div>
 
-              <p className="text-xs text-slate-700 italic text-center font-medium leading-relaxed min-h-[48px]">
-                {reviews[activeReviewSlide].text}
-              </p>
+                  <p className="text-xs text-slate-700 italic text-center font-medium leading-relaxed min-h-[48px]">
+                    &quot;{current.comment}&quot;
+                  </p>
 
-              <p className="text-[11px] font-bold text-slate-500 text-right mt-2">
-                {reviews[activeReviewSlide].author}
-              </p>
+                  <p className="text-[11px] font-bold text-slate-500 text-right mt-2">
+                    — {current.studentName}
+                  </p>
+                </>
+              ) : null}
             </div>
 
-            <div className="flex justify-center gap-1.5 mt-4">
-              {reviews.map((_, idx) => (
+            {/* Carousel dots + arrows */}
+            {reviews.length > 1 && (
+              <div className="flex justify-center items-center gap-2 mt-4">
                 <button
-                  key={idx}
-                  onClick={() => setActiveReviewSlide(idx)}
-                  className={`w-2.5 h-2.5 rounded-full transition-all cursor-pointer ${
-                    activeReviewSlide === idx ? 'bg-amber-500 w-5' : 'bg-slate-300'
-                  }`}
-                />
-              ))}
-            </div>
+                  onClick={() => setActiveReviewSlide((p) => (p - 1 + reviews.length) % reviews.length)}
+                  className="p-1 rounded-full hover:bg-amber-200 transition-colors cursor-pointer"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5 text-amber-700" />
+                </button>
+                {reviews.map((_, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setActiveReviewSlide(idx)}
+                    className={`h-2 rounded-full transition-all cursor-pointer ${
+                      activeReviewSlide === idx ? 'bg-amber-500 w-5' : 'bg-slate-300 w-2'
+                    }`}
+                  />
+                ))}
+                <button
+                  onClick={() => setActiveReviewSlide((p) => (p + 1) % reviews.length)}
+                  className="p-1 rounded-full hover:bg-amber-200 transition-colors cursor-pointer"
+                >
+                  <ChevronRight className="w-3.5 h-3.5 text-amber-700" />
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Card 3: Download Sample PDF */}

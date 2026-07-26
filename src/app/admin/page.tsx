@@ -1,100 +1,125 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, startTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  LayoutDashboard,
-  Package,
-  ShoppingCart,
-  Users,
-  DollarSign,
-  ArrowLeft,
-  Edit2,
-  Check,
-  Power,
-  Plus,
-  Trash2,
-  BookOpen,
-  Upload,
-  MessageSquare,
-  Truck,
-  Send,
-  ShieldCheck,
-  Download,
-  LogOut,
-  MapPin,
-  X,
-  Search,
-  RefreshCw,
-  ChevronRight,
-  Eye,
-  MoreVertical,
-  TrendingUp,
-  IndianRupee,
-  Box,
-  Clock,
-  CheckCircle2,
-  Circle,
-  ArrowRight,
+  Package, ShoppingCart, Users, ArrowLeft, Edit2, Check,
+  Plus, Trash2, MessageSquare, Truck, Send, ShieldCheck,
+  Download, X, Search, RefreshCw, TrendingUp, IndianRupee,
+  Box, Clock, CheckCircle2, LogOut, BarChart2,
+  CreditCard, Banknote, Smartphone, Star, AlertCircle,
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 
+// ─── Types ───────────────────────────────────────────────────────────────────
+interface OrderItem { title: string; qty: number; price?: number; subtotal?: number; }
+interface Order {
+  orderId: string; id: string; customerName: string; customerPhone: string;
+  address: string; city: string; pincode: string; totalAmount: number;
+  paymentMethod: string; paymentStatus: string; courierStatus: string;
+  trackingNumber: string; shipmentId: string; isOfficialAwb: boolean;
+  trackingUrl: string; courierName: string; items: OrderItem[]; createdAt: string;
+}
+interface AnalyticsSummary {
+  totalOrders: number; totalRevenue: number; avgOrderValue: number;
+  paidOrders: number; codOrders: number; todayOrders: number; todayRevenue: number;
+}
+interface DailyPoint { day: string; orders: number; revenue: number; onlineRevenue: number; codRevenue: number; }
+interface MethodBreakdown { method: string; count: number; revenue: number; }
+interface StatusBreakdown { status: string; count: number; revenue: number; }
+interface TopProduct { title: string; totalQty: number; totalRevenue: number; orderCount: number; }
+interface Analytics {
+  summary: AnalyticsSummary; daily: DailyPoint[]; paymentMethods: MethodBreakdown[];
+  orderStatuses: StatusBreakdown[]; paymentStatuses: StatusBreakdown[];
+  topProducts: TopProduct[]; monthlyTrend: { month: string; orders: number; revenue: number }[];
+  range: number;
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+const fmt = (n: number) => `₹${n.toLocaleString('en-IN')}`;
+const pct = (part: number, total: number) => total > 0 ? Math.round((part / total) * 100) : 0;
+
+function MiniBar({ value, max, color = 'bg-blue-500' }: { value: number; max: number; color?: string }) {
+  const w = max > 0 ? Math.round((value / max) * 100) : 0;
+  return (
+    <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden w-full">
+      <div className={`h-full ${color} rounded-full transition-all duration-500`} style={{ width: `${w}%` }} />
+    </div>
+  );
+}
+
+// Simple SVG bar chart — no external dependency
+function SimpleBarChart({ data, height = 120 }: { data: DailyPoint[]; height?: number }) {
+  if (!data.length) return <div className="flex items-center justify-center h-28 text-xs text-gray-400">No data yet</div>;
+  const maxRev = Math.max(...data.map((d) => d.revenue), 1);
+  const barW = Math.max(4, Math.min(28, Math.floor(560 / data.length) - 3));
+  const gap = Math.max(2, Math.floor(560 / data.length) - barW);
+  return (
+    <div className="w-full overflow-x-auto pb-1">
+      <svg width={Math.max(data.length * (barW + gap), 300)} height={height + 28} className="block">
+        {data.map((d, i) => {
+          const barH = Math.max(2, Math.round((d.revenue / maxRev) * height));
+          const x = i * (barW + gap);
+          const y = height - barH;
+          const isToday = i === data.length - 1;
+          return (
+            <g key={d.day}>
+              <rect x={x} y={y} width={barW} height={barH}
+                rx={3} fill={isToday ? '#2874f0' : '#bfdbfe'} className="transition-all" />
+              <title>{d.day}: {fmt(d.revenue)} ({d.orders} orders)</title>
+              {i % Math.max(1, Math.floor(data.length / 7)) === 0 && (
+                <text x={x + barW / 2} y={height + 16} textAnchor="middle"
+                  fontSize={9} fill="#9ca3af">
+                  {new Date(d.day).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                </text>
+              )}
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
 export default function AdminPage() {
   const router = useRouter();
   const { user, setIsAuthOpen, products, updateProductInDb, addNewProductToDb, deleteProductFromDb, showToast, logoutUser } = useStore();
-  const [activeTab, setActiveTab] = useState<'catalog' | 'orders' | 'whatsapp'>('orders');
+
+  type Tab = 'analytics' | 'orders' | 'catalog' | 'whatsapp';
+  const [activeTab, setActiveTab] = useState<Tab>('analytics');
+
+  // ── WhatsApp state
   const [waStatus, setWaStatus] = useState<{ status: string; connected?: boolean; qrImage?: string; pairingCode?: string; message?: string }>({ status: 'LOADING', connected: false });
   const [waPhoneInput, setWaPhoneInput] = useState('');
   const [waPairingCode, setWaPairingCode] = useState<string | null>(null);
 
-  // Check if current logged-in user has Admin privileges
-  const isAdmin = !!user && (user.role === 'admin' || (user.email && user.email.toLowerCase().includes('admin')));
+  // ── Orders state
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  const [shiprocketAwbInput, setShiprocketAwbInput] = useState<Record<string, string>>({});
+  const [dispatchingOrderIds, setDispatchingOrderIds] = useState<Record<string, boolean>>({});
+  const [dbStats, setDbStats] = useState({ users: 0, books: 0 });
 
-  // Poll WhatsApp service status from Next.js internal API
-  useEffect(() => {
-    const fetchWaStatus = async () => {
-      try {
-        const res = await fetch('/api/whatsapp/qr');
-        if (res.ok) {
-          const data = await res.json();
-          setWaStatus(data);
-        }
-      } catch (e) {
-        setWaStatus({ status: 'INITIALIZING', message: 'WhatsApp Engine Initializing...' });
-      }
-    };
-    fetchWaStatus();
-    const interval = setInterval(fetchWaStatus, 3000);
-    return () => clearInterval(interval);
-  }, []);
+  // ── Orders filter state
+  const [orderSearch, setOrderSearch] = useState('');
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [filterPayment, setFilterPayment] = useState('all');
+  const [filterDateFrom, setFilterDateFrom] = useState('');
+  const [filterDateTo, setFilterDateTo] = useState('');
 
-  const handleRequestPairingCode = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!waPhoneInput) return;
-    showToast('⏳ Generating 8-Digit Pairing Code...');
-    try {
-      const res = await fetch(`/api/whatsapp/qr?phone=${encodeURIComponent(waPhoneInput)}`);
-      const data = await res.json();
-      if (data.pairingCode) {
-        setWaPairingCode(data.pairingCode);
-        showToast(`✅ Pairing Code: ${data.pairingCode}`);
-      } else if (data.error) {
-        showToast(`⚠️ ${data.error}`);
-      }
-    } catch (e) {
-      showToast('❌ Error generating pairing code.');
-    }
-  };
+  // ── Analytics state
+  const [analytics, setAnalytics] = useState<Analytics | null>(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [analyticsRange, setAnalyticsRange] = useState(30);
+
+  // ── Catalog edit state
   const [editingId, setEditingId] = useState<string | number | null>(null);
-
-  // Edit form state
   const [editPrice, setEditPrice] = useState(0);
   const [editMrp, setEditMrp] = useState(0);
   const [editBadge, setEditBadge] = useState('');
   const [editBadgeEnabled, setEditBadgeEnabled] = useState(true);
   const [editDiscountEnabled, setEditDiscountEnabled] = useState(true);
-
-  // New product form state
   const [showAddForm, setShowAddForm] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newCls, setNewCls] = useState('10th');
@@ -106,1085 +131,743 @@ export default function AdminPage() {
   const [newDiscountEnabled, setNewDiscountEnabled] = useState(true);
   const [newImg, setNewImg] = useState('https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80');
 
-  // Live Orders from Database
-  const [orders, setOrders] = useState<any[]>([]);
-  const [shiprocketAwbInput, setShiprocketAwbInput] = useState<{ [orderId: string]: string }>({});
-  const [dispatchingOrderIds, setDispatchingOrderIds] = useState<{ [orderId: string]: boolean }>({});
-  const [dbStats, setDbStats] = useState({ users: 0, books: 0 });
-  const [orderStatuses, setOrderStatuses] = useState<{ [orderId: string]: string }>({});
+  const isAdmin = !!user && (user.role === 'admin' || (user.email && user.email.toLowerCase().includes('admin')));
 
-  const loadLiveOrders = async () => {
+  // ── Data loaders
+  const loadLiveOrders = useCallback(async () => {
     if (!user?.id) return;
+    setOrdersLoading(true);
     try {
       const res = await fetch(`/api/orders?adminUserId=${encodeURIComponent(String(user.id))}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data)) setOrders(data);
-      }
-    } catch (err) {
-      console.warn('Orders API offline');
-    }
-  };
+      if (res.ok) { const data = await res.json(); if (Array.isArray(data)) setOrders(data); }
+    } catch {
+      // network error — silently ignore
+    } finally { setOrdersLoading(false); }
+  }, [user]);
 
+  const loadAnalytics = useCallback(async () => {
+    if (!user?.id) return;
+    setAnalyticsLoading(true);
+    try {
+      const res = await fetch(`/api/admin/analytics?adminUserId=${encodeURIComponent(String(user.id))}&range=${analyticsRange}`);
+      if (res.ok) { const data = await res.json(); setAnalytics(data); }
+    } catch {
+      // network error — silently ignore
+    } finally { setAnalyticsLoading(false); }
+  }, [user, analyticsRange]);
+
+  // ── Initial load + SSE stream
   useEffect(() => {
-    loadLiveOrders();
-
-    // Firebase-style Instant Real-Time Order Stream
-    let eventSource: EventSource | null = null;
+    startTransition(() => { void loadLiveOrders(); void loadAnalytics(); });
+    let es: EventSource | null = null;
     try {
-      eventSource = new EventSource('/api/orders/stream');
-      eventSource.onmessage = (event) => {
+      es = new EventSource('/api/orders/stream');
+      es.onmessage = (e) => {
         try {
-          const payload = JSON.parse(event.data);
-          if (payload.type === 'ORDER_UPDATED') {
-            loadLiveOrders();
-          }
-        } catch (_) {}
+          const p = JSON.parse(e.data) as { type: string };
+          if (p.type === 'ORDER_UPDATED') { startTransition(() => { void loadLiveOrders(); void loadAnalytics(); }); }
+        } catch { /* ignore parse errors */ }
       };
-    } catch (_) {}
-
-    // Backup polling every 12 seconds
-    const interval = setInterval(loadLiveOrders, 12000);
-
-    // Load live DB stats for users + books
-    fetch('/api/db-status')
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.tableRowCounts) {
-          setDbStats({
-            users: d.tableRowCounts.users || 0,
-            books: d.tableRowCounts.books || 0,
-          });
-        }
-      })
-      .catch(() => {});
-
-    return () => {
-      clearInterval(interval);
-      if (eventSource) eventSource.close();
-    };
-  }, [activeTab]);
-
-  const handleImageFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 10 * 1024 * 1024) {
-        alert('File size exceeds 10MB limit.');
-        return;
+    } catch { /* SSE not supported */ }
+    const interval = setInterval(() => { void loadLiveOrders(); }, 15000);
+    fetch('/api/db-status').then((r) => r.json()).then((d: { tableRowCounts?: { users?: number; books?: number } }) => {
+      if (d.tableRowCounts) {
+        const u = d.tableRowCounts.users || 0;
+        const b = d.tableRowCounts.books || 0;
+        setTimeout(() => setDbStats({ users: u, books: b }), 0);
       }
+    }).catch(() => {});
+    return () => { clearInterval(interval); if (es) es.close(); };
+  }, [loadLiveOrders, loadAnalytics]);
 
-      showToast('⏳ Uploading book image...');
+  // Reload analytics when range changes
+  useEffect(() => { if (activeTab === 'analytics') startTransition(() => { void loadAnalytics(); }); }, [analyticsRange, activeTab, loadAnalytics]);
+
+  // WhatsApp polling
+  useEffect(() => {
+    const fetchWa = async () => {
       try {
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('folder', 'blessing_power_guides');
-
-        const res = await fetch('/api/upload', {
-          method: 'POST',
-          body: formData,
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          if (data.url) {
-            setNewImg(data.url);
-            showToast(data.provider === 'cloudinary' ? '☁️ Uploaded to Cloudinary!' : '✓ Image uploaded successfully!');
-            return;
-          }
+        const r = await fetch('/api/whatsapp/qr');
+        if (r.ok) {
+          const data = await r.json();
+          setWaStatus(data);
         }
-      } catch (_) {}
+      } catch {
+        setWaStatus({ status: 'INITIALIZING' });
+      }
+    };
+    fetchWa();
+    const iv = setInterval(fetchWa, 5000);
+    return () => clearInterval(iv);
+  }, []);
 
-      // Local fallback
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        if (typeof reader.result === 'string') {
-          setNewImg(reader.result);
-          showToast('✓ Image uploaded successfully!');
-        }
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const startEditing = (p: any) => {
-    setEditingId(p.id);
-    setEditPrice(p.price);
-    setEditMrp(p.mrp);
-    setEditBadge(p.badge || '');
-    setEditBadgeEnabled(!!p.badge);
-    setEditDiscountEnabled(p.price < p.mrp);
-  };
-
-  const saveProductChanges = async (id: string | number) => {
-    const finalPrice = editDiscountEnabled ? editPrice : editMrp;
-    const finalBadge = editBadgeEnabled ? (editBadge.trim() || 'BESTSELLER') : '';
-    const calculatedDiscount = Math.round(((editMrp - finalPrice) / editMrp) * 100);
-
-    // Save to Railway PostgreSQL via API
-    try {
-      await fetch('/api/products', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, price: finalPrice, mrp: editMrp, badge: finalBadge }),
-      });
-    } catch (_) {}
-
-    // Also update local products state via StoreContext
-    updateProductInDb(id, {
-      price: Number(finalPrice),
-      mrp: Number(editMrp),
-      discount: calculatedDiscount > 0 ? calculatedDiscount : 0,
-      badge: finalBadge,
+  // ── Filtered orders
+  const filteredOrders = useMemo(() => {
+    return orders.filter((o) => {
+      if (filterStatus !== 'all' && (o.courierStatus || '').toLowerCase() !== filterStatus.toLowerCase()) return false;
+      if (filterPayment !== 'all') {
+        const pm = (o.paymentMethod || '').toLowerCase();
+        if (filterPayment === 'cod' && !pm.includes('cod')) return false;
+        if (filterPayment === 'online' && pm.includes('cod')) return false;
+      }
+      if (orderSearch.trim()) {
+        const q = orderSearch.toLowerCase();
+        const hit = (o.orderId || '').toLowerCase().includes(q)
+          || (o.customerName || '').toLowerCase().includes(q)
+          || (o.customerPhone || '').includes(q)
+          || (o.city || '').toLowerCase().includes(q);
+        if (!hit) return false;
+      }
+      if (filterDateFrom) {
+        const from = new Date(filterDateFrom).getTime();
+        const orderDate = new Date(o.createdAt || 0).getTime();
+        if (orderDate < from) return false;
+      }
+      if (filterDateTo) {
+        const to = new Date(filterDateTo).getTime() + 86400000;
+        const orderDate = new Date(o.createdAt || 0).getTime();
+        if (orderDate > to) return false;
+      }
+      return true;
     });
-    setEditingId(null);
-    showToast(`✅ Product #${id} updated to ₹${finalPrice} — saved securely to Railway PostgreSQL!`);
-  };
+  }, [orders, filterStatus, filterPayment, orderSearch, filterDateFrom, filterDateTo]);
 
+  const totalRevenue = orders.reduce((s, o) => s + Number(o.totalAmount || 0), 0);
+  const uniqueStatuses = useMemo(() => ['all', ...Array.from(new Set(orders.map((o) => o.courierStatus).filter(Boolean)))], [orders]);
+
+  // ── Catalog handlers
+  const startEditing = (p: { id: string | number; price: number; mrp: number; badge?: string }) => { setEditingId(p.id); setEditPrice(p.price); setEditMrp(p.mrp); setEditBadge(p.badge || ''); setEditBadgeEnabled(!!p.badge); setEditDiscountEnabled(p.price < p.mrp); };
+  const saveProductChanges = async (id: string | number) => {
+    const fp = editDiscountEnabled ? editPrice : editMrp;
+    const fb = editBadgeEnabled ? (editBadge.trim() || 'BESTSELLER') : '';
+    try { await fetch('/api/products', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, price: fp, mrp: editMrp, badge: fb }) }); } catch (_) {}
+    updateProductInDb(id, { price: Number(fp), mrp: Number(editMrp), discount: Math.round(((editMrp - fp) / editMrp) * 100), badge: fb });
+    setEditingId(null); showToast(`✅ Product updated`);
+  };
   const handleCreateProduct = (e: React.FormEvent) => {
     e.preventDefault();
-    const finalPrice = newDiscountEnabled ? Number(newPrice) : Number(newMrp);
-    const finalBadge = newBadgeEnabled ? (newBadge.trim() || 'BESTSELLER') : '';
-    const calculatedDiscount = Math.round(((newMrp - finalPrice) / newMrp) * 100);
-
-    addNewProductToDb({
-      title: newTitle,
-      cls: newCls,
-      category: newCat,
-      price: finalPrice,
-      mrp: Number(newMrp),
-      discount: calculatedDiscount > 0 ? calculatedDiscount : 0,
-      badge: finalBadge,
-      image: newImg,
-      description: `Complete ${newCls} Standard ${newTitle} for State Board / CBSE exams.`,
-    });
-    setShowAddForm(false);
-    setNewTitle('');
-    showToast('🎉 New Guide Book created & saved directly to Railway PostgreSQL Database!');
+    const fp = newDiscountEnabled ? Number(newPrice) : Number(newMrp);
+    addNewProductToDb({ title: newTitle, cls: newCls, category: newCat, price: fp, mrp: Number(newMrp), discount: Math.round(((newMrp - fp) / newMrp) * 100), badge: newBadgeEnabled ? newBadge : '', image: newImg });
+    setShowAddForm(false); setNewTitle(''); showToast('🎉 Product created!');
   };
-
-  const handleDispatchOrder = async (orderId: string, newStatus?: string) => {
-    const trackingNo = (shiprocketAwbInput[orderId] || '').trim();
-    const currentOrderObj = orders.find((o) => o.orderId === orderId);
-    let status = newStatus || orderStatuses[orderId];
-
-    // If admin entered an AWB number, it MUST be positively verified before saving.
-    if (trackingNo) {
-      showToast('⏳ Verifying ST Courier Docket Number with ST Courier Live API...');
-      try {
-        const verifyRes = await fetch(`/api/courier/track?docket=${encodeURIComponent(trackingNo)}`);
-        const verifyData = await verifyRes.json();
-
-        const isPositivelyVerified = verifyRes.ok && verifyData.isValid === true && verifyData.verified === true;
-
-        if (!isPositivelyVerified) {
-          const reason = verifyData.error
-            ?? (verifyData.scrapeInconclusive
-              ? `ST Courier's tracking page returned no readable data for "${trackingNo}". Please check the docket on your booking receipt.`
-              : `Docket "${trackingNo}" could not be confirmed in the ST Courier network.`);
-
-          showToast(`❌ DOCKET REJECTED: ${reason}`);
-          alert(
-            `⚠️ ST Courier Docket Verification Failed!\n\n${reason}\n\n` +
-            `Please enter a valid official ST Courier docket number (e.g. STC241568974).\n\n` +
-            (verifyData.trackingUrl ? `You can verify manually at:\n${verifyData.trackingUrl}` : '')
-          );
-          return; // Hard stop — do not save anything
-        }
-
-        // Docket is verified — auto-adopt the live scraped status from ST Courier
-        if (verifyData.status && verifyData.status !== 'Shipped via ST Courier') {
-          status = verifyData.status;
-        } else if (!status) {
-          status = 'Handed to ST Courier';
-        }
-      } catch (err) {
-        showToast('❌ Could not reach the ST Courier verification service. Please check your connection and try again.');
-        alert('❌ Verification Failed\n\nCould not connect to the ST Courier verification service.\nPlease try again before saving the docket number.');
-        return;
-      }
-    }
-
-    if (!status) {
-      status = currentOrderObj?.courierStatus || 'Handed to ST Courier';
-    }
-
-    try {
-      await fetch('/api/orders', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orderId, status, awbNumber: trackingNo }),
-      });
-      showToast(`🔒 Order #${orderId} VERIFIED & LOCKED INTO ST COURIER AUTO-PILOT! Current Status: [${status}].`);
-      loadLiveOrders();
-    } catch (e) {
-      showToast(`✓ Order #${orderId} updated locally.`);
-    }
+  const toggleStock = async (id: string | number, cur: boolean) => {
+    try { await fetch('/api/products', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, inStock: !cur }) }); } catch (_) {}
+    updateProductInDb(id, { inStock: !cur }); showToast('✅ Stock updated');
   };
-
-  const toggleStock = async (id: string | number, currentStock: boolean) => {
-    try {
-      await fetch('/api/products', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, inStock: !currentStock }),
-      });
-    } catch (_) {}
-    updateProductInDb(id, { inStock: !currentStock });
-    showToast(`✅ Stock status updated in Railway PostgreSQL!`);
-  };
-
   const handleDeleteProduct = async (id: string | number) => {
-    if (!confirm('Delete this book from Railway Database permanently?')) return;
+    if (!confirm('Delete this book permanently?')) return;
+    try { await fetch(`/api/products?id=${id}`, { method: 'DELETE' }); } catch (_) {}
+    deleteProductFromDb(id); showToast('🗑️ Book deleted');
+  };
+  const handleImageFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]; if (!file) return;
+    showToast('⏳ Uploading image...');
     try {
-      await fetch(`/api/products?id=${id}`, { method: 'DELETE' });
+      const fd = new FormData(); fd.append('file', file); fd.append('folder', 'blessing_power_guides');
+      const r = await fetch('/api/upload', { method: 'POST', body: fd });
+      if (r.ok) { const d = await r.json(); if (d.url) { setNewImg(d.url); showToast('☁️ Uploaded!'); return; } }
     } catch (_) {}
-    deleteProductFromDb(id);
-    showToast(`🗑️ Book deleted from Railway PostgreSQL!`);
+    const reader = new FileReader(); reader.onloadend = () => { if (typeof reader.result === 'string') { setNewImg(reader.result); showToast('✅ Image ready'); } }; reader.readAsDataURL(file);
   };
 
-  const handleExportOrdersCsv = () => {
-    if (orders.length === 0) {
-      showToast('⚠️ No orders available to export.');
-      return;
-    }
-
-    const headers = ['Order ID', 'Date', 'Customer Name', 'Phone', 'Address', 'City', 'Pincode', 'Total Amount', 'Payment Method', 'Payment Status', 'Courier Status', 'Docket AWB'];
-    const rows = orders.map((o) => [
-      `"${o.orderId || ''}"`,
-      `"${o.createdAt || ''}"`,
-      `"${(o.customerName || '').replace(/"/g, '""')}"`,
-      `"${o.customerPhone || ''}"`,
-      `"${(o.address || '').replace(/"/g, '""')}"`,
-      `"${o.city || ''}"`,
-      `"${o.pincode || ''}"`,
-      `"${o.totalAmount || 0}"`,
-      `"${o.paymentMethod || ''}"`,
-      `"${o.paymentStatus || ''}"`,
-      `"${o.courierStatus || ''}"`,
-      `"${o.trackingNumber || ''}"`,
-    ]);
-
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `blessing_orders_report_${Date.now()}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
-    showToast('📥 Orders CSV exported successfully for accounting & shipping!');
-  };
-
-  const handlePrintShippingLabel = (o: any) => {
-    const printWindow = window.open('', '_blank', 'width=600,height=700');
-    if (!printWindow) return;
-
-    const isCod = (o.paymentMethod || '').toLowerCase().includes('cod');
-    const amountToCollect = isCod ? `₹${o.totalAmount} (CASH ON DELIVERY)` : 'PREPAID (DO NOT COLLECT CASH)';
-
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>ST Courier Label - #${o.orderId}</title>
-          <style>
-            body { font-family: Arial, sans-serif; padding: 20px; max-width: 450px; margin: auto; border: 2.5px solid #000; border-radius: 12px; }
-            .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 15px; }
-            .logo { font-size: 22px; font-weight: 900; letter-spacing: 1px; color: #001B3A; }
-            .courier { font-size: 13px; font-weight: 800; color: #0044AA; margin-top: 2px; }
-            .box { border: 1px solid #000; padding: 10px; margin-bottom: 10px; border-radius: 6px; }
-            .title { font-size: 10px; font-weight: 900; text-transform: uppercase; color: #444; }
-            .bold { font-size: 15px; font-weight: 900; margin-top: 2px; }
-            .cod-badge { font-size: 14px; font-weight: 900; color: #000; background: #fffbeb; padding: 8px; text-align: center; border: 2px dashed #d97706; margin: 12px 0; border-radius: 6px; }
-            .barcode { font-family: monospace; font-size: 18px; font-weight: 900; letter-spacing: 3px; text-align: center; margin: 12px 0; background: #f1f5f9; padding: 8px; border-radius: 4px; }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <div class="logo">BLESSING POWER GUIDE</div>
-            <div class="courier">ST COURIER EXPRESS DISPATCH LABEL</div>
-          </div>
-
-          <div class="barcode">||| #${o.orderId} |||</div>
-
-          <div class="box">
-            <div class="title">DELIVER TO (RECIPIENT):</div>
-            <div class="bold">${o.customerName || 'Customer'}</div>
-            <div style="font-size: 13px; margin-top: 4px;">${o.address || ''} ${o.city ? `, ${o.city}` : ''} ${o.pincode ? `- ${o.pincode}` : ''}</div>
-            <div style="margin-top: 6px; font-size: 13px;"><strong>PHONE:</strong> +91 ${o.customerPhone || ''}</div>
-          </div>
-
-          <div class="box">
-            <div class="title">SHIPMENT DETAILS:</div>
-            <div style="font-size: 12px;"><strong>ST Courier Docket:</strong> ${o.trackingNumber || o.shipmentId || 'SHP-ST-COURIER'}</div>
-            <div style="font-size: 12px;"><strong>Parcel Contents:</strong> ${o.items?.length || 1} Educational Guide Book(s)</div>
-          </div>
-
-          <div class="cod-badge">
-            PAYMENT: ${amountToCollect}
-          </div>
-
-          <div class="box" style="font-size: 11px;">
-            <div class="title">RETURN ADDRESS (SENDER):</div>
-            <div><strong>BLESSING POWER GUIDE PUBLICATIONS</strong></div>
-            <div>Main Express Logistics Hub, Tamil Nadu, India</div>
-            <div>Helpdesk WhatsApp: +91 9842100000</div>
-          </div>
-
-          <script>
-            window.onload = function() { window.print(); window.close(); }
-          </script>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
-  };
-
-  const handleResendWhatsApp = async (o: any) => {
-    let rawPhone = (o.customerPhone || '').replace(/\D/g, '');
-    if (rawPhone.length === 10) rawPhone = '91' + rawPhone;
-    if (!rawPhone) rawPhone = '919840418228';
-
-    const textMsg = `Hello ${o.customerName || 'Student'}! 📚\n\nYour Blessing Power Guide Order #${o.orderId} status has been updated to: *${o.courierStatus || 'Processing'}*.\n\n🚚 ST Courier AWB Docket: *${o.trackingNumber || 'STC241568974'}*\n\nTrack Live: https://stcourier.com/track/shipment?docket=${o.trackingNumber || ''}\n\nThank you for choosing Blessing Power Guide!`;
-
-    const waWebUrl = `https://api.whatsapp.com/send?phone=${rawPhone}&text=${encodeURIComponent(textMsg)}`;
-    window.open(waWebUrl, '_blank');
-
+  // ── Dispatch
+  const handleDispatch = async (orderId: string) => {
+    const awb = (shiprocketAwbInput[orderId] ?? '').trim();
+    if (!awb) { alert('Enter ST Courier docket number first.'); return; }
+    setDispatchingOrderIds((p) => ({ ...p, [orderId]: true }));
+    showToast('Verifying docket...');
     try {
-      await fetch('/api/whatsapp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          step: o.courierStatus || 'ORDER_PLACED',
-          customerPhone: o.customerPhone,
-          customerName: o.customerName,
-          orderId: o.orderId,
-          totalAmount: o.totalAmount,
-          trackingNumber: o.trackingNumber,
-        }),
-      });
-      showToast(`📲 WhatsApp message sent to +91 ${o.customerPhone}!`);
-    } catch (e) {
-      showToast(`📲 Opened WhatsApp Chat for +91 ${o.customerPhone}!`);
-    }
+      const vr = await fetch(`/api/courier/track?docket=${encodeURIComponent(awb)}`);
+      const vd = await vr.json();
+      if (!vr.ok || !vd.isValid || !vd.verified) { showToast(`❌ ${vd.error || 'Invalid docket'}`); alert(`Docket verification failed:\n${vd.error || 'Not found in ST Courier network.'}`); return; }
+      await fetch('/api/orders/timeline', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orderId, status: 'HANDED_TO_ST_COURIER', awbNumber: awb }) });
+      showToast(`✅ Dispatched #${orderId}`); loadLiveOrders();
+    } catch (_) { showToast('❌ Dispatch error'); }
+    finally { setDispatchingOrderIds((p) => ({ ...p, [orderId]: false })); }
   };
 
+  // ── Export CSV
+  const handleExportCsv = () => {
+    if (!filteredOrders.length) { showToast('⚠️ No orders to export'); return; }
+    const rows = [
+      ['Order ID','Date','Customer','Phone','City','Amount','Payment','Status','AWB'].join(','),
+      ...filteredOrders.map((o) => [`"${o.orderId}"`,`"${o.createdAt}"`,`"${(o.customerName||'').replace(/"/g,'""')}"`,`"${o.customerPhone}"`,`"${o.city}"`,o.totalAmount,`"${o.paymentMethod}"`,`"${o.courierStatus}"`,`"${o.trackingNumber||''}"`].join(',')),
+    ].join('\n');
+    const a = document.createElement('a'); a.href = 'data:text/csv;charset=utf-8,' + encodeURI(rows); a.download = `orders_${Date.now()}.csv`; a.click();
+    showToast('📥 CSV exported');
+  };
+
+  // ── WhatsApp
+  const handleResendWhatsApp = async (o: Order) => {
+    let ph = (o.customerPhone || '').replace(/\D/g, ''); if (ph.length === 10) ph = '91' + ph;
+    const msg = `Hello ${o.customerName}! 📚\nOrder #${o.orderId} → ${o.courierStatus}\nAWB: ${o.trackingNumber}\nTrack: https://stcourier.com/track/shipment?docket=${o.trackingNumber}`;
+    window.open(`https://api.whatsapp.com/send?phone=${ph}&text=${encodeURIComponent(msg)}`, '_blank');
+    showToast(`📲 WhatsApp opened for +91 ${o.customerPhone}`);
+  };
+  const handlePrintLabel = (o: Order) => {
+    const pw = window.open('','_blank','width=600,height=700'); if (!pw) return;
+    const isCod = (o.paymentMethod||'').toLowerCase().includes('cod');
+    pw.document.write(`<!DOCTYPE html><html><head><title>Label #${o.orderId}</title><style>body{font-family:Arial,sans-serif;padding:20px;max-width:450px;margin:auto;border:2.5px solid #000;border-radius:12px}.hdr{text-align:center;border-bottom:2px solid #000;padding-bottom:10px;margin-bottom:15px}.logo{font-size:22px;font-weight:900;color:#001B3A}.box{border:1px solid #000;padding:10px;margin-bottom:10px;border-radius:6px}.t{font-size:10px;font-weight:900;text-transform:uppercase;color:#444}.b{font-size:15px;font-weight:900;margin-top:2px}.cod{font-size:14px;font-weight:900;background:#fffbeb;padding:8px;text-align:center;border:2px dashed #d97706;margin:12px 0;border-radius:6px}.bar{font-family:monospace;font-size:18px;font-weight:900;letter-spacing:3px;text-align:center;margin:12px 0;background:#f1f5f9;padding:8px;border-radius:4px}</style></head><body><div class="hdr"><div class="logo">BLESSING POWER GUIDE</div><div style="font-size:13px;font-weight:800;color:#0044AA">ST COURIER EXPRESS</div></div><div class="bar">||| #${o.orderId} |||</div><div class="box"><div class="t">DELIVER TO:</div><div class="b">${o.customerName||'Customer'}</div><div style="font-size:13px;margin-top:4px">${o.address||''}, ${o.city||''} - ${o.pincode||''}</div><div style="margin-top:6px;font-size:13px"><strong>PHONE:</strong> +91 ${o.customerPhone||''}</div></div><div class="cod">PAYMENT: ${isCod?`₹${o.totalAmount} CASH ON DELIVERY`:'PREPAID — DO NOT COLLECT'}</div><div class="box" style="font-size:11px"><div class="t">RETURN ADDRESS:</div><div><strong>BLESSING POWER GUIDE</strong></div><div>Medavakkam, Chennai 600012 | WA: +91 9840418228</div></div><script>window.onload=function(){window.print();window.close()}</script></body></html>`);
+    pw.document.close();
+  };
   const handleUnlinkWhatsApp = async () => {
-    if (!confirm('Are you sure you want to unlink this WhatsApp session? You will need to scan a new QR code.')) return;
-    try {
-      const res = await fetch('/api/whatsapp/qr', { method: 'DELETE' });
-      if (res.ok) {
-        showToast('✅ WhatsApp session unlinked. Generating fresh QR code...');
-        setWaStatus({ status: 'DISCONNECTED', connected: false });
-      }
-    } catch (e) {
-      showToast('❌ Error unlinking WhatsApp session.');
-    }
+    if (!confirm('Unlink WhatsApp session?')) return;
+    try { const r = await fetch('/api/whatsapp/qr', { method: 'DELETE' }); if (r.ok) { showToast('✅ Session unlinked'); setWaStatus({ status: 'DISCONNECTED' }); } } catch (_) {}
+  };
+  const handleRequestPairingCode = async (e: React.FormEvent) => {
+    e.preventDefault(); if (!waPhoneInput) return;
+    showToast('⏳ Generating pairing code...');
+    try { const r = await fetch(`/api/whatsapp/qr?phone=${encodeURIComponent(waPhoneInput)}`); const d = await r.json(); if (d.pairingCode) { setWaPairingCode(d.pairingCode); showToast(`✅ Code: ${d.pairingCode}`); } else showToast(`⚠️ ${d.error}`); } catch (_) { showToast('❌ Error'); }
   };
 
-  // Analytics Metrics
-  const totalRevenue = orders.reduce((sum, o) => sum + Number(o.totalAmount || 0), 0);
-
+  // ── Access gate
   if (!isAdmin) {
     return (
-      <div className="min-h-screen bg-[#f1f3f6] flex items-center justify-center p-6" style={{ fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif" }}>
-        <div className="max-w-md w-full bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center space-y-5">
-          <div className="w-14 h-14 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto">
-            <ShieldCheck className="w-7 h-7" />
-          </div>
+      <div className="min-h-screen bg-[#f1f3f6] flex items-center justify-center p-6">
+        <div className="max-w-md w-full bg-white rounded-2xl shadow-sm border border-gray-200 p-8 text-center space-y-5">
+          <div className="w-14 h-14 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto"><ShieldCheck className="w-7 h-7" /></div>
           <div>
             <h2 className="font-semibold text-xl text-gray-900">Admin Access Required</h2>
             <p className="text-sm text-gray-500 mt-2 leading-relaxed">
-              {user ? (
-                <>
-                  Logged in as <strong className="text-gray-700">{user.email}</strong>. This account does not have administrator privileges.
-                </>
-              ) : (
-                'You must be signed in with an administrator account to access the store management dashboard.'
-              )}
+              {user ? <></>: 'You must be signed in with an administrator account.'}
             </p>
           </div>
           <div className="space-y-3 pt-2">
-            <button
-              onClick={() => router.push('/')}
-              className="w-full py-2.5 bg-[#2874f0] hover:bg-[#1a5dc8] text-white font-semibold text-sm rounded-sm shadow-sm transition-colors cursor-pointer flex items-center justify-center gap-2"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              Return to Store
-            </button>
-            <button
-              onClick={() => { logoutUser(); setIsAuthOpen(true); router.push('/'); }}
-              className="w-full py-2.5 bg-white hover:bg-gray-50 text-[#2874f0] font-semibold text-sm rounded-sm border border-gray-300 transition-colors cursor-pointer"
-            >
-              Sign In as Administrator
-            </button>
+            <button onClick={() => router.push('/')} className="w-full py-2.5 bg-[#2874f0] hover:bg-[#1a5dc8] text-white font-semibold text-sm rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-2"><ArrowLeft className="w-4 h-4" />Return to Store</button>
+            <button onClick={() => { logoutUser(); setIsAuthOpen(true); router.push('/'); }} className="w-full py-2.5 bg-white hover:bg-gray-50 text-[#2874f0] font-semibold text-sm rounded-xl border border-gray-300 transition-colors cursor-pointer">Sign In as Administrator</button>
           </div>
         </div>
       </div>
     );
   }
 
-  // Tab config
   const tabs = [
-    { id: 'orders' as const, label: 'Orders', icon: ShoppingCart, count: orders.length },
-    { id: 'catalog' as const, label: 'Products', icon: Package, count: products.length },
-    { id: 'whatsapp' as const, label: 'WhatsApp', icon: MessageSquare, count: null },
+    { id: 'analytics' as Tab, label: 'Analytics', icon: BarChart2 },
+    { id: 'orders'    as Tab, label: 'Orders',    icon: ShoppingCart, count: orders.length },
+    { id: 'catalog'   as Tab, label: 'Products',  icon: Package, count: products.length },
+    { id: 'whatsapp'  as Tab, label: 'WhatsApp',  icon: MessageSquare },
   ];
 
   return (
-    <div className="min-h-screen bg-[#f1f3f6]" style={{ fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif" }}>
-      {/* Top Navbar */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+    <div className="min-h-screen bg-[#f1f3f6]" style={{ fontFamily: "'Inter','Segoe UI',system-ui,sans-serif" }}>
+
+      {/* ── Top Navbar ── */}
+      <header className="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6">
           <div className="flex items-center justify-between h-14">
-            {/* Logo */}
-            <div className="flex items-center gap-3">
-              <button onClick={() => router.push('/')} className="text-gray-400 hover:text-gray-600 transition-colors cursor-pointer">
-                <ArrowLeft className="w-5 h-5" />
-              </button>
+            <div className="flex items-center gap-2 sm:gap-3">
+              <button onClick={() => router.push('/')} className="text-gray-400 hover:text-gray-600 transition-colors p-1 cursor-pointer"><ArrowLeft className="w-5 h-5" /></button>
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 bg-[#2874f0] text-white rounded-md flex items-center justify-center font-bold text-sm">B</div>
-                <div>
-                  <h1 className="text-sm font-bold text-gray-900 leading-tight">Blessing Store</h1>
-                  <span className="text-[10px] text-gray-400 font-medium">Seller Dashboard</span>
+                <div className="w-8 h-8 bg-[#2874f0] text-white rounded-lg flex items-center justify-center font-black text-sm select-none">B</div>
+                <div className="hidden sm:block">
+                  <p className="text-sm font-bold text-gray-900 leading-tight">Blessing Store</p>
+                  <p className="text-[10px] text-gray-400 font-medium">Admin Dashboard</p>
                 </div>
               </div>
             </div>
 
-            {/* Nav Tabs */}
+            {/* Desktop tabs */}
             <nav className="hidden md:flex items-center h-full">
-              {tabs.map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`h-full px-5 flex items-center gap-2 text-[13px] font-semibold transition-colors border-b-[3px] cursor-pointer ${
-                    activeTab === tab.id
-                      ? 'border-[#2874f0] text-[#2874f0]'
-                      : 'border-transparent text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  <tab.icon className="w-4 h-4" />
-                  <span>{tab.label}</span>
-                  {tab.count !== null && (
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
-                      activeTab === tab.id ? 'bg-[#2874f0]/10 text-[#2874f0]' : 'bg-gray-100 text-gray-500'
-                    }`}>
-                      {tab.count}
-                    </span>
+              {tabs.map((t) => (
+                <button key={t.id} onClick={() => setActiveTab(t.id)}
+                  className={`h-full px-4 flex items-center gap-1.5 text-[13px] font-semibold border-b-[3px] transition-colors cursor-pointer ${activeTab === t.id ? 'border-[#2874f0] text-[#2874f0]' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+                  <t.icon className="w-4 h-4" />
+                  <span>{t.label}</span>
+                  {'count' in t && t.count !== undefined && (
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${activeTab === t.id ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>{t.count}</span>
                   )}
                 </button>
               ))}
             </nav>
 
-            {/* Right Actions */}
             <div className="flex items-center gap-2">
               <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 bg-green-50 border border-green-200 rounded-full">
                 <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
                 <span className="text-[10px] font-semibold text-green-700">Live</span>
               </div>
-              <button
-                onClick={() => { logoutUser(); showToast('Logged out.'); router.push('/'); }}
-                className="text-gray-400 hover:text-red-500 transition-colors p-1.5 cursor-pointer"
-                title="Sign Out"
-              >
-                <LogOut className="w-4 h-4" />
-              </button>
+              <button onClick={() => { logoutUser(); router.push('/'); }} className="text-gray-400 hover:text-red-500 transition-colors p-1.5 cursor-pointer" title="Sign Out"><LogOut className="w-4 h-4" /></button>
             </div>
           </div>
         </div>
 
-        {/* Mobile Tab Bar */}
-        <div className="md:hidden border-t border-gray-100 flex">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex-1 py-2.5 flex items-center justify-center gap-1.5 text-xs font-semibold transition-colors border-b-2 cursor-pointer ${
-                activeTab === tab.id
-                  ? 'border-[#2874f0] text-[#2874f0] bg-blue-50/50'
-                  : 'border-transparent text-gray-400'
-              }`}
-            >
-              <tab.icon className="w-3.5 h-3.5" />
-              <span>{tab.label}</span>
-              {tab.count !== null && <span className="text-[10px] font-bold">({tab.count})</span>}
+        {/* Mobile tab bar */}
+        <div className="md:hidden border-t border-gray-100 flex bg-white">
+          {tabs.map((t) => (
+            <button key={t.id} onClick={() => setActiveTab(t.id)}
+              className={`flex-1 py-2.5 flex flex-col items-center gap-0.5 text-[10px] font-semibold transition-colors border-b-2 cursor-pointer ${activeTab === t.id ? 'border-[#2874f0] text-[#2874f0] bg-blue-50/40' : 'border-transparent text-gray-400'}`}>
+              <t.icon className="w-4 h-4" />
+              <span>{t.label}</span>
             </button>
           ))}
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-6">
-        {/* Stats Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+      <main className="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-4">
+
+        {/* ── KPI Summary Cards (always visible) ── */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {[
-            { label: 'Total Revenue', value: `₹${totalRevenue.toLocaleString()}`, icon: IndianRupee, color: 'text-green-600', bg: 'bg-green-50' },
-            { label: 'Total Orders', value: orders.length, icon: ShoppingCart, color: 'text-blue-600', bg: 'bg-blue-50' },
-            { label: 'Active Products', value: products.length, icon: Box, color: 'text-orange-600', bg: 'bg-orange-50' },
-            { label: 'Customers', value: dbStats.users || 0, icon: Users, color: 'text-purple-600', bg: 'bg-purple-50' },
-          ].map((stat) => (
-            <div key={stat.label} className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-sm transition-shadow">
-              <div className="flex items-center gap-3">
-                <div className={`w-9 h-9 ${stat.bg} rounded-lg flex items-center justify-center ${stat.color}`}>
-                  <stat.icon className="w-4.5 h-4.5" />
-                </div>
-                <div>
-                  <p className="text-[11px] text-gray-400 font-medium">{stat.label}</p>
-                  <p className="text-lg font-bold text-gray-900 leading-tight">{stat.value}</p>
+            { label: 'Total Revenue', value: fmt(analytics?.summary.totalRevenue ?? totalRevenue), icon: IndianRupee, color: 'text-green-600', bg: 'bg-green-50', sub: analytics ? `₹${analytics.summary.todayRevenue.toLocaleString('en-IN')} today` : '' },
+            { label: 'Total Orders',  value: analytics?.summary.totalOrders ?? orders.length, icon: ShoppingCart, color: 'text-blue-600', bg: 'bg-blue-50', sub: analytics ? `${analytics.summary.todayOrders} today` : '' },
+            { label: 'Products',      value: products.length, icon: Box, color: 'text-orange-600', bg: 'bg-orange-50', sub: `${dbStats.books} in DB` },
+            { label: 'Customers',     value: dbStats.users, icon: Users, color: 'text-purple-600', bg: 'bg-purple-50', sub: analytics ? `Avg order ${fmt(analytics.summary.avgOrderValue)}` : '' },
+          ].map((s) => (
+            <div key={s.label} className="bg-white rounded-xl border border-gray-200 p-3.5 hover:shadow-sm transition-shadow">
+              <div className="flex items-start justify-between gap-2">
+                <div className={`w-9 h-9 ${s.bg} rounded-lg flex items-center justify-center ${s.color} flex-shrink-0`}><s.icon className="w-4.5 h-4.5" /></div>
+                <div className="min-w-0 text-right">
+                  <p className="text-[11px] text-gray-400 font-medium truncate">{s.label}</p>
+                  <p className="text-lg font-black text-gray-900 leading-tight">{s.value}</p>
+                  {s.sub && <p className="text-[10px] text-gray-400 mt-0.5">{s.sub}</p>}
                 </div>
               </div>
             </div>
           ))}
         </div>
 
-        {/* ====================== ORDERS TAB ====================== */}
-        {activeTab === 'orders' && (
-          <div className="space-y-3">
-            {/* Orders Header */}
-            <div className="bg-white rounded-lg border border-gray-200 p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        {/* ══════════════════════════════════════════════════════════
+            ANALYTICS TAB
+        ══════════════════════════════════════════════════════════ */}
+        {activeTab === 'analytics' && (
+          <div className="space-y-4">
+            {/* Range picker */}
+            <div className="bg-white rounded-xl border border-gray-200 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <h2 className="text-base font-bold text-gray-900">Order Management</h2>
-                <p className="text-xs text-gray-400 mt-0.5">Track and manage all customer orders in real-time</p>
+                <h2 className="text-base font-bold text-gray-900">Payment Analytics</h2>
+                <p className="text-xs text-gray-400 mt-0.5">Revenue, payment methods, and order trends</p>
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={async () => {
-                    showToast('Syncing courier tracking...');
-                    try {
-                      for (const order of orders) {
-                        if (order.awbNumber) {
-                          await fetch(`/api/courier/track?awb=${encodeURIComponent(order.awbNumber)}&orderId=${encodeURIComponent(order.orderId)}`);
-                        }
-                      }
-                      showToast('✅ Courier tracking synced!');
-                      loadLiveOrders();
-                    } catch (e) {
-                      showToast('Sync complete.');
-                    }
-                  }}
-                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-gray-600 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-md transition-colors cursor-pointer"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Sync Tracking</span>
-                </button>
-                <button
-                  onClick={handleExportOrdersCsv}
-                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-white bg-[#2874f0] hover:bg-[#1a5dc8] rounded-md transition-colors cursor-pointer"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Export CSV</span>
-                </button>
+              <div className="flex items-center gap-2 flex-wrap">
+                {[7, 14, 30, 90].map((d) => (
+                  <button key={d} onClick={() => setAnalyticsRange(d)}
+                    className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer ${analyticsRange === d ? 'bg-[#2874f0] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                    {d}d
+                  </button>
+                ))}
+                <button onClick={loadAnalytics} className="p-1.5 text-gray-400 hover:text-[#2874f0] hover:bg-blue-50 rounded-lg transition-colors cursor-pointer" title="Refresh"><RefreshCw className={`w-4 h-4 ${analyticsLoading ? 'animate-spin' : ''}`} /></button>
               </div>
             </div>
 
-            {/* Order Cards */}
-            {orders.length === 0 ? (
-              <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
-                <ShoppingCart className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-                <p className="text-sm font-semibold text-gray-600">No orders yet</p>
-                <p className="text-xs text-gray-400 mt-1">New orders will appear here automatically</p>
+            {analyticsLoading && !analytics ? (
+              <div className="bg-white rounded-xl border border-gray-200 p-16 text-center">
+                <RefreshCw className="w-8 h-8 animate-spin text-[#2874f0] mx-auto mb-3" />
+                <p className="text-sm text-gray-400">Loading analytics...</p>
               </div>
-            ) : (
-              orders.map((o) => {
-                const currentStatus = o.courierStatus || 'Order Placed';
-                const allSteps = [
-                  'Order Placed',
-                  'Payment Confirmed',
-                  'Preparing Order',
-                  'Packed',
-                  'Handed to ST Courier',
-                  'In Transit',
-                  'Out for Delivery',
-                  'Delivered',
-                ];
-                const activeIdx = allSteps.findIndex((s) => s.toLowerCase() === currentStatus.toLowerCase());
-                const stepIdx = activeIdx >= 0 ? activeIdx : 0;
-                const isCod = (o.paymentMethod || '').toLowerCase().includes('cod');
-
-                return (
-                  <div key={o.orderId} className="bg-white rounded-lg border border-gray-200 overflow-hidden hover:shadow-sm transition-shadow">
-                    {/* Order Header */}
-                    <div className="px-4 py-3 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                      <div className="flex items-center gap-3 flex-wrap">
-                        <span className="text-sm font-bold text-gray-900">#{o.orderId}</span>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-sm uppercase ${
-                          isCod ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-green-50 text-green-700 border border-green-200'
-                        }`}>
-                          {isCod ? 'COD' : 'PAID'} • ₹{o.totalAmount}
-                        </span>
-                        {o.isOfficialAwb && (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-sm bg-blue-50 text-blue-600 border border-blue-200">
-                            AUTO-TRACKED
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 text-xs text-gray-400">
-                        <Clock className="w-3 h-3" />
-                        <span>{o.createdAt}</span>
-                      </div>
+            ) : analytics ? (
+              <>
+                {/* Today spotlight */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {[
+                    { label: "Today's Revenue",  value: fmt(analytics.summary.todayRevenue),  icon: IndianRupee, color: 'text-green-600',  bg: 'bg-green-50' },
+                    { label: "Today's Orders",   value: analytics.summary.todayOrders,        icon: ShoppingCart, color: 'text-blue-600',  bg: 'bg-blue-50' },
+                    { label: 'Online Payments',  value: analytics.summary.paidOrders,         icon: CreditCard,   color: 'text-violet-600', bg: 'bg-violet-50' },
+                    { label: 'COD Orders',        value: analytics.summary.codOrders,          icon: Banknote,     color: 'text-amber-600',  bg: 'bg-amber-50' },
+                  ].map((s) => (
+                    <div key={s.label} className="bg-white rounded-xl border border-gray-200 p-3.5">
+                      <div className={`w-8 h-8 ${s.bg} rounded-lg flex items-center justify-center ${s.color} mb-2`}><s.icon className="w-4 h-4" /></div>
+                      <p className="text-[11px] text-gray-400">{s.label}</p>
+                      <p className="text-xl font-black text-gray-900">{s.value}</p>
                     </div>
+                  ))}
+                </div>
 
-                    {/* Order Content */}
-                    <div className="p-4 space-y-4">
-                      {/* Customer Info Row */}
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 bg-gray-100 rounded-full flex items-center justify-center text-gray-500 text-sm font-bold">
-                            {(o.customerName || 'C').charAt(0).toUpperCase()}
-                          </div>
-                          <div>
-                            <p className="text-sm font-semibold text-gray-900">{o.customerName}</p>
-                            <p className="text-xs text-gray-400">
-                              {o.address}{o.city ? `, ${o.city}` : ''}{o.pincode ? ` - ${o.pincode}` : ''} • {o.items?.length || 1} item(s)
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => handlePrintShippingLabel(o)}
-                            className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold text-gray-600 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-md transition-colors cursor-pointer"
-                          >
-                            <Download className="w-3 h-3" />
-                            Label
-                          </button>
-                          <button
-                            onClick={() => handleResendWhatsApp(o)}
-                            className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold text-white bg-[#25d366] hover:bg-[#1fb855] rounded-md transition-colors cursor-pointer"
-                          >
-                            <MessageSquare className="w-3 h-3" />
-                            WhatsApp
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Progress Stepper */}
-                      <div className="bg-[#f8f9fa] rounded-md p-3">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-[11px] font-semibold text-gray-500">Delivery Progress</span>
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-sm ${
-                            stepIdx >= 7 ? 'bg-green-50 text-green-700' :
-                            stepIdx >= 4 ? 'bg-blue-50 text-blue-700' :
-                            'bg-orange-50 text-orange-700'
-                          }`}>
-                            {currentStatus}
-                          </span>
-                        </div>
-                        {/* Linear Progress Bar */}
-                        <div className="relative">
-                          <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                            <div
-                              className={`h-full rounded-full transition-all duration-500 ${
-                                stepIdx >= 7 ? 'bg-green-500' : 'bg-[#2874f0]'
-                              }`}
-                              style={{ width: `${((stepIdx + 1) / allSteps.length) * 100}%` }}
-                            />
-                          </div>
-                          <div className="flex justify-between mt-1.5">
-                            {allSteps.map((s, idx) => (
-                              <div key={s} className="flex flex-col items-center" style={{ width: `${100 / allSteps.length}%` }}>
-                                <div className={`w-2.5 h-2.5 rounded-full border-2 -mt-[11px] bg-white transition-colors ${
-                                  idx <= stepIdx
-                                    ? stepIdx >= 7 ? 'border-green-500 bg-green-500' : 'border-[#2874f0] bg-[#2874f0]'
-                                    : 'border-gray-300'
-                                }`} />
-                                <span className={`text-[8px] mt-1 text-center leading-tight hidden lg:block ${
-                                  idx <= stepIdx ? 'text-gray-700 font-semibold' : 'text-gray-400'
-                                }`}>
-                                  {s}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Dispatch Control */}
-                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-[#f8f9fa] rounded-md p-3">
-                        <div className="flex items-center gap-2 text-xs text-gray-500 shrink-0">
-                          <Truck className="w-4 h-4 text-gray-400" />
-                          <span className="font-medium">AWB Docket:</span>
-                        </div>
-                        <input
-                          type="text"
-                          placeholder="Enter ST Courier Docket (e.g. STC241568974)"
-                          value={
-                            shiprocketAwbInput[o.orderId] !== undefined
-                              ? shiprocketAwbInput[o.orderId]
-                              : o.trackingNumber && !o.trackingNumber.startsWith('SHP-')
-                              ? o.trackingNumber
-                              : ''
-                          }
-                          onChange={(e) =>
-                            setShiprocketAwbInput({
-                              ...shiprocketAwbInput,
-                              [o.orderId]: e.target.value,
-                            })
-                          }
-                          className="flex-1 px-3 py-2 bg-white border border-gray-200 rounded-md text-xs text-gray-900 font-mono uppercase placeholder:text-gray-300 placeholder:normal-case outline-none focus:border-[#2874f0] focus:ring-1 focus:ring-[#2874f0]/20 transition-all"
-                        />
-                        <button
-                          disabled={!!dispatchingOrderIds[o.orderId]}
-                          onClick={async () => {
-                            const inputVal = (shiprocketAwbInput[o.orderId] ?? (o.trackingNumber && !o.trackingNumber.startsWith('SHP-') ? o.trackingNumber : '')).trim();
-                            if (!inputVal) {
-                              alert('Please enter an ST Courier Docket Number first.');
-                              return;
-                            }
-                            const awb = inputVal;
-
-                            setDispatchingOrderIds((prev) => ({ ...prev, [o.orderId]: true }));
-                            showToast('Validating docket...');
-
-                            try {
-                              const verifyRes = await fetch(`/api/courier/track?docket=${encodeURIComponent(awb)}`);
-                              const verifyData = await verifyRes.json();
-
-                              const isPositivelyVerified = verifyRes.ok && verifyData.isValid === true && verifyData.verified === true;
-
-                              if (!isPositivelyVerified) {
-                                const reason = verifyData.error || 'ST Courier did not confirm this docket number.';
-                                showToast(`❌ ${reason}`);
-                                alert(`Docket Verification Failed\n\n${reason}\n\nPlease enter a valid ST Courier docket number.`);
-                                setDispatchingOrderIds((prev) => ({ ...prev, [o.orderId]: false }));
-                                return;
-                              }
-
-                              showToast('Dispatching order...');
-                              await fetch('/api/orders/timeline', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ orderId: o.orderId, status: 'HANDED_TO_ST_COURIER', awbNumber: awb }),
-                              });
-
-                              showToast(`✅ Order #${o.orderId} dispatched with AWB: ${awb}`);
-                              loadLiveOrders();
-                            } catch (err: any) {
-                              showToast('❌ Dispatch error');
-                            } finally {
-                              setDispatchingOrderIds((prev) => ({ ...prev, [o.orderId]: false }));
-                            }
-                          }}
-                          className="px-4 py-2 text-xs font-semibold text-white bg-[#2874f0] hover:bg-[#1a5dc8] disabled:bg-gray-300 disabled:cursor-not-allowed rounded-md transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0"
-                        >
-                          {dispatchingOrderIds[o.orderId] ? (
-                            <>
-                              <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                              Verifying...
-                            </>
-                          ) : (
-                            <>
-                              <Send className="w-3 h-3" />
-                              Dispatch
-                            </>
-                          )}
-                        </button>
-                      </div>
+                {/* Daily Revenue Chart */}
+                <div className="bg-white rounded-xl border border-gray-200 p-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="text-sm font-bold text-gray-900">Daily Revenue — Last {analytics.range} Days</h3>
+                      <p className="text-xs text-gray-400 mt-0.5">Blue bar = today</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-gray-400">Total</p>
+                      <p className="text-base font-black text-gray-900">{fmt(analytics.summary.totalRevenue)}</p>
                     </div>
                   </div>
-                );
-              })
+                  <SimpleBarChart data={analytics.daily} height={110} />
+                </div>
+
+                {/* Payment Methods + Order Statuses side by side */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Payment Methods */}
+                  <div className="bg-white rounded-xl border border-gray-200 p-4">
+                    <h3 className="text-sm font-bold text-gray-900 mb-4 flex items-center gap-2"><Smartphone className="w-4 h-4 text-violet-500" />Payment Methods</h3>
+                    {analytics.paymentMethods.length === 0 ? <p className="text-xs text-gray-400 text-center py-4">No data</p> : (
+                      <div className="space-y-3">
+                        {analytics.paymentMethods.map((m) => {
+                          const total = analytics.paymentMethods.reduce((s, x) => s + x.revenue, 0);
+                          const isCod = m.method.toLowerCase().includes('cod');
+                          return (
+                            <div key={m.method}>
+                              <div className="flex items-center justify-between text-xs mb-1">
+                                <div className="flex items-center gap-2">
+                                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isCod ? 'bg-amber-400' : 'bg-blue-500'}`} />
+                                  <span className="font-medium text-gray-700 truncate max-w-[120px]">{m.method}</span>
+                                  <span className="text-gray-400">× {m.count}</span>
+                                </div>
+                                <div className="text-right shrink-0">
+                                  <span className="font-bold text-gray-900">{fmt(m.revenue)}</span>
+                                  <span className="text-gray-400 ml-1">({pct(m.revenue, total)}%)</span>
+                                </div>
+                              </div>
+                              <MiniBar value={m.revenue} max={total} color={isCod ? 'bg-amber-400' : 'bg-blue-500'} />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Order Status Breakdown */}
+                  <div className="bg-white rounded-xl border border-gray-200 p-4">
+                    <h3 className="text-sm font-bold text-gray-900 mb-4 flex items-center gap-2"><Truck className="w-4 h-4 text-blue-500" />Order Statuses</h3>
+                    {analytics.orderStatuses.length === 0 ? <p className="text-xs text-gray-400 text-center py-4">No data</p> : (
+                      <div className="space-y-3">
+                        {analytics.orderStatuses.map((s) => {
+                          const total = analytics.orderStatuses.reduce((sum, x) => sum + x.count, 0);
+                          const isDelivered = s.status.toLowerCase().includes('deliver');
+                          const isInTransit = s.status.toLowerCase().includes('transit') || s.status.toLowerCase().includes('courier');
+                          const col = isDelivered ? 'bg-green-500' : isInTransit ? 'bg-blue-500' : 'bg-amber-400';
+                          return (
+                            <div key={s.status}>
+                              <div className="flex items-center justify-between text-xs mb-1">
+                                <div className="flex items-center gap-2">
+                                  <span className={`w-2 h-2 rounded-full ${col}`} />
+                                  <span className="font-medium text-gray-700 truncate max-w-[140px]">{s.status}</span>
+                                </div>
+                                <span className="font-bold text-gray-900 shrink-0">{s.count} <span className="text-gray-400 font-normal">({pct(s.count, total)}%)</span></span>
+                              </div>
+                              <MiniBar value={s.count} max={total} color={col} />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Monthly Trend + Top Products */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {/* Monthly trend */}
+                  <div className="bg-white rounded-xl border border-gray-200 p-4">
+                    <h3 className="text-sm font-bold text-gray-900 mb-4 flex items-center gap-2"><TrendingUp className="w-4 h-4 text-green-500" />Monthly Trend</h3>
+                    {analytics.monthlyTrend.length === 0 ? <p className="text-xs text-gray-400 text-center py-6">No data yet</p> : (
+                      <div className="space-y-2.5">
+                        {analytics.monthlyTrend.map((m, i) => {
+                          const maxRev = Math.max(...analytics.monthlyTrend.map((x) => x.revenue), 1);
+                          const prev = i > 0 ? analytics.monthlyTrend[i - 1].revenue : null;
+                          const growth = prev && prev > 0 ? ((m.revenue - prev) / prev * 100).toFixed(0) : null;
+                          return (
+                            <div key={m.month} className="flex items-center gap-3">
+                              <div className="w-16 text-[11px] text-gray-500 font-medium shrink-0">{m.month}</div>
+                              <div className="flex-1">
+                                <MiniBar value={m.revenue} max={maxRev} color="bg-green-500" />
+                              </div>
+                              <div className="w-24 text-right shrink-0">
+                                <span className="text-xs font-bold text-gray-900">{fmt(m.revenue)}</span>
+                                {growth !== null && (
+                                  <span className={`ml-1.5 text-[10px] font-bold ${Number(growth) >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                                    {Number(growth) >= 0 ? '▲' : '▼'}{Math.abs(Number(growth))}%
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Top Products */}
+                  <div className="bg-white rounded-xl border border-gray-200 p-4">
+                    <h3 className="text-sm font-bold text-gray-900 mb-4 flex items-center gap-2"><Star className="w-4 h-4 text-amber-500" />Top Selling Products</h3>
+                    {analytics.topProducts.length === 0 ? <p className="text-xs text-gray-400 text-center py-6">No sales data yet</p> : (
+                      <div className="space-y-3">
+                        {analytics.topProducts.slice(0, 7).map((p, i) => {
+                          const maxQty = analytics.topProducts[0]?.totalQty || 1;
+                          return (
+                            <div key={p.title}>
+                              <div className="flex items-center justify-between text-xs mb-1 gap-2">
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <span className="w-4 h-4 rounded-full bg-gray-100 text-gray-500 text-[9px] font-black flex items-center justify-center shrink-0">{i+1}</span>
+                                  <span className="font-medium text-gray-700 truncate">{p.title}</span>
+                                </div>
+                                <div className="text-right shrink-0">
+                                  <span className="font-bold text-gray-900">{p.totalQty} sold</span>
+                                  <span className="text-gray-400 ml-1">• {fmt(p.totalRevenue)}</span>
+                                </div>
+                              </div>
+                              <MiniBar value={p.totalQty} max={maxQty} color="bg-amber-400" />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+                <AlertCircle className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+                <p className="text-sm text-gray-500">Could not load analytics. Check DB connection.</p>
+                <button onClick={loadAnalytics} className="mt-3 px-4 py-2 text-xs font-semibold text-[#2874f0] bg-blue-50 rounded-lg cursor-pointer hover:bg-blue-100 transition-colors">Retry</button>
+              </div>
             )}
           </div>
         )}
 
-        {/* ====================== CATALOG TAB ====================== */}
+        {/* ══════════════════════════════════════════════════════════
+            ORDERS TAB
+        ══════════════════════════════════════════════════════════ */}
+        {activeTab === 'orders' && (
+          <div className="space-y-3">
+            {/* Header */}
+            <div className="bg-white rounded-xl border border-gray-200 p-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+                <div>
+                  <h2 className="text-base font-bold text-gray-900">Order Management</h2>
+                  <p className="text-xs text-gray-400 mt-0.5">{filteredOrders.length} of {orders.length} orders shown</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={loadLiveOrders} className="p-1.5 text-gray-400 hover:text-[#2874f0] hover:bg-blue-50 rounded-lg transition-colors cursor-pointer" title="Refresh"><RefreshCw className={`w-4 h-4 ${ordersLoading ? 'animate-spin' : ''}`} /></button>
+                  <button onClick={handleExportCsv} className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-white bg-[#2874f0] hover:bg-[#1a5dc8] rounded-lg transition-colors cursor-pointer"><Download className="w-3.5 h-3.5" /><span className="hidden sm:inline">Export CSV</span></button>
+                </div>
+              </div>
+
+              {/* Filters */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+                  <input type="text" placeholder="Search order / name / phone" value={orderSearch} onChange={(e) => setOrderSearch(e.target.value)}
+                    className="w-full pl-8 pr-3 py-2 text-xs border border-gray-200 rounded-lg outline-none focus:border-[#2874f0] focus:ring-1 focus:ring-[#2874f0]/20 col-span-2 sm:col-span-1" />
+                </div>
+                <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}
+                  className="px-3 py-2 text-xs border border-gray-200 rounded-lg outline-none focus:border-[#2874f0] bg-white cursor-pointer">
+                  {uniqueStatuses.map((s) => <option key={s} value={s}>{s === 'all' ? 'All Statuses' : s}</option>)}
+                </select>
+                <select value={filterPayment} onChange={(e) => setFilterPayment(e.target.value)}
+                  className="px-3 py-2 text-xs border border-gray-200 rounded-lg outline-none focus:border-[#2874f0] bg-white cursor-pointer">
+                  <option value="all">All Payments</option>
+                  <option value="online">Online (Paid)</option>
+                  <option value="cod">Cash on Delivery</option>
+                </select>
+                <div className="flex gap-1.5 col-span-2 sm:col-span-1">
+                  <input type="date" value={filterDateFrom} onChange={(e) => setFilterDateFrom(e.target.value)}
+                    className="flex-1 px-2 py-2 text-xs border border-gray-200 rounded-lg outline-none focus:border-[#2874f0] cursor-pointer min-w-0" title="From date" />
+                  <input type="date" value={filterDateTo} onChange={(e) => setFilterDateTo(e.target.value)}
+                    className="flex-1 px-2 py-2 text-xs border border-gray-200 rounded-lg outline-none focus:border-[#2874f0] cursor-pointer min-w-0" title="To date" />
+                </div>
+              </div>
+              {(orderSearch || filterStatus !== 'all' || filterPayment !== 'all' || filterDateFrom || filterDateTo) && (
+                <button onClick={() => { setOrderSearch(''); setFilterStatus('all'); setFilterPayment('all'); setFilterDateFrom(''); setFilterDateTo(''); }}
+                  className="mt-2 text-[11px] font-semibold text-[#2874f0] hover:underline cursor-pointer flex items-center gap-1">
+                  <X className="w-3 h-3" /> Clear all filters
+                </button>
+              )}
+            </div>
+
+            {/* Order list */}
+            {ordersLoading && orders.length === 0 ? (
+              <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+                <RefreshCw className="w-8 h-8 animate-spin text-[#2874f0] mx-auto mb-3" /><p className="text-sm text-gray-400">Loading orders...</p>
+              </div>
+            ) : filteredOrders.length === 0 ? (
+              <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+                <ShoppingCart className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                <p className="text-sm font-semibold text-gray-600">{orders.length === 0 ? 'No orders yet' : 'No orders match filters'}</p>
+                <p className="text-xs text-gray-400 mt-1">{orders.length === 0 ? 'New orders will appear here in real-time' : 'Try adjusting your search or filter criteria'}</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {filteredOrders.map((o) => {
+                  const allSteps = ['Order Placed','Payment Confirmed','Preparing Order','Packed','Handed to ST Courier','In Transit','Out for Delivery','Delivered'];
+                  const stepIdx = Math.max(0, allSteps.findIndex((s) => s.toLowerCase() === (o.courierStatus||'').toLowerCase()));
+                  const isCod = (o.paymentMethod||'').toLowerCase().includes('cod');
+                  const isDelivered = stepIdx >= 7;
+                  return (
+                    <div key={o.orderId} className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-sm transition-shadow">
+                      {/* Order header */}
+                      <div className="px-4 py-3 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div className="flex items-center gap-2.5 flex-wrap">
+                          <span className="text-sm font-black text-gray-900">#{o.orderId}</span>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase ${isCod ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-green-50 text-green-700 border border-green-200'}`}>
+                            {isCod ? 'COD' : 'PAID'} • {fmt(o.totalAmount)}
+                          </span>
+                          {o.isOfficialAwb && <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-50 text-blue-600 border border-blue-200">AUTO-TRACKED</span>}
+                          {isDelivered && <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-green-50 text-green-700 border border-green-200 flex items-center gap-1"><CheckCircle2 className="w-2.5 h-2.5" />DELIVERED</span>}
+                        </div>
+                        <div className="flex items-center gap-1.5 text-xs text-gray-400"><Clock className="w-3 h-3" /><span>{o.createdAt}</span></div>
+                      </div>
+
+                      <div className="p-4 space-y-3">
+                        {/* Customer + actions row */}
+                        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                          <div className="flex items-start gap-3">
+                            <div className="w-9 h-9 bg-gray-100 rounded-full flex items-center justify-center text-gray-600 text-sm font-black shrink-0">
+                              {(o.customerName||'C').charAt(0).toUpperCase()}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-gray-900">{o.customerName}</p>
+                              <p className="text-xs text-gray-400">{o.customerPhone && `+91 ${o.customerPhone}`}</p>
+                              <p className="text-xs text-gray-400 mt-0.5 line-clamp-1">{o.address}{o.city ? `, ${o.city}` : ''}{o.pincode ? ` - ${o.pincode}` : ''}</p>
+                              <div className="flex flex-wrap gap-1 mt-1.5">
+                                {(o.items || []).map((item: { title: string; qty: number }, i: number) => (
+                                  <span key={i} className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-md font-medium">{item.title} × {item.qty}</span>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
+                            <button onClick={() => handlePrintLabel(o)} className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold text-gray-600 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg transition-colors cursor-pointer"><Download className="w-3 h-3" />Label</button>
+                            <button onClick={() => handleResendWhatsApp(o)} className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold text-white bg-[#25d366] hover:bg-[#1fb855] rounded-lg transition-colors cursor-pointer"><MessageSquare className="w-3 h-3" />WhatsApp</button>
+                          </div>
+                        </div>
+
+                        {/* Progress bar */}
+                        <div className="bg-[#f8f9fa] rounded-lg p-3">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-[11px] font-semibold text-gray-500">Delivery Progress</span>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${isDelivered ? 'bg-green-50 text-green-700' : stepIdx >= 4 ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700'}`}>{o.courierStatus || 'Order Placed'}</span>
+                          </div>
+                          <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                            <div className={`h-full rounded-full transition-all duration-500 ${isDelivered ? 'bg-green-500' : 'bg-[#2874f0]'}`} style={{ width: `${((stepIdx + 1) / allSteps.length) * 100}%` }} />
+                          </div>
+                          <div className="flex justify-between mt-2">
+                            {allSteps.map((s, idx) => (
+                              <div key={s} className="flex flex-col items-center" style={{ width: `${100 / allSteps.length}%` }}>
+                                <div className={`w-2 h-2 rounded-full border-2 bg-white transition-colors ${idx <= stepIdx ? (isDelivered ? 'border-green-500 bg-green-500' : 'border-[#2874f0] bg-[#2874f0]') : 'border-gray-300'}`} />
+                                <span className={`text-[7px] mt-1 text-center leading-tight hidden xl:block ${idx <= stepIdx ? 'text-gray-600 font-semibold' : 'text-gray-400'}`}>{s}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Dispatch */}
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-[#f8f9fa] rounded-lg p-3">
+                          <div className="flex items-center gap-2 text-xs text-gray-500 shrink-0"><Truck className="w-4 h-4 text-gray-400" /><span className="font-medium">AWB:</span></div>
+                          <input type="text" placeholder="ST Courier Docket e.g. STC241568974"
+                            value={shiprocketAwbInput[o.orderId] !== undefined ? shiprocketAwbInput[o.orderId] : (o.trackingNumber && !o.trackingNumber.startsWith('SHP-') ? o.trackingNumber : '')}
+                            onChange={(e) => setShiprocketAwbInput((p) => ({ ...p, [o.orderId]: e.target.value }))}
+                            className="flex-1 px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-mono uppercase placeholder:normal-case placeholder:text-gray-300 outline-none focus:border-[#2874f0] focus:ring-1 focus:ring-[#2874f0]/20 transition-all" />
+                          <button disabled={!!dispatchingOrderIds[o.orderId]} onClick={() => handleDispatch(o.orderId)}
+                            className="px-4 py-2 text-xs font-semibold text-white bg-[#2874f0] hover:bg-[#1a5dc8] disabled:bg-gray-300 disabled:cursor-not-allowed rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0">
+                            {dispatchingOrderIds[o.orderId] ? <><span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />Verifying...</> : <><Send className="w-3 h-3" />Dispatch</>}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════════════════════════
+            CATALOG TAB
+        ══════════════════════════════════════════════════════════ */}
         {activeTab === 'catalog' && (
           <div className="space-y-3">
-            {/* Catalog Header */}
-            <div className="bg-white rounded-lg border border-gray-200 p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="bg-white rounded-xl border border-gray-200 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <h2 className="text-base font-bold text-gray-900">Product Catalog</h2>
-                <p className="text-xs text-gray-400 mt-0.5">Manage guide books, pricing, and stock availability</p>
+                <p className="text-xs text-gray-400 mt-0.5">Manage guide books, pricing, and stock</p>
               </div>
-              <button
-                onClick={() => setShowAddForm(!showAddForm)}
-                className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-[#2874f0] hover:bg-[#1a5dc8] rounded-md transition-colors cursor-pointer"
-              >
+              <button onClick={() => setShowAddForm(!showAddForm)} className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-[#2874f0] hover:bg-[#1a5dc8] rounded-lg transition-colors cursor-pointer">
                 {showAddForm ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
-                <span>{showAddForm ? 'Close' : 'Add Product'}</span>
+                {showAddForm ? 'Close' : 'Add Product'}
               </button>
             </div>
 
-            {/* Add Product Form */}
             {showAddForm && (
-              <div className="bg-white rounded-lg border-2 border-[#2874f0]/30 p-5">
-                <h3 className="text-sm font-bold text-gray-900 mb-4 flex items-center gap-2">
-                  <Plus className="w-4 h-4 text-[#2874f0]" /> Add New Guide Book
-                </h3>
-                <form onSubmit={handleCreateProduct} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div className="sm:col-span-2">
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Book Title</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. 10th Standard Mathematics Guide"
-                      value={newTitle}
-                      onChange={(e) => setNewTitle(e.target.value)}
-                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-md text-sm text-gray-900 outline-none focus:border-[#2874f0] focus:ring-1 focus:ring-[#2874f0]/20"
-                    />
+              <div className="bg-white rounded-xl border-2 border-[#2874f0]/30 p-5">
+                <h3 className="text-sm font-bold text-gray-900 mb-4 flex items-center gap-2"><Plus className="w-4 h-4 text-[#2874f0]" />New Guide Book</h3>
+                <form onSubmit={handleCreateProduct} className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  <div className="col-span-2">
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Title *</label>
+                    <input type="text" required placeholder="e.g. 10th Standard Mathematics Guide" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm outline-none focus:border-[#2874f0] focus:ring-1 focus:ring-[#2874f0]/20" />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">Class</label>
-                    <select
-                      value={newCls}
-                      onChange={(e) => setNewCls(e.target.value)}
-                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-md text-sm text-gray-900 outline-none focus:border-[#2874f0]"
-                    >
-                      {['6th', '7th', '8th', '9th', '10th', '11th', '12th'].map((c) => (
-                        <option key={c} value={c}>{c} Std</option>
-                      ))}
+                    <select value={newCls} onChange={(e) => setNewCls(e.target.value)} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:border-[#2874f0] cursor-pointer bg-white">
+                      {['6th','7th','8th','9th','10th','11th','12th'].map((c) => <option key={c} value={c}>{c} Std</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Category</label>
-                    <select
-                      value={newCat}
-                      onChange={(e) => setNewCat(e.target.value as any)}
-                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-md text-sm text-gray-900 outline-none focus:border-[#2874f0]"
-                    >
-                      <option value="guide">Single Subject Guide</option>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Type</label>
+                    <select value={newCat} onChange={(e) => setNewCat(e.target.value as 'guide' | 'combo')} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:border-[#2874f0] cursor-pointer bg-white">
+                      <option value="guide">Single Guide</option>
                       <option value="combo">5-Subject Combo</option>
                     </select>
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1.5">
-                      <input
-                        type="checkbox"
-                        checked={newDiscountEnabled}
-                        onChange={(e) => {
-                          setNewDiscountEnabled(e.target.checked);
-                          if (!e.target.checked) setNewPrice(newMrp);
-                        }}
-                        className="w-3.5 h-3.5 accent-[#2874f0] rounded cursor-pointer"
-                      />
-                      <span>Sale Price (₹)</span>
+                      <input type="checkbox" checked={newDiscountEnabled} onChange={(e) => { setNewDiscountEnabled(e.target.checked); if (!e.target.checked) setNewPrice(newMrp); }} className="w-3.5 h-3.5 accent-[#2874f0] cursor-pointer rounded" />
+                      Sale Price (₹)
                     </label>
-                    <input
-                      type="number"
-                      required
-                      disabled={!newDiscountEnabled}
-                      value={newDiscountEnabled ? newPrice : newMrp}
-                      onChange={(e) => setNewPrice(Number(e.target.value))}
-                      className={`w-full px-3 py-2 bg-white border rounded-md text-sm outline-none ${
-                        newDiscountEnabled ? 'border-[#2874f0] text-gray-900' : 'border-gray-200 text-gray-400 bg-gray-50'
-                      }`}
-                    />
+                    <input type="number" required disabled={!newDiscountEnabled} value={newDiscountEnabled ? newPrice : newMrp} onChange={(e) => setNewPrice(Number(e.target.value))} className={`w-full px-3 py-2 border rounded-lg text-sm outline-none ${newDiscountEnabled ? 'border-[#2874f0]' : 'border-gray-200 text-gray-400 bg-gray-50'}`} />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">MRP (₹)</label>
-                    <input
-                      type="number"
-                      required
-                      value={newMrp}
-                      onChange={(e) => {
-                        const val = Number(e.target.value);
-                        setNewMrp(val);
-                        if (!newDiscountEnabled) setNewPrice(val);
-                      }}
-                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-md text-sm text-gray-900 outline-none focus:border-[#2874f0]"
-                    />
+                    <input type="number" required value={newMrp} onChange={(e) => { const v = Number(e.target.value); setNewMrp(v); if (!newDiscountEnabled) setNewPrice(v); }} className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm outline-none focus:border-[#2874f0]" />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1.5">
-                      <input
-                        type="checkbox"
-                        checked={newBadgeEnabled}
-                        onChange={(e) => setNewBadgeEnabled(e.target.checked)}
-                        className="w-3.5 h-3.5 accent-[#2874f0] rounded cursor-pointer"
-                      />
-                      <span>Offer Badge</span>
+                      <input type="checkbox" checked={newBadgeEnabled} onChange={(e) => setNewBadgeEnabled(e.target.checked)} className="w-3.5 h-3.5 accent-[#2874f0] cursor-pointer rounded" />
+                      Badge
                     </label>
-                    <input
-                      type="text"
-                      disabled={!newBadgeEnabled}
-                      placeholder="e.g. BESTSELLER"
-                      value={newBadge}
-                      onChange={(e) => setNewBadge(e.target.value)}
-                      className={`w-full px-3 py-2 bg-white border rounded-md text-sm uppercase outline-none ${
-                        newBadgeEnabled ? 'border-[#2874f0] text-gray-900' : 'border-gray-200 text-gray-400 bg-gray-50'
-                      }`}
-                    />
+                    <input type="text" disabled={!newBadgeEnabled} placeholder="e.g. BESTSELLER" value={newBadge} onChange={(e) => setNewBadge(e.target.value)} className={`w-full px-3 py-2 border rounded-lg text-sm uppercase outline-none ${newBadgeEnabled ? 'border-[#2874f0]' : 'border-gray-200 text-gray-400 bg-gray-50'}`} />
                   </div>
-                  <div className="sm:col-span-2 lg:col-span-1">
+                  <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">Cover Image</label>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleImageFileUpload}
-                      className="w-full text-xs text-gray-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-[#2874f0]/10 file:text-[#2874f0] cursor-pointer"
-                    />
+                    <input type="file" accept="image/*" onChange={handleImageFileUpload} className="w-full text-xs text-gray-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-[#2874f0] cursor-pointer" />
                   </div>
-                  <div className="sm:col-span-2 lg:col-span-4 flex items-center justify-between pt-1">
-                    {newImg && (
-                      <img src={newImg} alt="Preview" className="w-10 h-10 object-contain rounded border border-gray-200 bg-gray-50 p-0.5" />
-                    )}
-                    <button
-                      type="submit"
-                      className="px-5 py-2 text-xs font-semibold text-white bg-[#2874f0] hover:bg-[#1a5dc8] rounded-md transition-colors cursor-pointer ml-auto"
-                    >
-                      Save Product
-                    </button>
+                  <div className="col-span-2 sm:col-span-4 flex items-center justify-between pt-1">
+                    {newImg && <img src={newImg} alt="" className="w-10 h-10 object-contain rounded-lg border border-gray-200 bg-gray-50 p-0.5" />}
+                    <button type="submit" className="px-5 py-2 text-xs font-semibold text-white bg-[#2874f0] hover:bg-[#1a5dc8] rounded-lg transition-colors cursor-pointer ml-auto">Save Product</button>
                   </div>
                 </form>
               </div>
             )}
 
-            {/* Product Table */}
-            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
               {products.length === 0 ? (
-                <div className="p-12 text-center">
-                  <Package className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-                  <p className="text-sm font-semibold text-gray-600">No products in catalog</p>
-                  <p className="text-xs text-gray-400 mt-1">Click &ldquo;Add Product&rdquo; to create your first listing</p>
-                </div>
+                <div className="p-12 text-center"><Package className="w-12 h-12 mx-auto mb-3 text-gray-300" /><p className="text-sm font-semibold text-gray-600">No products yet</p><p className="text-xs text-gray-400 mt-1">Click &ldquo;Add Product&rdquo; to create your first listing</p></div>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs">
-                    <thead>
-                      <tr className="bg-[#f8f9fa] border-b border-gray-200">
-                        <th className="py-3 px-4 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Product</th>
-                        <th className="py-3 px-3 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Class</th>
-                        <th className="py-3 px-3 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Price</th>
-                        <th className="py-3 px-3 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wide">MRP</th>
-                        <th className="py-3 px-3 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Badge</th>
-                        <th className="py-3 px-3 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Status</th>
-                        <th className="py-3 px-3 text-right text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Actions</th>
-                      </tr>
-                    </thead>
+                    <thead><tr className="bg-[#f8f9fa] border-b border-gray-200">{['Product','Class','Price','MRP','Badge','Stock','Actions'].map((h) => <th key={h} className={`py-3 px-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide ${h === 'Actions' ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
                     <tbody className="divide-y divide-gray-100">
                       {products.map((p) => {
                         const isEditing = editingId === p.id;
-                        const discount = p.mrp > p.price ? Math.round(((p.mrp - p.price) / p.mrp) * 100) : 0;
+                        const disc = p.mrp > p.price ? Math.round(((p.mrp - p.price) / p.mrp) * 100) : 0;
                         return (
                           <tr key={p.id} className="hover:bg-[#f8f9fa] transition-colors">
-                            <td className="py-3 px-4">
-                              <div className="flex items-center gap-3">
-                                <img
-                                  src={p.image}
-                                  alt={p.title}
-                                  className="w-10 h-10 object-contain bg-gray-50 border border-gray-100 rounded p-0.5"
-                                />
-                                <span className="font-medium text-gray-900 max-w-[200px] truncate">{p.title}</span>
-                              </div>
-                            </td>
-                            <td className="py-3 px-3 text-gray-500">{p.cls}</td>
+                            <td className="py-3 px-3"><div className="flex items-center gap-2.5"><img src={p.image} alt={p.title} className="w-8 h-8 object-contain bg-gray-50 border border-gray-100 rounded-lg p-0.5 flex-shrink-0" /><span className="font-medium text-gray-900 truncate max-w-[160px] sm:max-w-xs">{p.title}</span></div></td>
+                            <td className="py-3 px-3 text-gray-500 whitespace-nowrap">{p.cls}</td>
                             <td className="py-3 px-3">
                               {isEditing ? (
-                                <div className="flex items-center gap-1.5">
-                                  <input
-                                    type="checkbox"
-                                    checked={editDiscountEnabled}
-                                    onChange={(e) => {
-                                      const checked = e.target.checked;
-                                      setEditDiscountEnabled(checked);
-                                      if (!checked) {
-                                        setEditPrice(editMrp);
-                                      }
-                                    }}
-                                    className="w-3.5 h-3.5 accent-[#2874f0] rounded cursor-pointer"
-                                    title="Enable Sale Price"
-                                  />
-                                  <input
-                                    type="number"
-                                    disabled={!editDiscountEnabled}
-                                    value={editDiscountEnabled ? editPrice : editMrp}
-                                    onChange={(e) => setEditPrice(Number(e.target.value))}
-                                    className={`w-16 px-2 py-1 bg-gray-50 border rounded text-xs font-semibold outline-none ${
-                                      editDiscountEnabled ? 'border-[#2874f0] text-[#2874f0]' : 'border-gray-200 text-gray-400'
-                                    }`}
-                                  />
-                                </div>
-                              ) : (
-                                <div className="flex items-center gap-1.5">
-                                  <span className="font-bold text-gray-900">₹{p.price}</span>
-                                  {discount > 0 && (
-                                    <span className="text-[10px] font-bold text-green-600">{discount}% off</span>
-                                  )}
-                                </div>
-                              )}
+                                <div className="flex items-center gap-1"><input type="checkbox" checked={editDiscountEnabled} onChange={(e) => { setEditDiscountEnabled(e.target.checked); if (!e.target.checked) setEditPrice(editMrp); }} className="w-3 h-3 accent-[#2874f0] cursor-pointer" /><input type="number" disabled={!editDiscountEnabled} value={editDiscountEnabled ? editPrice : editMrp} onChange={(e) => setEditPrice(Number(e.target.value))} className={`w-16 px-2 py-1 border rounded text-xs font-semibold outline-none ${editDiscountEnabled ? 'border-[#2874f0] text-[#2874f0]' : 'border-gray-200 text-gray-400'}`} /></div>
+                              ) : (<div className="flex items-center gap-1.5"><span className="font-bold text-gray-900">₹{p.price}</span>{disc > 0 && <span className="text-[10px] font-bold text-green-600">{disc}%</span>}</div>)}
                             </td>
                             <td className="py-3 px-3 text-gray-400">
-                              {isEditing ? (
-                                <input
-                                  type="number"
-                                  value={editMrp}
-                                  onChange={(e) => {
-                                    const val = Number(e.target.value);
-                                    setEditMrp(val);
-                                    if (!editDiscountEnabled) setEditPrice(val);
-                                  }}
-                                  className="w-16 px-2 py-1 bg-gray-50 border border-gray-200 rounded text-xs font-semibold text-gray-700 outline-none"
-                                />
-                              ) : (
-                                <span className={discount > 0 ? 'line-through' : ''}>₹{p.mrp}</span>
-                              )}
+                              {isEditing ? <input type="number" value={editMrp} onChange={(e) => { const v = Number(e.target.value); setEditMrp(v); if (!editDiscountEnabled) setEditPrice(v); }} className="w-16 px-2 py-1 bg-gray-50 border border-gray-200 rounded text-xs font-semibold text-gray-700 outline-none" />
+                              : <span className={disc > 0 ? 'line-through' : ''}>₹{p.mrp}</span>}
                             </td>
                             <td className="py-3 px-3">
                               {isEditing ? (
-                                <div className="flex items-center gap-1.5">
-                                  <input
-                                    type="checkbox"
-                                    checked={editBadgeEnabled}
-                                    onChange={(e) => setEditBadgeEnabled(e.target.checked)}
-                                    className="w-3.5 h-3.5 accent-[#2874f0] rounded cursor-pointer"
-                                  />
-                                  <input
-                                    type="text"
-                                    disabled={!editBadgeEnabled}
-                                    value={editBadge}
-                                    placeholder="Badge"
-                                    onChange={(e) => setEditBadge(e.target.value)}
-                                    className={`w-20 px-2 py-1 bg-gray-50 border rounded text-[10px] font-bold uppercase outline-none ${
-                                      editBadgeEnabled ? 'border-[#2874f0] text-gray-700' : 'border-gray-200 text-gray-300'
-                                    }`}
-                                  />
-                                </div>
-                              ) : (
-                                p.badge ? (
-                                  <span className="text-[10px] font-bold text-orange-700 bg-orange-50 border border-orange-200 px-1.5 py-0.5 rounded uppercase">
-                                    {p.badge}
-                                  </span>
-                                ) : (
-                                  <span className="text-gray-300 text-[10px]">—</span>
-                                )
-                              )}
+                                <div className="flex items-center gap-1"><input type="checkbox" checked={editBadgeEnabled} onChange={(e) => setEditBadgeEnabled(e.target.checked)} className="w-3 h-3 accent-[#2874f0] cursor-pointer" /><input type="text" disabled={!editBadgeEnabled} value={editBadge} placeholder="Badge" onChange={(e) => setEditBadge(e.target.value)} className={`w-20 px-2 py-1 border rounded text-[10px] font-bold uppercase outline-none ${editBadgeEnabled ? 'border-[#2874f0]' : 'border-gray-200 text-gray-300'}`} /></div>
+                              ) : p.badge ? <span className="text-[10px] font-bold text-orange-700 bg-orange-50 border border-orange-200 px-1.5 py-0.5 rounded-md uppercase">{p.badge}</span> : <span className="text-gray-300">—</span>}
                             </td>
                             <td className="py-3 px-3">
-                              <button
-                                onClick={() => toggleStock(p.id, p.inStock)}
-                                className={`text-[10px] font-bold px-2 py-1 rounded-sm transition-colors cursor-pointer ${
-                                  p.inStock
-                                    ? 'bg-green-50 text-green-700 border border-green-200'
-                                    : 'bg-red-50 text-red-600 border border-red-200'
-                                }`}
-                              >
-                                {p.inStock ? 'Active' : 'Inactive'}
-                              </button>
+                              <button onClick={() => toggleStock(p.id, p.inStock)} className={`text-[10px] font-bold px-2 py-1 rounded-md transition-colors cursor-pointer ${p.inStock ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-600 border border-red-200'}`}>{p.inStock ? 'Active' : 'Off'}</button>
                             </td>
                             <td className="py-3 px-3 text-right">
                               <div className="flex items-center justify-end gap-1.5">
                                 {isEditing ? (
-                                  <button
-                                    onClick={() => saveProductChanges(p.id)}
-                                    className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-white bg-green-600 hover:bg-green-700 rounded-md cursor-pointer transition-colors"
-                                  >
-                                    <Check className="w-3 h-3" /> Save
-                                  </button>
+                                  <button onClick={() => saveProductChanges(p.id)} className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-white bg-green-600 hover:bg-green-700 rounded-lg cursor-pointer transition-colors"><Check className="w-3 h-3" />Save</button>
                                 ) : (
-                                  <button
-                                    onClick={() => startEditing(p)}
-                                    className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-[#2874f0] bg-blue-50 hover:bg-blue-100 rounded-md cursor-pointer transition-colors"
-                                  >
-                                    <Edit2 className="w-3 h-3" /> Edit
-                                  </button>
+                                  <button onClick={() => startEditing(p)} className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-[#2874f0] bg-blue-50 hover:bg-blue-100 rounded-lg cursor-pointer transition-colors"><Edit2 className="w-3 h-3" />Edit</button>
                                 )}
-                                <button
-                                  onClick={() => handleDeleteProduct(p.id)}
-                                  className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors cursor-pointer"
-                                  title="Delete"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
+                                <button onClick={() => handleDeleteProduct(p.id)} className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
                               </div>
                             </td>
                           </tr>
@@ -1198,84 +881,62 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* ====================== WHATSAPP TAB ====================== */}
+        {/* ══════════════════════════════════════════════════════════
+            WHATSAPP TAB
+        ══════════════════════════════════════════════════════════ */}
         {activeTab === 'whatsapp' && (
           <div className="max-w-lg mx-auto space-y-4">
-            <div className="bg-white rounded-lg border border-gray-200 p-6 text-center">
-              <div className="w-12 h-12 bg-[#25d366]/10 text-[#25d366] rounded-full flex items-center justify-center mx-auto mb-3">
-                <MessageSquare className="w-6 h-6" />
-              </div>
+            <div className="bg-white rounded-xl border border-gray-200 p-6 text-center">
+              <div className="w-12 h-12 bg-[#25d366]/10 text-[#25d366] rounded-full flex items-center justify-center mx-auto mb-3"><MessageSquare className="w-6 h-6" /></div>
               <h2 className="text-base font-bold text-gray-900">WhatsApp Business Bot</h2>
-              <p className="text-xs text-gray-400 mt-1">
-                Connect your WhatsApp to send automated order updates to customers
-              </p>
+              <p className="text-xs text-gray-400 mt-1">Connect your WhatsApp to send automated order updates</p>
             </div>
 
             {waStatus.status === 'CONNECTED' || waStatus.connected ? (
-              <div className="bg-white rounded-lg border border-green-200 p-6 text-center space-y-4">
-                <div className="w-12 h-12 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto">
-                  <CheckCircle2 className="w-6 h-6" />
+              <div className="bg-white rounded-xl border border-green-200 p-6 text-center space-y-4">
+                <div className="w-12 h-12 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto"><CheckCircle2 className="w-6 h-6" /></div>
+                <div><h3 className="text-sm font-bold text-green-700">WhatsApp Connected</h3><p className="text-xs text-gray-500 mt-1">Session is saved and will persist across restarts.</p></div>
+                <div className="bg-gray-50 rounded-lg p-3 text-xs space-y-1.5">
+                  {[['Session','Permanent'],['Status','Online'],['Cost','Free (Baileys)']].map(([k,v]) => (
+                    <div key={k} className="flex justify-between"><span className="text-gray-500">{k}</span><span className="font-semibold text-gray-700">{v}</span></div>
+                  ))}
                 </div>
-                <div>
-                  <h3 className="text-sm font-bold text-green-700">WhatsApp Connected</h3>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Your session is saved and will persist across server restarts.
-                  </p>
-                </div>
-
-                <div className="bg-gray-50 rounded-md p-3 text-xs space-y-1.5">
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Session</span>
-                    <span className="text-green-600 font-semibold">Permanent</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Status</span>
-                    <span className="text-green-600 font-semibold">Online</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Cost</span>
-                    <span className="text-gray-700 font-semibold">Free</span>
-                  </div>
-                </div>
-
-                <button
-                  onClick={handleUnlinkWhatsApp}
-                  className="text-xs font-semibold text-red-500 hover:text-red-600 hover:bg-red-50 px-4 py-2 rounded-md transition-colors cursor-pointer"
-                >
-                  Unlink Session
-                </button>
+                <button onClick={handleUnlinkWhatsApp} className="text-xs font-semibold text-red-500 hover:text-red-600 hover:bg-red-50 px-4 py-2 rounded-lg transition-colors cursor-pointer">Unlink Session</button>
               </div>
             ) : (
-              <div className="bg-white rounded-lg border border-gray-200 p-6 text-center space-y-4">
-                {waStatus.qrImage ? (
-                  <div>
-                    <div className="bg-white border-2 border-gray-200 p-4 rounded-lg inline-block shadow-sm">
-                      <img src={waStatus.qrImage} alt="WhatsApp QR Code" className="w-56 h-56 mx-auto block" />
-                    </div>
-                    <p className="text-xs text-gray-500 mt-3 font-medium">
-                      Open WhatsApp → Linked Devices → Scan this code
-                    </p>
-                  </div>
-                ) : (
-                  <div className="py-6 space-y-3">
-                    <div className="w-6 h-6 border-2 border-[#2874f0] border-t-transparent rounded-full animate-spin mx-auto" />
-                    <p className="text-xs text-gray-400">Generating QR Code...</p>
+              <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
+                <div className="text-center space-y-1">
+                  <p className="text-sm font-bold text-gray-700">
+                    {waStatus.status === 'LOADING' ? 'Connecting...' : waStatus.status === 'INITIALIZING' ? 'WhatsApp Engine Starting...' : 'Not Connected'}
+                  </p>
+                  <p className="text-xs text-gray-400">{waStatus.message || 'Link using a pairing code or QR code below'}</p>
+                </div>
+
+                {waStatus.qrImage && (
+                  <div className="text-center">
+                    <img src={waStatus.qrImage} alt="WhatsApp QR" className="w-48 h-48 mx-auto rounded-xl border border-gray-200 shadow-sm" />
+                    <p className="text-xs text-gray-400 mt-2">Scan this QR code with WhatsApp</p>
                   </div>
                 )}
+
+                <div className="border-t border-gray-100 pt-4">
+                  <p className="text-xs font-semibold text-gray-700 mb-3">Or link via Pairing Code</p>
+                  <form onSubmit={handleRequestPairingCode} className="flex gap-2">
+                    <input type="tel" placeholder="91XXXXXXXXXX" value={waPhoneInput} onChange={(e) => setWaPhoneInput(e.target.value)} required className="flex-1 px-3 py-2 text-xs border border-gray-200 rounded-lg outline-none focus:border-[#2874f0] focus:ring-1 focus:ring-[#2874f0]/20" />
+                    <button type="submit" className="px-3 py-2 text-xs font-semibold text-white bg-[#2874f0] hover:bg-[#1a5dc8] rounded-lg transition-colors cursor-pointer whitespace-nowrap">Get Code</button>
+                  </form>
+                  {waPairingCode && (
+                    <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg text-center">
+                      <p className="text-xs text-amber-700 font-medium mb-1">Enter this code in WhatsApp → Link a Device → Link with Phone Number:</p>
+                      <p className="text-2xl font-black text-amber-800 tracking-[0.3em]">{waPairingCode}</p>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
-
-            <div className="bg-white rounded-lg border border-gray-200 p-4">
-              <h4 className="text-xs font-bold text-gray-700 mb-2">How to connect:</h4>
-              <ol className="text-[11px] text-gray-500 space-y-1 list-decimal list-inside">
-                <li>Open WhatsApp on your phone</li>
-                <li>Tap Menu → Linked Devices → Link a Device</li>
-                <li>Point your camera at the QR code above</li>
-                <li>Your session will be saved permanently</li>
-              </ol>
-            </div>
           </div>
         )}
+
       </main>
     </div>
   );
