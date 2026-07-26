@@ -78,7 +78,7 @@ async function connectToWhatsApp() {
   sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect, qr } = update;
 
-    if (qr) {
+    if (qr && !isConnected) {
       try {
         const qrBuffer = await QRCode.toBuffer(qr);
         fs.writeFileSync(QR_IMAGE_FILE, qrBuffer);
@@ -104,17 +104,23 @@ async function connectToWhatsApp() {
     }
 
     if (connection === 'close') {
-      const shouldReconnect = (lastDisconnect?.error)?.output?.statusCode !== DisconnectReason.loggedOut;
-      isConnected = false;
-      updateStateFile({
-        status: 'DISCONNECTED',
-        connected: false,
-        message: 'Reconnecting to WhatsApp...',
-        timestamp: Date.now(),
-      });
-      console.log('❌ WhatsApp connection closed. Reconnecting:', shouldReconnect);
-      if (shouldReconnect) {
+      const statusCode = (lastDisconnect?.error)?.output?.statusCode;
+      const isLoggedOut = statusCode === DisconnectReason.loggedOut;
+      const shouldReconnect = !isLoggedOut;
+
+      if (!isLoggedOut) {
+        // Keeps user status as CONNECTED in DB during temporary reconnects
+        console.log('🔄 Temporary WhatsApp socket drop. Preserving session & reconnecting...');
         setTimeout(connectToWhatsApp, 3000);
+      } else {
+        isConnected = false;
+        updateStateFile({
+          status: 'DISCONNECTED',
+          connected: false,
+          message: 'WhatsApp session unlinked.',
+          timestamp: Date.now(),
+        });
+        console.log('❌ WhatsApp logged out permanently.');
       }
     } else if (connection === 'open') {
       isConnected = true;
