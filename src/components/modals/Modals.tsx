@@ -1214,76 +1214,116 @@ export const Modals = () => {
             </motion.div>
           </div>
         )}
-        {/* Flipkart / Amazon-Style Order Success Celebration Splash Modal */}
+        {/* Custom Brand-Exclusive Blessing Power Guide Order Victory Splash Modal */}
         {orderSuccessData && (
-          <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl z-50 flex items-center justify-center p-4 overflow-y-auto">
             <motion.div
-              initial={{ scale: 0.8, opacity: 0, y: 20 }}
+              initial={{ scale: 0.85, opacity: 0, y: 30 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.8, opacity: 0, y: 20 }}
-              className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 text-center space-y-6 shadow-2xl relative border border-slate-100 overflow-hidden"
+              exit={{ scale: 0.85, opacity: 0, y: 30 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              className="bg-white rounded-[2.5rem] max-w-lg w-full p-6 sm:p-9 text-center space-y-6 shadow-[0_25px_60px_-15px_rgba(0,27,58,0.5)] relative border border-slate-200/80 overflow-hidden"
             >
-              {/* Top Confetti Ambient Glow */}
-              <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-64 h-64 bg-gradient-to-br from-amber-300 via-emerald-400 to-blue-500 rounded-full blur-3xl opacity-30 pointer-events-none" />
+              {/* Background Ambient Radial Aura */}
+              <div className="absolute -top-32 left-1/2 -translate-x-1/2 w-80 h-80 bg-gradient-to-tr from-amber-400/40 via-blue-600/30 to-emerald-400/40 rounded-full blur-3xl opacity-60 pointer-events-none animate-pulse" />
+              <div className="absolute top-0 right-0 w-32 h-32 bg-amber-300/20 rounded-full blur-2xl pointer-events-none" />
 
-              {/* Glowing Scaling Green Checkmark Icon */}
+              {/* Unique BPG Crest Icon with Glowing Pulse Ring */}
               <div className="relative inline-block mt-2">
-                <div className="w-20 h-20 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-600 text-white flex items-center justify-center mx-auto shadow-xl ring-8 ring-emerald-100 animate-bounce">
-                  <CheckCircle2 className="w-12 h-12 stroke-[2.5]" />
+                <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-[#001B3A] via-[#002B5B] to-[#0044AA] text-white flex items-center justify-center mx-auto shadow-2xl ring-8 ring-amber-400/30 transform -rotate-3 hover:rotate-0 transition-transform duration-300">
+                  <PackageCheck className="w-12 h-12 text-amber-400 stroke-[2.2]" />
                 </div>
-                <div className="absolute -top-2 -right-2 bg-amber-400 text-slate-950 font-black text-[10px] px-2 py-0.5 rounded-full shadow-md animate-pulse">
-                  🎉 CONFIRMED
+                <div className="absolute -bottom-2 right-0 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white font-black text-[10px] px-3 py-1 rounded-full shadow-lg border border-white flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3 text-white" />
+                  <span>BPG VERIFIED</span>
                 </div>
               </div>
 
-              <div>
-                <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest bg-emerald-50 px-3.5 py-1 rounded-full border border-emerald-200">
-                  ✨ ORDER PLACED SUCCESSFULLY
-                </span>
-                <h2 className="font-heading font-black text-2xl sm:text-3xl text-[#001B3A] mt-3">
-                  Thank You for Your Order!
+              {/* Title & Subtitle */}
+              <div className="space-y-2">
+                <div className="inline-flex items-center gap-1.5 bg-amber-500/10 text-amber-700 text-[11px] font-black uppercase tracking-widest px-4 py-1.5 rounded-full border border-amber-400/30">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-500 fill-amber-400" />
+                  <span>ORDER CONFIRMED &amp; DISPATCH READY</span>
+                </div>
+
+                <h2 className="font-heading font-black text-2xl sm:text-3xl text-[#001B3A] tracking-tight">
+                  Congratulations on Your Guide Book Order!
                 </h2>
-                <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto">
-                  Your order <span className="font-extrabold text-blue-600">#{orderSuccessData.orderId}</span> has been confirmed &amp; logged into Railway PostgreSQL!
+
+                <p className="text-xs text-slate-500 max-w-xs mx-auto">
+                  Your order is booked &amp; logged into Railway PostgreSQL. ST Courier fulfillment is now underway!
                 </p>
               </div>
 
-              {/* Order Info & Delivery Badge */}
-              <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 text-left space-y-3 text-xs">
-                <div className="flex justify-between items-center pb-2.5 border-b border-slate-200/60">
-                  <span className="text-slate-500 font-bold uppercase text-[10px]">ORDER ID</span>
-                  <span className="font-mono font-black text-[#001B3A] text-sm">#{orderSuccessData.orderId}</span>
+              {/* Interactive Order Details Summary Box */}
+              <div className="bg-gradient-to-br from-slate-50 to-blue-50/40 border border-slate-200/90 rounded-3xl p-5 text-left space-y-3 shadow-inner">
+                <div className="flex justify-between items-center pb-3 border-b border-slate-200/70">
+                  <div>
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">OFFICIAL ORDER NUMBER</span>
+                    <span className="font-mono font-black text-[#001B3A] text-base">#{orderSuccessData.orderId}</span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(orderSuccessData.orderId);
+                      showToast('📋 Order ID copied to clipboard!');
+                    }}
+                    className="text-[10px] font-bold text-blue-600 bg-blue-100/80 hover:bg-blue-200/80 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                  >
+                    COPY ID
+                  </button>
                 </div>
 
-                <div className="flex justify-between items-center pb-2.5 border-b border-slate-200/60">
-                  <span className="text-slate-500 font-bold uppercase text-[10px]">TOTAL AMOUNT</span>
-                  <span className="font-black text-emerald-600 text-sm">₹{orderSuccessData.totalAmount} ({orderSuccessData.paymentMethod})</span>
+                <div className="flex justify-between items-center pb-3 border-b border-slate-200/70">
+                  <div>
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">TOTAL PAYMENT</span>
+                    <span className="font-black text-emerald-600 text-sm">₹{orderSuccessData.totalAmount}</span>
+                  </div>
+                  <span className="text-[11px] font-extrabold bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full border border-emerald-200">
+                    {orderSuccessData.paymentMethod}
+                  </span>
                 </div>
 
-                <div className="flex justify-between items-center">
-                  <span className="text-slate-500 font-bold uppercase text-[10px]">LOGISTICS PARTNER</span>
-                  <span className="font-extrabold text-slate-900 text-xs">ST Courier Express (2-3 Days)</span>
+                <div className="flex items-center justify-between pt-1">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-blue-600/10 text-blue-700 flex items-center justify-center">
+                      <Truck className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">LOGISTICS NETWORK</span>
+                      <span className="font-extrabold text-slate-900 text-xs">ST Courier Express (2-3 Business Days)</span>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {/* Free WhatsApp Dispatch Badge */}
-              <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-3.5 flex items-center justify-center gap-2 text-xs text-emerald-800 font-bold">
-                <Send className="w-4 h-4 text-emerald-600 animate-pulse" />
-                <span>Automated WhatsApp update sent to <strong>+91 {orderSuccessData.phone}</strong></span>
+              {/* WhatsApp Automated Dispatch Status Card */}
+              <div className="bg-[#001B3A] text-white rounded-2xl p-4 flex items-center justify-between text-xs shadow-lg">
+                <div className="flex items-center gap-3 text-left">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/40">
+                    <Send className="w-4.5 h-4.5 animate-pulse" />
+                  </div>
+                  <div>
+                    <span className="font-bold text-slate-200 block">WhatsApp Notification Sent</span>
+                    <span className="text-[11px] text-emerald-400 font-mono">+91 {orderSuccessData.phone}</span>
+                  </div>
+                </div>
+                <span className="text-[10px] font-extrabold bg-emerald-500 text-slate-950 px-2.5 py-1 rounded-lg">
+                  LIVE
+                </span>
               </div>
 
-              {/* Action Buttons */}
-              <div className="space-y-2.5 pt-2">
+              {/* High-Impact Action Buttons */}
+              <div className="space-y-3 pt-1">
                 <button
                   onClick={() => {
                     const oid = orderSuccessData.orderId;
                     setOrderSuccessData(null);
                     router.push(`/orders?orderId=${oid}`);
                   }}
-                  className="w-full bg-gradient-to-r from-[#001B3A] via-[#002B5B] to-[#0044AA] hover:from-blue-700 hover:to-blue-600 text-white font-black text-xs py-3.5 rounded-2xl shadow-lg uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer"
+                  className="w-full bg-gradient-to-r from-[#001B3A] via-[#002B5B] to-[#0044AA] hover:from-blue-700 hover:to-blue-600 text-white font-black text-xs py-4 rounded-2xl shadow-xl uppercase tracking-wider flex items-center justify-center gap-2.5 transition-all transform hover:-translate-y-0.5 cursor-pointer"
                 >
                   <Truck className="w-4 h-4 text-amber-400" />
-                  <span>VIEW LIVE ST COURIER TRACKING</span>
+                  <span>TRACK ST COURIER SHIPMENT LIVE</span>
                 </button>
 
                 <button
@@ -1291,7 +1331,7 @@ export const Modals = () => {
                     setOrderSuccessData(null);
                     router.push('/');
                   }}
-                  className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs py-3 rounded-2xl transition-colors cursor-pointer"
+                  className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs py-3.5 rounded-2xl transition-colors cursor-pointer"
                 >
                   CONTINUE SHOPPING
                 </button>
