@@ -1091,18 +1091,30 @@ export default function AdminPage() {
 
                           <button
                             onClick={async () => {
-                              const awb = shiprocketAwbInput[o.orderId] || o.trackingNumber;
+                              const awb = (shiprocketAwbInput[o.orderId] || o.trackingNumber || '').trim();
                               if (!awb) {
-                                alert('Please enter an ST Courier Docket Number first!');
+                                alert('⚠️ Please enter an ST Courier Docket Number in the box below first!');
                                 return;
                               }
+
+                              showToast('⏳ Validating ST Courier Docket format...');
+                              const verifyRes = await fetch(`/api/courier/track?docket=${encodeURIComponent(awb)}`);
+                              const verifyData = await verifyRes.json();
+
+                              if (!verifyRes.ok || verifyData.isValid === false) {
+                                const reason = verifyData.error || 'Invalid ST Courier docket number format.';
+                                showToast(`❌ INVALID AWB: ${reason}`);
+                                alert(`⚠️ ST COURIER AWB REJECTED!\n\n${reason}\n\nValid examples: STC241568974, TN12345678, 123456789012`);
+                                return;
+                              }
+
                               showToast('⏳ Updating stage: Handed to ST Courier...');
                               await fetch('/api/orders/timeline', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ orderId: o.orderId, status: 'HANDED_TO_ST_COURIER', awbNumber: awb }),
                               });
-                              showToast('✅ Stage updated: Handed to ST Courier!');
+                              showToast('✅ Docket verified & stage updated to Handed to ST Courier!');
                               loadLiveOrders();
                             }}
                             className="bg-blue-900/60 hover:bg-blue-800 text-blue-200 border border-blue-700/50 p-2 rounded-lg transition-all text-center cursor-pointer font-extrabold"
