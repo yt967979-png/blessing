@@ -143,12 +143,13 @@ async function sendGmailOtp(toEmail: string, otp: string): Promise<boolean> {
 export async function POST(request: Request) {
   let client: any = null;
   try {
-    const { email } = await request.json();
+    const { email, mode } = await request.json();
     if (!email || !String(email).trim()) {
       return NextResponse.json({ error: 'Email address is required.' }, { status: 400 });
     }
 
     const cleanEmail = String(email).toLowerCase().trim();
+    const isResetMode = mode === 'reset';
 
     if (!isValidEmailFormat(cleanEmail)) {
       return NextResponse.json({ error: 'Please enter a valid email address.' }, { status: 400 });
@@ -163,13 +164,20 @@ export async function POST(request: Request) {
 
     client = await getDbClient();
 
-    // 1. Check if email is already registered
+    // Check user registration status based on mode
     const userCheck = await client.query('SELECT id FROM users WHERE LOWER(email) = $1', [cleanEmail]);
-    if (userCheck.rows.length > 0) {
+    if (!isResetMode && userCheck.rows.length > 0) {
       await client.end();
       return NextResponse.json(
         { error: 'An account with this email address already exists. Please log in.' },
         { status: 409 }
+      );
+    }
+    if (isResetMode && userCheck.rows.length === 0) {
+      await client.end();
+      return NextResponse.json(
+        { error: 'No account found with this email address.' },
+        { status: 404 }
       );
     }
 

@@ -92,8 +92,12 @@ export const Modals = () => {
   const [trackResult, setTrackResult] = useState<any>(null);
 
   // Auth form state
-  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+  const [authMode, setAuthMode] = useState<'login' | 'register' | 'forgot'>('login');
   const [authForm, setAuthForm] = useState({ name: '', email: '', phone: '', password: '' });
+  const [forgotOtp, setForgotOtp] = useState('');
+  const [forgotNewPassword, setForgotNewPassword] = useState('');
+  const [forgotStep, setForgotStep] = useState<'email' | 'otp'>('email');
+  const [forgotOtpSent, setForgotOtpSent] = useState(false);
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -842,6 +846,21 @@ export const Modals = () => {
                           {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                         </button>
                       </div>
+                      {authMode === 'login' && (
+                        <div className="text-right mt-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAuthMode('forgot');
+                              setAuthError(null);
+                              setForgotStep('email');
+                            }}
+                            className="text-[11px] font-bold text-blue-600 hover:text-blue-700 transition-colors cursor-pointer"
+                          >
+                            Forgot Password?
+                          </button>
+                        </div>
+                      )}
                     </div>
 
                     {authMode === 'register' && (
@@ -899,20 +918,161 @@ export const Modals = () => {
                       </>
                     )}
 
-                    <button
-                      type="submit"
-                      disabled={isSubmitting}
-                      className="w-full bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-[#001B3A] font-extrabold text-xs py-3.5 rounded-xl shadow-md uppercase tracking-wider mt-2 transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
-                    >
-                      {authMode === 'login' ? (
-                        <span>{isSubmitting ? 'SIGNING IN...' : 'SIGN IN TO ACCOUNT'}</span>
-                      ) : (
-                        <>
-                          <User className="w-4 h-4" />
-                          <span>{isSubmitting ? 'CREATING ACCOUNT...' : 'CREATE ACCOUNT'}</span>
-                        </>
-                      )}
-                    </button>
+                    {authMode === 'forgot' ? (
+                      <div className="space-y-3.5">
+                        <div className="text-center pb-1">
+                          <h4 className="font-bold text-slate-900 text-sm">Reset Your Password</h4>
+                          <p className="text-[11px] text-slate-500 mt-0.5">
+                            {forgotStep === 'email'
+                              ? 'Enter your registered email to receive a 6-digit OTP code.'
+                              : `Enter the 6-digit code sent to ${authForm.email} and set your new password.`}
+                          </p>
+                        </div>
+
+                        {forgotStep === 'email' ? (
+                          <>
+                            <div>
+                              <label className="block font-bold text-slate-700 mb-1">Registered Email Address *</label>
+                              <div className="relative">
+                                <input
+                                  type="email"
+                                  required
+                                  placeholder="e.g. student@example.com"
+                                  value={authForm.email}
+                                  onChange={(e) => setAuthForm({ ...authForm, email: e.target.value })}
+                                  className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-blue-600 focus:bg-white transition-all font-medium"
+                                />
+                                <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              disabled={isSubmitting || !authForm.email}
+                              onClick={async () => {
+                                setIsSubmitting(true);
+                                setAuthError(null);
+                                try {
+                                  const res = await fetch('/api/auth/send-otp', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ email: authForm.email, mode: 'reset' }),
+                                  });
+                                  const data = await res.json();
+                                  if (res.ok && data.success) {
+                                    setForgotStep('otp');
+                                    setForgotOtpSent(true);
+                                    showToast('✉️ 6-digit password reset OTP sent to your email!');
+                                  } else {
+                                    setAuthError(data.error || 'Failed to send reset code.');
+                                  }
+                                } catch (e) {
+                                  setAuthError('Network error sending OTP.');
+                                } finally {
+                                  setIsSubmitting(false);
+                                }
+                              }}
+                              className="w-full bg-[#001B3A] hover:bg-blue-600 text-white font-extrabold text-xs py-3 rounded-xl shadow-md uppercase tracking-wider transition-colors cursor-pointer disabled:opacity-50"
+                            >
+                              {isSubmitting ? 'SENDING OTP...' : 'SEND RESET OTP CODE'}
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <div>
+                              <label className="block font-bold text-slate-700 mb-1">6-Digit Verification Code (OTP) *</label>
+                              <input
+                                type="text"
+                                maxLength={6}
+                                required
+                                placeholder="Enter 6-digit OTP code"
+                                value={forgotOtp}
+                                onChange={(e) => setForgotOtp(e.target.value)}
+                                className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold text-center tracking-widest outline-none focus:border-blue-600 uppercase"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block font-bold text-slate-700 mb-1">New Password *</label>
+                              <div className="relative">
+                                <input
+                                  type={showPassword ? 'text' : 'password'}
+                                  required
+                                  placeholder="Minimum 6 characters"
+                                  value={forgotNewPassword}
+                                  onChange={(e) => setForgotNewPassword(e.target.value)}
+                                  className="w-full pl-9 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-blue-600 transition-all font-medium"
+                                />
+                                <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              disabled={isSubmitting || !forgotOtp || !forgotNewPassword}
+                              onClick={async () => {
+                                setIsSubmitting(true);
+                                setAuthError(null);
+                                try {
+                                  const res = await fetch('/api/auth/reset-password', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                      email: authForm.email,
+                                      otp: forgotOtp,
+                                      newPassword: forgotNewPassword,
+                                    }),
+                                  });
+                                  const data = await res.json();
+                                  if (res.ok && data.success) {
+                                    showToast('✅ Password reset! Please sign in with your new password.');
+                                    setAuthMode('login');
+                                    setAuthError(null);
+                                  } else {
+                                    setAuthError(data.error || 'Password reset failed.');
+                                  }
+                                } catch (e) {
+                                  setAuthError('Error resetting password.');
+                                } finally {
+                                  setIsSubmitting(false);
+                                }
+                              }}
+                              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs py-3 rounded-xl shadow-md uppercase tracking-wider transition-colors cursor-pointer disabled:opacity-50"
+                            >
+                              {isSubmitting ? 'RESETTING...' : 'CONFIRM NEW PASSWORD'}
+                            </button>
+                          </>
+                        )}
+
+                        <div className="text-center pt-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAuthMode('login');
+                              setAuthError(null);
+                            }}
+                            className="text-xs font-bold text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
+                          >
+                            ← Back to Sign In
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        type="submit"
+                        disabled={isSubmitting}
+                        className="w-full bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-[#001B3A] font-extrabold text-xs py-3.5 rounded-xl shadow-md uppercase tracking-wider mt-2 transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+                      >
+                        {authMode === 'login' ? (
+                          <span>{isSubmitting ? 'SIGNING IN...' : 'SIGN IN TO ACCOUNT'}</span>
+                        ) : (
+                          <>
+                            <User className="w-4 h-4" />
+                            <span>{isSubmitting ? 'CREATING ACCOUNT...' : 'CREATE ACCOUNT'}</span>
+                          </>
+                        )}
+                      </button>
+                    )}
                   </>
                 </form>
 
