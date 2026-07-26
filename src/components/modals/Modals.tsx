@@ -28,7 +28,6 @@ import { useStore } from '@/context/StoreContext';
 import {
   isDisposableEmail,
   isValidEmailFormat,
-  isAdminCredentials,
   checkPasswordCriteria,
   isStrongPassword,
 } from '@/lib/authValidation';
@@ -94,14 +93,9 @@ export const Modals = () => {
 
   // Auth form state
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
-  const [registerStep, setRegisterStep] = useState<'details' | 'otp'>('details');
   const [authForm, setAuthForm] = useState({ name: '', email: '', phone: '', password: '' });
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [otpCode, setOtpCode] = useState('');
-  const [activeOtpPreview, setActiveOtpPreview] = useState<string | null>(null);
-  const [otpSentMsg, setOtpSentMsg] = useState<string | null>(null);
-  const [isSendingOtp, setIsSendingOtp] = useState(false);
-  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -147,21 +141,24 @@ export const Modals = () => {
     const orderId = 'BPG-' + Math.floor(1000 + Math.random() * 9000);
     const finalAmount = cartTotal > 0 ? cartTotal : 360;
 
-    const processOrderCompletion = async (payId?: string) => {
+    const processOrderCompletion = async (payId?: string, rzpOrderId?: string, rzpSignature?: string) => {
       try {
         await fetch('/api/orders', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            userId: user?.email || user?.id || user?.name || selectedAddress.name || 'Customer',
+            userId: user?.id || user?.email || selectedAddress.name || 'guest',
             customerName: selectedAddress.name || user?.name || 'Customer',
             customerPhone: selectedAddress.phone || user?.phone || '',
             address: selectedAddress.address,
             city: selectedAddress.city || 'Chennai',
+            pincode: selectedAddress.pincode || '600012',
             items: cart.map((i) => ({ id: i.id, title: i.title, qty: i.qty, price: i.price })),
             paymentMethod: paymentMethod === 'razorpay' ? 'Razorpay UPI / Cards' : 'Cash on Delivery (COD)',
-            paymentStatus: paymentMethod === 'razorpay' ? 'PAID' : 'Pending COD',
+            paymentStatus: paymentMethod === 'razorpay' ? 'Payment Confirmed' : 'Pending COD',
             razorpayPaymentId: payId || null,
+            razorpayOrderId: rzpOrderId || null,
+            razorpaySignature: rzpSignature || null,
           }),
         });
       } catch (e) {}
@@ -178,7 +175,7 @@ export const Modals = () => {
         paymentMethod: paymentMethod === 'razorpay' ? 'Razorpay UPI' : 'Cash on Delivery (COD)',
         paymentStatus: paymentMethod === 'razorpay' ? 'Payment Confirmed' : 'Pending COD',
       });
-      showToast(`🎉 Order #${orderId} placed successfully! Automated WhatsApp update sent.`);
+      showToast(`🎉 Order #${orderId} placed successfully! WhatsApp update sent.`);
     };
 
     if (paymentMethod === 'razorpay') {
@@ -190,10 +187,15 @@ export const Modals = () => {
         });
         const rzpData = await res.json();
 
+        if (!res.ok || !rzpData.id) {
+          showToast('❌ Could not create payment order. Please try again.');
+          return;
+        }
+
         if (typeof window !== 'undefined' && (window as any).Razorpay) {
           const options = {
-            key: rzpData.key || 'rzp_test_BPG10023490',
-            amount: rzpData.amount || finalAmount * 100,
+            key: rzpData.key,
+            amount: rzpData.amount,
             currency: 'INR',
             name: 'BLESSING POWER GUIDE',
             description: `Order #${orderId} - Educational Guide Books`,
@@ -204,13 +206,34 @@ export const Modals = () => {
               contact: selectedAddress.phone || user?.phone || '',
             },
             theme: { color: '#001B3A' },
-            handler: function (response: any) {
-              showToast('💳 Payment Verified via Razorpay UPI!');
-              processOrderCompletion(response.razorpay_payment_id);
+            handler: async function (response: any) {
+              // Verify signature server-side before confirming order
+              const verifyRes = await fetch('/api/razorpay', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  razorpay_order_id: response.razorpay_order_id,
+                  razorpay_payment_id: response.razorpay_payment_id,
+                  razorpay_signature: response.razorpay_signature,
+                }),
+              });
+              const verifyData = await verifyRes.json();
+
+              if (!verifyData.verified) {
+                showToast('❌ Payment verification failed. Please contact support.');
+                return;
+              }
+
+              showToast('💳 Payment verified!');
+              processOrderCompletion(
+                response.razorpay_payment_id,
+                response.razorpay_order_id,
+                response.razorpay_signature
+              );
             },
             modal: {
               ondismiss: function () {
-                showToast('Payment popup closed. You can retry payment anytime.');
+                showToast('Payment popup closed. You can retry anytime.');
               },
             },
           };
@@ -219,158 +242,25 @@ export const Modals = () => {
           rzp.open();
           return;
         }
-      } catch (err) {}
+      } catch (err) {
+        showToast('❌ Payment service error. Please try again.');
+        return;
+      }
     }
 
-    // COD or Fallback
+    // COD path
     await processOrderCompletion();
   };
 
-  const handleSendOtp = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    setAuthError(null);
-
-    const emailClean = authForm.email.trim();
-    const passwordClean = authForm.password;
-
-    if (!isValidEmailFormat(emailClean)) {
-      setAuthError('Please enter a valid email address (e.g. user@domain.com).');
-      return;
-    }
-
-    if (isDisposableEmail(emailClean)) {
-      setAuthError('⚠️ Disposable / temporary emails are blocked for security. Please use your official email.');
-      return;
-    }
-
-    if (!isStrongPassword(passwordClean)) {
-      setAuthError('⚠️ Password must be at least 8 characters long with 1 Uppercase, 1 Lowercase, 1 Number, and 1 Special Character.');
-      return;
-    }
-
-    if (passwordClean !== confirmPassword) {
-      setAuthError('⚠️ Passwords do not match. Please re-type your confirm password accurately.');
-      return;
-    }
-
-    if (!authForm.name || authForm.name.trim().length < 2) {
-      setAuthError('Please enter your full name.');
-      return;
-    }
-
-    setIsSendingOtp(true);
-    try {
-      const res = await fetch('/api/auth/send-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: emailClean }),
-      });
-      const data = await res.json();
-
-      if (data.error) {
-        setAuthError(data.error);
-        return;
-      }
-
-      setRegisterStep('otp');
-      setOtpSentMsg(`A 6-digit verification code has been sent to ${emailClean}.`);
-      if (data.previewOtp) {
-        setActiveOtpPreview(data.previewOtp);
-        showToast(`✉️ OTP sent to ${emailClean}! (Code: ${data.previewOtp})`);
-      } else {
-        showToast(`✉️ Verification code sent to ${emailClean}`);
-      }
-    } catch {
-      setAuthError('Connection error sending verification code. Please check network.');
-    } finally {
-      setIsSendingOtp(false);
-    }
-  };
-
-  const handleVerifyOtpAndRegister = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    setAuthError(null);
-
-    if (!otpCode || otpCode.trim().length < 6) {
-      setAuthError('Please enter the complete 6-digit OTP code.');
-      return;
-    }
-
-    const emailClean = authForm.email.trim();
-    const passwordClean = authForm.password;
-
-    setIsVerifyingOtp(true);
-
-    try {
-      // 1. Verify OTP with Railway PostgreSQL DB
-      const verifyRes = await fetch('/api/auth/verify-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: emailClean, otp: otpCode.trim() }),
-      });
-      const verifyData = await verifyRes.json();
-
-      if (!verifyData.verified) {
-        setIsVerifyingOtp(false);
-        setAuthError(verifyData.error || 'Invalid or expired OTP verification code.');
-        return;
-      }
-
-      // 2. Complete Account Registration in Railway PostgreSQL DB
-      const regRes = await fetch('/api/auth', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'register',
-          email: emailClean,
-          password: passwordClean,
-          name: authForm.name || emailClean.split('@')[0],
-          phone: authForm.phone || '',
-        }),
-      });
-      const regData = await regRes.json();
-      setIsVerifyingOtp(false);
-
-      if (regData.error) {
-        setAuthError(regData.error);
-        return;
-      }
-
-      // Login user in client state
-      loginUser(regData.user, regData.cart || [], regData.wishlist || [], regData.addresses || []);
-      setIsAuthOpen(false);
-      setRegisterStep('details');
-      setOtpCode('');
-      showToast(`🎉 Email verified & account created! Welcome, ${regData.user.name}`);
-    } catch {
-      setIsVerifyingOtp(false);
-      setAuthError('Server error completing registration. Please try again.');
-    }
-  };
-
-  const handleAuthSubmit = (e: React.FormEvent) => {
+  const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError(null);
 
     const emailClean = authForm.email.trim();
     const passwordClean = authForm.password;
 
-    if (isAdminCredentials(emailClean, passwordClean)) {
-      showToast('👑 Admin Authentication Success!');
-      const adminUser = {
-        id: 999,
-        name: 'Store Admin',
-        email: 'admin@blessingpowerguide.in',
-        phone: '',
-      };
-      loginUser(adminUser, [], [], []);
-      setIsAuthOpen(false);
-      router.push('/admin');
-      return;
-    }
-
     if (!isValidEmailFormat(emailClean)) {
-      setAuthError('Please enter a valid email address (e.g. user@domain.com).');
+      setAuthError('Please enter a valid email address.');
       return;
     }
 
@@ -383,72 +273,65 @@ export const Modals = () => {
         setAuthError('Please enter a valid 10-digit mobile number.');
         return;
       }
-      if (!authForm.password || authForm.password.length < 8) {
-        setAuthError('Password must be at least 8 characters long.');
+      if (isDisposableEmail(emailClean)) {
+        setAuthError('Disposable / temporary emails are blocked. Please use your real email.');
         return;
       }
-      if (authForm.password !== confirmPassword) {
+      if (!isStrongPassword(passwordClean)) {
+        setAuthError('Password must be at least 8 characters with 1 uppercase, 1 lowercase, 1 number, and 1 special character.');
+        return;
+      }
+      if (passwordClean !== confirmPassword) {
         setAuthError('Passwords do not match.');
         return;
       }
 
-      setIsSendingOtp(true);
-      fetch('/api/auth', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'register',
-          email: emailClean,
-          password: passwordClean,
-          name: authForm.name.trim(),
-          phone: authForm.phone.trim(),
-        }),
-      })
-        .then((res) => res.json())
-        .then((data) => {
-          setIsSendingOtp(false);
-          if (data.error) {
-            setAuthError(data.error);
-            return;
-          }
-          loginUser(data.user, data.cart || [], data.wishlist || [], data.addresses || []);
-          setIsAuthOpen(false);
-          showToast(`🎉 Account created successfully! Welcome, ${data.user.name}`);
-        })
-        .catch(() => {
-          setIsSendingOtp(false);
-          setAuthError('Server error creating account. Please try again.');
+      setIsSubmitting(true);
+      try {
+        const res = await fetch('/api/auth', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'register',
+            email: emailClean,
+            password: passwordClean,
+            name: authForm.name.trim(),
+            phone: authForm.phone.trim(),
+          }),
         });
+        const data = await res.json();
+        if (data.error) { setAuthError(data.error); return; }
+        loginUser(data.user, data.cart || [], data.wishlist || [], data.addresses || []);
+        setIsAuthOpen(false);
+        showToast(`🎉 Account created! Welcome, ${data.user.name}`);
+        if (data.user?.role === 'admin') router.push('/admin');
+      } catch {
+        setAuthError('Server error. Please try again.');
+      } finally {
+        setIsSubmitting(false);
+      }
       return;
     }
 
-    // Login Action
-    setAuthError(null);
-    fetch('/api/auth', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'login',
-        email: emailClean,
-        password: passwordClean,
-      }),
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.error) {
-          setAuthError(data.error);
-          return;
-        }
-        loginUser(data.user, data.cart || [], data.wishlist || [], data.addresses || []);
-        setIsAuthOpen(false);
-        showToast(`✓ Logged in! Welcome back, ${data.user.name}`);
-        if (data.user?.role === 'admin') {
-          router.push('/admin');
-        }
-      })
-      .catch(() => {
-        setAuthError('Connection error. Please check your internet and try again.');
+    // Login
+    setIsSubmitting(true);
+    try {
+      const res = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'login', email: emailClean, password: passwordClean }),
       });
+      const data = await res.json();
+      if (data.error) { setAuthError(data.error); return; }
+      loginUser(data.user, data.cart || [], data.wishlist || [], data.addresses || []);
+      setIsAuthOpen(false);
+      showToast(`✓ Welcome back, ${data.user.name}`);
+      if (data.user?.role === 'admin') router.push('/admin');
+    } catch {
+      setAuthError('Connection error. Please check your internet and try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -877,246 +760,162 @@ export const Modals = () => {
                 )}
 
                 <form onSubmit={handleAuthSubmit} className="space-y-3.5 text-xs">
-                  {authMode === 'register' && registerStep === 'otp' ? (
-                    <div className="space-y-4">
-                      <div className="bg-blue-50 border border-blue-200 rounded-xl p-3.5 text-xs text-blue-800 space-y-1">
-                        <div className="font-extrabold flex items-center gap-1.5 text-blue-900">
-                          <Mail className="w-4 h-4 text-blue-600" />
-                          <span>Verify Your Email Address</span>
-                        </div>
-                        <p className="text-[11px] leading-relaxed text-blue-700">{otpSentMsg}</p>
-                      </div>
-
-                      {activeOtpPreview && (
-                        <div
-                          onClick={() => setOtpCode(activeOtpPreview)}
-                          className="bg-amber-50 border border-amber-300 rounded-xl p-3 text-xs text-amber-900 flex items-center justify-between cursor-pointer hover:bg-amber-100/80 transition-all shadow-xs"
-                        >
-                          <div>
-                            <span className="font-bold text-[10px] uppercase text-amber-700 block">
-                              🔑 Verification Code (Generated OTP)
-                            </span>
-                            <span className="font-mono font-black text-amber-950 text-base tracking-widest">
-                              {activeOtpPreview}
-                            </span>
+                  <>
+                    {authMode === 'register' && (
+                      <>
+                        <div>
+                          <label className="block font-bold text-slate-700 mb-1" htmlFor="auth-name">Full Name *</label>
+                          <div className="relative">
+                            <input
+                              id="auth-name"
+                              name="name"
+                              type="text"
+                              autoComplete="name"
+                              required
+                              placeholder="e.g. Student Name"
+                              value={authForm.name}
+                              onChange={(e) => setAuthForm({ ...authForm, name: e.target.value })}
+                              className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-blue-600 focus:bg-white transition-all font-medium"
+                            />
+                            <User className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                           </div>
-                          <span className="bg-amber-200 hover:bg-amber-300 text-amber-950 font-black text-[10px] px-2.5 py-1.5 rounded-lg transition-colors flex items-center gap-1">
-                            <Sparkles className="w-3 h-3 text-amber-700" />
-                            <span>1-CLICK AUTOFILL</span>
-                          </span>
                         </div>
-                      )}
 
-                      <div>
-                        <label className="block font-bold text-slate-700 mb-1.5">Enter 6-Digit Verification Code (OTP) *</label>
+                        <div>
+                          <label className="block font-bold text-slate-700 mb-1" htmlFor="auth-phone">Mobile Number (WhatsApp) *</label>
+                          <div className="relative">
+                            <input
+                              id="auth-phone"
+                              name="phone"
+                              type="tel"
+                              autoComplete="tel"
+                              required
+                              placeholder="e.g. 9840418228"
+                              value={authForm.phone}
+                              onChange={(e) => setAuthForm({ ...authForm, phone: e.target.value })}
+                              className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-blue-600 focus:bg-white transition-all font-medium"
+                            />
+                            <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                          </div>
+                        </div>
+                      </>
+                    )}
+
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1" htmlFor="auth-email">Email Address *</label>
+                      <div className="relative">
                         <input
-                          type="text"
-                          maxLength={6}
+                          id="auth-email"
+                          name="username"
+                          type="email"
+                          autoComplete="username"
                           required
-                          placeholder="e.g. 483921"
-                          value={otpCode}
-                          onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
-                          className="w-full text-center tracking-[0.4em] font-mono font-black text-lg py-3 bg-slate-50 border border-blue-300 rounded-xl outline-none focus:border-blue-600 focus:bg-white transition-all text-[#001B3A]"
+                          placeholder="e.g. student@example.com"
+                          value={authForm.email}
+                          onChange={(e) => setAuthForm({ ...authForm, email: e.target.value })}
+                          className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-blue-600 focus:bg-white transition-all font-medium"
                         />
+                        <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                       </div>
+                    </div>
 
-                      <button
-                        type="button"
-                        onClick={(e) => handleVerifyOtpAndRegister(e)}
-                        disabled={isVerifyingOtp || otpCode.length < 6}
-                        className="w-full bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-extrabold text-xs py-3.5 rounded-xl uppercase tracking-wider shadow-md transition-all disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
-                      >
-                        <ShieldCheck className="w-4 h-4" />
-                        <span>{isVerifyingOtp ? 'VERIFYING CODE...' : 'VERIFY & CREATE ACCOUNT'}</span>
-                      </button>
-
-                      <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-100">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1" htmlFor="auth-password">Password *</label>
+                      <div className="relative">
+                        <input
+                          id="auth-password"
+                          name="password"
+                          type={showPassword ? 'text' : 'password'}
+                          autoComplete={authMode === 'login' ? 'current-password' : 'new-password'}
+                          required
+                          placeholder="••••••••••••"
+                          value={authForm.password}
+                          onChange={(e) => setAuthForm({ ...authForm, password: e.target.value })}
+                          className="w-full pl-9 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-blue-600 focus:bg-white transition-all font-medium"
+                        />
+                        <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                         <button
                           type="button"
-                          onClick={() => setRegisterStep('details')}
-                          className="text-slate-500 hover:text-slate-800 font-bold underline cursor-pointer"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 cursor-pointer"
                         >
-                          ← Edit Details
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => handleSendOtp(e)}
-                          disabled={isSendingOtp}
-                          className="text-blue-600 hover:text-blue-800 font-extrabold cursor-pointer"
-                        >
-                          {isSendingOtp ? 'Sending...' : 'Resend Code'}
+                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                         </button>
                       </div>
                     </div>
-                  ) : (
-                    <>
-                      {authMode === 'register' && (
-                        <>
-                          <div>
-                            <label className="block font-bold text-slate-700 mb-1" htmlFor="auth-name">Full Name *</label>
-                            <div className="relative">
-                              <input
-                                id="auth-name"
-                                name="name"
-                                type="text"
-                                autoComplete="name"
-                                required
-                                placeholder="e.g. Student Name"
-                                value={authForm.name}
-                                onChange={(e) => setAuthForm({ ...authForm, name: e.target.value })}
-                                className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-blue-600 focus:bg-white transition-all font-medium"
-                              />
-                              <User className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                            </div>
-                          </div>
 
-                          <div>
-                            <label className="block font-bold text-slate-700 mb-1" htmlFor="auth-phone">Mobile Number (WhatsApp) *</label>
-                            <div className="relative">
-                              <input
-                                id="auth-phone"
-                                name="phone"
-                                type="tel"
-                                autoComplete="tel"
-                                required
-                                placeholder="e.g. 9840418228"
-                                value={authForm.phone}
-                                onChange={(e) => setAuthForm({ ...authForm, phone: e.target.value })}
-                                className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-blue-600 focus:bg-white transition-all font-medium"
-                              />
-                              <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                            </div>
+                    {authMode === 'register' && (
+                      <>
+                        <div>
+                          <label className="block font-bold text-slate-700 mb-1">Confirm Password *</label>
+                          <div className="relative">
+                            <input
+                              type={showConfirmPassword ? 'text' : 'password'}
+                              required
+                              placeholder="Re-type password"
+                              value={confirmPassword}
+                              onChange={(e) => setConfirmPassword(e.target.value)}
+                              className={`w-full pl-9 pr-10 py-2.5 bg-slate-50 border rounded-xl text-xs outline-none focus:bg-white transition-all font-medium ${
+                                confirmPassword && confirmPassword !== authForm.password
+                                  ? 'border-red-400 focus:border-red-500'
+                                  : 'border-slate-200 focus:border-blue-600'
+                              }`}
+                            />
+                            <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                            <button
+                              type="button"
+                              onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                              className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 cursor-pointer"
+                            >
+                              {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                            </button>
                           </div>
+                          {confirmPassword && confirmPassword !== authForm.password && (
+                            <span className="text-[10px] font-bold text-red-500 mt-0.5 block">
+                              Passwords do not match
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Live Password Criteria Checklist */}
+                        <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-1 text-[11px]">
+                          <div className="font-bold text-slate-700 mb-1 flex items-center justify-between">
+                            <span>Password Strength:</span>
+                            <span className="text-[10px] text-slate-400 font-normal">8+ chars, upper, lower, number, symbol</span>
+                          </div>
+                          {(() => {
+                            const c = checkPasswordCriteria(authForm.password);
+                            return (
+                              <div className="grid grid-cols-2 gap-1 font-bold text-[10px]">
+                                <span className={c.minLength ? 'text-emerald-600' : 'text-slate-400'}>{c.minLength ? '✓' : '○'} Min 8 Chars</span>
+                                <span className={c.hasUpper ? 'text-emerald-600' : 'text-slate-400'}>{c.hasUpper ? '✓' : '○'} Uppercase</span>
+                                <span className={c.hasLower ? 'text-emerald-600' : 'text-slate-400'}>{c.hasLower ? '✓' : '○'} Lowercase</span>
+                                <span className={c.hasNumber ? 'text-emerald-600' : 'text-slate-400'}>{c.hasNumber ? '✓' : '○'} Number</span>
+                                <span className={c.hasSpecial ? 'text-emerald-600' : 'text-slate-400'}>{c.hasSpecial ? '✓' : '○'} Symbol (!@#$)</span>
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      </>
+                    )}
+
+                    <button
+                      type="submit"
+                      disabled={isSubmitting}
+                      className="w-full bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-[#001B3A] font-extrabold text-xs py-3.5 rounded-xl shadow-md uppercase tracking-wider mt-2 transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {authMode === 'login' ? (
+                        <span>{isSubmitting ? 'SIGNING IN...' : 'SIGN IN TO ACCOUNT'}</span>
+                      ) : (
+                        <>
+                          <User className="w-4 h-4" />
+                          <span>{isSubmitting ? 'CREATING ACCOUNT...' : 'CREATE ACCOUNT'}</span>
                         </>
                       )}
-
-                      <div>
-                        <label className="block font-bold text-slate-700 mb-1" htmlFor="auth-email">Email Address *</label>
-                        <div className="relative">
-                          <input
-                            id="auth-email"
-                            name="username"
-                            type="email"
-                            autoComplete="username"
-                            required
-                            placeholder="e.g. student@example.com"
-                            value={authForm.email}
-                            onChange={(e) => setAuthForm({ ...authForm, email: e.target.value })}
-                            className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-blue-600 focus:bg-white transition-all font-medium"
-                          />
-                          <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block font-bold text-slate-700 mb-1" htmlFor="auth-password">Password *</label>
-                        <div className="relative">
-                          <input
-                            id="auth-password"
-                            name="password"
-                            type={showPassword ? 'text' : 'password'}
-                            autoComplete={authMode === 'login' ? 'current-password' : 'new-password'}
-                            required
-                            placeholder="••••••••••••"
-                            value={authForm.password}
-                            onChange={(e) => setAuthForm({ ...authForm, password: e.target.value })}
-                            className="w-full pl-9 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-blue-600 focus:bg-white transition-all font-medium"
-                          />
-                          <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                          <button
-                            type="button"
-                            onClick={() => setShowPassword(!showPassword)}
-                            className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 cursor-pointer"
-                          >
-                            {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                          </button>
-                        </div>
-                      </div>
-
-                      {authMode === 'register' && (
-                        <>
-                          <div>
-                            <label className="block font-bold text-slate-700 mb-1">Confirm Password *</label>
-                            <div className="relative">
-                              <input
-                                type={showConfirmPassword ? 'text' : 'password'}
-                                required
-                                placeholder="Re-type password"
-                                value={confirmPassword}
-                                onChange={(e) => setConfirmPassword(e.target.value)}
-                                className={`w-full pl-9 pr-10 py-2.5 bg-slate-50 border rounded-xl text-xs outline-none focus:bg-white transition-all font-medium ${
-                                  confirmPassword && confirmPassword !== authForm.password
-                                    ? 'border-red-400 focus:border-red-500'
-                                    : 'border-slate-200 focus:border-blue-600'
-                                }`}
-                              />
-                              <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                              <button
-                                type="button"
-                                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                                className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 cursor-pointer"
-                              >
-                                {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                              </button>
-                            </div>
-                            {confirmPassword && confirmPassword !== authForm.password && (
-                              <span className="text-[10px] font-bold text-red-500 mt-0.5 block">
-                                Passwords do not match
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Live Password Criteria Checklist */}
-                          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-1 text-[11px]">
-                            <div className="font-bold text-slate-700 mb-1 flex items-center justify-between">
-                              <span>Password Strength Checklist:</span>
-                              <span className="text-[10px] text-slate-400 font-normal">8+ Chars (1 Upper, 1 Lower, 1 Number, 1 Symbol)</span>
-                            </div>
-                            {(() => {
-                              const c = checkPasswordCriteria(authForm.password);
-                              return (
-                                <div className="grid grid-cols-2 gap-1 font-bold text-[10px]">
-                                  <span className={c.minLength ? 'text-emerald-600' : 'text-slate-400'}>
-                                    {c.minLength ? '✓' : '○'} Min 8 Chars
-                                  </span>
-                                  <span className={c.hasUpper ? 'text-emerald-600' : 'text-slate-400'}>
-                                    {c.hasUpper ? '✓' : '○'} Uppercase (A-Z)
-                                  </span>
-                                  <span className={c.hasLower ? 'text-emerald-600' : 'text-slate-400'}>
-                                    {c.hasLower ? '✓' : '○'} Lowercase (a-z)
-                                  </span>
-                                  <span className={c.hasNumber ? 'text-emerald-600' : 'text-slate-400'}>
-                                    {c.hasNumber ? '✓' : '○'} Number (0-9)
-                                  </span>
-                                  <span className={c.hasSpecial ? 'text-emerald-600' : 'text-slate-400'}>
-                                    {c.hasSpecial ? '✓' : '○'} Symbol (!@#$)
-                                  </span>
-                                </div>
-                              );
-                            })()}
-                          </div>
-                        </>
-                      )}
-
-                      <button
-                        type="submit"
-                        disabled={isSendingOtp}
-                        className="w-full bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-[#001B3A] font-extrabold text-xs py-3.5 rounded-xl shadow-md uppercase tracking-wider mt-2 transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
-                      >
-                        {authMode === 'login' ? (
-                          <span>SIGN IN TO ACCOUNT</span>
-                        ) : (
-                          <>
-                            <User className="w-4 h-4" />
-                            <span>{isSendingOtp ? 'CREATING ACCOUNT...' : 'CREATE ACCOUNT'}</span>
-                          </>
-                        )}
-                      </button>
-                    </>
-                  )}
+                    </button>
+                  </>
                 </form>
 
-                {/* Cloudflare Security Badge */}
                 <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-center gap-1.5 text-[10px] text-slate-400 font-semibold">
                   <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
                   <span>Secured by 256-Bit SSL Encryption</span>

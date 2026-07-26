@@ -20,7 +20,7 @@ const { Client } = require('pg');
 
 const STATUS_FILE = path.join(PUBLIC_DIR, 'whatsapp_status.json');
 const QR_IMAGE_FILE = path.join(PUBLIC_DIR, 'whatsapp_qr.png');
-const RAILWAY_DB_FALLBACK = process.env.DATABASE_URL || "postgresql://postgres:USdOHOzspyXMPFmDnfsjkxoSIGedYwgk@sakura.proxy.rlwy.net:32874/railway";
+const DB_URL = process.env.DATABASE_URL || process.env.POSTGRES_URL;
 
 async function backupSessionToDb() {
   let client = null;
@@ -37,8 +37,8 @@ async function backupSessionToDb() {
     if (Object.keys(sessionMap).length === 0) return;
 
     client = new Client({
-      connectionString: RAILWAY_DB_FALLBACK,
-      ssl: RAILWAY_DB_FALLBACK.includes('railway') || RAILWAY_DB_FALLBACK.includes('rlwy.net') ? { rejectUnauthorized: false } : false,
+      connectionString: DB_URL,
+      ssl: DB_URL.includes('railway') || DB_URL.includes('rlwy.net') ? { rejectUnauthorized: false } : false,
     });
     await client.connect();
     await client.query(
@@ -62,8 +62,8 @@ async function restoreSessionFromDb() {
   let client = null;
   try {
     client = new Client({
-      connectionString: RAILWAY_DB_FALLBACK,
-      ssl: RAILWAY_DB_FALLBACK.includes('railway') || RAILWAY_DB_FALLBACK.includes('rlwy.net') ? { rejectUnauthorized: false } : false,
+      connectionString: DB_URL,
+      ssl: DB_URL.includes('railway') || DB_URL.includes('rlwy.net') ? { rejectUnauthorized: false } : false,
     });
     await client.connect();
     const res = await client.query(`SELECT session_data FROM whatsapp_sessions WHERE id = 'default' LIMIT 1`);
@@ -88,8 +88,8 @@ async function saveToDatabase(data) {
   let client = null;
   try {
     client = new Client({
-      connectionString: RAILWAY_DB_FALLBACK,
-      ssl: RAILWAY_DB_FALLBACK.includes('railway') || RAILWAY_DB_FALLBACK.includes('rlwy.net') ? { rejectUnauthorized: false } : false,
+      connectionString: DB_URL,
+      ssl: DB_URL.includes('railway') || DB_URL.includes('rlwy.net') ? { rejectUnauthorized: false } : false,
     });
     await client.connect();
     await client.query(

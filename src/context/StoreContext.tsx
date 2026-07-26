@@ -81,6 +81,8 @@ interface StoreContextType {
   deleteProductFromDb: (id: string | number) => void;
   cartTotal: number;
   cartCount: number;
+  checkoutTotal: number;
+  setCheckoutTotal: (amount: number) => void;
   orderSuccessData: any | null;
   setOrderSuccessData: (data: any | null) => void;
   showToast: (msg: string) => void;
@@ -388,6 +390,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const cartTotal = cart.reduce((acc, item) => acc + item.price * item.qty, 0);
   const cartCount = cart.reduce((acc, item) => acc + item.qty, 0);
+  const [checkoutTotal, setCheckoutTotal] = useState(0);
+
+  // Keep checkoutTotal in sync with cartTotal unless manually overridden (e.g. coupon applied)
+  useEffect(() => {
+    setCheckoutTotal(cartTotal);
+  }, [cartTotal]);
 
   return (
     <StoreContext.Provider
@@ -427,6 +435,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         deleteProductFromDb,
         cartTotal,
         cartCount,
+        checkoutTotal,
+        setCheckoutTotal,
         orderSuccessData,
         setOrderSuccessData,
         showToast,

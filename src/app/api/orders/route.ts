@@ -8,8 +8,23 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const orderNumberParam = searchParams.get('orderId');
     const userIdParam = searchParams.get('userId');
+    const adminUserIdParam = searchParams.get('adminUserId');
 
     if (client) {
+      // Admin access: verify the requesting user has role='admin' in DB
+      let isAdminRequest = false;
+      if (adminUserIdParam) {
+        try {
+          const adminCheck = await client.query(
+            `SELECT id FROM users WHERE id = $1 AND role = 'admin' LIMIT 1`,
+            [adminUserIdParam]
+          );
+          isAdminRequest = adminCheck.rows.length > 0;
+        } catch (_) {}
+        if (!isAdminRequest) {
+          return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+        }
+      }
       // Auto-heal legacy order rows where user_id was stored as name or empty
       try {
         await client.query(`
@@ -42,17 +57,14 @@ export async function GET(request: Request) {
         whereClauses.push(`(o.order_number = $${params.length} OR o.id = $${params.length})`);
       }
 
-      if (userIdParam) {
+      // Admin gets all orders; regular users only see their own
+      if (!isAdminRequest && userIdParam) {
         params.push(userIdParam);
         whereClauses.push(`(
-          o.user_id ILIKE $${params.length} 
-          OR o.user_id = 'Customer' 
-          OR o.user_id = 'guest'
-          OR o.user_id IS NULL
+          o.user_id ILIKE $${params.length}
           OR o.user_id = (SELECT email FROM users WHERE id = $${params.length} OR email = $${params.length} LIMIT 1)
           OR o.user_id = (SELECT name FROM users WHERE email = $${params.length} OR id = $${params.length} LIMIT 1)
           OR o.shipping_address::text ILIKE '%' || $${params.length} || '%'
-          OR true
         )`);
       }
 

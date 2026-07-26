@@ -96,10 +96,9 @@ export default function AdminPage() {
   const [orderStatuses, setOrderStatuses] = useState<{ [orderId: string]: string }>({});
 
   const loadLiveOrders = async () => {
+    if (!user?.id) return;
     try {
-      const res = await fetch('/api/orders', {
-        headers: { 'x-admin-key': 'admin123' },
-      });
+      const res = await fetch(`/api/orders?adminUserId=${encodeURIComponent(String(user.id))}`);
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data)) setOrders(data);
@@ -241,26 +240,47 @@ export default function AdminPage() {
     const currentOrderObj = orders.find((o) => o.orderId === orderId);
     let status = newStatus || orderStatuses[orderId];
 
+    // If admin entered an AWB number, it MUST be positively verified before saving.
     if (trackingNo) {
       showToast('⏳ Verifying ST Courier Docket Number with ST Courier Live API...');
       try {
         const verifyRes = await fetch(`/api/courier/track?docket=${encodeURIComponent(trackingNo)}`);
         const verifyData = await verifyRes.json();
 
-        if (!verifyRes.ok || verifyData.isValid === false) {
-          showToast(`❌ INVALID ST COURIER DOCKET: ST Courier system did not recognize '${trackingNo}'. Please enter a valid ST Courier AWB.`);
-          alert(`⚠️ Invalid ST Courier Docket Number!\n\nThe docket number '${trackingNo}' could not be verified with ST Courier.\n\nPlease enter a valid official ST Courier docket number (e.g. STC241568974).`);
-          return;
+        // Block if:
+        //   • HTTP error (400 = bad format, 404 = not found in ST Courier network)
+        //   • isValid is explicitly false
+        //   • verified is not explicitly true (covers the 422 inconclusive case)
+        //   • scrapeInconclusive flag is set
+        const isPositivelyVerified = verifyRes.ok && verifyData.isValid === true && verifyData.verified === true;
+
+        if (!isPositivelyVerified) {
+          // Build a human-readable reason from whatever the API returned
+          const reason = verifyData.error
+            ?? (verifyData.scrapeInconclusive
+              ? `ST Courier's tracking page returned no readable data for "${trackingNo}". Please check the docket on your booking receipt.`
+              : `Docket "${trackingNo}" could not be confirmed in the ST Courier network.`);
+
+          showToast(`❌ DOCKET REJECTED: ${reason}`);
+          alert(
+            `⚠️ ST Courier Docket Verification Failed!\n\n${reason}\n\n` +
+            `Please enter a valid official ST Courier docket number (e.g. STC241568974).\n\n` +
+            (verifyData.trackingUrl ? `You can verify manually at:\n${verifyData.trackingUrl}` : '')
+          );
+          return; // Hard stop — do not save anything
         }
 
-        // Auto-adopt live scraped status from ST Courier if available
+        // Docket is verified — auto-adopt the live scraped status from ST Courier
         if (verifyData.status && verifyData.status !== 'Shipped via ST Courier') {
           status = verifyData.status;
         } else if (!status) {
           status = 'Handed to ST Courier';
         }
       } catch (err) {
-        showToast('⚠️ Could not connect to ST Courier API. Proceeding with manual input.');
+        // Network failure reaching our own API — do NOT silently proceed
+        showToast('❌ Could not reach the ST Courier verification service. Please check your connection and try again.');
+        alert('❌ Verification Failed\n\nCould not connect to the ST Courier verification service.\nPlease try again before saving the docket number.');
+        return; // Hard stop on network error too
       }
     }
 

@@ -1,17 +1,30 @@
 import { NextResponse } from 'next/server';
 import { getDbClient } from '@/lib/db';
 
+/**
+ * ST Courier uses these AWB/docket patterns in practice:
+ *  - STC + 9 digits         e.g. STC241568974
+ *  - STCOE + 7-10 digits    e.g. STCOE1234567
+ *  - numeric-only 10–13 digits
+ *  - 2-3 uppercase letters + 6-12 digits (regional codes)
+ *
+ * Anything shorter than 8 chars or containing only letters is almost
+ * certainly not a real docket number.
+ */
+const VALID_DOCKET_PATTERN = /^(STC[A-Z0-9]{6,12}|[A-Z]{2,4}[0-9]{6,12}|[0-9]{10,13})$/;
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const docket = searchParams.get('docket');
 
-  const cleanDocket = (docket || '').trim().toUpperCase();
-  const isValidFormat = cleanDocket.length >= 6 && /^[A-Z0-9-]+$/.test(cleanDocket);
+  const cleanDocket = (docket || '').trim().toUpperCase().replace(/\s+/g, '');
 
-  if (!isValidFormat) {
+  // --- Strict format gate ---
+  if (!VALID_DOCKET_PATTERN.test(cleanDocket)) {
     return NextResponse.json({
       isValid: false,
-      error: 'Invalid ST Courier Docket Format. A valid docket must be at least 6 alphanumeric characters (e.g., STC241568974).',
+      verified: false,
+      error: `"${cleanDocket}" does not match any known ST Courier docket format. Valid examples: STC241568974, TN12345678. Please check the docket number on your ST Courier booking receipt.`,
       docket: cleanDocket,
     }, { status: 400 });
   }
@@ -20,48 +33,105 @@ export async function GET(request: Request) {
   let liveStatus = 'Handed to ST Courier';
   let events: Array<{ time: string; activity: string; location: string }> = [];
 
-  let isVerifiedInNetwork = false;
+  // Tri-state: true = confirmed in ST Courier network, false = explicitly rejected,
+  // null = scrape was inconclusive (JS-rendered page returned no data).
+  let networkVerification: boolean | null = null;
 
   try {
     const res = await fetch(officialUrl, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-IN,en;q=0.9',
       },
-      next: { revalidate: 180 }, // 3 min cache
+      // No cache so admin gets a fresh check every time
+      cache: 'no-store',
     });
 
     if (res.ok) {
       const html = await res.text();
       const lower = html.toLowerCase();
 
-      // Check if ST Courier explicitly reports docket not found
-      if (lower.includes('invalid docket') || lower.includes('no record found') || lower.includes('docket not found')) {
+      // --- Explicit rejection signals from ST Courier ---
+      const rejectionPhrases = [
+        'invalid docket',
+        'no record found',
+        'docket not found',
+        'not found',
+        'invalid tracking',
+        'no shipment',
+        'incorrect docket',
+        'does not exist',
+      ];
+      const isExplicitlyRejected = rejectionPhrases.some((phrase) => lower.includes(phrase));
+
+      if (isExplicitlyRejected) {
+        networkVerification = false;
         return NextResponse.json({
           isValid: false,
           verified: false,
-          error: `ST Courier Docket '${cleanDocket}' not found in ST Courier Express network system. Please verify the docket number on your booking receipt.`,
+          error: `ST Courier did not recognise docket "${cleanDocket}". Please verify the number on your booking slip or wait a few minutes if freshly booked.`,
           docket: cleanDocket,
         }, { status: 404 });
       }
 
-      isVerifiedInNetwork = true;
+      // --- Positive confirmation signals from ST Courier ---
+      const confirmationPhrases = [
+        'delivered',
+        'out for delivery',
+        'in transit',
+        'dispatched',
+        'booked',
+        'received at',
+        'shipment details',
+        'tracking details',
+        'consignment',
+        'docket no',
+        'awb',
+      ];
+      const hasPositiveSignal = confirmationPhrases.some((phrase) => lower.includes(phrase));
 
-      // Check for delivery indicators in ST Courier HTML
-      if (lower.includes('delivered') || lower.includes('successful')) {
-        liveStatus = 'Delivered';
-      } else if (lower.includes('out for delivery')) {
-        liveStatus = 'Out for Delivery';
-      } else if (lower.includes('in transit') || lower.includes('dispatched')) {
-        liveStatus = 'In Transit';
-      } else if (lower.includes('booked') || lower.includes('received')) {
-        liveStatus = 'Handed to ST Courier';
+      if (hasPositiveSignal) {
+        networkVerification = true;
+
+        if (lower.includes('delivered') || lower.includes('successful delivery')) {
+          liveStatus = 'Delivered';
+        } else if (lower.includes('out for delivery')) {
+          liveStatus = 'Out for Delivery';
+        } else if (lower.includes('in transit') || lower.includes('dispatched')) {
+          liveStatus = 'In Transit';
+        } else if (lower.includes('booked') || lower.includes('received')) {
+          liveStatus = 'Handed to ST Courier';
+        }
+      } else {
+        // Page loaded but has no positive or negative signal — likely JS-rendered shell.
+        // Mark as inconclusive; we will NOT mark isValid:true.
+        networkVerification = null;
       }
     }
   } catch (e: any) {
     console.error('ST Courier web scrape error:', e.message);
+    // Network error — treat as inconclusive, not as valid
+    networkVerification = null;
   }
 
-  // Auto-sync status into Railway PostgreSQL orders DB if available
+  // If the scrape was inconclusive (JS-rendered page gave us nothing useful),
+  // reject the attempt so the admin cannot slip through a made-up number.
+  if (networkVerification === null) {
+    return NextResponse.json({
+      isValid: false,
+      verified: false,
+      scrapeInconclusive: true,
+      error: `Could not confirm docket "${cleanDocket}" with ST Courier's live system (their tracking page is JavaScript-rendered and returned no readable data). Please double-check the docket number on your ST Courier booking receipt before saving.`,
+      docket: cleanDocket,
+      // Provide the tracking URL so admin can manually verify
+      trackingUrl: officialUrl,
+    }, { status: 422 });
+  }
+
+  // networkVerification === true from here on — docket is confirmed in ST Courier network
+
+  // Auto-sync confirmed status into Railway PostgreSQL
   try {
     const client = await getDbClient();
     if (client) {
@@ -77,10 +147,10 @@ export async function GET(request: Request) {
     console.error('DB update error in courier API:', dbErr.message);
   }
 
-  // Generate Hub Transit Activity Log based on Docket & Status
+  // Generate Hub Transit Activity Log
   const cityNames = ['Chennai Central Hub', 'Coimbatore Sorting Hub', 'Salem Regional Hub', 'Madurai Express Center'];
   const assignedCity = cityNames[Math.abs(cleanDocket.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)) % cityNames.length];
-  
+
   const createdDate = new Date();
   createdDate.setHours(createdDate.getHours() - 12);
   const transitDate = new Date();
@@ -99,7 +169,12 @@ export async function GET(request: Request) {
     },
     {
       time: transitDate.toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }),
-      activity: liveStatus === 'Delivered' ? 'Delivered to Student' : liveStatus === 'Out for Delivery' ? 'Out for Delivery with Courier Executive' : 'Dispatched En Route to Destination Hub',
+      activity:
+        liveStatus === 'Delivered'
+          ? 'Delivered to Student'
+          : liveStatus === 'Out for Delivery'
+          ? 'Out for Delivery with Courier Executive'
+          : 'Dispatched En Route to Destination Hub',
       location: assignedCity,
     },
   ];
@@ -107,6 +182,7 @@ export async function GET(request: Request) {
   return NextResponse.json({
     success: true,
     isValid: true,
+    verified: true,
     docket: cleanDocket,
     courierName: 'ST Courier Express',
     status: liveStatus,

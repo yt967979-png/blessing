@@ -2,8 +2,6 @@ import { Client } from 'pg';
 
 let isSchemaInitialized = false;
 
-const RAILWAY_DB_FALLBACK = "postgresql://postgres:USdOHOzspyXMPFmDnfsjkxoSIGedYwgk@sakura.proxy.rlwy.net:32874/railway";
-
 export async function getDbClient() {
   let connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.DATABASE_PUBLIC_URL;
 
@@ -17,7 +15,7 @@ export async function getDbClient() {
   }
 
   if (!connectionString) {
-    connectionString = RAILWAY_DB_FALLBACK;
+    throw new Error('DATABASE_URL is not configured. Add it to your Railway environment variables.');
   }
 
   const client = new Client({
