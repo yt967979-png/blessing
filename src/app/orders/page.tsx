@@ -87,7 +87,8 @@ function OrdersContent() {
         }
 
         if (user) {
-          const res = await fetch(`/api/orders?userId=${encodeURIComponent(user.id || user.email || '')}`);
+          const userQueryTerm = user.email || user.name || user.phone || user.id || '';
+          const res = await fetch(`/api/orders?userId=${encodeURIComponent(userQueryTerm)}`);
           if (res.ok) {
             const data = await res.json();
             setUserOrders(data);
