@@ -117,7 +117,7 @@ export async function POST(request: Request) {
     if (userRes.rows.length === 0) {
       await client.end();
       return NextResponse.json(
-        { error: 'No account found with this phone number or email. Please register first.' },
+        { error: 'No account found with this mobile number. Please register first.' },
         { status: 404 }
       );
     }

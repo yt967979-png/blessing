@@ -854,16 +854,16 @@ export const Modals = () => {
 
                     <div>
                       <label className="block font-bold text-slate-700 mb-1" htmlFor="auth-email">
-                        {authMode === 'login' ? 'Mobile Number or Email Address *' : 'Email Address *'}
+                        {authMode === 'login' ? 'Mobile Number (WhatsApp) *' : 'Email Address *'}
                       </label>
                       <div className="relative">
                         <input
                           id="auth-email"
                           name="username"
-                          type="text"
+                          type={authMode === 'login' ? 'tel' : 'email'}
                           autoComplete="username"
                           required
-                          placeholder={authMode === 'login' ? "e.g. 9840418228 or student@gmail.com" : "e.g. student@gmail.com"}
+                          placeholder={authMode === 'login' ? "e.g. 9840418228" : "e.g. student@gmail.com"}
                           value={authForm.email}
                           onChange={(e) => setAuthForm({ ...authForm, email: e.target.value, phone: e.target.value })}
                           className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-blue-600 focus:bg-white transition-all font-medium"
