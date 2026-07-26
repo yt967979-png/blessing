@@ -9,6 +9,8 @@ export function generateTaxInvoiceHtml(orderData: {
   paymentMethod: string;
   items?: any[];
   trackingNumber?: string;
+  courierName?: string;
+  paymentStatus?: string;
   createdAt?: string;
 }) {
   const dateStr = orderData.createdAt || new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -58,17 +60,17 @@ export function generateTaxInvoiceHtml(orderData: {
       <div class="box">
         <div class="box-title">Billed & Shipped To</div>
         <div style="font-weight: 800; font-size: 14px; color: #0f172a;">${orderData.customerName}</div>
-        <div style="margin-top: 4px;">${orderData.address || 'No. 45, Medavakkam High Road'}</div>
-        <div>${orderData.city || 'Chennai'} - ${orderData.pincode || '600012'}, Tamil Nadu</div>
-        <div style="font-weight: 700; margin-top: 6px; color: #0284c7;">Phone: +91 ${orderData.customerPhone}</div>
+        <div style="margin-top: 4px;">${orderData.address}</div>
+        <div>${orderData.city}${orderData.pincode ? ` - ${orderData.pincode}` : ''}</div>
+        <div style="font-weight: 700; margin-top: 6px; color: #0284c7;">Phone: ${orderData.customerPhone}</div>
       </div>
 
       <div class="box">
         <div class="box-title">Logistics & Payment Info</div>
-        <div><strong>Courier Partner:</strong> ST Courier Express</div>
-        <div><strong>Docket Number:</strong> ${orderData.trackingNumber || 'STC-TN-984210'}</div>
+        <div><strong>Courier Partner:</strong> ${orderData.courierName || 'ST Courier Express'}</div>
+        <div><strong>Docket Number:</strong> ${orderData.trackingNumber || 'Pending AWB Assignment'}</div>
         <div><strong>Payment Method:</strong> ${orderData.paymentMethod}</div>
-        <div style="margin-top: 6px; color: #16a34a; font-weight: 800;">Status: PAID / ACCEPTED</div>
+        <div style="margin-top: 6px; color: #16a34a; font-weight: 800;">Status: ${orderData.paymentStatus || 'PAID'}</div>
       </div>
     </div>
 

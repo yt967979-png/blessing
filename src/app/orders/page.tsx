@@ -513,14 +513,14 @@ export default function OrdersPage() {
                       <CheckCircle2 className="w-3 h-3 text-white" />
                     </div>
                     <div className="font-extrabold text-slate-900">Order Dispatched &amp; Handed to ST Courier</div>
-                    <div className="text-[11px] text-slate-500 font-medium">Origin Hub: Medavakkam Express Logistics Facility</div>
+                    <div className="text-[11px] text-slate-500 font-medium">Origin Facility: Express Logistics Sorting Hub</div>
                     <div className="text-[10px] text-slate-400 mt-0.5">{searchedOrderData.createdAt}</div>
                   </div>
 
                   <div className="relative">
                     <div className="absolute -left-6 top-0 w-4 h-4 rounded-full bg-blue-600 ring-4 ring-blue-100 animate-pulse" />
                     <div className="font-extrabold text-blue-900">In-Transit via ST Courier Express Route</div>
-                    <div className="text-[11px] text-slate-600 font-medium">Docket #{searchedOrderData.trackingNumber || 'STC-TN-984210'} • Sorting Hub: Chennai Central Hub</div>
+                    <div className="text-[11px] text-slate-600 font-medium">Docket #{searchedOrderData.trackingNumber || 'Pending AWB Assignment'}</div>
                     <div className="text-[10px] text-blue-600 font-bold mt-0.5">Estimated Delivery: Next Business Day by 5:00 PM</div>
                   </div>
 
