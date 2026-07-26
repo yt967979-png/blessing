@@ -1059,129 +1059,65 @@ export default function AdminPage() {
                         </div>
                       </div>
 
-                      {/* Custom ST Courier Stage Management Controls */}
+                      {/* Single Clean ST Courier Docket Dispatch Control */}
                       <div className="bg-slate-950/90 border border-slate-800 rounded-xl p-3.5 space-y-3">
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <span className="font-bold text-slate-300 text-[11px] flex items-center gap-1.5">
                             <Truck className="w-3.5 h-3.5 text-amber-400" />
-                            <span>Update Logistics Stage:</span>
+                            <span>ST Courier Dispatch & Docket Assignment:</span>
                           </span>
                           <span className="text-[10px] text-emerald-400 font-extrabold uppercase bg-emerald-950/80 border border-emerald-500/30 px-2 py-0.5 rounded">
-                            Current: {o.courierStatus || 'Order Placed'}
+                            Current Status: {o.courierStatus || 'Order Placed'}
                           </span>
                         </div>
 
-                        {/* Stage Buttons Grid */}
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-1.5 text-[10px] font-bold">
-                          <button
-                            onClick={async () => {
-                              showToast('⏳ Updating stage: Packed & Sealed...');
-                              await fetch('/api/orders/timeline', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ orderId: o.orderId, status: 'PACKED' }),
-                              });
-                              showToast('✅ Stage updated to Packed & Sealed!');
-                              loadLiveOrders();
-                            }}
-                            className="bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 p-2 rounded-lg transition-all text-center cursor-pointer font-extrabold"
-                          >
-                            📦 PACKED
-                          </button>
+                        <div className="flex flex-col sm:flex-row items-center gap-2">
+                          <input
+                            type="text"
+                            placeholder="Enter ST Courier Docket AWB (e.g. STC241568974)..."
+                            value={shiprocketAwbInput[o.orderId] ?? (o.trackingNumber || '')}
+                            onChange={(e) =>
+                              setShiprocketAwbInput({
+                                ...shiprocketAwbInput,
+                                [o.orderId]: e.target.value,
+                              })
+                            }
+                            className="w-full sm:flex-1 px-3.5 py-2 bg-slate-900 border border-slate-700 focus:border-amber-400 rounded-xl text-white text-xs outline-none uppercase font-bold tracking-wide"
+                          />
 
                           <button
                             onClick={async () => {
                               const awb = (shiprocketAwbInput[o.orderId] || o.trackingNumber || '').trim();
                               if (!awb) {
-                                alert('⚠️ Please enter an ST Courier Docket Number in the box below first!');
+                                alert('⚠️ Please enter an ST Courier Docket Number first!');
                                 return;
                               }
 
-                              showToast('⏳ Validating ST Courier Docket format...');
+                              showToast('⏳ Validating ST Courier Docket AWB format...');
                               const verifyRes = await fetch(`/api/courier/track?docket=${encodeURIComponent(awb)}`);
                               const verifyData = await verifyRes.json();
 
-                              const isPositivelyVerified = verifyRes.ok && verifyData.isValid === true && verifyData.verified === true;
-
-                              if (!isPositivelyVerified) {
-                                const reason = verifyData.error || 'ST Courier did not confirm this docket number in their live system.';
-                                showToast(`❌ INVALID AWB: ${reason}`);
-                                alert(`⚠️ ST COURIER DOCKET REJECTED!\n\n${reason}\n\nPlease enter an official active ST Courier docket number from your booking receipt.`);
+                              if (!verifyRes.ok || verifyData.isValid === false) {
+                                const reason = verifyData.error || 'Invalid ST Courier docket number format.';
+                                showToast(`❌ INVALID DOCKET: ${reason}`);
+                                alert(`⚠️ ST COURIER DOCKET REJECTED!\n\n${reason}\n\nValid examples: STC241568974, TN12345678, 123456789012`);
                                 return;
                               }
 
-                              showToast('⏳ Updating stage: Handed to ST Courier...');
+                              showToast('⏳ Dispatching order & linking ST Courier AWB...');
                               await fetch('/api/orders/timeline', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ orderId: o.orderId, status: 'HANDED_TO_ST_COURIER', awbNumber: awb }),
                               });
-                              showToast('✅ Docket verified & stage updated to Handed to ST Courier!');
-                              loadLiveOrders();
-                            }}
-                            className="bg-blue-900/60 hover:bg-blue-800 text-blue-200 border border-blue-700/50 p-2 rounded-lg transition-all text-center cursor-pointer font-extrabold"
-                          >
-                            🚚 HAND TO COURIER
-                          </button>
 
-                          <button
-                            onClick={async () => {
-                              const awb = (shiprocketAwbInput[o.orderId] || o.trackingNumber || '').trim();
-                              if (awb) {
-                                const verifyRes = await fetch(`/api/courier/track?docket=${encodeURIComponent(awb)}`);
-                                const verifyData = await verifyRes.json();
-                                const isPositivelyVerified = verifyRes.ok && verifyData.isValid === true && verifyData.verified === true;
-                                if (!isPositivelyVerified) {
-                                  alert(`⚠️ ST COURIER DOCKET REJECTED!\n\n${verifyData.error || 'ST Courier did not confirm this docket.'}\n\nPlease enter an official active ST Courier docket number.`);
-                                  return;
-                                }
-                              }
-                              const hub = prompt('Enter Current Hub City (e.g. Chennai Central Hub, Madurai Hub):', o.city ? `${o.city} Sorting Hub` : 'Regional Sorting Hub');
-                              if (!hub) return;
-                              showToast(`⏳ Updating stage: In Transit at ${hub}...`);
-                              await fetch('/api/orders/timeline', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ orderId: o.orderId, status: 'IN_TRANSIT', hubCity: hub, awbNumber: awb || undefined }),
-                              });
-                              showToast(`✅ Stage updated: In Transit at ${hub}!`);
+                              showToast(`✅ Order #${o.orderId} Dispatched via ST Courier AWB: ${awb}!`);
                               loadLiveOrders();
                             }}
-                            className="bg-amber-900/40 hover:bg-amber-800/60 text-amber-200 border border-amber-700/50 p-2 rounded-lg transition-all text-center cursor-pointer font-extrabold"
+                            className="w-full sm:w-auto bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white font-extrabold text-xs px-5 py-2 rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
                           >
-                            ⚡ IN TRANSIT (HUB)
-                          </button>
-
-                          <button
-                            onClick={async () => {
-                              showToast('⏳ Updating stage: Out for Delivery...');
-                              await fetch('/api/orders/timeline', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ orderId: o.orderId, status: 'OUT_FOR_DELIVERY', hubCity: o.city ? `${o.city} Branch` : 'Local Branch' }),
-                              });
-                              showToast('✅ Stage updated to Out for Delivery!');
-                              loadLiveOrders();
-                            }}
-                            className="bg-purple-900/40 hover:bg-purple-800/60 text-purple-200 border border-purple-700/50 p-2 rounded-lg transition-all text-center cursor-pointer font-extrabold"
-                          >
-                            🛵 OUT FOR DELIVERY
-                          </button>
-
-                          <button
-                            onClick={async () => {
-                              showToast('⏳ Updating stage: Delivered...');
-                              await fetch('/api/orders/timeline', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ orderId: o.orderId, status: 'DELIVERED', hubCity: o.city ? `${o.city} Destination` : 'Delivered' }),
-                              });
-                              showToast('🎉 Order marked as Delivered!');
-                              loadLiveOrders();
-                            }}
-                            className="bg-emerald-900/60 hover:bg-emerald-800 text-emerald-200 border border-emerald-700/50 p-2 rounded-lg transition-all text-center cursor-pointer font-extrabold col-span-2 sm:col-span-1"
-                          >
-                            ✅ DELIVERED
+                            <Truck className="w-3.5 h-3.5 text-amber-300" />
+                            <span>DISPATCH WITH ST COURIER</span>
                           </button>
                         </div>
                       </div>
@@ -1196,19 +1132,6 @@ export default function AdminPage() {
                         </div>
 
                         <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
-                          <input
-                            type="text"
-                            placeholder="Enter ST Courier Docket (e.g. STC241568974)..."
-                            value={shiprocketAwbInput[o.orderId] ?? (o.isOfficialAwb ? o.trackingNumber : '')}
-                            onChange={(e) =>
-                              setShiprocketAwbInput({
-                                ...shiprocketAwbInput,
-                                [o.orderId]: e.target.value,
-                              })
-                            }
-                            className="px-3 py-1.5 bg-slate-950 border border-slate-700 rounded-lg text-white text-xs outline-none focus:border-amber-400 uppercase min-w-[180px]"
-                          />
-
                           <button
                             onClick={() => handlePrintShippingLabel(o)}
                             className="bg-amber-400 hover:bg-amber-500 text-[#001B3A] font-extrabold text-xs px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 cursor-pointer"
