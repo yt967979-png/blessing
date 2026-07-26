@@ -10,6 +10,10 @@ import {
   Share2,
   CheckCircle,
   ChevronRight,
+  FileText,
+  Eye,
+  X,
+  BookOpen,
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { Header } from '@/components/layout/Header';
@@ -73,6 +77,8 @@ export default function ProductDetailPage({
   const [pincode, setPincode] = useState('600012');
   const [pincodeMsg, setPincodeMsg] = useState('✓ Delivery available in 2-3 business days (Express Post)');
   const [showReviewForm, setShowReviewForm] = useState(false);
+  const [showPdfModal, setShowPdfModal] = useState(false);
+  const [activePdfPage, setActivePdfPage] = useState(1);
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewText, setReviewText] = useState('');
   const [reviewName, setReviewName] = useState('');
@@ -280,10 +286,21 @@ export default function ProductDetailPage({
             </div>
 
             {/* Actions */}
-            <div className="flex gap-4 mt-auto">
+            <div className="flex flex-col sm:flex-row gap-3 mt-auto">
+              <button
+                onClick={() => {
+                  setActivePdfPage(1);
+                  setShowPdfModal(true);
+                }}
+                className="bg-slate-100 hover:bg-slate-200 text-[#001B3A] font-extrabold text-xs py-3.5 px-5 rounded-xl border border-slate-300 transition-all flex items-center justify-center gap-2 uppercase tracking-wider cursor-pointer"
+              >
+                <BookOpen className="w-4 h-4 text-blue-600" />
+                <span>READ 5-PAGE SAMPLE PDF</span>
+              </button>
+
               <button
                 onClick={() => addToCart(product)}
-                className="w-full bg-gradient-to-r from-amber-400 to-amber-500 text-[#001B3A] font-extrabold text-sm py-3.5 px-6 rounded-xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 uppercase tracking-wider"
+                className="flex-1 bg-gradient-to-r from-amber-400 to-amber-500 text-[#001B3A] font-extrabold text-sm py-3.5 px-6 rounded-xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 uppercase tracking-wider cursor-pointer"
               >
                 <ShoppingBag className="w-4 h-4" />
                 <span>ADD TO CART & BUY NOW</span>
@@ -473,6 +490,160 @@ export default function ProductDetailPage({
           <span>ADD TO CART</span>
         </button>
       </div>
+
+      {/* Interactive 5-Page PDF Reader Modal */}
+      {showPdfModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+            {/* Modal Header */}
+            <div className="bg-slate-800 border-b border-slate-700 p-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-heading font-extrabold text-sm text-white flex items-center gap-2">
+                    <span>{product.title}</span>
+                    <span className="text-[10px] bg-amber-400 text-[#001B3A] px-2 py-0.5 rounded font-black uppercase">
+                      SAMPLE PREVIEW (5 PAGES)
+                    </span>
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Showing Page {activePdfPage} of 5 • {product.cls} Standard {product.subject}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowPdfModal(false)}
+                className="w-8 h-8 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 flex items-center justify-center cursor-pointer transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body / Page Canvas Showcase */}
+            <div className="flex-1 p-6 bg-slate-950 overflow-y-auto flex flex-col items-center justify-center min-h-[360px]">
+              <div className="w-full max-w-md bg-white text-slate-900 rounded-xl p-8 shadow-2xl border border-slate-200 text-center flex flex-col justify-between min-h-[340px] relative overflow-hidden">
+                <div className="absolute top-0 right-0 bg-blue-600 text-white font-black text-[9px] px-3 py-1 rounded-bl-lg uppercase tracking-wider">
+                  BLESSING POWER GUIDE
+                </div>
+
+                {activePdfPage === 1 && (
+                  <div className="my-auto space-y-4">
+                    <div className="w-16 h-16 mx-auto bg-amber-100 text-[#001B3A] font-black rounded-2xl flex items-center justify-center text-2xl shadow-inner">
+                      📖
+                    </div>
+                    <span className="text-xs font-bold text-blue-600 uppercase tracking-widest block">PAGE 1: TABLE OF CONTENTS</span>
+                    <h4 className="font-heading font-black text-xl text-[#001B3A]">{product.title}</h4>
+                    <div className="text-left text-xs text-slate-600 space-y-2 pt-2 border-t border-slate-100">
+                      <p>✓ Chapter 1: Important Formulae & Summary</p>
+                      <p>✓ Chapter 2: Solved Model Question Papers (2024-2025)</p>
+                      <p>✓ Chapter 3: 5-Star Expected Board Exam Questions</p>
+                      <p>✓ Chapter 4: Quick Revision Mind Maps</p>
+                    </div>
+                  </div>
+                )}
+
+                {activePdfPage === 2 && (
+                  <div className="my-auto space-y-3">
+                    <span className="text-xs font-bold text-blue-600 uppercase tracking-widest block">PAGE 2: CHAPTER 1 NOTES & FORMULAE</span>
+                    <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-left font-mono text-[11px] text-slate-700 space-y-1.5">
+                      <p className="font-bold text-blue-800">Key Formula / Theorem 1.1:</p>
+                      <p>• Area = ½ × Base × Height</p>
+                      <p>• Standard Equation: ax² + bx + c = 0</p>
+                      <p>• Quadratic Formula: x = (-b ± √(b² - 4ac)) / 2a</p>
+                    </div>
+                    <p className="text-xs text-slate-500 italic">"Consistently repeated in State Board 2021, 2023, 2024 exams."</p>
+                  </div>
+                )}
+
+                {activePdfPage === 3 && (
+                  <div className="my-auto space-y-3">
+                    <span className="text-xs font-bold text-blue-600 uppercase tracking-widest block">PAGE 3: 5-MARK SOLVED EXAM QUESTION</span>
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-left text-[11px] space-y-2">
+                      <p className="font-bold text-[#001B3A]">Question 4 (5 Marks):</p>
+                      <p className="text-slate-700">Derive and explain the step-by-step solution for the standard board question.</p>
+                      <div className="bg-white p-2 rounded border border-amber-300 font-semibold text-emerald-800 text-[10px]">
+                        ✓ Solved with Step Marks Allocation Breakdown by Expert Teachers.
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {activePdfPage === 4 && (
+                  <div className="my-auto space-y-3">
+                    <span className="text-xs font-bold text-blue-600 uppercase tracking-widest block">PAGE 4: MODEL TEST QUESTION PAPER</span>
+                    <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-left text-[11px] space-y-2 text-slate-700">
+                      <p className="font-bold text-slate-900">SECTION A: 1-MARK OBJECTIVE QUESTIONS</p>
+                      <p>1. Choose the correct answer from the given options below.</p>
+                      <p>2. Fill in the blanks with appropriate answers.</p>
+                      <p>3. Match the following terms correctly.</p>
+                    </div>
+                  </div>
+                )}
+
+                {activePdfPage === 5 && (
+                  <div className="my-auto space-y-4">
+                    <div className="w-14 h-14 mx-auto bg-emerald-100 text-emerald-700 rounded-2xl flex items-center justify-center font-black text-2xl">
+                      🎉
+                    </div>
+                    <span className="text-xs font-bold text-emerald-600 uppercase tracking-widest block">SAMPLE COMPLETE</span>
+                    <h4 className="font-heading font-extrabold text-lg text-[#001B3A]">Ready to score 100/100?</h4>
+                    <p className="text-xs text-slate-600">
+                      Order the printed physical book now to get the full 250+ page guide with Free ST Courier Delivery!
+                    </p>
+                    <button
+                      onClick={() => {
+                        setShowPdfModal(false);
+                        addToCart(product);
+                      }}
+                      className="w-full bg-gradient-to-r from-amber-400 to-amber-500 text-[#001B3A] font-extrabold text-xs py-3 rounded-xl shadow-md uppercase tracking-wider cursor-pointer"
+                    >
+                      BUY FULL BOOK NOW (₹{product.price})
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Modal Footer Controls */}
+            <div className="bg-slate-800 border-t border-slate-700 p-4 flex items-center justify-between">
+              <div className="flex gap-1.5">
+                {[1, 2, 3, 4, 5].map((page) => (
+                  <button
+                    key={page}
+                    onClick={() => setActivePdfPage(page)}
+                    className={`w-7 h-7 rounded-lg text-xs font-extrabold cursor-pointer transition-all ${
+                      activePdfPage === page
+                        ? 'bg-blue-600 text-white shadow-sm'
+                        : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                    }`}
+                  >
+                    {page}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  disabled={activePdfPage === 1}
+                  onClick={() => setActivePdfPage((p) => Math.max(1, p - 1))}
+                  className="px-3 py-1.5 rounded-lg bg-slate-700 text-slate-300 hover:bg-slate-600 disabled:opacity-40 text-xs font-extrabold cursor-pointer"
+                >
+                  PREV
+                </button>
+                <button
+                  disabled={activePdfPage === 5}
+                  onClick={() => setActivePdfPage((p) => Math.min(5, p + 1))}
+                  className="px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-40 text-xs font-extrabold cursor-pointer"
+                >
+                  NEXT
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <Footer />
       <CartDrawer />
