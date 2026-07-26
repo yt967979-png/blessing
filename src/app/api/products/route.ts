@@ -133,6 +133,8 @@ export async function PATCH(request: Request) {
       if (inStock !== undefined) {
         fields.push(`status = $${idx++}`);
         values.push(inStock ? 'published' : 'out_of_stock');
+        fields.push(`stock = $${idx++}`);
+        values.push(inStock ? 100 : 0);
       }
 
       if (fields.length > 0) {
