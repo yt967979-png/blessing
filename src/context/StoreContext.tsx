@@ -93,7 +93,16 @@ const StoreContext = createContext<StoreContextType | undefined>(undefined);
 const LOCAL_PRODUCTS_KEY = 'bpg_products_db_persistent_v3';
 
 export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [products, setProducts] = useState<Product[]>([]);
+  // Initial state for products with instant localStorage cache fallback
+  const [products, setProducts] = useState<Product[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem(LOCAL_PRODUCTS_KEY);
+        if (cached) return JSON.parse(cached);
+      } catch (e) {}
+    }
+    return [];
+  });
   const [cart, setCart] = useState<CartItem[]>([]);
   const [wishlist, setWishlist] = useState<(string | number)[]>([]);
   const [user, setUser] = useState<UserData | null>(null);

@@ -143,8 +143,8 @@ export default function AdminPage() {
       };
     } catch (_) {}
 
-    // Backup polling every 4 seconds
-    const interval = setInterval(loadLiveOrders, 4000);
+    // Backup polling every 12 seconds
+    const interval = setInterval(loadLiveOrders, 12000);
 
     // Load live DB stats for users + books
     fetch('/api/db-status')

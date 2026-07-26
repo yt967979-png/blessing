@@ -100,7 +100,7 @@ export default function ProfilePage() {
       };
     } catch (_) {}
 
-    const interval = setInterval(fetchUserLiveOrders, 4000);
+    const interval = setInterval(fetchUserLiveOrders, 15000);
     return () => {
       clearInterval(interval);
       if (eventSource) eventSource.close();
