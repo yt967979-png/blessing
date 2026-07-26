@@ -1051,7 +1051,7 @@ export default function AdminPage() {
                 LINK YOUR WHATSAPP PHONE NUMBER
               </h2>
               <p className="text-xs text-slate-400 mt-1 max-w-md mx-auto">
-                Scan the QR code below OR enter your phone number to get an 8-digit Pairing Code to link WhatsApp with $0 fees!
+                Scan the QR code below to authenticate once. Your WhatsApp session will lock &amp; stay connected permanently with $0 fees!
               </p>
             </div>
 
@@ -1065,7 +1065,7 @@ export default function AdminPage() {
                     🟢 WHATSAPP BOT IS PERMANENTLY CONNECTED &amp; ACTIVE
                   </h3>
                   <p className="text-xs text-emerald-200 mt-1 max-w-md mx-auto">
-                    Your WhatsApp session is locked &amp; permanently saved inside your server (`./whatsapp_session`). It will stay connected forever across all server restarts and navigation.
+                    Your WhatsApp session is locked &amp; permanently saved in your Railway PostgreSQL DB (`whatsapp_sessions`). It will stay connected forever across all server restarts.
                   </p>
                 </div>
 
@@ -1110,50 +1110,15 @@ export default function AdminPage() {
                     </div>
                   )}
                 </div>
-
-                {/* Option 2: 8-Digit Pairing Code */}
-                <div className="bg-slate-800/80 border border-slate-700/80 p-5 rounded-2xl text-left space-y-3">
-                  <h4 className="font-heading font-black text-xs text-amber-400 uppercase tracking-wider flex items-center gap-2">
-                    <span>📱 OPTION 2: LINK WITH 8-DIGIT PAIRING CODE (NO CAMERA NEEDED)</span>
-                  </h4>
-
-                  <form onSubmit={handleRequestPairingCode} className="flex gap-2">
-                    <input
-                      type="text"
-                      placeholder="Enter phone number e.g. 9840418228..."
-                      value={waPhoneInput}
-                      onChange={(e) => setWaPhoneInput(e.target.value)}
-                      className="px-3.5 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs outline-none focus:border-amber-400 flex-1 font-bold"
-                    />
-                    <button
-                      type="submit"
-                      className="bg-amber-400 hover:bg-amber-500 text-[#001B3A] font-extrabold text-xs px-4 py-2 rounded-xl transition-all shadow-md cursor-pointer whitespace-nowrap"
-                    >
-                      GET PAIRING CODE
-                    </button>
-                  </form>
-
-                  {waPairingCode && (
-                    <div className="bg-amber-400/10 border border-amber-400/40 p-4 rounded-xl text-center space-y-2">
-                      <span className="text-[10px] font-bold text-amber-300 uppercase block">YOUR 8-DIGIT WHATSAPP PAIRING CODE:</span>
-                      <div className="font-mono font-black text-2xl text-amber-400 tracking-widest bg-slate-900 py-2 rounded-lg border border-amber-400/30 inline-block px-6">
-                        {waPairingCode}
-                      </div>
-                      <p className="text-[11px] text-slate-300">
-                        Open WhatsApp on phone → Linked Devices → Link with phone number → Enter code above!
-                      </p>
-                    </div>
-                  )}
-                </div>
               </div>
             )}
 
             <div className="pt-4 border-t border-slate-800 text-left text-xs text-slate-400 space-y-2">
-              <div className="font-bold text-white">📌 Quick Instructions:</div>
+              <div className="font-bold text-white">📌 Quick QR Link Instructions:</div>
               <div>1. Open **WhatsApp** on your mobile phone.</div>
               <div>2. Tap **Menu / Settings** (top right 3 dots or gear icon).</div>
-              <div>3. Tap **Linked Devices** → **Link a Device** (or Link with phone number).</div>
-              <div>4. Point your camera at the QR code above or enter the 8-digit Pairing Code!</div>
+              <div>3. Tap **Linked Devices** → **Link a Device**.</div>
+              <div>4. Point your camera at the QR code above to authenticate once!</div>
             </div>
           </div>
         )}
