@@ -53,6 +53,8 @@ export const Modals = () => {
     user,
     loginUser,
     logoutUser,
+    orderSuccessData,
+    setOrderSuccessData,
     showToast,
   } = useStore();
 
@@ -164,8 +166,17 @@ export const Modals = () => {
 
       setIsCheckoutOpen(false);
       clearCart();
+      setOrderSuccessData({
+        orderId,
+        totalAmount: finalAmount,
+        customerName: selectedAddress.name || user?.name || 'Customer',
+        address: selectedAddress.address,
+        city: selectedAddress.city || 'Chennai',
+        phone: selectedAddress.phone || user?.phone || '',
+        paymentMethod: paymentMethod === 'razorpay' ? 'Razorpay UPI' : 'Cash on Delivery (COD)',
+        paymentStatus: paymentMethod === 'razorpay' ? 'Payment Confirmed' : 'Pending COD',
+      });
       showToast(`🎉 Order #${orderId} placed successfully! Automated WhatsApp update sent.`);
-      router.push('/orders');
     };
 
     if (paymentMethod === 'razorpay') {
@@ -1198,6 +1209,91 @@ export const Modals = () => {
                 >
                   <LogOut className="w-4 h-4" />
                   <span>LOGOUT FROM ACCOUNT</span>
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+        {/* Flipkart / Amazon-Style Order Success Celebration Splash Modal */}
+        {orderSuccessData && (
+          <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4 overflow-y-auto">
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.8, opacity: 0, y: 20 }}
+              className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 text-center space-y-6 shadow-2xl relative border border-slate-100 overflow-hidden"
+            >
+              {/* Top Confetti Ambient Glow */}
+              <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-64 h-64 bg-gradient-to-br from-amber-300 via-emerald-400 to-blue-500 rounded-full blur-3xl opacity-30 pointer-events-none" />
+
+              {/* Glowing Scaling Green Checkmark Icon */}
+              <div className="relative inline-block mt-2">
+                <div className="w-20 h-20 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-600 text-white flex items-center justify-center mx-auto shadow-xl ring-8 ring-emerald-100 animate-bounce">
+                  <CheckCircle2 className="w-12 h-12 stroke-[2.5]" />
+                </div>
+                <div className="absolute -top-2 -right-2 bg-amber-400 text-slate-950 font-black text-[10px] px-2 py-0.5 rounded-full shadow-md animate-pulse">
+                  🎉 CONFIRMED
+                </div>
+              </div>
+
+              <div>
+                <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest bg-emerald-50 px-3.5 py-1 rounded-full border border-emerald-200">
+                  ✨ ORDER PLACED SUCCESSFULLY
+                </span>
+                <h2 className="font-heading font-black text-2xl sm:text-3xl text-[#001B3A] mt-3">
+                  Thank You for Your Order!
+                </h2>
+                <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto">
+                  Your order <span className="font-extrabold text-blue-600">#{orderSuccessData.orderId}</span> has been confirmed &amp; logged into Railway PostgreSQL!
+                </p>
+              </div>
+
+              {/* Order Info & Delivery Badge */}
+              <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 text-left space-y-3 text-xs">
+                <div className="flex justify-between items-center pb-2.5 border-b border-slate-200/60">
+                  <span className="text-slate-500 font-bold uppercase text-[10px]">ORDER ID</span>
+                  <span className="font-mono font-black text-[#001B3A] text-sm">#{orderSuccessData.orderId}</span>
+                </div>
+
+                <div className="flex justify-between items-center pb-2.5 border-b border-slate-200/60">
+                  <span className="text-slate-500 font-bold uppercase text-[10px]">TOTAL AMOUNT</span>
+                  <span className="font-black text-emerald-600 text-sm">₹{orderSuccessData.totalAmount} ({orderSuccessData.paymentMethod})</span>
+                </div>
+
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500 font-bold uppercase text-[10px]">LOGISTICS PARTNER</span>
+                  <span className="font-extrabold text-slate-900 text-xs">ST Courier Express (2-3 Days)</span>
+                </div>
+              </div>
+
+              {/* Free WhatsApp Dispatch Badge */}
+              <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-3.5 flex items-center justify-center gap-2 text-xs text-emerald-800 font-bold">
+                <Send className="w-4 h-4 text-emerald-600 animate-pulse" />
+                <span>Automated WhatsApp update sent to <strong>+91 {orderSuccessData.phone}</strong></span>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="space-y-2.5 pt-2">
+                <button
+                  onClick={() => {
+                    const oid = orderSuccessData.orderId;
+                    setOrderSuccessData(null);
+                    router.push(`/orders?orderId=${oid}`);
+                  }}
+                  className="w-full bg-gradient-to-r from-[#001B3A] via-[#002B5B] to-[#0044AA] hover:from-blue-700 hover:to-blue-600 text-white font-black text-xs py-3.5 rounded-2xl shadow-lg uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer"
+                >
+                  <Truck className="w-4 h-4 text-amber-400" />
+                  <span>VIEW LIVE ST COURIER TRACKING</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setOrderSuccessData(null);
+                    router.push('/');
+                  }}
+                  className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs py-3 rounded-2xl transition-colors cursor-pointer"
+                >
+                  CONTINUE SHOPPING
                 </button>
               </div>
             </motion.div>

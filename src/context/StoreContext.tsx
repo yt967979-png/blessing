@@ -81,6 +81,8 @@ interface StoreContextType {
   deleteProductFromDb: (id: string | number) => void;
   cartTotal: number;
   cartCount: number;
+  orderSuccessData: any | null;
+  setOrderSuccessData: (data: any | null) => void;
   showToast: (msg: string) => void;
 }
 
@@ -105,6 +107,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [isTrackOpen, setIsTrackOpen] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [orderSuccessData, setOrderSuccessData] = useState<any | null>(null);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -422,6 +425,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         deleteProductFromDb,
         cartTotal,
         cartCount,
+        orderSuccessData,
+        setOrderSuccessData,
         showToast,
       }}
     >
