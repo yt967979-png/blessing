@@ -94,6 +94,8 @@ export const Modals = () => {
   // Auth form state
   const [authMode, setAuthMode] = useState<'login' | 'register' | 'forgot'>('login');
   const [authForm, setAuthForm] = useState({ name: '', email: '', phone: '', password: '' });
+  const [regOtp, setRegOtp] = useState('');
+  const [regStep, setRegStep] = useState<'details' | 'otp'>('details');
   const [forgotOtp, setForgotOtp] = useState('');
   const [forgotNewPassword, setForgotNewPassword] = useState('');
   const [forgotStep, setForgotStep] = useState<'email' | 'otp'>('email');
@@ -290,8 +292,51 @@ export const Modals = () => {
         return;
       }
 
+      if (regStep === 'details') {
+        setIsSubmitting(true);
+        try {
+          // Send WhatsApp OTP to customer's mobile number
+          const otpRes = await fetch('/api/auth/send-otp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: emailClean, phone: authForm.phone.trim(), mode: 'register' }),
+          });
+          const otpData = await otpRes.json();
+          if (otpRes.ok && otpData.success) {
+            setRegStep('otp');
+            showToast(`📲 6-digit verification code sent to your WhatsApp (${authForm.phone.trim()})!`);
+          } else {
+            setAuthError(otpData.error || 'Failed to send WhatsApp verification code.');
+          }
+        } catch (e) {
+          setAuthError('Error dispatching WhatsApp OTP.');
+        } finally {
+          setIsSubmitting(false);
+        }
+        return;
+      }
+
+      // RegStep === 'otp' -> Verify OTP & Complete Registration
+      if (!regOtp || regOtp.trim().length !== 6) {
+        setAuthError('Please enter the 6-digit WhatsApp OTP code.');
+        return;
+      }
+
       setIsSubmitting(true);
       try {
+        const verifyRes = await fetch('/api/auth/verify-otp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: emailClean, otp: regOtp.trim() }),
+        });
+        const verifyData = await verifyRes.json();
+        if (!verifyRes.ok || !verifyData.verified) {
+          setAuthError(verifyData.error || 'Invalid or expired WhatsApp OTP code.');
+          setIsSubmitting(false);
+          return;
+        }
+
+        // WhatsApp OTP verified -> complete registration in DB
         const res = await fetch('/api/auth', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -307,7 +352,9 @@ export const Modals = () => {
         if (data.error) { setAuthError(data.error); return; }
         loginUser(data.user, data.cart || [], data.wishlist || [], data.addresses || []);
         setIsAuthOpen(false);
-        showToast(`🎉 Account created! Welcome, ${data.user.name}`);
+        setRegStep('details');
+        setRegOtp('');
+        showToast(`🎉 Account verified & created! Welcome, ${data.user.name}`);
         if (data.user?.role === 'admin') router.push('/admin');
       } catch {
         setAuthError('Server error. Please try again.');
@@ -915,6 +962,26 @@ export const Modals = () => {
                             );
                           })()}
                         </div>
+
+                        {regStep === 'otp' && (
+                          <div className="bg-blue-50 border border-blue-200 rounded-xl p-3.5 space-y-2">
+                            <label className="block font-bold text-blue-900 text-xs">
+                              Enter 6-Digit WhatsApp OTP Code *
+                            </label>
+                            <input
+                              type="text"
+                              maxLength={6}
+                              required
+                              placeholder="6-digit code"
+                              value={regOtp}
+                              onChange={(e) => setRegOtp(e.target.value)}
+                              className="w-full px-3 py-2 bg-white border border-blue-300 rounded-lg text-xs font-mono font-bold text-center tracking-widest text-blue-900 outline-none focus:border-blue-600 uppercase"
+                            />
+                            <p className="text-[10px] text-blue-600 font-medium">
+                              📲 Code sent to your WhatsApp number <strong>{authForm.phone}</strong>.
+                            </p>
+                          </div>
+                        )}
                       </>
                     )}
 
@@ -1065,10 +1132,15 @@ export const Modals = () => {
                       >
                         {authMode === 'login' ? (
                           <span>{isSubmitting ? 'SIGNING IN...' : 'SIGN IN TO ACCOUNT'}</span>
+                        ) : regStep === 'details' ? (
+                          <>
+                            <Send className="w-4 h-4" />
+                            <span>{isSubmitting ? 'SENDING WHATSAPP OTP...' : 'SEND WHATSAPP OTP CODE'}</span>
+                          </>
                         ) : (
                           <>
                             <User className="w-4 h-4" />
-                            <span>{isSubmitting ? 'CREATING ACCOUNT...' : 'CREATE ACCOUNT'}</span>
+                            <span>{isSubmitting ? 'VERIFYING & CREATING...' : 'VERIFY & CREATE ACCOUNT'}</span>
                           </>
                         )}
                       </button>
