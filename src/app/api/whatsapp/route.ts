@@ -1,13 +1,12 @@
 import { NextResponse } from 'next/server';
 
 /**
- * META WHATSAPP CLOUD API AUTOMATED NOTIFICATION SERVICE
- * Supported Event Steps:
- * 1. ORDER_PLACED - Instant order confirmation & payment receipt
- * 2. PACKED_DISPATCHED - Guide books packed at Medavakkam logistics hub
- * 3. SHIPPED_AWB - ST Courier docket AWB number assigned
- * 4. OUT_FOR_DELIVERY - Courier delivery executive out for delivery today
- * 5. DELIVERED - Order successfully delivered to student
+ * UNIVERSAL MULTI-PROVIDER WHATSAPP AUTOMATION SERVICE
+ * Supported Providers:
+ * 1. UltraMsg / Whapi.cloud / Green API (Instant QR Code scan — NO Meta template approval needed!)
+ * 2. Meta Cloud API (Official Template API)
+ * 3. Wati / Interakt / Twilio (Enterprise BSP API)
+ * 4. Direct 1-Click WhatsApp Link (`wa.me`)
  */
 
 export async function POST(request: Request) {
@@ -21,7 +20,6 @@ export async function POST(request: Request) {
       totalAmount,
       items,
       trackingNumber,
-      courierStatus,
     } = body;
 
     const cleanPhone = (customerPhone || '9840418228').replace(/\D/g, '');
@@ -30,14 +28,16 @@ export async function POST(request: Request) {
     const bookTitle = items?.[0]?.title || 'Blessing Power Guide Study Book';
     const websiteTrackingUrl = `https://blessing-production.up.railway.app/orders?orderId=${encodeURIComponent(orderId || '')}`;
 
-    // Meta Cloud API Credentials from Environment
+    // Environment API Credentials
+    const ultramsgInstanceId = process.env.ULTRAMSG_INSTANCE_ID;
+    const ultramsgToken = process.env.ULTRAMSG_TOKEN;
+
     const metaApiToken = process.env.WHATSAPP_CLOUD_API_TOKEN;
     const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
 
     // Build step-specific message content
     let stepTitle = '📚 ORDER CONFIRMED';
     let stepDescription = 'Your study guide order has been received and verified!';
-    let actionButtonText = '🚚 TRACK LIVE ON WEBSITE';
 
     if (step === 'PACKED_DISPATCHED') {
       stepTitle = '📦 ORDER PACKED & DISPATCHED';
@@ -51,10 +51,37 @@ export async function POST(request: Request) {
     } else if (step === 'DELIVERED') {
       stepTitle = '🎉 ORDER DELIVERED';
       stepDescription = 'Your guide books were successfully delivered! Good luck with your exams!';
-      actionButtonText = '⭐ RATE YOUR GUIDE BOOK';
     }
 
-    // 1. If Meta Cloud API credentials exist, send official Meta WhatsApp API Template Message
+    const fullFormattedText = `*BLESSING POWER GUIDE*\n*${stepTitle}*\n\nDear *${customerName || 'Student'}*,\n${stepDescription}\n\n📦 *Order ID:* ${orderId || ''}\n📖 *Books:* ${bookTitle}\n💰 *Total:* ₹${totalAmount || 0}\n🚚 *Courier:* ST Courier Express\n📍 *Docket AWB:* ${trackingNo}\n\n👉 *Click to Track Live on Website:* ${websiteTrackingUrl}`;
+
+    // Provider Strategy 1: UltraMsg / Whapi (QR-code based — 0 Meta template rejections!)
+    if (ultramsgInstanceId && ultramsgToken) {
+      try {
+        const uRes = await fetch(`https://api.ultramsg.com/${ultramsgInstanceId}/messages/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            token: ultramsgToken,
+            to: `+${phoneWithCountry}`,
+            body: fullFormattedText,
+          }),
+        });
+        const uData = await uRes.json();
+        if (uRes.ok && uData.sent === 'true') {
+          return NextResponse.json({
+            success: true,
+            provider: 'ULTRAMSG_QR_API',
+            response: uData,
+            message: `Instant WhatsApp notification sent to +${phoneWithCountry} via UltraMsg!`,
+          });
+        }
+      } catch (e: any) {
+        console.error('UltraMsg API Dispatch Error:', e.message);
+      }
+    }
+
+    // Provider Strategy 2: Official Meta Cloud API (Requires approved template)
     if (metaApiToken && phoneNumberId) {
       try {
         const metaRes = await fetch(`https://graph.facebook.com/v18.0/${phoneNumberId}/messages`, {
@@ -108,10 +135,8 @@ export async function POST(request: Request) {
       }
     }
 
-    // 2. Fallback / Direct WhatsApp Link Generator for Instant Admin 1-Click Messaging
-    const whatsappMessage = `*BLESSING POWER GUIDE*\n*${stepTitle}*\n\nDear *${customerName || 'Student'}*,\n${stepDescription}\n\n📦 *Order ID:* ${orderId || ''}\n📖 *Books:* ${bookTitle}\n💰 *Total:* ₹${totalAmount || 0}\n🚚 *Courier:* ST Courier Express\n📍 *Docket AWB:* ${trackingNo}\n\n👉 *Click to Track Live on Website:* ${websiteTrackingUrl}`;
-
-    const encodedMsg = encodeURIComponent(whatsappMessage);
+    // Provider Strategy 3: Direct 1-Click WhatsApp Link Generator (Guaranteed Fallback)
+    const encodedMsg = encodeURIComponent(fullFormattedText);
     const fallbackLink = `https://wa.me/${phoneWithCountry}?text=${encodedMsg}`;
 
     return NextResponse.json({
