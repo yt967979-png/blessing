@@ -1,6 +1,7 @@
 const http = require('http');
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
-const qrcode = require('qrcode-terminal');
+const qrcodeTerminal = require('qrcode-terminal');
+const QRCode = require('qrcode');
 const path = require('path');
 const fs = require('fs');
 
@@ -14,6 +15,7 @@ if (!fs.existsSync(SESSION_DIR)) {
 let sock = null;
 let isConnected = false;
 let latestQr = null;
+let latestQrImage = null;
 
 async function connectToWhatsApp() {
   const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
@@ -25,15 +27,20 @@ async function connectToWhatsApp() {
 
   sock.ev.on('creds.update', saveCreds);
 
-  sock.ev.on('connection.update', (update) => {
+  sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect, qr } = update;
 
     if (qr) {
       latestQr = qr;
+      try {
+        latestQrImage = await QRCode.toDataURL(qr);
+      } catch (e) {
+        latestQrImage = null;
+      }
       console.log('\n==================================================');
       console.log('📱 SCAN THIS QR CODE WITH YOUR WHATSAPP PHONE:');
       console.log('==================================================');
-      qrcode.generate(qr, { small: true });
+      qrcodeTerminal.generate(qr, { small: true });
     }
 
     if (connection === 'close') {
@@ -46,13 +53,14 @@ async function connectToWhatsApp() {
     } else if (connection === 'open') {
       isConnected = true;
       latestQr = null;
+      latestQrImage = null;
       console.log('\n✅ [BAILEYS FREE WHATSAPP] Connected & Authenticated Successfully!');
       console.log('🚀 Ready to send 100% FREE UNLIMITED WhatsApp notifications with $0 fees!\n');
     }
   });
 }
 
-// Start HTTP REST API Server for Sending Messages
+// Start HTTP REST API Server for Sending Messages & Serving QR Page
 const server = http.createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -64,14 +72,70 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  if (req.method === 'GET' && req.url === '/status') {
+  if (req.method === 'GET' && (req.url === '/status' || req.url === '/api/status')) {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       status: isConnected ? 'CONNECTED' : 'DISCONNECTED',
-      qrAvailable: !!latestQr,
+      qrAvailable: !!latestQrImage,
+      qrImage: latestQrImage,
       qrString: latestQr,
       message: isConnected ? 'Ready for unlimited free dispatches' : 'Scan QR code to connect',
     }));
+    return;
+  }
+
+  if (req.method === 'GET' && (req.url === '/' || req.url === '/qr')) {
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.end(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Blessing WhatsApp Bot - QR Code Linker</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0b132b; color: #ffffff; text-align: center; padding: 40px 20px; }
+          .card { background: #1c2541; border: 1px solid #3a506b; max-width: 450px; margin: 0 auto; padding: 30px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+          h1 { color: #fbbf24; font-size: 20px; margin-bottom: 8px; }
+          p { color: #94a3b8; font-size: 13px; margin-bottom: 20px; }
+          .qr-box { background: white; padding: 16px; border-radius: 16px; display: inline-block; margin: 15px 0; }
+          img { width: 220px; height: 220px; display: block; }
+          .badge { display: inline-block; padding: 6px 14px; border-radius: 20px; font-weight: bold; font-size: 12px; }
+          .connected { background: #10b981; color: white; }
+          .pending { background: #f59e0b; color: #000; }
+        </style>
+        <script>
+          setInterval(async () => {
+            try {
+              const r = await fetch('/status');
+              const d = await r.json();
+              if (d.status === 'CONNECTED') {
+                location.reload();
+              }
+            } catch(e) {}
+          }, 3000);
+        </script>
+      </head>
+      <body>
+        <div class="card">
+          <h1>BLESSING WHATSAPP BOT LINKER</h1>
+          <p>Scan this QR code with your phone (WhatsApp → Linked Devices) to enable 100% FREE UNLIMITED messaging!</p>
+          ${isConnected ? `
+            <div class="badge connected">✅ WHATSAPP CONNECTED & READY</div>
+            <p style="margin-top:15px; color:#10b981; font-weight:bold;">Your WhatsApp account is active! You can now send unlimited order notifications.</p>
+          ` : latestQrImage ? `
+            <div class="badge pending">⚡ SCAN QR CODE BELOW</div>
+            <div class="qr-box">
+              <img src="${latestQrImage}" alt="WhatsApp QR Code" />
+            </div>
+            <p style="font-size:11px; color:#cbd5e1;">Open WhatsApp on your phone → Settings → Linked Devices → Link a Device</p>
+          ` : `
+            <div class="badge pending">⏳ GENERATING QR CODE...</div>
+            <p style="margin-top:15px;">Please wait 5 seconds and refresh this page.</p>
+          `}
+        </div>
+      </body>
+      </html>
+    `);
     return;
   }
 
@@ -110,5 +174,6 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`⚡ Baileys Free Unlimited WhatsApp Service running on http://127.0.0.1:${PORT}`);
+  console.log(`🌐 Web QR Code Page available at http://127.0.0.1:${PORT}/qr`);
   connectToWhatsApp();
 });

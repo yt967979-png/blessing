@@ -26,7 +26,26 @@ import { useStore } from '@/context/StoreContext';
 
 export default function AdminPage() {
   const { products, updateProductInDb, addNewProductToDb, deleteProductFromDb, showToast } = useStore();
-  const [activeTab, setActiveTab] = useState<'catalog' | 'orders'>('catalog');
+  const [activeTab, setActiveTab] = useState<'catalog' | 'orders' | 'whatsapp'>('catalog');
+  const [waStatus, setWaStatus] = useState<{ status: string; qrImage?: string; message?: string }>({ status: 'LOADING' });
+
+  // Poll WhatsApp service status
+  useEffect(() => {
+    const fetchWaStatus = async () => {
+      try {
+        const res = await fetch('http://127.0.0.1:4000/status');
+        if (res.ok) {
+          const data = await res.json();
+          setWaStatus(data);
+        }
+      } catch (e) {
+        setWaStatus({ status: 'SERVICE_OFFLINE', message: 'Local Baileys engine is initializing or running in background' });
+      }
+    };
+    fetchWaStatus();
+    const interval = setInterval(fetchWaStatus, 4000);
+    return () => clearInterval(interval);
+  }, []);
   const [editingId, setEditingId] = useState<string | number | null>(null);
 
   // Edit form state
@@ -256,6 +275,17 @@ export default function AdminPage() {
             >
               <ShoppingCart className="w-4 h-4" />
               <span>Incoming Orders ({orders.length})</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('whatsapp')}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors ${
+                activeTab === 'whatsapp'
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+              }`}
+            >
+              <MessageSquare className="w-4 h-4 text-emerald-400" />
+              <span>WhatsApp Bot QR Engine</span>
             </button>
           </nav>
         </div>
@@ -753,6 +783,64 @@ export default function AdminPage() {
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {activeTab === 'whatsapp' && (
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 md:p-8 max-w-2xl mx-auto text-center space-y-6">
+            <div>
+              <span className="text-[10px] font-extrabold text-amber-400 uppercase tracking-wider bg-amber-400/10 px-3 py-1 rounded-full border border-amber-400/30">
+                100% FREE UNLIMITED WHATSAPP BOT ENGINE
+              </span>
+              <h2 className="font-heading font-black text-2xl text-white mt-3">
+                LINK YOUR WHATSAPP PHONE NUMBER
+              </h2>
+              <p className="text-xs text-slate-400 mt-1 max-w-md mx-auto">
+                Scan the QR code below with your mobile phone (WhatsApp → Settings → Linked Devices) to enable $0 cost, unlimited order dispatches!
+              </p>
+            </div>
+
+            {waStatus.status === 'CONNECTED' ? (
+              <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-6 space-y-3">
+                <div className="w-12 h-12 bg-emerald-500 text-white rounded-full flex items-center justify-center mx-auto text-xl font-bold">
+                  ✓
+                </div>
+                <h3 className="font-extrabold text-emerald-400 text-base">WHATSAPP BOT CONNECTED &amp; ACTIVE</h3>
+                <p className="text-xs text-emerald-200">
+                  Your WhatsApp phone is authenticated! The bot will automatically send order updates, ST Courier dockets, and live tracking links to your students.
+                </p>
+              </div>
+            ) : waStatus.qrImage ? (
+              <div className="bg-white border-2 border-amber-400 p-5 rounded-2xl inline-block shadow-2xl">
+                <img src={waStatus.qrImage} alt="WhatsApp QR Code" className="w-64 h-64 mx-auto block" />
+                <span className="text-[11px] font-bold text-slate-900 block mt-3 uppercase tracking-wider">
+                  ⚡ SCAN WITH YOUR PHONE WHATSAPP
+                </span>
+              </div>
+            ) : (
+              <div className="bg-slate-800 border border-slate-700 rounded-2xl p-8 space-y-3">
+                <div className="w-8 h-8 border-2 border-amber-400 border-t-transparent rounded-full animate-spin mx-auto" />
+                <p className="text-xs text-slate-300 font-bold">
+                  Initializing WhatsApp QR Engine on http://127.0.0.1:4000/qr ...
+                </p>
+                <a
+                  href="http://127.0.0.1:4000/qr"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-amber-400 text-xs hover:underline block font-extrabold"
+                >
+                  Open http://127.0.0.1:4000/qr in New Tab ↗
+                </a>
+              </div>
+            )}
+
+            <div className="pt-4 border-t border-slate-800 text-left text-xs text-slate-400 space-y-2">
+              <div className="font-bold text-white">📌 Quick Instructions:</div>
+              <div>1. Open **WhatsApp** on your mobile phone.</div>
+              <div>2. Tap **Menu / Settings** (top right 3 dots or gear icon).</div>
+              <div>3. Tap **Linked Devices** → **Link a Device**.</div>
+              <div>4. Point your phone camera at the QR code above!</div>
+            </div>
           </div>
         )}
       </main>
