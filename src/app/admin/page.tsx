@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   LayoutDashboard,
   Package,
@@ -21,11 +21,13 @@ import {
   Send,
   ShieldCheck,
   Download,
+  LogOut,
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 
 export default function AdminPage() {
-  const { products, updateProductInDb, addNewProductToDb, deleteProductFromDb, showToast } = useStore();
+  const router = useRouter();
+  const { products, updateProductInDb, addNewProductToDb, deleteProductFromDb, showToast, logoutUser } = useStore();
   const [activeTab, setActiveTab] = useState<'catalog' | 'orders' | 'whatsapp'>('catalog');
   const [waStatus, setWaStatus] = useState<{ status: string; qrImage?: string; pairingCode?: string; message?: string }>({ status: 'LOADING' });
   const [waPhoneInput, setWaPhoneInput] = useState('');
@@ -407,13 +409,17 @@ export default function AdminPage() {
         </div>
 
         <div className="pt-6 border-t border-slate-800">
-          <Link
-            href="/"
-            className="flex items-center justify-center gap-2 w-full bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs py-2.5 rounded-xl transition-colors"
+          <button
+            onClick={() => {
+              logoutUser();
+              showToast('🔒 Logged out from Admin Portal.');
+              router.push('/');
+            }}
+            className="flex items-center justify-center gap-2 w-full bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 font-extrabold text-xs py-3 rounded-xl transition-colors cursor-pointer uppercase tracking-wider"
           >
-            <ArrowLeft className="w-4 h-4 text-amber-400" />
-            <span>Return to Website</span>
-          </Link>
+            <LogOut className="w-4 h-4 text-red-400" />
+            <span>LOG OUT FROM ADMIN</span>
+          </button>
         </div>
       </aside>
 
