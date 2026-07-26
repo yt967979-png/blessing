@@ -3,9 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "node scripts/whatsapp-service.js & next dev",
     "build": "node scripts/init-db.js && next build",
-    "start": "next start",
+    "start": "node scripts/whatsapp-service.js & next start",
+    "whatsapp": "node scripts/whatsapp-service.js",
     "lint": "eslint"
   },
   "dependencies": {
