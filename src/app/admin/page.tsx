@@ -1074,7 +1074,13 @@ export default function AdminPage() {
                                   <input
                                     type="checkbox"
                                     checked={editDiscountEnabled}
-                                    onChange={(e) => setEditDiscountEnabled(e.target.checked)}
+                                    onChange={(e) => {
+                                      const checked = e.target.checked;
+                                      setEditDiscountEnabled(checked);
+                                      if (!checked) {
+                                        setEditPrice(editMrp);
+                                      }
+                                    }}
                                     className="w-3.5 h-3.5 accent-[#2874f0] rounded cursor-pointer"
                                     title="Enable Sale Price"
                                   />
