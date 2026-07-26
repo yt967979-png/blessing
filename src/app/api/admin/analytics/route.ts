@@ -131,39 +131,39 @@ export async function GET(request: Request) {
         todayOrders:    Number(summary.today_orders   || 0),
         todayRevenue:   Number(summary.today_revenue  || 0),
       },
-      daily: dailyRes.rows.map((r) => ({
+      daily: dailyRes.rows.map((r: any) => ({
         day:           r.day,
         orders:        Number(r.orders),
         revenue:       Number(r.revenue),
         onlineRevenue: Number(r.online_revenue),
         codRevenue:    Number(r.cod_revenue),
       })),
-      paymentMethods: paymentMethodRes.rows.map((r) => ({
+      paymentMethods: paymentMethodRes.rows.map((r: any) => ({
         method:  r.payment_method || 'Unknown',
         count:   Number(r.count),
         revenue: Number(r.revenue),
       })),
-      orderStatuses: statusRes.rows.map((r) => ({
+      orderStatuses: statusRes.rows.map((r: any) => ({
         status:  r.status || 'Unknown',
         count:   Number(r.count),
         revenue: Number(r.revenue),
       })),
-      paymentStatuses: payStatusRes.rows.map((r) => ({
+      paymentStatuses: payStatusRes.rows.map((r: any) => ({
         status:  r.payment_status || 'Unknown',
         count:   Number(r.count),
         revenue: Number(r.revenue),
       })),
-      topProducts: topProductsRes.rows.map((r) => ({
+      topProducts: topProductsRes.rows.map((r: any) => ({
         title:        r.title,
         totalQty:     Number(r.total_qty),
         totalRevenue: Number(r.total_revenue),
         orderCount:   Number(r.order_count),
       })),
-      hourly: hourlyRes.rows.map((r) => ({
+      hourly: hourlyRes.rows.map((r: any) => ({
         hour:   Number(r.hour),
         orders: Number(r.orders),
       })),
-      monthlyTrend: momRes.rows.map((r) => ({
+      monthlyTrend: momRes.rows.map((r: any) => ({
         month:   r.month,
         orders:  Number(r.orders),
         revenue: Number(r.revenue),

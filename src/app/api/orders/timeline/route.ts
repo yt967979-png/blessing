@@ -150,7 +150,7 @@ export async function GET(request: Request) {
       Object.entries(STAGE_META).map(([k, v]) => [v.label, k])
     );
 
-    const events = res.rows.map((row) => {
+    const events = res.rows.map((row: any) => {
       const stageKey = statusLabelToKey[row.status] || row.status;
       const meta = STAGE_META[stageKey];
       return {
