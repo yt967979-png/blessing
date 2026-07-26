@@ -117,7 +117,7 @@ export default function ProductDetailPage({
             aggregateRating: {
               '@type': 'AggregateRating',
               ratingValue: product.rating || 5.0,
-              reviewCount: product.reviews || 120,
+              reviewCount: product.reviews ?? 0,
             },
           }),
         }}
@@ -395,50 +395,34 @@ export default function ProductDetailPage({
             </div>
           )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {(dbReviews.length > 0
-              ? dbReviews
-              : [
-                  {
-                    studentName: 'Karthik M (10th Standard)',
-                    rating: 5,
-                    comment: 'Scored 96/100 in Maths State Board exam after studying with Blessing Power Guide! Solved papers were super helpful.',
-                  },
-                  {
-                    studentName: 'Ananya S (12th Standard)',
-                    rating: 5,
-                    comment: 'Very clear step-by-step explanations and diagrams for Physics & Chemistry. Delivered in 24 hours via ST Courier!',
-                  },
-                  {
-                    studentName: 'Priya R (11th Standard)',
-                    rating: 5,
-                    comment: 'Best guide for Tamil Nadu State Board! The solved question papers are exactly like the real exam. Highly recommended!',
-                  },
-                  {
-                    studentName: 'Ravi K (10th Standard)',
-                    rating: 4,
-                    comment: 'Good book with chapter-wise important questions. Helped me score 90+ in all subjects. Fast delivery too!',
-                  },
-                ]
-            ).map((rev: any, idx: number) => (
-              <div key={idx} className="bg-slate-50 border border-slate-200 rounded-xl p-5">
-                <div className="flex justify-between items-start mb-2">
-                  <div>
-                    <div className="font-extrabold text-slate-900 text-sm">{rev.studentName}</div>
-                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded border border-emerald-200 uppercase">
-                      VERIFIED PURCHASER
-                    </span>
+          {dbReviews.length === 0 ? (
+            <div className="py-10 text-center text-slate-400 border border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
+              <Star className="w-8 h-8 mx-auto mb-2 text-amber-400 opacity-60" />
+              <p className="text-xs font-bold text-slate-700">No verified reviews submitted yet for this book.</p>
+              <p className="text-[11px] text-slate-500 mt-0.5">Be the first student to leave a review above!</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {dbReviews.map((rev: any, idx: number) => (
+                <div key={idx} className="bg-slate-50 border border-slate-200 rounded-xl p-5">
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <div className="font-extrabold text-slate-900 text-sm">{rev.studentName}</div>
+                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded border border-emerald-200 uppercase">
+                        VERIFIED PURCHASER
+                      </span>
+                    </div>
+                    <div className="flex gap-0.5">
+                      {Array.from({ length: rev.rating || 5 }).map((_, i) => (
+                        <Star key={i} className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                      ))}
+                    </div>
                   </div>
-                  <div className="flex text-amber-400">
-                    {[...Array(rev.rating || 5)].map((_, i) => (
-                      <Star key={i} className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                    ))}
-                  </div>
+                  <p className="text-slate-600 text-xs leading-relaxed font-medium">"{rev.comment}"</p>
                 </div>
-                <p className="text-slate-600 text-xs leading-relaxed mt-1">"{rev.comment}"</p>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </section>
 
         {/* Recommended Products */}

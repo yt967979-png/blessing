@@ -9,22 +9,29 @@ export async function GET(request: Request) {
     const search = searchParams.get('search');
 
     if (client) {
-      let sql = 'SELECT * FROM books WHERE 1=1';
+      let sql = `
+        SELECT b.*, 
+               COALESCE(COUNT(r.id), 0)::int as review_count,
+               COALESCE(AVG(r.rating), 5.0)::numeric(3,1) as avg_rating
+        FROM books b
+        LEFT JOIN reviews r ON b.id = r.book_id
+        WHERE 1=1
+      `;
       const params: any[] = [];
       let count = 1;
 
       if (cls && cls !== 'all' && cls !== 'ALL') {
-        sql += ` AND title ILIKE $${count++}`;
+        sql += ` AND b.title ILIKE $${count++}`;
         params.push(`%${cls}%`);
       }
 
       if (search && search.trim()) {
-        sql += ` AND (title ILIKE $${count} OR subject ILIKE $${count} OR description ILIKE $${count})`;
+        sql += ` AND (b.title ILIKE $${count} OR b.subject ILIKE $${count} OR b.description ILIKE $${count})`;
         params.push(`%${search.trim()}%`);
         count++;
       }
 
-      sql += ' ORDER BY created_at DESC';
+      sql += ' GROUP BY b.id ORDER BY b.created_at DESC';
 
       const res = await client.query(sql, params);
 
@@ -49,8 +56,8 @@ export async function GET(request: Request) {
             price: Number(d.discount_price || d.price),
             mrp: Number(d.price),
             discount: calculatedDiscount,
-            rating: 5.0,
-            reviews: 120,
+            rating: Number(d.avg_rating || 5.0),
+            reviews: Number(d.review_count || 0),
             badge: isCombo ? 'SUPER COMBO' : 'BESTSELLER',
             badgeColor: 'bg-blue-600',
             image: d.cover_image || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80',

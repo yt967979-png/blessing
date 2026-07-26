@@ -152,7 +152,7 @@ export async function POST(request: Request) {
       category: 'guide',
       discount: 20,
       rating: 5.0,
-      reviews: 120,
+      reviews: 0,
       badge: 'BESTSELLER',
       badgeColor: 'bg-blue-600',
       description: 'Official guide book.',

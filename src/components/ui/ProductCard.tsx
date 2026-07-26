@@ -100,7 +100,7 @@ export const ProductCard = ({ product }: { product: Product }) => {
             {product.rating || 5.0}
           </span>
           <span className="text-[9px] text-slate-500 font-bold">
-            ({product.reviews || 120})
+            ({product.reviews ?? 0})
           </span>
         </div>
 
