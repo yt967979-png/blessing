@@ -16,12 +16,43 @@ if (!fs.existsSync(PUBLIC_DIR)) {
   fs.mkdirSync(PUBLIC_DIR, { recursive: true });
 }
 
+const { Client } = require('pg');
+
 const STATUS_FILE = path.join(PUBLIC_DIR, 'whatsapp_status.json');
 const QR_IMAGE_FILE = path.join(PUBLIC_DIR, 'whatsapp_qr.png');
+const RAILWAY_DB_FALLBACK = process.env.DATABASE_URL || "postgresql://postgres:USdOHOzspyXMPFmDnfsjkxoSIGedYwgk@sakura.proxy.rlwy.net:32874/railway";
+
+async function saveToDatabase(data) {
+  let client = null;
+  try {
+    client = new Client({
+      connectionString: RAILWAY_DB_FALLBACK,
+      ssl: RAILWAY_DB_FALLBACK.includes('railway') || RAILWAY_DB_FALLBACK.includes('rlwy.net') ? { rejectUnauthorized: false } : false,
+    });
+    await client.connect();
+    await client.query(
+      `INSERT INTO whatsapp_sessions (id, status, connected, qr_image, pairing_code, message, updated_at)
+       VALUES ('default', $1, $2, $3, $4, $5, NOW())
+       ON CONFLICT (id) DO UPDATE 
+       SET status = EXCLUDED.status,
+           connected = EXCLUDED.connected,
+           qr_image = EXCLUDED.qr_image,
+           pairing_code = EXCLUDED.pairing_code,
+           message = EXCLUDED.message,
+           updated_at = NOW()`,
+      [data.status || 'UNKNOWN', !!data.connected, data.qrImage || null, data.pairingCode || null, data.message || null]
+    );
+  } catch (e) {
+    // DB sync logging
+  } finally {
+    if (client) try { await client.end(); } catch (_) {}
+  }
+}
 
 function updateStateFile(data) {
   try {
     fs.writeFileSync(STATUS_FILE, JSON.stringify(data, null, 2));
+    saveToDatabase(data);
   } catch (e) {
     console.error('Error writing status file:', e.message);
   }

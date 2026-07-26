@@ -188,6 +188,48 @@ export async function getDbClient() {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
+    CREATE TABLE IF NOT EXISTS order_timeline (
+      id VARCHAR(255) PRIMARY KEY,
+      order_id VARCHAR(255) REFERENCES orders(id) ON DELETE CASCADE,
+      status VARCHAR(255) NOT NULL,
+      remarks TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS whatsapp_sessions (
+      id VARCHAR(255) PRIMARY KEY DEFAULT 'default',
+      status VARCHAR(100) NOT NULL DEFAULT 'INITIALIZING',
+      connected BOOLEAN DEFAULT FALSE,
+      qr_image TEXT,
+      pairing_code VARCHAR(50),
+      message TEXT,
+      session_data JSONB,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS courier_tracking (
+      id VARCHAR(255) PRIMARY KEY,
+      order_id VARCHAR(255) REFERENCES orders(id) ON DELETE CASCADE,
+      docket_number VARCHAR(255) NOT NULL,
+      courier_name VARCHAR(100) DEFAULT 'ST Courier Express',
+      current_status VARCHAR(255),
+      origin_hub VARCHAR(255),
+      destination_hub VARCHAR(255),
+      estimated_delivery VARCHAR(255),
+      scraped_events JSONB,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS whatsapp_logs (
+      id VARCHAR(255) PRIMARY KEY,
+      order_id VARCHAR(255),
+      phone VARCHAR(100) NOT NULL,
+      message TEXT NOT NULL,
+      provider VARCHAR(100) DEFAULT 'BAILEYS_FREE_UNLIMITED',
+      status VARCHAR(50) DEFAULT 'SENT',
+      sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
     ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_address TEXT;
     ALTER TABLE reviews ADD COLUMN IF NOT EXISTS user_name VARCHAR(255);
   `);

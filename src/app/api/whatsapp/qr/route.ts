@@ -3,6 +3,24 @@ import fs from 'fs';
 import path from 'path';
 
 export async function GET() {
+  // 1. Read directly from Railway PostgreSQL DB first
+  try {
+    const db = await import('@/lib/db');
+    const client = await db.getDbClient();
+    const res = await client.query(`SELECT status, connected, qr_image, pairing_code, message FROM whatsapp_sessions WHERE id = 'default' LIMIT 1`);
+    if (res.rows.length > 0) {
+      const row = res.rows[0];
+      return NextResponse.json({
+        status: row.status,
+        connected: row.connected,
+        qrImage: row.qr_image,
+        pairingCode: row.pairing_code,
+        message: row.message,
+      });
+    }
+  } catch (_) {}
+
+  // 2. Fallback to local status file
   const statusFile = path.join(process.cwd(), 'public', 'whatsapp_status.json');
 
   if (fs.existsSync(statusFile)) {
@@ -24,6 +42,12 @@ export async function GET() {
 }
 
 export async function DELETE() {
+  try {
+    const db = await import('@/lib/db');
+    const client = await db.getDbClient();
+    await client.query(`UPDATE whatsapp_sessions SET status = 'DISCONNECTED', connected = false, qr_image = NULL, message = 'Unlinked by admin' WHERE id = 'default'`);
+  } catch (_) {}
+
   try {
     const res = await fetch('http://127.0.0.1:4000/unlink', { method: 'POST' });
     if (res.ok) {
