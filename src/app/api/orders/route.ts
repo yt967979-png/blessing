@@ -187,6 +187,24 @@ export async function POST(request: Request) {
         [timelineId, id]
       );
 
+      // Auto-dispatch initial WhatsApp Order Placed notification
+      try {
+        const originUrl = new URL(request.url).origin;
+        fetch(`${originUrl}/api/whatsapp`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            step: 'ORDER_PLACED',
+            customerPhone: customerPhone,
+            customerName: customerName,
+            orderId: orderNumber,
+            totalAmount: totalAmount,
+            trackingNumber: internalShipmentId,
+            items: verifiedItems,
+          }),
+        }).catch(() => {});
+      } catch (_) {}
+
       return NextResponse.json({
         orderId: orderNumber,
         shipmentId: internalShipmentId,
@@ -266,7 +284,8 @@ export async function PATCH(request: NextRequest) {
         } catch (_) {}
 
         if (phone) {
-          fetch(`${request.nextUrl.origin}/api/whatsapp`, {
+          const originUrl = new URL(request.url).origin;
+          fetch(`${originUrl}/api/whatsapp`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

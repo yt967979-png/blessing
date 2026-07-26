@@ -35,25 +35,37 @@ export async function POST(request: Request) {
     const metaApiToken = process.env.WHATSAPP_CLOUD_API_TOKEN;
     const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
 
-    // Build step-specific message content
+    const statusClean = (step || body.status || '').toUpperCase();
     let stepTitle = '📚 ORDER CONFIRMED';
     let stepDescription = 'Your study guide order has been received and verified!';
 
-    if (step === 'PACKED_DISPATCHED') {
-      stepTitle = '📦 ORDER PACKED & DISPATCHED';
-      stepDescription = 'Your guide books have been inspected, packed, and handed to ST Courier.';
-    } else if (step === 'SHIPPED_AWB') {
-      stepTitle = '🚚 SHIPPED VIA ST COURIER';
-      stepDescription = `Your parcel is in transit! ST Courier Docket AWB: *${trackingNo}*.`;
-    } else if (step === 'OUT_FOR_DELIVERY') {
-      stepTitle = '📍 OUT FOR DELIVERY TODAY';
-      stepDescription = 'Your ST Courier delivery executive is out for delivery to your address.';
-    } else if (step === 'DELIVERED') {
-      stepTitle = '🎉 ORDER DELIVERED';
-      stepDescription = 'Your guide books were successfully delivered! Good luck with your exams!';
+    if (statusClean.includes('DELIVERED')) {
+      stepTitle = '🎉 ORDER DELIVERED SUCCESSFULLY';
+      stepDescription = 'Your guide books were successfully delivered to your address! Thank you for choosing Blessing Power Guide. Good luck with your studies!';
+    } else if (statusClean.includes('OUT_FOR_DELIVERY') || statusClean.includes('OUT FOR DELIVERY')) {
+      stepTitle = '🛵 OUT FOR DELIVERY TODAY';
+      stepDescription = 'Your ST Courier delivery executive is out to deliver your parcel today. Please ensure someone is available at your address to receive it.';
+    } else if (statusClean.includes('IN_TRANSIT') || statusClean.includes('IN TRANSIT')) {
+      stepTitle = '⚡ PARCEL IN TRANSIT (ST COURIER)';
+      stepDescription = `Your order is currently moving between ST Courier sorting hubs towards your city. ST Courier Docket: *${trackingNo}*.`;
+    } else if (statusClean.includes('HANDED TO ST COURIER') || statusClean.includes('SHIPPED')) {
+      stepTitle = '🚚 HANDED TO ST COURIER EXPRESS';
+      stepDescription = `Your order has been handed to ST Courier for fast delivery! Official ST Courier Docket AWB: *${trackingNo}*.`;
+    } else if (statusClean.includes('PACKED')) {
+      stepTitle = '📦 ORDER PACKED & SEALED';
+      stepDescription = 'Your books have been quality checked, packed in a protective mailer, and sealed for shipment.';
+    } else if (statusClean.includes('PREPARING')) {
+      stepTitle = '📚 PREPARING YOUR ORDER';
+      stepDescription = 'Our warehouse team is retrieving your ordered guide books from inventory.';
+    } else if (statusClean.includes('PAYMENT') || statusClean.includes('PAID')) {
+      stepTitle = '💳 PAYMENT CONFIRMED';
+      stepDescription = 'Your payment has been successfully verified! Order processing is underway.';
+    } else {
+      stepTitle = '🎉 ORDER CONFIRMED';
+      stepDescription = 'Thank you for placing your order with Blessing Power Guide! We are processing it right now.';
     }
 
-    const fullFormattedText = `*BLESSING POWER GUIDE*\n*${stepTitle}*\n\nDear *${customerName || 'Student'}*,\n${stepDescription}\n\n📦 *Order ID:* ${orderId || ''}\n📖 *Books:* ${bookTitle}\n💰 *Total:* ₹${totalAmount || 0}\n🚚 *Courier:* ST Courier Express\n📍 *Docket AWB:* ${trackingNo}\n\n👉 *Click to Track Live on Website:* ${websiteTrackingUrl}`;
+    const fullFormattedText = `*BLESSING POWER GUIDE*\n*${stepTitle}*\n\nDear *${customerName || 'Student'}*,\n${stepDescription}\n\n📦 *Order ID:* ${orderId || ''}\n📖 *Books:* ${bookTitle}\n💰 *Total Amount:* ₹${totalAmount || body.totalAmount || 0}\n🚚 *Logistics Partner:* ST Courier Express\n📍 *Docket AWB:* ${trackingNo}\n\n👉 *Track Live on Website:* ${websiteTrackingUrl}`;
 
     // Priority Strategy 1: Baileys Free Unlimited Self-Hosted Engine (Port 4000)
     try {
