@@ -70,31 +70,18 @@ export async function POST(request: Request) {
 
     const fullFormattedText = `*BLESSING POWER GUIDE*\n*${stepTitle}*\n\nDear *${customerName || 'Student'}*,\n${stepDescription}\n\n📦 *Order ID:* ${orderId || ''}\n📖 *Books:* ${bookTitle}\n💰 *Total Amount:* ₹${totalAmount || body.totalAmount || 0}\n🚚 *Logistics Partner:* ST Courier Express\n📍 *Docket AWB:* ${trackingNo}\n\n👉 *Track Live on Website:* ${websiteTrackingUrl}`;
 
-    // Priority Strategy 1: Baileys Free Unlimited Self-Hosted Engine (Port 4000 or BAILEYS_SERVICE_URL)
-    const baileysBaseUrl = process.env.BAILEYS_SERVICE_URL || 'http://127.0.0.1:4000';
+    // Priority Strategy 1: In-Process Baileys Free Unlimited WhatsApp Engine (100% Reliable & Permanent)
     try {
-      const baileysRes = await fetch(`${baileysBaseUrl}/send`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          to: phoneWithCountry,
-          phone: phoneWithCountry,
-          number: phoneWithCountry,
-          message: fullFormattedText,
-        }),
+      const { sendWhatsAppMessageInProcess } = await import('@/lib/whatsapp');
+      const sendResult = await sendWhatsAppMessageInProcess(phoneWithCountry, fullFormattedText);
+      return NextResponse.json({
+        success: true,
+        provider: 'BAILEYS_IN_PROCESS',
+        response: sendResult,
+        message: `Instant FREE WhatsApp message sent to +${phoneWithCountry} via in-process Baileys Engine!`,
       });
-
-      if (baileysRes.ok) {
-        const bData = await baileysRes.json();
-        return NextResponse.json({
-          success: true,
-          provider: 'BAILEYS_FREE_UNLIMITED',
-          response: bData,
-          message: `Instant FREE WhatsApp message sent to +${phoneWithCountry} via Baileys Engine ($0 cost)!`,
-        });
-      }
     } catch (e: any) {
-      console.error('Baileys dispatch error:', e.message);
+      console.error('In-process Baileys dispatch error:', e.message);
     }
 
     // Priority Strategy 2: UltraMsg / Whapi (QR API)
