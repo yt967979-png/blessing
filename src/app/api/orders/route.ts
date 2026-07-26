@@ -57,14 +57,19 @@ export async function GET(request: Request) {
         whereClauses.push(`(o.order_number = $${params.length} OR o.id = $${params.length})`);
       }
 
-      // Admin gets all orders; regular users only see their own
+      // Admin gets all orders; regular users match by ID, email, phone, name, or address
       if (!isAdminRequest && userIdParam) {
         params.push(userIdParam);
+        const p1 = params.length;
+        params.push(`%${userIdParam}%`);
+        const p2 = params.length;
         whereClauses.push(`(
-          o.user_id ILIKE $${params.length}
-          OR o.user_id = (SELECT email FROM users WHERE id = $${params.length} OR email = $${params.length} LIMIT 1)
-          OR o.user_id = (SELECT name FROM users WHERE email = $${params.length} OR id = $${params.length} LIMIT 1)
-          OR o.shipping_address::text ILIKE '%' || $${params.length} || '%'
+          o.user_id = $${p1}
+          OR LOWER(o.user_id) = LOWER($${p1})
+          OR o.user_id ILIKE $${p2}
+          OR o.shipping_address::text ILIKE $${p2}
+          OR o.user_id = (SELECT id FROM users WHERE id = $${p1} OR LOWER(email) = LOWER($${p1}) OR phone = $${p1} LIMIT 1)
+          OR o.user_id = (SELECT email FROM users WHERE id = $${p1} OR LOWER(email) = LOWER($${p1}) OR phone = $${p1} LIMIT 1)
         )`);
       }
 
