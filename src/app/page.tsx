@@ -1,6 +1,8 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useStore } from '@/context/StoreContext';
 import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
 import { Header } from '@/components/layout/Header';
 import { NavBar } from '@/components/layout/NavBar';
@@ -17,6 +19,15 @@ import { Modals } from '@/components/modals/Modals';
 import { Toast } from '@/components/ui/Toast';
 
 export default function Home() {
+  const router = useRouter();
+  const { user } = useStore();
+
+  useEffect(() => {
+    // If the logged in user is Admin, auto-redirect directly to Admin Dashboard
+    if (user && user.role === 'admin') {
+      router.replace('/admin');
+    }
+  }, [user, router]);
   return (
     <main className="min-h-screen bg-slate-50 flex flex-col">
       <Toast />

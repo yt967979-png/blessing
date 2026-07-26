@@ -138,7 +138,16 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           // Verify with Railway PostgreSQL DB if account still exists
           fetch(`/api/auth?userId=${u.id}`)
             .then((res) => {
-              if (res.status === 404) {
+              if (res.ok) {
+                return res.json();
+              }
+              return null;
+            })
+            .then((dbUser) => {
+              if (dbUser && dbUser.user) {
+                setUser(dbUser.user);
+                localStorage.setItem('bpg_user_next', JSON.stringify(dbUser.user));
+              } else {
                 // Account missing in DB -> Auto logout!
                 setUser(null);
                 setCart([]);
@@ -146,12 +155,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 localStorage.removeItem('bpg_user_next');
                 localStorage.removeItem('bpg_cart_next');
                 localStorage.removeItem('bpg_user_addresses');
-              } else {
-                // User valid -> restore cart
-                const savedCart = localStorage.getItem('bpg_cart_next');
-                if (savedCart) {
-                  try { setCart(JSON.parse(savedCart)); } catch (e) {}
-                }
               }
             })
             .catch(() => {
@@ -163,7 +166,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }
       } catch (e) {}
     }
-    // No user => cart stays empty (don't restore guest cart)
   }, []);
 
   // Cross-Device Sync Trigger to Railway PostgreSQL (only when logged in)
