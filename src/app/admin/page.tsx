@@ -78,6 +78,7 @@ export default function AdminPage() {
   const [editPrice, setEditPrice] = useState(0);
   const [editMrp, setEditMrp] = useState(0);
   const [editBadge, setEditBadge] = useState('');
+  const [editBadgeEnabled, setEditBadgeEnabled] = useState(true);
 
   // New product form state
   const [showAddForm, setShowAddForm] = useState(false);
@@ -87,6 +88,7 @@ export default function AdminPage() {
   const [newPrice, setNewPrice] = useState(190);
   const [newMrp, setNewMrp] = useState(240);
   const [newBadge, setNewBadge] = useState('BESTSELLER');
+  const [newBadgeEnabled, setNewBadgeEnabled] = useState(true);
   const [newImg, setNewImg] = useState('https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80');
 
   // Live Orders from Database
@@ -193,28 +195,32 @@ export default function AdminPage() {
     setEditingId(p.id);
     setEditPrice(p.price);
     setEditMrp(p.mrp);
-    setEditBadge(p.badge);
+    setEditBadge(p.badge || '');
+    setEditBadgeEnabled(!!p.badge);
   };
 
   const saveProductChanges = async (id: string | number) => {
+    const finalBadge = editBadgeEnabled ? (editBadge.trim() || 'BESTSELLER') : '';
     const calculatedDiscount = Math.round(((editMrp - editPrice) / editMrp) * 100);
+
     // Save to Railway PostgreSQL via API
     try {
       await fetch('/api/products', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, price: editPrice, mrp: editMrp, badge: editBadge }),
+        body: JSON.stringify({ id, price: editPrice, mrp: editMrp, badge: finalBadge }),
       });
     } catch (_) {}
+
     // Also update local products state via StoreContext
     updateProductInDb(id, {
       price: Number(editPrice),
       mrp: Number(editMrp),
       discount: calculatedDiscount > 0 ? calculatedDiscount : 0,
-      badge: editBadge,
+      badge: finalBadge,
     });
     setEditingId(null);
-    showToast(`✅ Product #${id} updated to ₹${editPrice} — saved to Railway PostgreSQL!`);
+    showToast(`✅ Product #${id} updated — saved securely to Railway PostgreSQL!`);
   };
 
   const handleCreateProduct = (e: React.FormEvent) => {
@@ -889,16 +895,33 @@ export default function AdminPage() {
 
                             <td className="py-3 px-2">
                               {isEditing ? (
-                                <input
-                                  type="text"
-                                  value={editBadge}
-                                  onChange={(e) => setEditBadge(e.target.value)}
-                                  className="w-24 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-[10px] font-bold uppercase outline-none"
-                                />
+                                <div className="flex items-center gap-1.5">
+                                  <input
+                                    type="checkbox"
+                                    id={`badge-check-${p.id}`}
+                                    checked={editBadgeEnabled}
+                                    onChange={(e) => setEditBadgeEnabled(e.target.checked)}
+                                    className="w-3.5 h-3.5 accent-purple-500 rounded cursor-pointer"
+                                  />
+                                  <input
+                                    type="text"
+                                    disabled={!editBadgeEnabled}
+                                    value={editBadge}
+                                    placeholder="e.g. BESTSELLER"
+                                    onChange={(e) => setEditBadge(e.target.value)}
+                                    className={`w-24 px-2 py-1 bg-slate-800 border rounded text-white text-[10px] font-bold uppercase outline-none ${
+                                      editBadgeEnabled ? 'border-purple-500 text-purple-300' : 'border-slate-700 opacity-40'
+                                    }`}
+                                  />
+                                </div>
                               ) : (
-                                <span className="bg-purple-500/20 text-purple-300 border border-purple-500/30 px-2 py-0.5 rounded text-[10px] font-bold uppercase">
-                                  {p.badge}
-                                </span>
+                                p.badge ? (
+                                  <span className="bg-purple-500/20 text-purple-300 border border-purple-500/30 px-2 py-0.5 rounded text-[10px] font-bold uppercase">
+                                    {p.badge}
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-600 text-[10px] italic">No Badge</span>
+                                )
                               )}
                             </td>
 

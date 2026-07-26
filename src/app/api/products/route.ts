@@ -64,7 +64,7 @@ export async function GET(request: Request) {
             hoverImage: d.cover_image || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80',
             description: d.description || 'Complete guide book for exam success.',
             features: ['Solved Papers', 'Chapter Notes'],
-            inStock: d.stock > 0,
+            inStock: d.status !== 'out_of_stock' && (d.stock === undefined || d.stock === null || Number(d.stock) > 0),
           };
         });
         return NextResponse.json(mapped);
