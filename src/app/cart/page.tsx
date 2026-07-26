@@ -20,7 +20,25 @@ export default function CartPage() {
   const totalMrp = cart.reduce((sum, item) => sum + (item.mrp || item.price + 40) * item.qty, 0);
   const totalDiscount = totalMrp - cartTotal;
   const shippingCost = 0; // FREE Shipping
-  const grandTotal = cartTotal;
+  const [couponCode, setCouponCode] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; percent: number } | null>(null);
+  const [couponError, setCouponError] = useState<string | null>(null);
+
+  const couponDiscountAmount = appliedCoupon ? Math.round((cartTotal * appliedCoupon.percent) / 100) : 0;
+  const grandTotal = Math.max(0, cartTotal - couponDiscountAmount);
+
+  const handleApplyCoupon = (e: React.FormEvent) => {
+    e.preventDefault();
+    setCouponError(null);
+    const codeClean = couponCode.trim().toUpperCase();
+    if (codeClean === 'FIRST10' || codeClean === 'BLESSING10') {
+      setAppliedCoupon({ code: codeClean, percent: 10 });
+    } else if (codeClean === 'POWER20' || codeClean === 'STUDENT20') {
+      setAppliedCoupon({ code: codeClean, percent: 20 });
+    } else {
+      setCouponError('Invalid coupon code. Try FIRST10 or POWER20!');
+    }
+  };
 
   const handleCheckPincode = (e: React.FormEvent) => {
     e.preventDefault();
@@ -157,6 +175,39 @@ export default function CartPage() {
                   PRICE DETAILS
                 </h3>
 
+                {/* Coupon Discount Code Widget */}
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2">
+                  <span className="text-[10px] font-extrabold uppercase text-slate-600 block">HAVE A COUPON CODE?</span>
+                  {!appliedCoupon ? (
+                    <form onSubmit={handleApplyCoupon} className="flex gap-2">
+                      <input
+                        type="text"
+                        placeholder="Try FIRST10 or POWER20"
+                        value={couponCode}
+                        onChange={(e) => setCouponCode(e.target.value)}
+                        className="px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-600 flex-1 uppercase font-bold text-slate-800"
+                      />
+                      <button
+                        type="submit"
+                        className="bg-[#001B3A] hover:bg-blue-600 text-white font-bold text-xs px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                      >
+                        APPLY
+                      </button>
+                    </form>
+                  ) : (
+                    <div className="flex justify-between items-center bg-emerald-50 border border-emerald-200 p-2 rounded-lg text-xs font-extrabold text-emerald-800">
+                      <span>🎉 Code {appliedCoupon.code} ({appliedCoupon.percent}% OFF) Applied!</span>
+                      <button
+                        onClick={() => { setAppliedCoupon(null); setCouponCode(''); }}
+                        className="text-red-600 hover:underline text-[10px]"
+                      >
+                        REMOVE
+                      </button>
+                    </div>
+                  )}
+                  {couponError && <p className="text-[10px] font-bold text-red-600">{couponError}</p>}
+                </div>
+
                 <div className="space-y-3 text-xs border-b border-slate-200 pb-4">
                   <div className="flex justify-between text-slate-600">
                     <span>Price ({cart.length} items):</span>
@@ -166,6 +217,12 @@ export default function CartPage() {
                     <span>Discount Savings:</span>
                     <span className="font-bold text-emerald-600">- ₹{totalDiscount}</span>
                   </div>
+                  {appliedCoupon && (
+                    <div className="flex justify-between text-emerald-700 font-bold">
+                      <span>Coupon ({appliedCoupon.code}):</span>
+                      <span>- ₹{couponDiscountAmount}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between text-slate-600">
                     <span>Delivery Charges:</span>
                     <span className="font-bold text-emerald-600">FREE</span>
