@@ -252,6 +252,96 @@ export default function AdminPage() {
     showToast('📥 Orders CSV exported successfully for accounting & shipping!');
   };
 
+  const handlePrintShippingLabel = (o: any) => {
+    const printWindow = window.open('', '_blank', 'width=600,height=700');
+    if (!printWindow) return;
+
+    const isCod = (o.paymentMethod || '').toLowerCase().includes('cod');
+    const amountToCollect = isCod ? `₹${o.totalAmount} (CASH ON DELIVERY)` : 'PREPAID (DO NOT COLLECT CASH)';
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>ST Courier Label - #${o.orderId}</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 20px; max-width: 450px; margin: auto; border: 2.5px solid #000; border-radius: 12px; }
+            .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 15px; }
+            .logo { font-size: 22px; font-weight: 900; letter-spacing: 1px; color: #001B3A; }
+            .courier { font-size: 13px; font-weight: 800; color: #0044AA; margin-top: 2px; }
+            .box { border: 1px solid #000; padding: 10px; margin-bottom: 10px; border-radius: 6px; }
+            .title { font-size: 10px; font-weight: 900; text-transform: uppercase; color: #444; }
+            .bold { font-size: 15px; font-weight: 900; margin-top: 2px; }
+            .cod-badge { font-size: 14px; font-weight: 900; color: #000; background: #fffbeb; padding: 8px; text-align: center; border: 2px dashed #d97706; margin: 12px 0; border-radius: 6px; }
+            .barcode { font-family: monospace; font-size: 18px; font-weight: 900; letter-spacing: 3px; text-align: center; margin: 12px 0; background: #f1f5f9; padding: 8px; border-radius: 4px; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="logo">BLESSING POWER GUIDE</div>
+            <div class="courier">ST COURIER EXPRESS DISPATCH LABEL</div>
+          </div>
+
+          <div class="barcode">||| #${o.orderId} |||</div>
+
+          <div class="box">
+            <div class="title">DELIVER TO (RECIPIENT):</div>
+            <div class="bold">${o.customerName || 'Customer'}</div>
+            <div style="font-size: 13px; margin-top: 4px;">${o.address || ''} ${o.city ? `, ${o.city}` : ''} ${o.pincode ? `- ${o.pincode}` : ''}</div>
+            <div style="margin-top: 6px; font-size: 13px;"><strong>PHONE:</strong> +91 ${o.customerPhone || ''}</div>
+          </div>
+
+          <div class="box">
+            <div class="title">SHIPMENT DETAILS:</div>
+            <div style="font-size: 12px;"><strong>ST Courier Docket:</strong> ${o.trackingNumber || o.shipmentId || 'SHP-ST-COURIER'}</div>
+            <div style="font-size: 12px;"><strong>Parcel Contents:</strong> ${o.items?.length || 1} Educational Guide Book(s)</div>
+          </div>
+
+          <div class="cod-badge">
+            PAYMENT: ${amountToCollect}
+          </div>
+
+          <div class="box" style="font-size: 11px;">
+            <div class="title">RETURN ADDRESS (SENDER):</div>
+            <div><strong>BLESSING POWER GUIDE PUBLICATIONS</strong></div>
+            <div>Main Express Logistics Hub, Tamil Nadu, India</div>
+            <div>Helpdesk WhatsApp: +91 9842100000</div>
+          </div>
+
+          <script>
+            window.onload = function() { window.print(); window.close(); }
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
+  const handleResendWhatsApp = async (o: any) => {
+    try {
+      const res = await fetch('/api/whatsapp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerPhone: o.customerPhone,
+          customerName: o.customerName,
+          orderId: o.orderId,
+          bookTitle: o.items?.[0]?.title || 'Educational Guide Book',
+          courierName: 'ST Courier Express',
+          awbNumber: o.trackingNumber || o.shipmentId || 'STC-TN-EXPRESS',
+          trackingUrl: `https://stcourier.com/track/shipment?docket=${o.trackingNumber || ''}`,
+        }),
+      });
+      if (res.ok) {
+        showToast(`📲 WhatsApp update sent to +91 ${o.customerPhone}!`);
+      } else {
+        showToast(`⚠️ WhatsApp engine error. Check QR tab.`);
+      }
+    } catch (e) {
+      showToast(`❌ Error sending WhatsApp message.`);
+    }
+  };
+
   // Analytics Metrics
   const totalRevenue = orders.reduce((sum, o) => sum + Number(o.totalAmount || 0), 0);
 
@@ -785,13 +875,33 @@ export default function AdminPage() {
                         </select>
                       </div>
 
-                      <button
-                        onClick={() => handleDispatchOrder(o.orderId)}
-                        className="w-full sm:w-auto bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-black text-xs px-5 py-2.5 rounded-xl shadow-md uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
-                      >
-                        <Send className="w-3.5 h-3.5" />
-                        <span>UPDATE STATUS &amp; AWB</span>
-                      </button>
+                      <div className="flex items-center gap-2 w-full sm:w-auto">
+                        <button
+                          onClick={() => handlePrintShippingLabel(o)}
+                          className="bg-amber-400 hover:bg-amber-500 text-[#001B3A] font-black text-xs px-3.5 py-2.5 rounded-xl shadow-md flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
+                          title="Print Thermal Shipping Address Slip"
+                        >
+                          <Download className="w-3.5 h-3.5 text-[#001B3A]" />
+                          <span>PRINT SLIP</span>
+                        </button>
+
+                        <button
+                          onClick={() => handleResendWhatsApp(o)}
+                          className="bg-emerald-700 hover:bg-emerald-600 text-white font-black text-xs px-3.5 py-2.5 rounded-xl shadow-md flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
+                          title="Resend WhatsApp ST Courier Tracking Link"
+                        >
+                          <MessageSquare className="w-3.5 h-3.5 text-white" />
+                          <span>WHATSAPP</span>
+                        </button>
+
+                        <button
+                          onClick={() => handleDispatchOrder(o.orderId)}
+                          className="bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-black text-xs px-4 py-2.5 rounded-xl shadow-md uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
+                        >
+                          <Send className="w-3.5 h-3.5" />
+                          <span>UPDATE</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}
