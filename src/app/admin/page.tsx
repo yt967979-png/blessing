@@ -23,13 +23,26 @@ import {
   Download,
   LogOut,
   MapPin,
+  X,
+  Search,
+  RefreshCw,
+  ChevronRight,
+  Eye,
+  MoreVertical,
+  TrendingUp,
+  IndianRupee,
+  Box,
+  Clock,
+  CheckCircle2,
+  Circle,
+  ArrowRight,
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 
 export default function AdminPage() {
   const router = useRouter();
   const { user, setIsAuthOpen, products, updateProductInDb, addNewProductToDb, deleteProductFromDb, showToast, logoutUser } = useStore();
-  const [activeTab, setActiveTab] = useState<'catalog' | 'orders' | 'whatsapp'>('catalog');
+  const [activeTab, setActiveTab] = useState<'catalog' | 'orders' | 'whatsapp'>('orders');
   const [waStatus, setWaStatus] = useState<{ status: string; connected?: boolean; qrImage?: string; pairingCode?: string; message?: string }>({ status: 'LOADING', connected: false });
   const [waPhoneInput, setWaPhoneInput] = useState('');
   const [waPairingCode, setWaPairingCode] = useState<string | null>(null);
@@ -257,15 +270,9 @@ export default function AdminPage() {
         const verifyRes = await fetch(`/api/courier/track?docket=${encodeURIComponent(trackingNo)}`);
         const verifyData = await verifyRes.json();
 
-        // Block if:
-        //   • HTTP error (400 = bad format, 404 = not found in ST Courier network)
-        //   • isValid is explicitly false
-        //   • verified is not explicitly true (covers the 422 inconclusive case)
-        //   • scrapeInconclusive flag is set
         const isPositivelyVerified = verifyRes.ok && verifyData.isValid === true && verifyData.verified === true;
 
         if (!isPositivelyVerified) {
-          // Build a human-readable reason from whatever the API returned
           const reason = verifyData.error
             ?? (verifyData.scrapeInconclusive
               ? `ST Courier's tracking page returned no readable data for "${trackingNo}". Please check the docket on your booking receipt.`
@@ -287,10 +294,9 @@ export default function AdminPage() {
           status = 'Handed to ST Courier';
         }
       } catch (err) {
-        // Network failure reaching our own API — do NOT silently proceed
         showToast('❌ Could not reach the ST Courier verification service. Please check your connection and try again.');
         alert('❌ Verification Failed\n\nCould not connect to the ST Courier verification service.\nPlease try again before saving the docket number.');
-        return; // Hard stop on network error too
+        return;
       }
     }
 
@@ -478,46 +484,34 @@ export default function AdminPage() {
 
   if (!isAdmin) {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-6">
-        <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-8 text-center space-y-6 shadow-2xl relative overflow-hidden">
-          <div className="w-16 h-16 bg-red-500/10 border border-red-500/30 text-red-400 rounded-2xl flex items-center justify-center mx-auto text-3xl shadow-lg ring-8 ring-red-500/10">
-            <ShieldCheck className="w-8 h-8 text-red-400" />
+      <div className="min-h-screen bg-[#f1f3f6] flex items-center justify-center p-6" style={{ fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif" }}>
+        <div className="max-w-md w-full bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center space-y-5">
+          <div className="w-14 h-14 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto">
+            <ShieldCheck className="w-7 h-7" />
           </div>
-
           <div>
-            <span className="text-[10px] font-black tracking-widest text-red-400 uppercase bg-red-500/10 px-3 py-1 rounded-full border border-red-500/20">
-              RESTRICTED ACCESS AREA
-            </span>
-            <h2 className="font-heading font-black text-xl text-white mt-3">
-              Admin Authorization Required
-            </h2>
-            <p className="text-xs text-slate-400 mt-2 leading-relaxed">
+            <h2 className="font-semibold text-xl text-gray-900">Admin Access Required</h2>
+            <p className="text-sm text-gray-500 mt-2 leading-relaxed">
               {user ? (
                 <>
-                  Logged in as <strong className="text-slate-200">{user.email}</strong>. This account does not have administrator privileges.
+                  Logged in as <strong className="text-gray-700">{user.email}</strong>. This account does not have administrator privileges.
                 </>
               ) : (
                 'You must be signed in with an administrator account to access the store management dashboard.'
               )}
             </p>
           </div>
-
           <div className="space-y-3 pt-2">
             <button
               onClick={() => router.push('/')}
-              className="w-full py-3 bg-amber-400 hover:bg-amber-500 text-[#001B3A] font-extrabold text-xs rounded-xl shadow-lg transition-all uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full py-2.5 bg-[#2874f0] hover:bg-[#1a5dc8] text-white font-semibold text-sm rounded-sm shadow-sm transition-colors cursor-pointer flex items-center justify-center gap-2"
             >
               <ArrowLeft className="w-4 h-4" />
-              <span>Return to Storefront</span>
+              Return to Store
             </button>
-
             <button
-              onClick={() => {
-                logoutUser();
-                setIsAuthOpen(true);
-                router.push('/');
-              }}
-              className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl border border-slate-700 transition-all uppercase tracking-wider cursor-pointer"
+              onClick={() => { logoutUser(); setIsAuthOpen(true); router.push('/'); }}
+              className="w-full py-2.5 bg-white hover:bg-gray-50 text-[#2874f0] font-semibold text-sm rounded-sm border border-gray-300 transition-colors cursor-pointer"
             >
               Sign In as Administrator
             </button>
@@ -527,378 +521,551 @@ export default function AdminPage() {
     );
   }
 
+  // Tab config
+  const tabs = [
+    { id: 'orders' as const, label: 'Orders', icon: ShoppingCart, count: orders.length },
+    { id: 'catalog' as const, label: 'Products', icon: Package, count: products.length },
+    { id: 'whatsapp' as const, label: 'WhatsApp', icon: MessageSquare, count: null },
+  ];
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col md:flex-row">
-      {/* Sidebar */}
-      <aside className="w-full md:w-64 bg-slate-900 border-r border-slate-800 p-6 flex flex-col justify-between">
-        <div>
-          <div className="flex items-center gap-2.5 mb-8">
-            <div className="w-10 h-10 bg-gradient-to-br from-amber-400 to-amber-500 text-[#001B3A] rounded-xl flex items-center justify-center font-black text-xl shadow-md">
-              B
+    <div className="min-h-screen bg-[#f1f3f6]" style={{ fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif" }}>
+      {/* Top Navbar */}
+      <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="flex items-center justify-between h-14">
+            {/* Logo */}
+            <div className="flex items-center gap-3">
+              <button onClick={() => router.push('/')} className="text-gray-400 hover:text-gray-600 transition-colors cursor-pointer">
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-[#2874f0] text-white rounded-md flex items-center justify-center font-bold text-sm">B</div>
+                <div>
+                  <h1 className="text-sm font-bold text-gray-900 leading-tight">Blessing Store</h1>
+                  <span className="text-[10px] text-gray-400 font-medium">Seller Dashboard</span>
+                </div>
+              </div>
             </div>
-            <div>
-              <h2 className="font-heading font-black text-sm text-white tracking-wide">STORE ADMIN</h2>
-              <span className="text-[9px] text-amber-400 font-bold uppercase">BLESSING CATALOG</span>
-            </div>
-          </div>
 
-          <nav className="space-y-1 text-xs font-semibold">
-            <button
-              onClick={() => setActiveTab('catalog')}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors ${
-                activeTab === 'catalog'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-              }`}
-            >
-              <LayoutDashboard className="w-4 h-4" />
-              <span>Products Catalog ({products.length})</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('orders')}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors ${
-                activeTab === 'orders'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-              }`}
-            >
-              <ShoppingCart className="w-4 h-4" />
-              <span>Incoming Orders ({orders.length})</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('whatsapp')}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors ${
-                activeTab === 'whatsapp'
-                  ? 'bg-emerald-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-              }`}
-            >
-              <MessageSquare className="w-4 h-4 text-emerald-400" />
-              <span>WhatsApp Bot QR Engine</span>
-            </button>
-          </nav>
-        </div>
+            {/* Nav Tabs */}
+            <nav className="hidden md:flex items-center h-full">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`h-full px-5 flex items-center gap-2 text-[13px] font-semibold transition-colors border-b-[3px] cursor-pointer ${
+                    activeTab === tab.id
+                      ? 'border-[#2874f0] text-[#2874f0]'
+                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  <tab.icon className="w-4 h-4" />
+                  <span>{tab.label}</span>
+                  {tab.count !== null && (
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                      activeTab === tab.id ? 'bg-[#2874f0]/10 text-[#2874f0]' : 'bg-gray-100 text-gray-500'
+                    }`}>
+                      {tab.count}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </nav>
 
-        <div className="pt-6 border-t border-slate-800">
-          <button
-            onClick={() => {
-              logoutUser();
-              showToast('🔒 Logged out from Admin Portal.');
-              router.push('/');
-            }}
-            className="flex items-center justify-center gap-2 w-full bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 font-extrabold text-xs py-3 rounded-xl transition-colors cursor-pointer uppercase tracking-wider"
-          >
-            <LogOut className="w-4 h-4 text-red-400" />
-            <span>LOG OUT FROM ADMIN</span>
-          </button>
-        </div>
-      </aside>
-
-      {/* Main Content */}
-      <main className="flex-1 p-6 md:p-10 overflow-y-auto">
-        {/* Analytics Counter Banner */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-              <DollarSign className="w-5 h-5" />
-            </div>
-            <div>
-              <span className="text-[10px] text-slate-400 font-bold uppercase block">Total Revenue</span>
-              <span className="font-black text-xl text-white">₹{totalRevenue}</span>
-            </div>
-          </div>
-
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-blue-400">
-              <ShoppingCart className="w-5 h-5" />
-            </div>
-            <div>
-              <span className="text-[10px] text-slate-400 font-bold uppercase block">Total Orders</span>
-              <span className="font-black text-xl text-white">{orders.length}</span>
-            </div>
-          </div>
-
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
-              <BookOpen className="w-5 h-5" />
-            </div>
-            <div>
-              <span className="text-[10px] text-slate-400 font-bold uppercase block">Active Books</span>
-              <span className="font-black text-xl text-white">{products.length}</span>
-            </div>
-          </div>
-
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-users text-purple-400">
-              <Users className="w-5 h-5" />
-            </div>
-            <div>
-              <span className="text-[10px] text-slate-400 font-bold uppercase block">Registered Students</span>
-              <span className="font-black text-xl text-white">{dbStats.users || 0}</span>
+            {/* Right Actions */}
+            <div className="flex items-center gap-2">
+              <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 bg-green-50 border border-green-200 rounded-full">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                <span className="text-[10px] font-semibold text-green-700">Live</span>
+              </div>
+              <button
+                onClick={() => { logoutUser(); showToast('Logged out.'); router.push('/'); }}
+                className="text-gray-400 hover:text-red-500 transition-colors p-1.5 cursor-pointer"
+                title="Sign Out"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
             </div>
           </div>
         </div>
 
-        {/* Top Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
-          <div>
-            <h1 className="font-heading font-black text-2xl text-white tracking-tight">
-              BLESSING STORE & CATALOG MANAGEMENT
-            </h1>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Manage live guide books, prices, stock, and incoming customer orders connected to Railway PostgreSQL Database.
-            </p>
-          </div>
+        {/* Mobile Tab Bar */}
+        <div className="md:hidden border-t border-gray-100 flex">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex-1 py-2.5 flex items-center justify-center gap-1.5 text-xs font-semibold transition-colors border-b-2 cursor-pointer ${
+                activeTab === tab.id
+                  ? 'border-[#2874f0] text-[#2874f0] bg-blue-50/50'
+                  : 'border-transparent text-gray-400'
+              }`}
+            >
+              <tab.icon className="w-3.5 h-3.5" />
+              <span>{tab.label}</span>
+              {tab.count !== null && <span className="text-[10px] font-bold">({tab.count})</span>}
+            </button>
+          ))}
+        </div>
+      </header>
 
-          <div className="flex items-center gap-2">
-            {activeTab === 'orders' && (
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-6">
+        {/* Stats Cards */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+          {[
+            { label: 'Total Revenue', value: `₹${totalRevenue.toLocaleString()}`, icon: IndianRupee, color: 'text-green-600', bg: 'bg-green-50' },
+            { label: 'Total Orders', value: orders.length, icon: ShoppingCart, color: 'text-blue-600', bg: 'bg-blue-50' },
+            { label: 'Active Products', value: products.length, icon: Box, color: 'text-orange-600', bg: 'bg-orange-50' },
+            { label: 'Customers', value: dbStats.users || 0, icon: Users, color: 'text-purple-600', bg: 'bg-purple-50' },
+          ].map((stat) => (
+            <div key={stat.label} className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-sm transition-shadow">
+              <div className="flex items-center gap-3">
+                <div className={`w-9 h-9 ${stat.bg} rounded-lg flex items-center justify-center ${stat.color}`}>
+                  <stat.icon className="w-4.5 h-4.5" />
+                </div>
+                <div>
+                  <p className="text-[11px] text-gray-400 font-medium">{stat.label}</p>
+                  <p className="text-lg font-bold text-gray-900 leading-tight">{stat.value}</p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* ====================== ORDERS TAB ====================== */}
+        {activeTab === 'orders' && (
+          <div className="space-y-3">
+            {/* Orders Header */}
+            <div className="bg-white rounded-lg border border-gray-200 p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div>
+                <h2 className="text-base font-bold text-gray-900">Order Management</h2>
+                <p className="text-xs text-gray-400 mt-0.5">Track and manage all customer orders in real-time</p>
+              </div>
               <div className="flex items-center gap-2">
                 <button
                   onClick={async () => {
-                    showToast('⏳ Syncing live ST Courier tracking statuses for all orders...');
+                    showToast('Syncing courier tracking...');
                     try {
                       for (const order of orders) {
                         if (order.awbNumber) {
                           await fetch(`/api/courier/track?awb=${encodeURIComponent(order.awbNumber)}&orderId=${encodeURIComponent(order.orderId)}`);
                         }
                       }
-                      showToast('✅ ST Courier tracking synced for all active orders!');
+                      showToast('✅ Courier tracking synced!');
                       loadLiveOrders();
                     } catch (e) {
-                      showToast('✓ ST Courier sync complete.');
+                      showToast('Sync complete.');
                     }
                   }}
-                  className="bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 font-extrabold text-xs px-4 py-3 rounded-xl shadow-md transition-all uppercase tracking-wider flex items-center gap-2 cursor-pointer"
+                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-gray-600 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-md transition-colors cursor-pointer"
                 >
-                  <Truck className="w-4 h-4 text-emerald-400" />
-                  <span>SYNC ST COURIER TRACKING</span>
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Sync Tracking</span>
                 </button>
-
                 <button
                   onClick={handleExportOrdersCsv}
-                  className="bg-slate-800 hover:bg-slate-700 text-amber-400 border border-amber-400/30 font-extrabold text-xs px-4 py-3 rounded-xl shadow-md transition-all uppercase tracking-wider flex items-center gap-2 cursor-pointer"
+                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-white bg-[#2874f0] hover:bg-[#1a5dc8] rounded-md transition-colors cursor-pointer"
                 >
-                  <Download className="w-4 h-4 text-amber-400" />
-                  <span>EXPORT CSV</span>
+                  <Download className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Export CSV</span>
                 </button>
               </div>
-            )}
+            </div>
 
-            {activeTab === 'catalog' && (
-              <button
-                onClick={() => setShowAddForm(!showAddForm)}
-                className="bg-gradient-to-r from-amber-400 to-amber-500 text-[#001B3A] font-extrabold text-xs px-5 py-3 rounded-xl shadow-md hover:shadow-lg transition-all uppercase tracking-wider flex items-center gap-2 cursor-pointer"
-              >
-                <Plus className="w-4 h-4" />
-                <span>{showAddForm ? 'CLOSE FORM' : '+ ADD NEW GUIDE BOOK'}</span>
-              </button>
+            {/* Order Cards */}
+            {orders.length === 0 ? (
+              <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
+                <ShoppingCart className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                <p className="text-sm font-semibold text-gray-600">No orders yet</p>
+                <p className="text-xs text-gray-400 mt-1">New orders will appear here automatically</p>
+              </div>
+            ) : (
+              orders.map((o) => {
+                const currentStatus = o.courierStatus || 'Order Placed';
+                const allSteps = [
+                  'Order Placed',
+                  'Payment Confirmed',
+                  'Preparing Order',
+                  'Packed',
+                  'Handed to ST Courier',
+                  'In Transit',
+                  'Out for Delivery',
+                  'Delivered',
+                ];
+                const activeIdx = allSteps.findIndex((s) => s.toLowerCase() === currentStatus.toLowerCase());
+                const stepIdx = activeIdx >= 0 ? activeIdx : 0;
+                const isCod = (o.paymentMethod || '').toLowerCase().includes('cod');
+
+                return (
+                  <div key={o.orderId} className="bg-white rounded-lg border border-gray-200 overflow-hidden hover:shadow-sm transition-shadow">
+                    {/* Order Header */}
+                    <div className="px-4 py-3 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <span className="text-sm font-bold text-gray-900">#{o.orderId}</span>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-sm uppercase ${
+                          isCod ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-green-50 text-green-700 border border-green-200'
+                        }`}>
+                          {isCod ? 'COD' : 'PAID'} • ₹{o.totalAmount}
+                        </span>
+                        {o.isOfficialAwb && (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-sm bg-blue-50 text-blue-600 border border-blue-200">
+                            AUTO-TRACKED
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-gray-400">
+                        <Clock className="w-3 h-3" />
+                        <span>{o.createdAt}</span>
+                      </div>
+                    </div>
+
+                    {/* Order Content */}
+                    <div className="p-4 space-y-4">
+                      {/* Customer Info Row */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 bg-gray-100 rounded-full flex items-center justify-center text-gray-500 text-sm font-bold">
+                            {(o.customerName || 'C').charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-gray-900">{o.customerName}</p>
+                            <p className="text-xs text-gray-400">
+                              {o.address}{o.city ? `, ${o.city}` : ''}{o.pincode ? ` - ${o.pincode}` : ''} • {o.items?.length || 1} item(s)
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handlePrintShippingLabel(o)}
+                            className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold text-gray-600 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-md transition-colors cursor-pointer"
+                          >
+                            <Download className="w-3 h-3" />
+                            Label
+                          </button>
+                          <button
+                            onClick={() => handleResendWhatsApp(o)}
+                            className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold text-white bg-[#25d366] hover:bg-[#1fb855] rounded-md transition-colors cursor-pointer"
+                          >
+                            <MessageSquare className="w-3 h-3" />
+                            WhatsApp
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Progress Stepper */}
+                      <div className="bg-[#f8f9fa] rounded-md p-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-[11px] font-semibold text-gray-500">Delivery Progress</span>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-sm ${
+                            stepIdx >= 7 ? 'bg-green-50 text-green-700' :
+                            stepIdx >= 4 ? 'bg-blue-50 text-blue-700' :
+                            'bg-orange-50 text-orange-700'
+                          }`}>
+                            {currentStatus}
+                          </span>
+                        </div>
+                        {/* Linear Progress Bar */}
+                        <div className="relative">
+                          <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all duration-500 ${
+                                stepIdx >= 7 ? 'bg-green-500' : 'bg-[#2874f0]'
+                              }`}
+                              style={{ width: `${((stepIdx + 1) / allSteps.length) * 100}%` }}
+                            />
+                          </div>
+                          <div className="flex justify-between mt-1.5">
+                            {allSteps.map((s, idx) => (
+                              <div key={s} className="flex flex-col items-center" style={{ width: `${100 / allSteps.length}%` }}>
+                                <div className={`w-2.5 h-2.5 rounded-full border-2 -mt-[11px] bg-white transition-colors ${
+                                  idx <= stepIdx
+                                    ? stepIdx >= 7 ? 'border-green-500 bg-green-500' : 'border-[#2874f0] bg-[#2874f0]'
+                                    : 'border-gray-300'
+                                }`} />
+                                <span className={`text-[8px] mt-1 text-center leading-tight hidden lg:block ${
+                                  idx <= stepIdx ? 'text-gray-700 font-semibold' : 'text-gray-400'
+                                }`}>
+                                  {s}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Dispatch Control */}
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-[#f8f9fa] rounded-md p-3">
+                        <div className="flex items-center gap-2 text-xs text-gray-500 shrink-0">
+                          <Truck className="w-4 h-4 text-gray-400" />
+                          <span className="font-medium">AWB Docket:</span>
+                        </div>
+                        <input
+                          type="text"
+                          placeholder="Enter ST Courier Docket (e.g. STC241568974)"
+                          value={
+                            shiprocketAwbInput[o.orderId] !== undefined
+                              ? shiprocketAwbInput[o.orderId]
+                              : o.trackingNumber && !o.trackingNumber.startsWith('SHP-')
+                              ? o.trackingNumber
+                              : ''
+                          }
+                          onChange={(e) =>
+                            setShiprocketAwbInput({
+                              ...shiprocketAwbInput,
+                              [o.orderId]: e.target.value,
+                            })
+                          }
+                          className="flex-1 px-3 py-2 bg-white border border-gray-200 rounded-md text-xs text-gray-900 font-mono uppercase placeholder:text-gray-300 placeholder:normal-case outline-none focus:border-[#2874f0] focus:ring-1 focus:ring-[#2874f0]/20 transition-all"
+                        />
+                        <button
+                          disabled={!!dispatchingOrderIds[o.orderId]}
+                          onClick={async () => {
+                            const inputVal = (shiprocketAwbInput[o.orderId] ?? (o.trackingNumber && !o.trackingNumber.startsWith('SHP-') ? o.trackingNumber : '')).trim();
+                            if (!inputVal) {
+                              alert('Please enter an ST Courier Docket Number first.');
+                              return;
+                            }
+                            const awb = inputVal;
+
+                            setDispatchingOrderIds((prev) => ({ ...prev, [o.orderId]: true }));
+                            showToast('Validating docket...');
+
+                            try {
+                              const verifyRes = await fetch(`/api/courier/track?docket=${encodeURIComponent(awb)}`);
+                              const verifyData = await verifyRes.json();
+
+                              const isPositivelyVerified = verifyRes.ok && verifyData.isValid === true && verifyData.verified === true;
+
+                              if (!isPositivelyVerified) {
+                                const reason = verifyData.error || 'ST Courier did not confirm this docket number.';
+                                showToast(`❌ ${reason}`);
+                                alert(`Docket Verification Failed\n\n${reason}\n\nPlease enter a valid ST Courier docket number.`);
+                                setDispatchingOrderIds((prev) => ({ ...prev, [o.orderId]: false }));
+                                return;
+                              }
+
+                              showToast('Dispatching order...');
+                              await fetch('/api/orders/timeline', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ orderId: o.orderId, status: 'HANDED_TO_ST_COURIER', awbNumber: awb }),
+                              });
+
+                              showToast(`✅ Order #${o.orderId} dispatched with AWB: ${awb}`);
+                              loadLiveOrders();
+                            } catch (err: any) {
+                              showToast('❌ Dispatch error');
+                            } finally {
+                              setDispatchingOrderIds((prev) => ({ ...prev, [o.orderId]: false }));
+                            }
+                          }}
+                          className="px-4 py-2 text-xs font-semibold text-white bg-[#2874f0] hover:bg-[#1a5dc8] disabled:bg-gray-300 disabled:cursor-not-allowed rounded-md transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0"
+                        >
+                          {dispatchingOrderIds[o.orderId] ? (
+                            <>
+                              <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                              Verifying...
+                            </>
+                          ) : (
+                            <>
+                              <Send className="w-3 h-3" />
+                              Dispatch
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
             )}
           </div>
-        </div>
+        )}
 
+        {/* ====================== CATALOG TAB ====================== */}
         {activeTab === 'catalog' && (
-          <>
+          <div className="space-y-3">
+            {/* Catalog Header */}
+            <div className="bg-white rounded-lg border border-gray-200 p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div>
+                <h2 className="text-base font-bold text-gray-900">Product Catalog</h2>
+                <p className="text-xs text-gray-400 mt-0.5">Manage guide books, pricing, and stock availability</p>
+              </div>
+              <button
+                onClick={() => setShowAddForm(!showAddForm)}
+                className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-[#2874f0] hover:bg-[#1a5dc8] rounded-md transition-colors cursor-pointer"
+              >
+                {showAddForm ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
+                <span>{showAddForm ? 'Close' : 'Add Product'}</span>
+              </button>
+            </div>
+
             {/* Add Product Form */}
             {showAddForm && (
-              <div className="bg-slate-900 border-2 border-amber-400/50 rounded-2xl p-6 mb-8 shadow-2xl">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="font-heading font-black text-base text-[#F0C14B] flex items-center gap-2">
-                    <BookOpen className="w-4 h-4 text-amber-400" /> Add New Book directly to Database
-                  </h3>
-                  <button
-                    onClick={() => setShowAddForm(false)}
-                    className="text-slate-400 hover:text-white text-xs font-bold"
-                  >
-                    Cancel
-                  </button>
-                </div>
-
-                <form
-                  onSubmit={handleCreateProduct}
-                  className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-xs"
-                >
+              <div className="bg-white rounded-lg border-2 border-[#2874f0]/30 p-5">
+                <h3 className="text-sm font-bold text-gray-900 mb-4 flex items-center gap-2">
+                  <Plus className="w-4 h-4 text-[#2874f0]" /> Add New Guide Book
+                </h3>
+                <form onSubmit={handleCreateProduct} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div className="sm:col-span-2">
-                    <label className="block text-slate-300 mb-1 font-bold">Book Title *</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Book Title</label>
                     <input
                       type="text"
                       required
                       placeholder="e.g. 10th Standard Mathematics Guide"
                       value={newTitle}
                       onChange={(e) => setNewTitle(e.target.value)}
-                      className="w-full p-2.5 bg-slate-800 border border-slate-700 rounded-xl text-white outline-none focus:border-amber-400"
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-md text-sm text-gray-900 outline-none focus:border-[#2874f0] focus:ring-1 focus:ring-[#2874f0]/20"
                     />
                   </div>
-
                   <div>
-                    <label className="block text-slate-300 mb-1 font-bold">Class Standard *</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Class</label>
                     <select
                       value={newCls}
                       onChange={(e) => setNewCls(e.target.value)}
-                      className="w-full p-2.5 bg-slate-800 border border-slate-700 rounded-xl text-white outline-none"
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-md text-sm text-gray-900 outline-none focus:border-[#2874f0]"
                     >
                       {['6th', '7th', '8th', '9th', '10th', '11th', '12th'].map((c) => (
-                        <option key={c} value={c}>
-                          {c} Standard
-                        </option>
+                        <option key={c} value={c}>{c} Std</option>
                       ))}
                     </select>
                   </div>
-
                   <div>
-                    <label className="block text-slate-300 mb-1 font-bold">Category *</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Category</label>
                     <select
                       value={newCat}
                       onChange={(e) => setNewCat(e.target.value as any)}
-                      className="w-full p-2.5 bg-slate-800 border border-slate-700 rounded-xl text-white outline-none"
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-md text-sm text-gray-900 outline-none focus:border-[#2874f0]"
                     >
                       <option value="guide">Single Subject Guide</option>
-                      <option value="combo">5-Subject Combo Bundle</option>
+                      <option value="combo">5-Subject Combo</option>
                     </select>
                   </div>
-
                   <div>
-                    <label className="block text-slate-300 mb-1 font-bold">Sale Price (₹) *</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Sale Price (₹)</label>
                     <input
                       type="number"
                       required
                       value={newPrice}
                       onChange={(e) => setNewPrice(Number(e.target.value))}
-                      className="w-full p-2.5 bg-slate-800 border border-slate-700 rounded-xl text-white outline-none"
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-md text-sm text-gray-900 outline-none focus:border-[#2874f0]"
                     />
                   </div>
-
                   <div>
-                    <label className="block text-slate-300 mb-1 font-bold">Original MRP (₹) *</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">MRP (₹)</label>
                     <input
                       type="number"
                       required
                       value={newMrp}
                       onChange={(e) => setNewMrp(Number(e.target.value))}
-                      className="w-full p-2.5 bg-slate-800 border border-slate-700 rounded-xl text-white outline-none"
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-md text-sm text-gray-900 outline-none focus:border-[#2874f0]"
                     />
                   </div>
-
                   <div>
-                    <label className="block text-slate-300 mb-1 font-bold">Offer Badge *</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Offer Badge</label>
                     <input
                       type="text"
                       required
-                      placeholder="e.g. BESTSELLER / 20% OFF"
+                      placeholder="e.g. BESTSELLER"
                       value={newBadge}
                       onChange={(e) => setNewBadge(e.target.value)}
-                      className="w-full p-2.5 bg-slate-800 border border-slate-700 rounded-xl text-white outline-none uppercase"
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-md text-sm text-gray-900 outline-none focus:border-[#2874f0] uppercase"
                     />
                   </div>
-
-                  <div className="sm:col-span-2 md:col-span-2">
-                    <label className="block text-slate-300 mb-1 font-bold flex items-center gap-1.5">
-                      <Upload className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Upload Book Cover Image (Local File)</span>
-                    </label>
-                    <div className="flex items-center gap-3">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleImageFileUpload}
-                        className="w-full p-2 bg-slate-800 border border-slate-700 rounded-xl text-white text-xs file:mr-3 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-amber-400 file:text-[#001B3A] cursor-pointer"
-                      />
-                      {newImg && (
-                        <img
-                          src={newImg}
-                          alt="Preview"
-                          className="w-10 h-10 object-contain rounded-lg border border-slate-700 bg-slate-800 p-1 flex-shrink-0"
-                        />
-                      )}
-                    </div>
+                  <div className="sm:col-span-2 lg:col-span-1">
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Cover Image</label>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageFileUpload}
+                      className="w-full text-xs text-gray-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-[#2874f0]/10 file:text-[#2874f0] cursor-pointer"
+                    />
                   </div>
-
-                  <div className="sm:col-span-2 md:col-span-4 pt-2">
+                  <div className="sm:col-span-2 lg:col-span-4 flex items-center justify-between pt-1">
+                    {newImg && (
+                      <img src={newImg} alt="Preview" className="w-10 h-10 object-contain rounded border border-gray-200 bg-gray-50 p-0.5" />
+                    )}
                     <button
                       type="submit"
-                      className="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs px-6 py-3 rounded-xl shadow-md uppercase tracking-wider"
+                      className="px-5 py-2 text-xs font-semibold text-white bg-[#2874f0] hover:bg-[#1a5dc8] rounded-md transition-colors cursor-pointer ml-auto"
                     >
-                      SAVE PRODUCT TO RAILWAY DATABASE
+                      Save Product
                     </button>
                   </div>
                 </form>
               </div>
             )}
 
-            {/* Live Database Table */}
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 mb-8">
-              <h3 className="font-heading font-bold text-base text-white mb-4">
-                Manage Books in Database ({products.length})
-              </h3>
-
+            {/* Product Table */}
+            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
               {products.length === 0 ? (
-                <div className="py-16 text-center text-slate-400 border border-dashed border-slate-800 rounded-xl">
-                  <Package className="w-12 h-12 mx-auto mb-3 opacity-30 text-amber-400" />
-                  <p className="text-sm font-bold text-white">Database is currently empty (0 products)</p>
-                  <p className="text-xs text-slate-500 mt-1">
-                    Click "+ ADD NEW GUIDE BOOK" above to create and save a new guide book directly to Railway PostgreSQL!
-                  </p>
+                <div className="p-12 text-center">
+                  <Package className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                  <p className="text-sm font-semibold text-gray-600">No products in catalog</p>
+                  <p className="text-xs text-gray-400 mt-1">Click &ldquo;Add Product&rdquo; to create your first listing</p>
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full text-xs text-left">
+                  <table className="w-full text-xs">
                     <thead>
-                      <tr className="border-b border-slate-800 text-slate-400 uppercase font-bold">
-                        <th className="py-3 px-2">Cover</th>
-                        <th className="py-3 px-2">Title</th>
-                        <th className="py-3 px-2">Class</th>
-                        <th className="py-3 px-2">Sale Price</th>
-                        <th className="py-3 px-2">MRP</th>
-                        <th className="py-3 px-2">Badge Offer</th>
-                        <th className="py-3 px-2">Stock</th>
-                        <th className="py-3 px-2">Actions</th>
+                      <tr className="bg-[#f8f9fa] border-b border-gray-200">
+                        <th className="py-3 px-4 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Product</th>
+                        <th className="py-3 px-3 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Class</th>
+                        <th className="py-3 px-3 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Price</th>
+                        <th className="py-3 px-3 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wide">MRP</th>
+                        <th className="py-3 px-3 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Badge</th>
+                        <th className="py-3 px-3 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Status</th>
+                        <th className="py-3 px-3 text-right text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Actions</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-800/50 text-slate-300">
+                    <tbody className="divide-y divide-gray-100">
                       {products.map((p) => {
                         const isEditing = editingId === p.id;
+                        const discount = p.mrp > p.price ? Math.round(((p.mrp - p.price) / p.mrp) * 100) : 0;
                         return (
-                          <tr key={p.id} className="hover:bg-slate-800/30">
-                            <td className="py-2 px-2">
-                              <img
-                                src={p.image}
-                                alt={p.title}
-                                className="w-9 h-9 object-contain bg-slate-800 border border-slate-700 rounded-lg p-0.5"
-                              />
+                          <tr key={p.id} className="hover:bg-[#f8f9fa] transition-colors">
+                            <td className="py-3 px-4">
+                              <div className="flex items-center gap-3">
+                                <img
+                                  src={p.image}
+                                  alt={p.title}
+                                  className="w-10 h-10 object-contain bg-gray-50 border border-gray-100 rounded p-0.5"
+                                />
+                                <span className="font-medium text-gray-900 max-w-[200px] truncate">{p.title}</span>
+                              </div>
                             </td>
-                            <td className="py-3 px-2 font-medium text-white max-w-[200px] truncate">
-                              {p.title}
-                            </td>
-                            <td className="py-3 px-2">{p.cls}</td>
-
-                            <td className="py-3 px-2 font-bold">
+                            <td className="py-3 px-3 text-gray-500">{p.cls}</td>
+                            <td className="py-3 px-3">
                               {isEditing ? (
                                 <div className="flex items-center gap-1.5">
                                   <input
                                     type="checkbox"
-                                    id={`discount-check-${p.id}`}
                                     checked={editDiscountEnabled}
                                     onChange={(e) => setEditDiscountEnabled(e.target.checked)}
-                                    title="Enable Offer / Sale Discounted Price"
-                                    className="w-3.5 h-3.5 accent-amber-500 rounded cursor-pointer"
+                                    className="w-3.5 h-3.5 accent-[#2874f0] rounded cursor-pointer"
+                                    title="Enable Sale Price"
                                   />
                                   <input
                                     type="number"
                                     disabled={!editDiscountEnabled}
                                     value={editDiscountEnabled ? editPrice : editMrp}
                                     onChange={(e) => setEditPrice(Number(e.target.value))}
-                                    className={`w-20 px-2 py-1 bg-slate-800 border rounded font-bold outline-none ${
-                                      editDiscountEnabled ? 'border-amber-400 text-amber-300' : 'border-slate-700 text-slate-500 opacity-40'
+                                    className={`w-16 px-2 py-1 bg-gray-50 border rounded text-xs font-semibold outline-none ${
+                                      editDiscountEnabled ? 'border-[#2874f0] text-[#2874f0]' : 'border-gray-200 text-gray-400'
                                     }`}
                                   />
                                 </div>
                               ) : (
-                                <span className={p.price < p.mrp ? 'text-amber-400 font-black' : 'text-white'}>
-                                  ₹{p.price}
-                                </span>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-bold text-gray-900">₹{p.price}</span>
+                                  {discount > 0 && (
+                                    <span className="text-[10px] font-bold text-green-600">{discount}% off</span>
+                                  )}
+                                </div>
                               )}
                             </td>
-
-                            <td className="py-3 px-2 text-slate-400">
+                            <td className="py-3 px-3 text-gray-400">
                               {isEditing ? (
                                 <input
                                   type="number"
@@ -908,85 +1075,79 @@ export default function AdminPage() {
                                     setEditMrp(val);
                                     if (!editDiscountEnabled) setEditPrice(val);
                                   }}
-                                  className="w-20 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-slate-300 font-bold outline-none"
+                                  className="w-16 px-2 py-1 bg-gray-50 border border-gray-200 rounded text-xs font-semibold text-gray-700 outline-none"
                                 />
                               ) : (
-                                <span>₹{p.mrp}</span>
+                                <span className={discount > 0 ? 'line-through' : ''}>₹{p.mrp}</span>
                               )}
                             </td>
-
-                            <td className="py-3 px-2">
+                            <td className="py-3 px-3">
                               {isEditing ? (
                                 <div className="flex items-center gap-1.5">
                                   <input
                                     type="checkbox"
-                                    id={`badge-check-${p.id}`}
                                     checked={editBadgeEnabled}
                                     onChange={(e) => setEditBadgeEnabled(e.target.checked)}
-                                    className="w-3.5 h-3.5 accent-purple-500 rounded cursor-pointer"
+                                    className="w-3.5 h-3.5 accent-[#2874f0] rounded cursor-pointer"
                                   />
                                   <input
                                     type="text"
                                     disabled={!editBadgeEnabled}
                                     value={editBadge}
-                                    placeholder="e.g. BESTSELLER"
+                                    placeholder="Badge"
                                     onChange={(e) => setEditBadge(e.target.value)}
-                                    className={`w-24 px-2 py-1 bg-slate-800 border rounded text-white text-[10px] font-bold uppercase outline-none ${
-                                      editBadgeEnabled ? 'border-purple-500 text-purple-300' : 'border-slate-700 opacity-40'
+                                    className={`w-20 px-2 py-1 bg-gray-50 border rounded text-[10px] font-bold uppercase outline-none ${
+                                      editBadgeEnabled ? 'border-[#2874f0] text-gray-700' : 'border-gray-200 text-gray-300'
                                     }`}
                                   />
                                 </div>
                               ) : (
                                 p.badge ? (
-                                  <span className="bg-purple-500/20 text-purple-300 border border-purple-500/30 px-2 py-0.5 rounded text-[10px] font-bold uppercase">
+                                  <span className="text-[10px] font-bold text-orange-700 bg-orange-50 border border-orange-200 px-1.5 py-0.5 rounded uppercase">
                                     {p.badge}
                                   </span>
                                 ) : (
-                                  <span className="text-slate-600 text-[10px] italic">No Badge</span>
+                                  <span className="text-gray-300 text-[10px]">—</span>
                                 )
                               )}
                             </td>
-
-                            <td className="py-3 px-2">
+                            <td className="py-3 px-3">
                               <button
                                 onClick={() => toggleStock(p.id, p.inStock)}
-                                className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors flex items-center gap-1 ${
+                                className={`text-[10px] font-bold px-2 py-1 rounded-sm transition-colors cursor-pointer ${
                                   p.inStock
-                                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                                    : 'bg-red-500/10 text-red-400 border-red-500/30'
+                                    ? 'bg-green-50 text-green-700 border border-green-200'
+                                    : 'bg-red-50 text-red-600 border border-red-200'
                                 }`}
                               >
-                                <Power className="w-3 h-3" />
-                                <span>{p.inStock ? 'IN STOCK' : 'OFFLINE'}</span>
+                                {p.inStock ? 'Active' : 'Inactive'}
                               </button>
                             </td>
-
-                            <td className="py-3 px-2 flex items-center gap-2">
-                              {isEditing ? (
+                            <td className="py-3 px-3 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                {isEditing ? (
+                                  <button
+                                    onClick={() => saveProductChanges(p.id)}
+                                    className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-white bg-green-600 hover:bg-green-700 rounded-md cursor-pointer transition-colors"
+                                  >
+                                    <Check className="w-3 h-3" /> Save
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={() => startEditing(p)}
+                                    className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-[#2874f0] bg-blue-50 hover:bg-blue-100 rounded-md cursor-pointer transition-colors"
+                                  >
+                                    <Edit2 className="w-3 h-3" /> Edit
+                                  </button>
+                                )}
                                 <button
-                                  onClick={() => saveProductChanges(p.id)}
-                                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-1 rounded text-[11px] flex items-center gap-1 shadow-sm"
+                                  onClick={() => handleDeleteProduct(p.id)}
+                                  className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors cursor-pointer"
+                                  title="Delete"
                                 >
-                                  <Check className="w-3.5 h-3.5" />
-                                  <span>SAVE</span>
+                                  <Trash2 className="w-3.5 h-3.5" />
                                 </button>
-                              ) : (
-                                <button
-                                  onClick={() => startEditing(p)}
-                                  className="bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white font-bold px-3 py-1 rounded text-[11px] flex items-center gap-1 border border-slate-700"
-                                >
-                                  <Edit2 className="w-3 h-3 text-amber-400" />
-                                  <span>EDIT</span>
-                                </button>
-                              )}
-
-                              <button
-                                onClick={() => handleDeleteProduct(p.id)}
-                                className="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 p-1 rounded hover:scale-105 transition-all"
-                                title="Delete from Railway DB"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                              </div>
                             </td>
                           </tr>
                         );
@@ -996,319 +1157,84 @@ export default function AdminPage() {
                 </div>
               )}
             </div>
-          </>
-        )}
-
-        {activeTab === 'orders' && (
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 mb-8">
-            <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-              <div>
-                <h2 className="font-heading font-black text-xl text-white">Live Orders Management</h2>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  View and update customer order states live from Railway PostgreSQL database.
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/30 px-3 py-1.5 rounded-full">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                <span className="text-[10px] font-black text-emerald-400 tracking-wider uppercase">
-                  🟢 LIVE AUTO-SYNC ACTIVE (DB POLL: 4S)
-                </span>
-              </div>
-            </div>
-
-            {orders.length === 0 ? (
-              <div className="py-16 text-center text-slate-400 border border-dashed border-slate-800 rounded-xl">
-                <ShoppingCart className="w-12 h-12 mx-auto mb-3 opacity-30 text-blue-400" />
-                <p className="text-sm font-bold text-white">No incoming orders yet</p>
-                <p className="text-xs text-slate-500 mt-1">
-                  When customers place orders via checkout, they will appear here live from Railway PostgreSQL!
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {orders.map((o) => {
-                  const currentStatus = o.courierStatus || 'Order Placed';
-                  const allSteps = [
-                    'Order Placed',
-                    'Payment Confirmed',
-                    'Preparing Order',
-                    'Packed',
-                    'Handed to ST Courier',
-                    'In Transit',
-                    'Out for Delivery',
-                    'Delivered',
-                  ];
-                  const activeIdx = allSteps.findIndex((s) => s.toLowerCase() === currentStatus.toLowerCase());
-                  const stepIdx = activeIdx >= 0 ? activeIdx : 0;
-
-                  return (
-                    <div
-                      key={o.orderId}
-                      className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 text-xs space-y-3.5 shadow-lg hover:border-amber-400/40 transition-all"
-                    >
-                      {/* Top Header Row */}
-                      <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-800 text-xs">
-                        <div className="flex items-center gap-2.5">
-                          <span className="font-heading font-black text-amber-400 text-base">
-                            Order #{o.orderId}
-                          </span>
-                          <span className="bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 px-2 py-0.5 rounded font-extrabold text-[10px] uppercase">
-                            ₹{o.totalAmount} • {o.paymentMethod || 'Razorpay'}
-                          </span>
-                          {o.isOfficialAwb && (
-                            <span className="bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded font-extrabold text-[10px] uppercase flex items-center gap-1">
-                              🔒 AUTO-PILOT ACTIVE
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="flex items-center gap-3 text-slate-300 font-medium">
-                          <span className="text-[11px] text-slate-400">{o.createdAt}</span>
-                          <button
-                            onClick={() => handleResendWhatsApp(o)}
-                            className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-3 py-1 rounded-lg font-extrabold text-[11px] flex items-center gap-1.5 transition-all cursor-pointer"
-                          >
-                            <MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
-                            <span>WhatsApp: +91 {o.customerPhone || 'N/A'}</span>
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* 8-Stage Progress Pill Bar */}
-                      <div className="space-y-2">
-                        <div className="flex justify-between items-center text-[10px] font-extrabold uppercase">
-                          <span className="text-slate-400">Status Progress (Stage {stepIdx + 1} of 8):</span>
-                          <span className="text-emerald-400 font-bold bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded">
-                            {currentStatus}
-                          </span>
-                        </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-1 text-[9px] text-center">
-                          {allSteps.map((s, idx) => {
-                            const isDone = idx <= stepIdx;
-                            const isCur = idx === stepIdx;
-                            return (
-                              <div
-                                key={s}
-                                className={`py-1 px-1 rounded-md border font-bold truncate transition-all ${
-                                  isCur
-                                    ? 'bg-blue-600 text-white border-blue-400 font-black shadow-xs'
-                                    : isDone
-                                    ? 'bg-emerald-950/40 text-emerald-300 border-emerald-500/30'
-                                    : 'bg-slate-900 text-slate-600 border-slate-800'
-                                }`}
-                              >
-                                {isDone ? '✓ ' : ''}{s}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      {/* Single Clean ST Courier Docket Dispatch Control */}
-                      <div className="bg-slate-950/90 border border-slate-800 rounded-xl p-3.5 space-y-3">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <span className="font-bold text-slate-300 text-[11px] flex items-center gap-1.5">
-                            <Truck className="w-3.5 h-3.5 text-amber-400" />
-                            <span>ST Courier Dispatch & Docket Assignment:</span>
-                          </span>
-                          <span className="text-[10px] text-emerald-400 font-extrabold uppercase bg-emerald-950/80 border border-emerald-500/30 px-2 py-0.5 rounded">
-                            Current Status: {o.courierStatus || 'Order Placed'}
-                          </span>
-                        </div>
-
-                        <div className="flex flex-col sm:flex-row items-center gap-2">
-                          <input
-                            type="text"
-                            placeholder="Enter ST Courier Docket AWB (e.g. STC241568974)..."
-                            value={
-                              shiprocketAwbInput[o.orderId] !== undefined
-                                ? shiprocketAwbInput[o.orderId]
-                                : o.trackingNumber && !o.trackingNumber.startsWith('SHP-')
-                                ? o.trackingNumber
-                                : ''
-                            }
-                            onChange={(e) =>
-                              setShiprocketAwbInput({
-                                ...shiprocketAwbInput,
-                                [o.orderId]: e.target.value,
-                              })
-                            }
-                            className="w-full sm:flex-1 px-3.5 py-2 bg-slate-900 border border-slate-700 focus:border-amber-400 rounded-xl text-white text-xs outline-none uppercase font-bold tracking-wide"
-                          />
-
-                          <button
-                            disabled={!!dispatchingOrderIds[o.orderId]}
-                            onClick={async () => {
-                              const inputVal = (shiprocketAwbInput[o.orderId] ?? (o.trackingNumber && !o.trackingNumber.startsWith('SHP-') ? o.trackingNumber : '')).trim();
-                              if (!inputVal) {
-                                alert('⚠️ Please enter an official ST Courier Docket Number (e.g. STC241568974) in the input box first!');
-                                return;
-                              }
-                              const awb = inputVal;
-
-                              setDispatchingOrderIds((prev) => ({ ...prev, [o.orderId]: true }));
-                              showToast('⏳ Validating ST Courier Docket AWB format...');
-
-                              try {
-                                const verifyRes = await fetch(`/api/courier/track?docket=${encodeURIComponent(awb)}`);
-                                const verifyData = await verifyRes.json();
-
-                                const isPositivelyVerified = verifyRes.ok && verifyData.isValid === true && verifyData.verified === true;
-
-                                if (!isPositivelyVerified) {
-                                  const reason = verifyData.error || 'ST Courier did not confirm this docket number in their live system.';
-                                  showToast(`❌ FAKE/UNVERIFIED DOCKET: ${reason}`);
-                                  alert(`⚠️ ST COURIER DOCKET REJECTED!\n\n${reason}\n\nPlease enter an official active ST Courier docket number from your physical booking receipt.`);
-                                  setDispatchingOrderIds((prev) => ({ ...prev, [o.orderId]: false }));
-                                  return;
-                                }
-
-                                showToast('⏳ Dispatching order & linking ST Courier AWB...');
-                                await fetch('/api/orders/timeline', {
-                                  method: 'POST',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ orderId: o.orderId, status: 'HANDED_TO_ST_COURIER', awbNumber: awb }),
-                                });
-
-                                showToast(`✅ Order #${o.orderId} Dispatched via ST Courier AWB: ${awb}!`);
-                                loadLiveOrders();
-                              } catch (err: any) {
-                                showToast('❌ Dispatch request error');
-                              } finally {
-                                setDispatchingOrderIds((prev) => ({ ...prev, [o.orderId]: false }));
-                              }
-                            }}
-                            className="w-full sm:w-auto bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 disabled:opacity-50 text-white font-extrabold text-xs px-5 py-2 rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
-                          >
-                            {dispatchingOrderIds[o.orderId] ? (
-                              <>
-                                <span className="w-3.5 h-3.5 border-2 border-amber-300 border-t-transparent rounded-full animate-spin" />
-                                <span>DISPATCHING...</span>
-                              </>
-                            ) : (
-                              <>
-                                <Truck className="w-3.5 h-3.5 text-amber-300" />
-                                <span>DISPATCH WITH ST COURIER</span>
-                              </>
-                            )}
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Customer Details & Action Inputs */}
-                      <div className="pt-1 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                        <div className="min-w-0">
-                          <span className="text-white font-extrabold text-sm block truncate">{o.customerName}</span>
-                          <span className="text-slate-400 text-[11px] block truncate">
-                            {o.address}{o.city ? `, ${o.city}` : ''} • {o.items?.length || 1} Book(s)
-                          </span>
-                        </div>
-
-                        <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
-                          <button
-                            onClick={() => handlePrintShippingLabel(o)}
-                            className="bg-amber-400 hover:bg-amber-500 text-[#001B3A] font-extrabold text-xs px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 cursor-pointer"
-                          >
-                            <Download className="w-3.5 h-3.5" />
-                            <span>SLIP</span>
-                          </button>
-
-                          <button
-                            onClick={() => handleResendWhatsApp(o)}
-                            className="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 cursor-pointer"
-                          >
-                            <MessageSquare className="w-3.5 h-3.5" />
-                            <span>WHATSAPP</span>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
           </div>
         )}
 
+        {/* ====================== WHATSAPP TAB ====================== */}
         {activeTab === 'whatsapp' && (
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 md:p-8 max-w-2xl mx-auto text-center space-y-6">
-            <div>
-              <span className="text-[10px] font-extrabold text-amber-400 uppercase tracking-wider bg-amber-400/10 px-3 py-1 rounded-full border border-amber-400/30">
-                100% FREE UNLIMITED WHATSAPP BOT ENGINE
-              </span>
-              <h2 className="font-heading font-black text-2xl text-white mt-3">
-                LINK YOUR WHATSAPP PHONE NUMBER
-              </h2>
-              <p className="text-xs text-slate-400 mt-1 max-w-md mx-auto">
-                Scan the QR code below to authenticate once. Your WhatsApp session will lock &amp; stay connected permanently with $0 fees!
+          <div className="max-w-lg mx-auto space-y-4">
+            <div className="bg-white rounded-lg border border-gray-200 p-6 text-center">
+              <div className="w-12 h-12 bg-[#25d366]/10 text-[#25d366] rounded-full flex items-center justify-center mx-auto mb-3">
+                <MessageSquare className="w-6 h-6" />
+              </div>
+              <h2 className="text-base font-bold text-gray-900">WhatsApp Business Bot</h2>
+              <p className="text-xs text-gray-400 mt-1">
+                Connect your WhatsApp to send automated order updates to customers
               </p>
             </div>
 
             {waStatus.status === 'CONNECTED' || waStatus.connected ? (
-              <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-6 text-center space-y-4">
-                <div className="w-14 h-14 bg-emerald-500 text-white rounded-full flex items-center justify-center mx-auto text-2xl font-bold shadow-lg ring-8 ring-emerald-500/20">
-                  ✓
+              <div className="bg-white rounded-lg border border-green-200 p-6 text-center space-y-4">
+                <div className="w-12 h-12 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto">
+                  <CheckCircle2 className="w-6 h-6" />
                 </div>
                 <div>
-                  <h3 className="font-heading font-black text-emerald-400 text-lg">
-                    🟢 WHATSAPP BOT IS PERMANENTLY CONNECTED &amp; ACTIVE
-                  </h3>
-                  <p className="text-xs text-emerald-200 mt-1 max-w-md mx-auto">
-                    Your WhatsApp session is locked &amp; permanently saved in your Railway PostgreSQL DB (`whatsapp_sessions`). It will stay connected forever across all server restarts.
+                  <h3 className="text-sm font-bold text-green-700">WhatsApp Connected</h3>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Your session is saved and will persist across server restarts.
                   </p>
                 </div>
 
-                <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5 text-xs text-slate-300 text-left space-y-1 font-mono max-w-sm mx-auto">
+                <div className="bg-gray-50 rounded-md p-3 text-xs space-y-1.5">
                   <div className="flex justify-between">
-                    <span className="text-slate-400 font-bold">SESSION LOCK:</span>
-                    <span className="text-emerald-400 font-bold">PERMANENT / PROTECTED</span>
+                    <span className="text-gray-500">Session</span>
+                    <span className="text-green-600 font-semibold">Permanent</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-400 font-bold">STATUS:</span>
-                    <span className="text-emerald-400 font-bold">ONLINE ($0 FEES)</span>
+                    <span className="text-gray-500">Status</span>
+                    <span className="text-green-600 font-semibold">Online</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Cost</span>
+                    <span className="text-gray-700 font-semibold">Free</span>
                   </div>
                 </div>
 
-                <div className="pt-2">
-                  <button
-                    onClick={handleUnlinkWhatsApp}
-                    className="bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-500/40 font-extrabold text-xs px-5 py-2.5 rounded-xl transition-all cursor-pointer uppercase tracking-wider inline-flex items-center gap-2"
-                  >
-                    <Trash2 className="w-4 h-4 text-red-400" />
-                    <span>UNLINK WHATSAPP SESSION</span>
-                  </button>
-                </div>
+                <button
+                  onClick={handleUnlinkWhatsApp}
+                  className="text-xs font-semibold text-red-500 hover:text-red-600 hover:bg-red-50 px-4 py-2 rounded-md transition-colors cursor-pointer"
+                >
+                  Unlink Session
+                </button>
               </div>
             ) : (
-              <div className="space-y-6">
-                {/* QR Code Section */}
-                <div className="bg-slate-800 border border-slate-700 p-6 rounded-2xl">
-                  {waStatus.qrImage ? (
-                    <div className="bg-white border-4 border-amber-400 p-4 rounded-2xl inline-block shadow-2xl">
-                      <img src={waStatus.qrImage} alt="WhatsApp QR Code" className="w-64 h-64 mx-auto block" />
-                      <span className="text-[11px] font-extrabold text-slate-900 block mt-3 uppercase tracking-wider">
-                        ⚡ SCAN WITH YOUR PHONE WHATSAPP
-                      </span>
+              <div className="bg-white rounded-lg border border-gray-200 p-6 text-center space-y-4">
+                {waStatus.qrImage ? (
+                  <div>
+                    <div className="bg-white border-2 border-gray-200 p-4 rounded-lg inline-block shadow-sm">
+                      <img src={waStatus.qrImage} alt="WhatsApp QR Code" className="w-56 h-56 mx-auto block" />
                     </div>
-                  ) : (
-                    <div className="py-6 space-y-3">
-                      <div className="w-8 h-8 border-2 border-amber-400 border-t-transparent rounded-full animate-spin mx-auto" />
-                      <p className="text-xs text-slate-300 font-bold">
-                        Generating Live WhatsApp QR Code &amp; Session...
-                      </p>
-                    </div>
-                  )}
-                </div>
+                    <p className="text-xs text-gray-500 mt-3 font-medium">
+                      Open WhatsApp → Linked Devices → Scan this code
+                    </p>
+                  </div>
+                ) : (
+                  <div className="py-6 space-y-3">
+                    <div className="w-6 h-6 border-2 border-[#2874f0] border-t-transparent rounded-full animate-spin mx-auto" />
+                    <p className="text-xs text-gray-400">Generating QR Code...</p>
+                  </div>
+                )}
               </div>
             )}
 
-            <div className="pt-4 border-t border-slate-800 text-left text-xs text-slate-400 space-y-2">
-              <div className="font-bold text-white">📌 Quick QR Link Instructions:</div>
-              <div>1. Open **WhatsApp** on your mobile phone.</div>
-              <div>2. Tap **Menu / Settings** (top right 3 dots or gear icon).</div>
-              <div>3. Tap **Linked Devices** → **Link a Device**.</div>
-              <div>4. Point your camera at the QR code above to authenticate once!</div>
+            <div className="bg-white rounded-lg border border-gray-200 p-4">
+              <h4 className="text-xs font-bold text-gray-700 mb-2">How to connect:</h4>
+              <ol className="text-[11px] text-gray-500 space-y-1 list-decimal list-inside">
+                <li>Open WhatsApp on your phone</li>
+                <li>Tap Menu → Linked Devices → Link a Device</li>
+                <li>Point your camera at the QR code above</li>
+                <li>Your session will be saved permanently</li>
+              </ol>
             </div>
           </div>
         )}
