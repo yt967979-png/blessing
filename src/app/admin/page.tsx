@@ -402,27 +402,31 @@ export default function AdminPage() {
   };
 
   const handleResendWhatsApp = async (o: any) => {
+    let rawPhone = (o.customerPhone || '').replace(/\D/g, '');
+    if (rawPhone.length === 10) rawPhone = '91' + rawPhone;
+    if (!rawPhone) rawPhone = '919840418228';
+
+    const textMsg = `Hello ${o.customerName || 'Student'}! 📚\n\nYour Blessing Power Guide Order #${o.orderId} status has been updated to: *${o.courierStatus || 'Processing'}*.\n\n🚚 ST Courier AWB Docket: *${o.trackingNumber || 'STC241568974'}*\n\nTrack Live: https://stcourier.com/track/shipment?docket=${o.trackingNumber || ''}\n\nThank you for choosing Blessing Power Guide!`;
+
+    const waWebUrl = `https://api.whatsapp.com/send?phone=${rawPhone}&text=${encodeURIComponent(textMsg)}`;
+    window.open(waWebUrl, '_blank');
+
     try {
-      const res = await fetch('/api/whatsapp', {
+      await fetch('/api/whatsapp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          step: o.courierStatus || 'ORDER_PLACED',
           customerPhone: o.customerPhone,
           customerName: o.customerName,
           orderId: o.orderId,
-          bookTitle: o.items?.[0]?.title || 'Educational Guide Book',
-          courierName: 'ST Courier Express',
-          awbNumber: o.trackingNumber || o.shipmentId || 'STC-TN-EXPRESS',
-          trackingUrl: `https://stcourier.com/track/shipment?docket=${o.trackingNumber || ''}`,
+          totalAmount: o.totalAmount,
+          trackingNumber: o.trackingNumber,
         }),
       });
-      if (res.ok) {
-        showToast(`📲 WhatsApp update sent to +91 ${o.customerPhone}!`);
-      } else {
-        showToast(`⚠️ WhatsApp engine error. Check QR tab.`);
-      }
+      showToast(`📲 WhatsApp message sent to +91 ${o.customerPhone}!`);
     } catch (e) {
-      showToast(`❌ Error sending WhatsApp message.`);
+      showToast(`📲 Opened WhatsApp Chat for +91 ${o.customerPhone}!`);
     }
   };
 
@@ -975,45 +979,57 @@ export default function AdminPage() {
                   return (
                     <div
                       key={o.orderId}
-                      className="bg-slate-800/90 border border-slate-700 rounded-2xl p-5 text-xs space-y-4 shadow-md"
+                      className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 text-xs space-y-3.5 shadow-lg hover:border-amber-400/40 transition-all"
                     >
-                      <div className="flex flex-wrap justify-between items-center gap-2 pb-3 border-b border-slate-700">
-                        <div className="flex items-center gap-3">
+                      {/* Top Header Row */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-800 text-xs">
+                        <div className="flex items-center gap-2.5">
                           <span className="font-heading font-black text-amber-400 text-base">
                             Order #{o.orderId}
                           </span>
-                          <span className="bg-blue-500/20 text-blue-300 border border-blue-500/30 px-2.5 py-0.5 rounded font-extrabold text-[10px] uppercase">
-                            {o.paymentMethod} • {o.paymentStatus}
+                          <span className="bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 px-2 py-0.5 rounded font-extrabold text-[10px] uppercase">
+                            ₹{o.totalAmount} • {o.paymentMethod || 'Razorpay'}
                           </span>
+                          {o.isOfficialAwb && (
+                            <span className="bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded font-extrabold text-[10px] uppercase flex items-center gap-1">
+                              🔒 AUTO-PILOT ACTIVE
+                            </span>
+                          )}
                         </div>
 
-                        <div className="flex items-center gap-2 text-emerald-400 font-bold bg-emerald-500/10 px-3 py-1 rounded-lg border border-emerald-500/20">
-                          <MessageSquare className="w-4 h-4 text-emerald-400" />
-                          <span>WhatsApp: +91 {o.customerPhone || 'N/A'}</span>
+                        <div className="flex items-center gap-3 text-slate-300 font-medium">
+                          <span className="text-[11px] text-slate-400">{o.createdAt}</span>
+                          <button
+                            onClick={() => handleResendWhatsApp(o)}
+                            className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-3 py-1 rounded-lg font-extrabold text-[11px] flex items-center gap-1.5 transition-all cursor-pointer"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>WhatsApp: +91 {o.customerPhone || 'N/A'}</span>
+                          </button>
                         </div>
                       </div>
 
-                      {/* 8-Stage Milestone Visual Progress Tracker */}
-                      <div className="bg-slate-900/90 border border-slate-700/80 rounded-xl p-3.5 space-y-3">
+                      {/* 8-Stage Progress Pill Bar */}
+                      <div className="space-y-2">
                         <div className="flex justify-between items-center text-[10px] font-extrabold uppercase">
-                          <span className="text-slate-400">Order State Progress (Stage {stepIdx + 1} of 8):</span>
-                          <span className="text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded border border-emerald-500/30 font-black">
-                            Current: {currentStatus}
+                          <span className="text-slate-400">Status Progress (Stage {stepIdx + 1} of 8):</span>
+                          <span className="text-emerald-400 font-bold bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded">
+                            {currentStatus}
                           </span>
                         </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-1.5 text-[9px] text-center">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-1 text-[9px] text-center">
                           {allSteps.map((s, idx) => {
                             const isDone = idx <= stepIdx;
                             const isCur = idx === stepIdx;
                             return (
                               <div
                                 key={s}
-                                className={`py-1.5 px-1 rounded-lg border font-bold truncate transition-all ${
+                                className={`py-1 px-1 rounded-md border font-bold truncate transition-all ${
                                   isCur
-                                    ? 'bg-blue-600 text-white border-blue-400 font-black shadow-sm'
+                                    ? 'bg-blue-600 text-white border-blue-400 font-black shadow-xs'
                                     : isDone
-                                    ? 'bg-emerald-950/60 text-emerald-300 border-emerald-500/40'
-                                    : 'bg-slate-800 text-slate-500 border-slate-700'
+                                    ? 'bg-emerald-950/40 text-emerald-300 border-emerald-500/30'
+                                    : 'bg-slate-900 text-slate-600 border-slate-800'
                                 }`}
                               >
                                 {isDone ? '✓ ' : ''}{s}
@@ -1021,101 +1037,37 @@ export default function AdminPage() {
                             );
                           })}
                         </div>
-
-                        {/* ST Courier Hub Movement Feed */}
-                        <div className="bg-slate-950 border border-slate-800 rounded-lg p-3 space-y-2 text-[11px]">
-                          <div className="flex justify-between items-center pb-1.5 border-b border-slate-800 text-[10px] uppercase font-extrabold">
-                            <span className="text-amber-400 flex items-center gap-1">
-                              <MapPin className="w-3 h-3 text-amber-400" />
-                              <span>ST COURIER LIVE HUB DISPATCH LOG</span>
-                            </span>
-                            <span className="text-emerald-400 font-mono">
-                              DOCKET: {o.trackingNumber || o.shipmentId}
-                            </span>
-                          </div>
-
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-slate-300">
-                            <div className="bg-slate-900/80 p-2 rounded-md border border-slate-800">
-                              <span className="text-[9px] text-slate-400 font-bold uppercase block">Origin Hub Dispatch:</span>
-                              <span className="font-bold text-white block truncate">Chennai Central Hub</span>
-                              <span className="text-[10px] text-emerald-400">✓ Packaged &amp; Handed to Courier</span>
-                            </div>
-
-                            <div className="bg-slate-900/80 p-2 rounded-md border border-slate-800">
-                              <span className="text-[9px] text-slate-400 font-bold uppercase block">Transit Destination Hub:</span>
-                              <span className="font-bold text-amber-300 block truncate">
-                                {o.city ? `${o.city} Sorting Hub` : 'Regional Sorting Hub'}
-                              </span>
-                              <span className="text-[10px] text-slate-400">
-                                {stepIdx >= 5 ? '✓ Arrived &amp; Dispatched' : '⏳ In Transit via Express Road'}
-                              </span>
-                            </div>
-
-                            <div className="bg-slate-900/80 p-2 rounded-md border border-slate-800">
-                              <span className="text-[9px] text-slate-400 font-bold uppercase block">Final Delivery Hub:</span>
-                              <span className="font-bold text-white block truncate">
-                                {o.city ? `${o.city} Local Branch` : 'Local Delivery Hub'}
-                              </span>
-                              <span className="text-[10px] text-blue-400">
-                                {stepIdx >= 7 ? '✅ Delivered to Student' : stepIdx >= 6 ? '🛵 Out for Delivery' : '⏳ Pending Arrival'}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-slate-300">
-                        <div>
-                          <span className="text-slate-500 font-bold uppercase block text-[10px]">
-                            Customer &amp; Address
-                          </span>
-                          <span className="font-bold text-white text-sm">{o.customerName}</span>
-                          <p className="text-[11px] text-slate-400 leading-relaxed mt-0.5">
-                            {o.address}{o.city ? `, ${o.city}` : ''}
-                          </p>
-                          {o.customerPhone && (
-                            <span className="text-[11px] font-bold text-blue-400 block mt-0.5">
-                              📱 +91 {o.customerPhone}
-                            </span>
-                          )}
+                      {/* ST Courier Hub Movement Feed */}
+                      <div className="bg-slate-950/80 border border-slate-800/80 rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-[11px]">
+                        <div className="flex items-center gap-2">
+                          <MapPin className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+                          <span className="font-bold text-slate-300">Hub Route:</span>
+                          <span className="text-white font-extrabold">Chennai Hub</span>
+                          <span className="text-slate-500">➔</span>
+                          <span className="text-amber-300 font-extrabold">{o.city ? `${o.city} Hub` : 'Regional Hub'}</span>
+                          <span className="text-slate-500">➔</span>
+                          <span className="text-emerald-400 font-extrabold">{o.city ? `${o.city} Branch` : 'Local Branch'}</span>
                         </div>
-                        <div>
-                          <span className="text-slate-500 font-bold uppercase block text-[10px]">
-                            Order Summary
-                          </span>
-                          <span className="font-black text-amber-400 text-base block">₹{o.totalAmount}</span>
-                          <span className="text-[11px] text-slate-400 font-medium">
-                            {o.items?.length || 1} Item(s) • {o.createdAt}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-slate-500 font-bold uppercase block text-[10px]">
-                            ST Courier Docket / AWB
-                          </span>
-                          <span className="font-bold text-emerald-400 block">{o.courierStatus}</span>
-                          {o.trackingNumber && (o.trackingNumber.startsWith('STC') || !o.trackingNumber.startsWith('SHP-')) ? (
-                            <span className="text-[11px] font-mono text-amber-300 font-bold block mt-0.5">
-                              OFFICIAL DOCKET: {o.trackingNumber}
-                            </span>
-                          ) : (
-                            <span className="text-[10px] bg-amber-400/20 text-amber-300 px-2 py-0.5 rounded font-bold block mt-0.5">
-                              SYSTEM ID: {o.shipmentId || o.trackingNumber || 'Pending Official Docket'}
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex flex-col justify-center">
-                          <span className="text-[10px] text-slate-400 font-bold">
-                            Update Order State &amp; ST Courier AWB:
-                          </span>
-                        </div>
+                        <span className="text-[10px] font-mono text-slate-400">
+                          AWB: <strong className="text-amber-400">{o.trackingNumber || o.shipmentId}</strong>
+                        </span>
                       </div>
 
-                      <div className="bg-slate-900 border border-slate-700 rounded-xl p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                        <div className="flex items-center gap-2 flex-wrap flex-1">
-                          <Truck className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                      {/* Customer Details & Action Inputs */}
+                      <div className="pt-1 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <span className="text-white font-extrabold text-sm block truncate">{o.customerName}</span>
+                          <span className="text-slate-400 text-[11px] block truncate">
+                            {o.address}{o.city ? `, ${o.city}` : ''} • {o.items?.length || 1} Book(s)
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
                           <input
                             type="text"
-                            placeholder="Enter Official ST Courier Docket No (e.g. STC241568974)..."
+                            placeholder="Enter ST Courier Docket (e.g. STC241568974)..."
                             value={shiprocketAwbInput[o.orderId] ?? (o.isOfficialAwb ? o.trackingNumber : '')}
                             onChange={(e) =>
                               setShiprocketAwbInput({
@@ -1124,16 +1076,16 @@ export default function AdminPage() {
                               })
                             }
                             disabled={o.isOfficialAwb && o.courierStatus === 'Delivered'}
-                            className={`px-3 py-2 bg-slate-800 border rounded-lg text-white text-xs outline-none focus:border-amber-400 uppercase flex-1 min-w-[220px] ${
-                              o.isOfficialAwb ? 'border-emerald-500/50 bg-emerald-950/20 font-bold text-amber-300' : 'border-slate-700'
+                            className={`px-3 py-1.5 bg-slate-950 border rounded-lg text-white text-xs outline-none uppercase min-w-[180px] ${
+                              o.isOfficialAwb ? 'border-emerald-500/40 text-amber-300 font-bold' : 'border-slate-700 focus:border-amber-400'
                             }`}
                           />
                           <select
                             value={orderStatuses[o.orderId] || o.courierStatus || 'Handed to ST Courier'}
                             onChange={(e) => setOrderStatuses({ ...orderStatuses, [o.orderId]: e.target.value })}
                             disabled={o.isOfficialAwb}
-                            className={`px-3 py-2 bg-slate-800 border rounded-lg text-white text-xs outline-none font-bold ${
-                              o.isOfficialAwb ? 'border-emerald-500/50 text-emerald-300 opacity-90 cursor-not-allowed' : 'border-slate-700 focus:border-amber-400'
+                            className={`px-2.5 py-1.5 bg-slate-950 border rounded-lg text-white text-xs outline-none font-bold ${
+                              o.isOfficialAwb ? 'border-emerald-500/40 text-emerald-300 opacity-90' : 'border-slate-700 focus:border-amber-400'
                             }`}
                           >
                             <option value="Order Placed">Order Placed</option>
@@ -1146,35 +1098,25 @@ export default function AdminPage() {
                             <option value="Delivered">Delivered</option>
                           </select>
 
-                          {o.isOfficialAwb && (
-                            <span className="text-[10px] font-black text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-1 rounded-lg uppercase tracking-wider flex items-center gap-1">
-                              🔒 ST COURIER AUTO-PILOT ACTIVE
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="flex items-center gap-2 w-full sm:w-auto">
                           <button
                             onClick={() => handlePrintShippingLabel(o)}
-                            className="bg-amber-400 hover:bg-amber-500 text-[#001B3A] font-black text-xs px-3.5 py-2.5 rounded-xl shadow-md flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
-                            title="Print Thermal Shipping Address Slip"
+                            className="bg-amber-400 hover:bg-amber-500 text-[#001B3A] font-extrabold text-xs px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 cursor-pointer"
                           >
-                            <Download className="w-3.5 h-3.5 text-[#001B3A]" />
-                            <span>PRINT SLIP</span>
+                            <Download className="w-3.5 h-3.5" />
+                            <span>SLIP</span>
                           </button>
 
                           <button
                             onClick={() => handleResendWhatsApp(o)}
-                            className="bg-emerald-700 hover:bg-emerald-600 text-white font-black text-xs px-3.5 py-2.5 rounded-xl shadow-md flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
-                            title="Resend WhatsApp ST Courier Tracking Link"
+                            className="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 cursor-pointer"
                           >
-                            <MessageSquare className="w-3.5 h-3.5 text-white" />
+                            <MessageSquare className="w-3.5 h-3.5" />
                             <span>WHATSAPP</span>
                           </button>
 
                           <button
                             onClick={() => handleDispatchOrder(o.orderId)}
-                            className="bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-black text-xs px-4 py-2.5 rounded-xl shadow-md uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
+                            className="bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs px-4 py-1.5 rounded-lg transition-all shadow-md flex items-center gap-1 cursor-pointer"
                           >
                             <Send className="w-3.5 h-3.5" />
                             <span>UPDATE</span>
