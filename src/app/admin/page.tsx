@@ -27,25 +27,42 @@ import { useStore } from '@/context/StoreContext';
 export default function AdminPage() {
   const { products, updateProductInDb, addNewProductToDb, deleteProductFromDb, showToast } = useStore();
   const [activeTab, setActiveTab] = useState<'catalog' | 'orders' | 'whatsapp'>('catalog');
-  const [waStatus, setWaStatus] = useState<{ status: string; qrImage?: string; message?: string }>({ status: 'LOADING' });
+  const [waStatus, setWaStatus] = useState<{ status: string; qrImage?: string; pairingCode?: string; message?: string }>({ status: 'LOADING' });
+  const [waPhoneInput, setWaPhoneInput] = useState('');
+  const [waPairingCode, setWaPairingCode] = useState<string | null>(null);
 
-  // Poll WhatsApp service status
+  // Poll WhatsApp service status from Next.js internal API
   useEffect(() => {
     const fetchWaStatus = async () => {
       try {
-        const res = await fetch('http://127.0.0.1:4000/status');
+        const res = await fetch('/api/whatsapp/qr');
         if (res.ok) {
           const data = await res.json();
           setWaStatus(data);
         }
       } catch (e) {
-        setWaStatus({ status: 'SERVICE_OFFLINE', message: 'Local Baileys engine is initializing or running in background' });
+        setWaStatus({ status: 'INITIALIZING', message: 'WhatsApp Engine Initializing...' });
       }
     };
     fetchWaStatus();
-    const interval = setInterval(fetchWaStatus, 4000);
+    const interval = setInterval(fetchWaStatus, 3000);
     return () => clearInterval(interval);
   }, []);
+
+  const handleRequestPairingCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!waPhoneInput) return;
+    try {
+      const res = await fetch(`/api/whatsapp/qr?phone=${encodeURIComponent(waPhoneInput)}`);
+      const data = await res.json();
+      if (data.pairingCode) {
+        setWaPairingCode(data.pairingCode);
+        showToast('✅ 8-Digit Pairing Code Generated!');
+      }
+    } catch (e) {
+      showToast('❌ Error generating pairing code.');
+    }
+  };
   const [editingId, setEditingId] = useState<string | number | null>(null);
 
   // Edit form state
@@ -796,7 +813,7 @@ export default function AdminPage() {
                 LINK YOUR WHATSAPP PHONE NUMBER
               </h2>
               <p className="text-xs text-slate-400 mt-1 max-w-md mx-auto">
-                Scan the QR code below with your mobile phone (WhatsApp → Settings → Linked Devices) to enable $0 cost, unlimited order dispatches!
+                Scan the QR code below OR enter your phone number to get an 8-digit Pairing Code to link WhatsApp with $0 fees!
               </p>
             </div>
 
@@ -810,27 +827,61 @@ export default function AdminPage() {
                   Your WhatsApp phone is authenticated! The bot will automatically send order updates, ST Courier dockets, and live tracking links to your students.
                 </p>
               </div>
-            ) : waStatus.qrImage ? (
-              <div className="bg-white border-2 border-amber-400 p-5 rounded-2xl inline-block shadow-2xl">
-                <img src={waStatus.qrImage} alt="WhatsApp QR Code" className="w-64 h-64 mx-auto block" />
-                <span className="text-[11px] font-bold text-slate-900 block mt-3 uppercase tracking-wider">
-                  ⚡ SCAN WITH YOUR PHONE WHATSAPP
-                </span>
-              </div>
             ) : (
-              <div className="bg-slate-800 border border-slate-700 rounded-2xl p-8 space-y-3">
-                <div className="w-8 h-8 border-2 border-amber-400 border-t-transparent rounded-full animate-spin mx-auto" />
-                <p className="text-xs text-slate-300 font-bold">
-                  Initializing WhatsApp QR Engine on http://127.0.0.1:4000/qr ...
-                </p>
-                <a
-                  href="http://127.0.0.1:4000/qr"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-amber-400 text-xs hover:underline block font-extrabold"
-                >
-                  Open http://127.0.0.1:4000/qr in New Tab ↗
-                </a>
+              <div className="space-y-6">
+                {/* QR Code Section */}
+                <div className="bg-slate-800 border border-slate-700 p-6 rounded-2xl">
+                  {waStatus.qrImage ? (
+                    <div className="bg-white border-4 border-amber-400 p-4 rounded-2xl inline-block shadow-2xl">
+                      <img src={waStatus.qrImage} alt="WhatsApp QR Code" className="w-64 h-64 mx-auto block" />
+                      <span className="text-[11px] font-extrabold text-slate-900 block mt-3 uppercase tracking-wider">
+                        ⚡ SCAN WITH YOUR PHONE WHATSAPP
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="py-6 space-y-3">
+                      <div className="w-8 h-8 border-2 border-amber-400 border-t-transparent rounded-full animate-spin mx-auto" />
+                      <p className="text-xs text-slate-300 font-bold">
+                        Generating Live WhatsApp QR Code &amp; Session...
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Option 2: 8-Digit Pairing Code */}
+                <div className="bg-slate-800/80 border border-slate-700/80 p-5 rounded-2xl text-left space-y-3">
+                  <h4 className="font-heading font-black text-xs text-amber-400 uppercase tracking-wider flex items-center gap-2">
+                    <span>📱 OPTION 2: LINK WITH 8-DIGIT PAIRING CODE (NO CAMERA NEEDED)</span>
+                  </h4>
+
+                  <form onSubmit={handleRequestPairingCode} className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="Enter phone number e.g. 9840418228..."
+                      value={waPhoneInput}
+                      onChange={(e) => setWaPhoneInput(e.target.value)}
+                      className="px-3.5 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs outline-none focus:border-amber-400 flex-1 font-bold"
+                    />
+                    <button
+                      type="submit"
+                      className="bg-amber-400 hover:bg-amber-500 text-[#001B3A] font-extrabold text-xs px-4 py-2 rounded-xl transition-all shadow-md cursor-pointer whitespace-nowrap"
+                    >
+                      GET PAIRING CODE
+                    </button>
+                  </form>
+
+                  {waPairingCode && (
+                    <div className="bg-amber-400/10 border border-amber-400/40 p-4 rounded-xl text-center space-y-2">
+                      <span className="text-[10px] font-bold text-amber-300 uppercase block">YOUR 8-DIGIT WHATSAPP PAIRING CODE:</span>
+                      <div className="font-mono font-black text-2xl text-amber-400 tracking-widest bg-slate-900 py-2 rounded-lg border border-amber-400/30 inline-block px-6">
+                        {waPairingCode}
+                      </div>
+                      <p className="text-[11px] text-slate-300">
+                        Open WhatsApp on phone → Linked Devices → Link with phone number → Enter code above!
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
@@ -838,8 +889,8 @@ export default function AdminPage() {
               <div className="font-bold text-white">📌 Quick Instructions:</div>
               <div>1. Open **WhatsApp** on your mobile phone.</div>
               <div>2. Tap **Menu / Settings** (top right 3 dots or gear icon).</div>
-              <div>3. Tap **Linked Devices** → **Link a Device**.</div>
-              <div>4. Point your phone camera at the QR code above!</div>
+              <div>3. Tap **Linked Devices** → **Link a Device** (or Link with phone number).</div>
+              <div>4. Point your camera at the QR code above or enter the 8-digit Pairing Code!</div>
             </div>
           </div>
         )}
