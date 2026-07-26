@@ -411,92 +411,103 @@ function OrdersContent() {
                   <ShieldCheck className="w-4 h-4 text-blue-600" />
                   <span>Detailed E-Commerce Milestone Audit</span>
                 </h3>
-                <span className="text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-full border border-blue-200">
-                  Step {currentStepIdx + 1} of 8 Complete
-                </span>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 text-center pt-2">
                 {ALL_STATUS_STEPS.map((step, idx) => {
                   const isDone = idx <= currentStepIdx;
+                  const isCurrent = idx === currentStepIdx;
                   return (
                     <div
                       key={step.key}
-                      className={`p-3.5 rounded-2xl border transition-all flex items-start gap-3 ${
-                        isDone
-                          ? 'bg-emerald-50/80 border-emerald-200 text-emerald-950'
-                          : 'bg-slate-50/60 border-slate-200 text-slate-400 opacity-60'
+                      className={`p-2.5 rounded-2xl border text-[11px] transition-all ${
+                        isCurrent
+                          ? 'bg-blue-600 text-white border-blue-600 shadow-md font-black scale-105'
+                          : isDone
+                          ? 'bg-emerald-50 text-emerald-900 border-emerald-200 font-extrabold'
+                          : 'bg-slate-50 text-slate-400 border-slate-200 font-medium'
                       }`}
                     >
-                      <div
-                        className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs flex-shrink-0 mt-0.5 ${
-                          isDone ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-500'
-                        }`}
-                      >
-                        {isDone ? '✔' : '○'}
+                      <div className="w-5 h-5 rounded-full mx-auto mb-1 flex items-center justify-center text-[10px] font-bold">
+                        {isDone ? '✓' : idx + 1}
                       </div>
-                      <div>
-                        <div className="font-extrabold text-xs">{step.label}</div>
-                        <div className="text-[10px] text-slate-500 mt-0.5 leading-tight">{step.desc}</div>
-                      </div>
+                      <div className="truncate">{step.label}</div>
                     </div>
                   );
                 })}
               </div>
             </div>
-          </div>
 
-          {/* 4. Delivery Address & Purchased Guide Books Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-            <div className="md:col-span-5 bg-white border border-slate-200 rounded-3xl p-6 shadow-xs space-y-3">
-              <h3 className="font-heading font-black text-sm text-[#001B3A] pb-3 border-b border-slate-100 flex items-center gap-2">
-                <Building2 className="w-4 h-4 text-blue-600" />
-                <span>Delivery Address</span>
-              </h3>
-              <div className="text-xs space-y-1">
-                <div className="font-extrabold text-slate-900 text-sm">{searchedOrderData.customerName}</div>
-                {searchedOrderData.address ? (
-                  <p className="text-slate-600 font-medium leading-relaxed">
-                    {searchedOrderData.address}{searchedOrderData.city ? `, ${searchedOrderData.city}` : ''}{searchedOrderData.pincode ? ` - ${searchedOrderData.pincode}` : ''}
-                  </p>
-                ) : (
-                  <p className="text-slate-400 italic">Address on file</p>
-                )}
-                {searchedOrderData.customerPhone && (
-                  <div className="pt-2 font-bold text-slate-700">
-                    <span>📱 Phone: </span>
-                    <span className="text-blue-600">+91 {searchedOrderData.customerPhone}</span>
+            {/* Shipment Hub & Address Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-6 pt-4">
+              <div className="md:col-span-5 bg-slate-50 border border-slate-200 rounded-3xl p-6 space-y-4">
+                <h3 className="font-heading font-black text-sm text-[#001B3A] pb-3 border-b border-slate-200 flex items-center justify-between">
+                  <span className="flex items-center gap-2">
+                    <Truck className="w-4 h-4 text-blue-600" />
+                    <span>ST Courier Logistics Hub</span>
+                  </span>
+                  <span className="text-[10px] font-black text-amber-700 bg-amber-100 px-2 py-0.5 rounded uppercase">
+                    EXPRESS
+                  </span>
+                </h3>
+
+                <div className="space-y-3 text-xs">
+                  <div>
+                    <span className="text-slate-400 font-bold block text-[10px] uppercase">TRACKING DOCKET (AWB)</span>
+                    <span className="font-mono font-black text-slate-900 text-sm">{searchedOrderData.trackingNumber || searchedOrderData.shipmentId || 'Generating...'}</span>
                   </div>
-                )}
-              </div>
-            </div>
 
-            <div className="md:col-span-7 bg-white border border-slate-200 rounded-3xl p-6 shadow-xs space-y-4">
-              <h3 className="font-heading font-black text-sm text-[#001B3A] pb-3 border-b border-slate-100 flex items-center gap-2">
-                <Package className="w-4 h-4 text-blue-600" />
-                <span>Purchased Guide Books ({searchedOrderData.items?.length || 1})</span>
-              </h3>
-              <div className="space-y-3">
-                {searchedOrderData.items?.map((item: any, idx: number) => (
-                  <div
-                    key={idx}
-                    className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between gap-3 text-xs"
+                  <div>
+                    <span className="text-slate-400 font-bold block text-[10px] uppercase">DELIVERY ADDRESS</span>
+                    <p className="font-bold text-slate-800 leading-relaxed mt-0.5">
+                      {searchedOrderData.shippingAddress?.name || searchedOrderData.customerName}<br />
+                      {searchedOrderData.shippingAddress?.address || searchedOrderData.address}, {searchedOrderData.shippingAddress?.city || searchedOrderData.city} — {searchedOrderData.shippingAddress?.pincode || searchedOrderData.pincode}
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={() => setShowTrackingModal(true)}
+                    className="w-full bg-[#001B3A] hover:bg-blue-600 text-white font-extrabold text-xs py-3 rounded-xl transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer mt-2"
                   >
-                    <div>
-                      <div className="font-extrabold text-slate-900">{item.title}</div>
-                      <div className="text-[11px] text-slate-500 mt-0.5">
-                        Qty: {item.qty || 1} • Price: ₹{item.price}
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => handleOpenReviewModal(item)}
-                      className="bg-amber-400/20 text-amber-900 hover:bg-amber-400/30 border border-amber-300 font-extrabold text-[11px] px-3 py-1.5 rounded-xl transition-all flex items-center gap-1 cursor-pointer"
+                    <ExternalLink className="w-4 h-4 text-amber-400" />
+                    <span>VIEW LIVE TRANSIT TIMELINE</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="md:col-span-7 bg-slate-50 border border-slate-200 rounded-3xl p-6 space-y-4">
+                <h3 className="font-heading font-black text-sm text-[#001B3A] pb-3 border-b border-slate-200 flex items-center justify-between">
+                  <span className="flex items-center gap-2">
+                    <Package className="w-4 h-4 text-blue-600" />
+                    <span>Purchased Items ({searchedOrderData.items?.length || 1})</span>
+                  </span>
+                  <span className="text-[10px] font-bold text-slate-500">
+                    Order #{searchedOrderData.orderId}
+                  </span>
+                </h3>
+
+                <div className="space-y-3">
+                  {searchedOrderData.items?.map((item: any, idx: number) => (
+                    <div
+                      key={idx}
+                      className="p-4 bg-white border border-slate-200 rounded-2xl flex items-center justify-between gap-3 text-xs shadow-2xs"
                     >
-                      <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
-                      <span>WRITE REVIEW</span>
-                    </button>
-                  </div>
-                ))}
+                      <div>
+                        <div className="font-extrabold text-slate-900 text-sm">{item.title}</div>
+                        <div className="text-[11px] text-slate-500 mt-0.5">
+                          Qty: {item.qty || 1} • Price: ₹{item.price}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleOpenReviewModal(item)}
+                        className="bg-amber-400/10 text-amber-900 hover:bg-amber-400/20 border border-amber-300 font-extrabold text-[11px] px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+                      >
+                        <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
+                        <span>WRITE REVIEW</span>
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
@@ -508,7 +519,7 @@ function OrdersContent() {
               <Package className="w-5 h-5 text-amber-500" />
               <span>My Recent Orders ({userOrders.length})</span>
             </h2>
-            <span className="text-xs text-slate-500 font-bold">Select an order to view live tracking</span>
+            <span className="text-xs text-slate-500 font-bold">Select any order card to view live tracking</span>
           </div>
 
           <div className="grid grid-cols-1 gap-4">
@@ -516,29 +527,38 @@ function OrdersContent() {
               <div
                 key={ord.orderId}
                 onClick={() => setSearchedOrderData(ord)}
-                className="bg-white border border-slate-200 hover:border-amber-400/80 rounded-3xl p-6 shadow-xs hover:shadow-md transition-all cursor-pointer space-y-4"
+                className="bg-white border border-slate-200 hover:border-amber-400 rounded-3xl p-6 shadow-sm hover:shadow-md transition-all cursor-pointer space-y-4 group"
               >
                 <div className="flex flex-wrap justify-between items-center gap-3 text-xs pb-3 border-b border-slate-100">
-                  <div>
-                    <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider block">ORDER ID</span>
-                    <span className="font-heading font-black text-lg text-[#001B3A]">{ord.orderId}</span>
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-2xl bg-[#001B3A] text-amber-400 flex items-center justify-center font-black text-sm shadow-sm group-hover:scale-105 transition-transform">
+                      📦
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider block">ORDER ID</span>
+                      <span className="font-heading font-black text-lg text-[#001B3A]">{ord.orderId}</span>
+                    </div>
                   </div>
+
                   <div>
                     <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider block">DATE</span>
                     <span className="font-bold text-slate-700">{ord.createdAt}</span>
                   </div>
+
                   <div>
-                    <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider block">TOTAL</span>
+                    <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider block">TOTAL AMOUNT</span>
                     <span className="font-black text-slate-900 text-sm">₹{ord.totalAmount}</span>
                   </div>
-                  <span className="bg-emerald-50 text-emerald-700 font-black text-xs px-3 py-1 rounded-full border border-emerald-200">
-                    {ord.courierStatus || 'Order Placed'}
+
+                  <span className="bg-emerald-50 text-emerald-700 font-black text-xs px-3.5 py-1.5 rounded-full border border-emerald-200 flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                    <span>{ord.courierStatus || 'Order Placed'}</span>
                   </span>
                 </div>
 
-                <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
+                <div className="flex flex-wrap items-center justify-between gap-3 text-xs pt-1">
                   <div className="space-y-1">
-                    <span className="font-bold text-slate-800">
+                    <span className="font-extrabold text-slate-800 text-xs">
                       Purchased Items ({ord.items?.length || 1}):
                     </span>
                     <p className="text-slate-600 font-medium">
@@ -546,29 +566,43 @@ function OrdersContent() {
                     </p>
                   </div>
 
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSearchedOrderData(ord);
-                    }}
-                    className="bg-[#001B3A] hover:bg-blue-600 text-white font-extrabold text-xs px-5 py-2.5 rounded-xl shadow-xs transition-all flex items-center gap-2 cursor-pointer"
-                  >
-                    <Truck className="w-4 h-4 text-amber-400" />
-                    <span>TRACK PACKAGE &amp; VIEW DETAILS →</span>
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        downloadTaxInvoice(ord);
+                      }}
+                      className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs px-4 py-2.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Download className="w-3.5 h-3.5 text-slate-600" />
+                      <span>INVOICE</span>
+                    </button>
+
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSearchedOrderData(ord);
+                      }}
+                      className="bg-[#001B3A] hover:bg-blue-600 text-white font-extrabold text-xs px-5 py-2.5 rounded-xl shadow-xs transition-all flex items-center gap-2 cursor-pointer"
+                    >
+                      <Truck className="w-4 h-4 text-amber-400" />
+                      <span>TRACK PACKAGE →</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
           </div>
         </div>
       ) : (
-        <div className="bg-white border border-slate-200 rounded-3xl p-12 text-center max-w-md mx-auto space-y-4 shadow-xs">
-          <AlertCircle className="w-12 h-12 text-amber-500 mx-auto opacity-80" />
-          <h3 className="font-heading font-black text-lg text-slate-900">No Active Order Selected</h3>
-          <p className="text-xs text-slate-500 leading-relaxed">
+        <div className="bg-white border border-slate-200 rounded-3xl p-12 text-center max-w-md mx-auto space-y-4 shadow-sm">
+          <div className="w-16 h-16 bg-amber-100 text-amber-600 rounded-3xl flex items-center justify-center mx-auto text-2xl shadow-xs">
+            📦
+          </div>
+          <h3 className="font-heading font-black text-xl text-slate-900">No Active Order Selected</h3>
+          <p className="text-xs text-slate-500 leading-relaxed max-w-xs mx-auto">
             Enter your Order ID (e.g. BPG-1082) in the search box above to view shipment progress &amp; ST Courier live tracking!
           </p>
-        </div>
       )}
 
       {/* Review Modal */}
