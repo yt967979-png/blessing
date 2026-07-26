@@ -66,20 +66,26 @@ export default function ProfilePage() {
     }
   }, [user]);
 
-  // Fetch live orders for logged-in user from backend database
+  // Fetch live orders for logged-in user from backend database with 4-second auto-sync
   useEffect(() => {
-    if (user && user.id) {
-      fetch(`/api/orders?userId=${user.id}`)
-        .then((res) => res.json())
-        .then((data) => {
-          if (Array.isArray(data)) {
-            setLiveOrders(data);
-          }
-        })
-        .catch(() => {});
-    } else {
-      setLiveOrders([]);
-    }
+    const fetchUserLiveOrders = () => {
+      if (user && (user.id || user.email)) {
+        fetch(`/api/orders?userId=${encodeURIComponent(user.id || user.email)}`)
+          .then((res) => res.json())
+          .then((data) => {
+            if (Array.isArray(data)) {
+              setLiveOrders(data);
+            }
+          })
+          .catch(() => {});
+      } else {
+        setLiveOrders([]);
+      }
+    };
+
+    fetchUserLiveOrders();
+    const interval = setInterval(fetchUserLiveOrders, 4000);
+    return () => clearInterval(interval);
   }, [user]);
 
   const saveAddressesToStorage = (updatedList: any[]) => {
