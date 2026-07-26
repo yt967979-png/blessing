@@ -952,10 +952,13 @@ export const Modals = () => {
                       {authMode === 'register' && (
                         <>
                           <div>
-                            <label className="block font-bold text-slate-700 mb-1">Full Name *</label>
+                            <label className="block font-bold text-slate-700 mb-1" htmlFor="auth-name">Full Name *</label>
                             <div className="relative">
                               <input
+                                id="auth-name"
+                                name="name"
                                 type="text"
+                                autoComplete="name"
                                 required
                                 placeholder="e.g. Student Name"
                                 value={authForm.name}
@@ -967,10 +970,13 @@ export const Modals = () => {
                           </div>
 
                           <div>
-                            <label className="block font-bold text-slate-700 mb-1">Mobile Number (WhatsApp) *</label>
+                            <label className="block font-bold text-slate-700 mb-1" htmlFor="auth-phone">Mobile Number (WhatsApp) *</label>
                             <div className="relative">
                               <input
+                                id="auth-phone"
+                                name="phone"
                                 type="tel"
+                                autoComplete="tel"
                                 required
                                 placeholder="e.g. 9840418228"
                                 value={authForm.phone}
@@ -984,10 +990,13 @@ export const Modals = () => {
                       )}
 
                       <div>
-                        <label className="block font-bold text-slate-700 mb-1">Email Address *</label>
+                        <label className="block font-bold text-slate-700 mb-1" htmlFor="auth-email">Email Address *</label>
                         <div className="relative">
                           <input
+                            id="auth-email"
+                            name="username"
                             type="email"
+                            autoComplete="username"
                             required
                             placeholder="e.g. student@example.com"
                             value={authForm.email}
@@ -999,10 +1008,13 @@ export const Modals = () => {
                       </div>
 
                       <div>
-                        <label className="block font-bold text-slate-700 mb-1">Password *</label>
+                        <label className="block font-bold text-slate-700 mb-1" htmlFor="auth-password">Password *</label>
                         <div className="relative">
                           <input
+                            id="auth-password"
+                            name="password"
                             type={showPassword ? 'text' : 'password'}
+                            autoComplete={authMode === 'login' ? 'current-password' : 'new-password'}
                             required
                             placeholder="••••••••••••"
                             value={authForm.password}
