@@ -20,6 +20,7 @@ export async function POST(request: Request) {
       totalAmount,
       items,
       trackingNumber,
+      customMessage,
     } = body;
 
     let rawPhone = (customerPhone || '').replace(/\D/g, '');
@@ -51,7 +52,7 @@ export async function POST(request: Request) {
     } else if (statusClean.includes('IN_TRANSIT') || statusClean.includes('IN TRANSIT')) {
       stepTitle = '⚡ PARCEL IN TRANSIT (ST COURIER)';
       stepDescription = `Your order is currently moving between ST Courier sorting hubs towards your city. ST Courier Docket: *${trackingNo}*.`;
-    } else if (statusClean.includes('HANDED TO ST COURIER') || statusClean.includes('SHIPPED')) {
+    } else if (statusClean.includes('HANDED TO ST COURIER') || statusClean.includes('SHIPPED') || statusClean.includes('HANDED_TO_ST_COURIER')) {
       stepTitle = '🚚 HANDED TO ST COURIER EXPRESS';
       stepDescription = `Your order has been handed to ST Courier for fast delivery! Official ST Courier Docket AWB: *${trackingNo}*.`;
     } else if (statusClean.includes('PACKED')) {
@@ -68,7 +69,7 @@ export async function POST(request: Request) {
       stepDescription = 'Thank you for placing your order with Blessing Power Guide! We are processing it right now.';
     }
 
-    const fullFormattedText = `*BLESSING POWER GUIDE*\n*${stepTitle}*\n\nDear *${customerName || 'Student'}*,\n${stepDescription}\n\n📦 *Order ID:* ${orderId || ''}\n📖 *Books:* ${bookTitle}\n💰 *Total Amount:* ₹${totalAmount || body.totalAmount || 0}\n🚚 *Logistics Partner:* ST Courier Express\n📍 *Docket AWB:* ${trackingNo}\n\n👉 *Track Live on Website:* ${websiteTrackingUrl}`;
+    const fullFormattedText = customMessage || `*BLESSING POWER GUIDE*\n*${stepTitle}*\n\nDear *${customerName || 'Student'}*,\n${stepDescription}\n\n📦 *Order ID:* ${orderId || ''}\n📖 *Books:* ${bookTitle}\n💰 *Total Amount:* ₹${totalAmount || body.totalAmount || 0}\n🚚 *Logistics Partner:* ST Courier Express\n📍 *Docket AWB:* ${trackingNo}\n\n👉 *Track Live on Website:* ${websiteTrackingUrl}`;
 
     // Priority Strategy 1: In-Process Baileys Free Unlimited WhatsApp Engine (100% Reliable & Permanent)
     try {
