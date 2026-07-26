@@ -70,13 +70,16 @@ export async function POST(request: Request) {
 
     const fullFormattedText = `*BLESSING POWER GUIDE*\n*${stepTitle}*\n\nDear *${customerName || 'Student'}*,\n${stepDescription}\n\n📦 *Order ID:* ${orderId || ''}\n📖 *Books:* ${bookTitle}\n💰 *Total Amount:* ₹${totalAmount || body.totalAmount || 0}\n🚚 *Logistics Partner:* ST Courier Express\n📍 *Docket AWB:* ${trackingNo}\n\n👉 *Track Live on Website:* ${websiteTrackingUrl}`;
 
-    // Priority Strategy 1: Baileys Free Unlimited Self-Hosted Engine (Port 4000)
+    // Priority Strategy 1: Baileys Free Unlimited Self-Hosted Engine (Port 4000 or BAILEYS_SERVICE_URL)
+    const baileysBaseUrl = process.env.BAILEYS_SERVICE_URL || 'http://127.0.0.1:4000';
     try {
-      const baileysRes = await fetch('http://127.0.0.1:4000/send', {
+      const baileysRes = await fetch(`${baileysBaseUrl}/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           to: phoneWithCountry,
+          phone: phoneWithCountry,
+          number: phoneWithCountry,
           message: fullFormattedText,
         }),
       });
@@ -91,7 +94,7 @@ export async function POST(request: Request) {
         });
       }
     } catch (e: any) {
-      // Baileys local service not running or connecting
+      console.error('Baileys dispatch error:', e.message);
     }
 
     // Priority Strategy 2: UltraMsg / Whapi (QR API)

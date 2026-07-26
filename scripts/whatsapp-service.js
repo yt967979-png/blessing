@@ -127,19 +127,20 @@ let sock = null;
 let isConnected = false;
 
 async function connectToWhatsApp() {
-  await restoreSessionFromDb();
-  const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
+  try {
+    await restoreSessionFromDb();
+    const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
 
-  sock = makeWASocket({
-    auth: state,
-    printQRInTerminal: false,
-    browser: ['Blessing Power Guide', 'Chrome', '1.0.0'],
-  });
+    sock = makeWASocket({
+      auth: state,
+      printQRInTerminal: false,
+      browser: ['Blessing Power Guide', 'Chrome', '1.0.0'],
+    });
 
-  sock.ev.on('creds.update', async () => {
-    await saveCreds();
-    backupSessionToDb();
-  });
+    sock.ev.on('creds.update', async () => {
+      await saveCreds();
+      backupSessionToDb();
+    });
 
   sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect, qr } = update;
@@ -207,7 +208,15 @@ async function connectToWhatsApp() {
       console.log('\n✅ [BAILEYS FREE WHATSAPP] Connected & Authenticated Successfully!');
       console.log('🚀 Ready to send 100% FREE UNLIMITED WhatsApp notifications with $0 fees!\n');
     }
-  });
+    });
+  } catch (err) {
+    console.error('🔥 Error inside connectToWhatsApp:', err.message);
+    updateStateFile({
+      status: 'DISCONNECTED',
+      connected: false,
+      message: `Failed to initialize WhatsApp socket: ${err.message}`
+    });
+  }
 }
 
 // Start HTTP REST API Server for Sending Messages
@@ -344,5 +353,25 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`⚡ Baileys Free Unlimited WhatsApp Service running on port ${PORT}`);
-  connectToWhatsApp();
+  try {
+    connectToWhatsApp();
+  } catch (err) {
+    console.error('Error starting connectToWhatsApp:', err.message);
+  }
+});
+
+// Prevent process from crashing on unhandled promise rejections or exceptions
+process.on('uncaughtException', (err) => {
+  console.error('🔥 Critical Uncaught Exception in WhatsApp Service:', err);
+  try {
+    updateStateFile({
+      status: 'ERROR',
+      connected: false,
+      message: `Critical Error: ${err.message}`
+    });
+  } catch (_) {}
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('🔥 Critical Unhandled Promise Rejection in WhatsApp Service:', reason);
 });
