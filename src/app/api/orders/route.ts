@@ -9,6 +9,14 @@ export async function GET(request: Request) {
     const userIdParam = searchParams.get('userId');
 
     if (client) {
+      // Auto-heal legacy order rows where user_id was stored as name or empty
+      try {
+        await client.query(`
+          UPDATE orders 
+          SET user_id = (shipping_address->>'name')
+          WHERE user_id IS NULL OR user_id = 'Customer' OR user_id = '';
+        `);
+      } catch (_) {}
       let query = `
         SELECT o.*,
                COALESCE(
@@ -35,7 +43,12 @@ export async function GET(request: Request) {
 
       if (userIdParam) {
         params.push(userIdParam);
-        whereClauses.push(`(o.user_id = $${params.length} OR o.user_id = (SELECT email FROM users WHERE id = $${params.length} LIMIT 1))`);
+        whereClauses.push(`(
+          o.user_id ILIKE $${params.length} 
+          OR o.user_id = (SELECT email FROM users WHERE id = $${params.length} OR email = $${params.length} LIMIT 1)
+          OR o.user_id = (SELECT name FROM users WHERE email = $${params.length} OR id = $${params.length} LIMIT 1)
+          OR o.shipping_address::text ILIKE '%' || $${params.length} || '%'
+        )`);
       }
 
       if (whereClauses.length > 0) {
@@ -289,12 +302,12 @@ export async function PATCH(request: NextRequest) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+              step: newStatus,
               customerPhone: phone,
               customerName: customerName,
               orderId: orderRow.order_number || orderId,
-              bookTitle: 'Educational Guide Book',
-              courierName: 'ST Courier Express',
-              awbNumber: awbNumber || orderRow.awb_number || 'STC-TN-EXPRESS',
+              totalAmount: orderRow.total_amount || 0,
+              trackingNumber: awbNumber || orderRow.awb_number || 'STC-TN-EXPRESS',
               trackingUrl: trackingUrl || orderRow.tracking_url,
             }),
           }).catch(() => {});

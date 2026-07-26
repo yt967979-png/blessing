@@ -69,8 +69,9 @@ export default function ProfilePage() {
   // Fetch live orders for logged-in user from backend database with 4-second auto-sync
   useEffect(() => {
     const fetchUserLiveOrders = () => {
-      if (user && (user.id || user.email)) {
-        fetch(`/api/orders?userId=${encodeURIComponent(user.id || user.email)}`)
+      if (user) {
+        const queryTerm = user.email || user.phone || user.name || user.id;
+        fetch(`/api/orders?userId=${encodeURIComponent(queryTerm)}`)
           .then((res) => res.json())
           .then((data) => {
             if (Array.isArray(data)) {
@@ -431,62 +432,128 @@ export default function ProfilePage() {
                 </div>
 
                 {liveOrders.length === 0 ? (
-                  <div className="py-12 text-center text-slate-400">
-                    <Package className="w-12 h-12 mx-auto mb-2 opacity-30 text-amber-500" />
-                    <p className="text-xs font-bold text-slate-600">No active orders placed yet</p>
+                  <div className="py-16 text-center text-slate-400 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
+                    <Package className="w-12 h-12 mx-auto mb-3 text-amber-500 opacity-60" />
+                    <h3 className="font-heading font-black text-slate-800 text-base">No active orders found yet</h3>
+                    <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1 leading-relaxed">
+                      When you purchase study guides or combo packs via Checkout, your live order status &amp; ST Courier dockets will appear here!
+                    </p>
+                    <Link
+                      href="/products"
+                      className="inline-flex items-center gap-2 mt-4 bg-[#001B3A] hover:bg-blue-600 text-white font-extrabold text-xs px-5 py-2.5 rounded-xl shadow-xs transition-all"
+                    >
+                      <ShoppingBag className="w-4 h-4 text-amber-400" />
+                      <span>BROWSE STUDY GUIDES</span>
+                    </Link>
                   </div>
                 ) : (
-                  <div className="space-y-4">
-                    {liveOrders.map((o) => (
-                      <div
-                        key={o.orderId}
-                        className="border border-slate-200 rounded-2xl p-5 hover:border-slate-300 transition-all space-y-4"
-                      >
-                        <div className="flex flex-wrap justify-between items-center gap-2 pb-3 border-b border-slate-100 text-xs font-bold text-slate-700">
-                          <div>
-                            <span>Order ID: </span>
-                            <span className="text-amber-600 font-extrabold">{o.orderId}</span>
-                          </div>
-                          <div className="text-emerald-600 flex items-center gap-1 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
-                            <Truck className="w-3.5 h-3.5" />
-                            <span>{o.courierStatus || 'Shipped via ST Courier Express'}</span>
-                          </div>
-                        </div>
+                  <div className="space-y-5">
+                    {liveOrders.map((o) => {
+                      const currentStatus = o.courierStatus || 'Order Placed';
+                      const allSteps = [
+                        'Order Placed',
+                        'Payment Confirmed',
+                        'Preparing Order',
+                        'Packed',
+                        'Handed to ST Courier',
+                        'In Transit',
+                        'Out for Delivery',
+                        'Delivered',
+                      ];
+                      const activeIdx = allSteps.findIndex((s) => s.toLowerCase() === currentStatus.toLowerCase());
+                      const stepIdx = activeIdx >= 0 ? activeIdx : 0;
 
-                        <div className="flex items-center gap-4">
-                          <div className="flex-1 text-xs">
-                            <h4 className="font-heading font-extrabold text-slate-900">
-                              {o.items?.[0]?.title || 'Guide Book Package'}
-                            </h4>
-                            <p className="text-slate-500 mt-0.5">
-                              Deliver to: {o.customerName} ({o.city})
-                            </p>
-                            <div className="font-black text-sm text-[#001B3A] mt-1">
-                              ₹{o.totalAmount} Total
+                      return (
+                        <div
+                          key={o.orderId}
+                          className="border border-slate-200 hover:border-blue-300 rounded-2xl p-5 bg-white shadow-xs space-y-4 transition-all"
+                        >
+                          <div className="flex flex-wrap justify-between items-center gap-2 pb-3 border-b border-slate-100">
+                            <div className="flex items-center gap-3">
+                              <span className="font-heading font-black text-[#001B3A] text-base">
+                                Order #{o.orderId}
+                              </span>
+                              <span className="bg-blue-50 text-blue-700 border border-blue-200 px-2.5 py-0.5 rounded-md font-extrabold text-[10px] uppercase">
+                                {o.paymentMethod || 'Razorpay UPI'} • {o.paymentStatus || 'Paid'}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-700 font-extrabold text-xs px-3 py-1 rounded-full">
+                              <Truck className="w-4 h-4 text-emerald-600 animate-pulse" />
+                              <span>{o.courierStatus || 'Handed to ST Courier'}</span>
                             </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <a
-                              href={`/api/orders/${o.orderId}/invoice`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs px-3 py-2 rounded-xl transition-colors flex items-center gap-1 border border-slate-300"
-                            >
-                              <Download className="w-3.5 h-3.5 text-blue-600" />
-                              <span>INVOICE</span>
-                            </a>
 
-                            <Link
-                              href={`/orders?orderId=${o.orderId}`}
-                              className="bg-[#001B3A] hover:bg-blue-600 text-white font-bold text-xs px-4 py-2 rounded-xl transition-colors flex items-center gap-1.5"
-                            >
-                              <Truck className="w-3.5 h-3.5 text-amber-400" />
-                              <span>TRACKING</span>
-                            </Link>
+                          {/* 8-Stage Progress Tracker */}
+                          <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 space-y-1.5">
+                            <div className="flex justify-between items-center text-[10px] font-extrabold uppercase text-slate-500">
+                              <span>Shipment Progress (Stage {stepIdx + 1} of 8):</span>
+                              <span className="text-emerald-700 font-black">{currentStatus}</span>
+                            </div>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-1.5 text-[9px] text-center">
+                              {allSteps.map((s, idx) => {
+                                const isDone = idx <= stepIdx;
+                                const isCur = idx === stepIdx;
+                                return (
+                                  <div
+                                    key={s}
+                                    className={`py-1 px-1 rounded border font-bold truncate transition-all ${
+                                      isCur
+                                        ? 'bg-[#001B3A] text-amber-300 border-[#001B3A] font-black shadow-xs'
+                                        : isDone
+                                        ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                                        : 'bg-white text-slate-400 border-slate-200'
+                                    }`}
+                                  >
+                                    {isDone ? '✓ ' : ''}{s}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-1">
+                            <div className="text-xs space-y-0.5">
+                              <h4 className="font-heading font-black text-slate-900 text-sm">
+                                {o.items?.[0]?.title || 'Blessing Power Guide Book Package'}
+                              </h4>
+                              <p className="text-slate-500 text-[11px]">
+                                Deliver to: <strong className="text-slate-800">{o.customerName}</strong> ({o.address}{o.city ? `, ${o.city}` : ''})
+                              </p>
+                              {o.trackingNumber && (
+                                <span className="text-[11px] font-mono text-amber-700 font-bold block pt-0.5">
+                                  ST Courier Docket AWB: {o.trackingNumber}
+                                </span>
+                              )}
+                              <div className="font-black text-sm text-[#001B3A] pt-1">
+                                ₹{o.totalAmount} Total • {o.createdAt}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 w-full sm:w-auto">
+                              <a
+                                href={`/api/orders/${o.orderId}/invoice`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-extrabold text-xs px-3.5 py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5 border border-slate-300 flex-1 sm:flex-none"
+                                title="Download Official Tax Invoice PDF"
+                              >
+                                <Download className="w-3.5 h-3.5 text-blue-600" />
+                                <span>INVOICE</span>
+                              </a>
+
+                              <Link
+                                href={`/orders?orderId=${o.orderId}`}
+                                className="bg-[#001B3A] hover:bg-blue-600 text-white font-black text-xs px-4 py-2.5 rounded-xl shadow-xs transition-colors flex items-center justify-center gap-1.5 flex-1 sm:flex-none"
+                              >
+                                <Truck className="w-3.5 h-3.5 text-amber-400" />
+                                <span>TRACK LIVE</span>
+                              </Link>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>

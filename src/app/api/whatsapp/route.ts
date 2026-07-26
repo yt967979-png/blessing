@@ -22,8 +22,11 @@ export async function POST(request: Request) {
       trackingNumber,
     } = body;
 
-    const cleanPhone = (customerPhone || '9840418228').replace(/\D/g, '');
-    const phoneWithCountry = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+    let rawPhone = (customerPhone || '').replace(/\D/g, '');
+    if (rawPhone.length < 10) {
+      rawPhone = '9840418228';
+    }
+    const phoneWithCountry = rawPhone.length === 10 ? `91${rawPhone}` : rawPhone;
     const trackingNo = trackingNumber || 'Pending AWB Assignment';
     const bookTitle = items?.[0]?.title || 'Blessing Power Guide Study Book';
     const websiteTrackingUrl = `https://blessing-production.up.railway.app/orders?orderId=${encodeURIComponent(orderId || '')}`;
