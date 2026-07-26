@@ -2,16 +2,13 @@ import { NextResponse } from 'next/server';
 import { getDbClient } from '@/lib/db';
 
 /**
- * ST Courier uses these AWB/docket patterns in practice:
- *  - STC + 9 digits         e.g. STC241568974
- *  - STCOE + 7-10 digits    e.g. STCOE1234567
- *  - numeric-only 10–13 digits
- *  - 2-3 uppercase letters + 6-12 digits (regional codes)
- *
- * Anything shorter than 8 chars or containing only letters is almost
- * certainly not a real docket number.
+ * Strict ST Courier AWB docket rules:
+ *  - Official STC format: STC followed by exactly 9 digits (e.g. STC241568974)
+ *  - Official STCOE format: STCOE followed by 7 to 10 digits
+ *  - Regional letter code: 2-3 uppercase letters followed by 8 to 12 digits (e.g. TN12345678)
+ *  - Pure numeric: 10 to 13 digits
  */
-const VALID_DOCKET_PATTERN = /^(STC[A-Z0-9]{6,12}|[A-Z]{2,4}[0-9]{6,12}|[0-9]{10,13})$/;
+const VALID_DOCKET_PATTERN = /^(STC[0-9]{9}|STCOE[0-9]{7,10}|[A-Z]{2,3}[0-9]{8,12}|[0-9]{10,13})$/;
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
