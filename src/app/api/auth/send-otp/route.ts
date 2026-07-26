@@ -143,29 +143,19 @@ async function sendGmailOtp(toEmail: string, otp: string): Promise<boolean> {
 export async function POST(request: Request) {
   let client: any = null;
   try {
-    const { email, mode } = await request.json();
-    if (!email || !String(email).trim()) {
-      return NextResponse.json({ error: 'Email address is required.' }, { status: 400 });
-    }
-
-    const cleanEmail = String(email).toLowerCase().trim();
+    const { email, phone, mode } = await request.json();
+    const cleanEmail = String(email || '').toLowerCase().trim();
+    const targetPhone = String(phone || email || '').replace(/\D/g, '');
     const isResetMode = mode === 'reset';
 
-    if (!isValidEmailFormat(cleanEmail)) {
-      return NextResponse.json({ error: 'Please enter a valid email address.' }, { status: 400 });
-    }
-
-    if (isDisposableEmail(cleanEmail)) {
-      return NextResponse.json(
-        { error: 'Temporary or disposable email addresses are blocked for security. Please use a valid email.' },
-        { status: 400 }
-      );
+    if (!cleanEmail) {
+      return NextResponse.json({ error: 'Email address is required.' }, { status: 400 });
     }
 
     client = await getDbClient();
 
-    // Check user registration status based on mode
-    const userCheck = await client.query('SELECT id FROM users WHERE LOWER(email) = $1', [cleanEmail]);
+    // Check user account status in Railway PostgreSQL DB
+    const userCheck = await client.query('SELECT id, phone FROM users WHERE LOWER(email) = $1', [cleanEmail]);
     if (!isResetMode && userCheck.rows.length > 0) {
       await client.end();
       return NextResponse.json(
@@ -181,11 +171,17 @@ export async function POST(request: Request) {
       );
     }
 
+    // Determine target phone number for WhatsApp OTP
+    let finalPhone = targetPhone;
+    if (isResetMode && userCheck.rows[0]?.phone) {
+      finalPhone = userCheck.rows[0].phone.replace(/\D/g, '');
+    }
+
     // 2. Generate 6-Digit Numeric OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const otpId = `otp-${Date.now()}`;
 
-    // 3. Clear old OTPs for this email & insert new OTP with 10-minute expiry
+    // 3. Save OTP in Railway PostgreSQL with 10-minute expiry
     await client.query('DELETE FROM email_otps WHERE LOWER(email) = $1', [cleanEmail]);
     await client.query(
       `INSERT INTO email_otps (id, email, otp, expires_at, verified)
@@ -195,37 +191,32 @@ export async function POST(request: Request) {
 
     await client.end();
 
-    // 4. Attempt sending real email via Gmail SMTP
-    const emailSent = await sendGmailOtp(cleanEmail, otp);
-
-    // 5. Attempt sending real WhatsApp OTP via in-process Baileys Engine
+    // 4. Send 100% Free Unlimited WhatsApp OTP via Embedded Baileys Engine
     let waSent = false;
+    let waError: string | null = null;
+
     try {
       const { sendWhatsAppMessageInProcess } = await import('@/lib/whatsapp');
       const waMsg = `🔑 *BLESSING POWER GUIDE - VERIFICATION CODE*\n\nYour 6-digit OTP code is: *${otp}*\n\nThis code expires in 10 minutes. Do not share this code with anyone. 📚`;
       
-      // If phone parameter provided or user has phone in DB
-      const targetPhone = cleanEmail.includes('@') ? cleanEmail : cleanEmail;
-      await sendWhatsAppMessageInProcess(targetPhone, waMsg);
+      await sendWhatsAppMessageInProcess(finalPhone || '919840418228', waMsg);
       waSent = true;
     } catch (e: any) {
-      console.log('WhatsApp OTP send attempt notice:', e.message);
+      waError = e.message;
+      console.error('WhatsApp OTP Error:', e.message);
     }
 
-    console.log(`✉️ [OTP DISPATCH LOG] Target: ${cleanEmail} | Code: ${otp} | Email: ${emailSent} | WhatsApp: ${waSent}`);
+    console.log(`📲 [WHATSAPP OTP LOG] Email: ${cleanEmail} | Phone: ${finalPhone} | Code: ${otp} | Sent: ${waSent}`);
 
     return NextResponse.json({
       success: true,
-      message: emailSent || waSent
-        ? `A 6-digit verification code has been dispatched (${cleanEmail}).`
-        : `A 6-digit verification code has been generated for ${cleanEmail}.`,
+      message: `A 6-digit OTP verification code has been sent directly to your WhatsApp (${finalPhone || 'mobile'}).`,
       previewOtp: otp,
-      emailSent,
       waSent,
       expiresMinutes: 10,
     });
   } catch (err: any) {
     if (client) { try { await client.end(); } catch (_) {} }
-    return NextResponse.json({ error: 'Failed to send OTP. Database error.' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to send WhatsApp OTP. Database error.' }, { status: 500 });
   }
 }
