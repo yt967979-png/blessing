@@ -20,6 +20,7 @@ import {
   Gift,
   AlertCircle,
   ShoppingBag,
+  Download,
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { Header } from '@/components/layout/Header';
@@ -458,13 +459,25 @@ export default function ProfilePage() {
                               ₹{o.totalAmount} Total
                             </div>
                           </div>
-                          <Link
-                            href={`/orders?orderId=${o.orderId}`}
-                            className="bg-[#001B3A] hover:bg-blue-600 text-white font-bold text-xs px-4 py-2 rounded-xl transition-colors flex items-center gap-1.5"
-                          >
-                            <Truck className="w-3.5 h-3.5 text-amber-400" />
-                            <span>VIEW LIVE TRACKING</span>
-                          </Link>
+                          <div className="flex items-center gap-2">
+                            <a
+                              href={`/api/orders/${o.orderId}/invoice`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs px-3 py-2 rounded-xl transition-colors flex items-center gap-1 border border-slate-300"
+                            >
+                              <Download className="w-3.5 h-3.5 text-blue-600" />
+                              <span>INVOICE</span>
+                            </a>
+
+                            <Link
+                              href={`/orders?orderId=${o.orderId}`}
+                              className="bg-[#001B3A] hover:bg-blue-600 text-white font-bold text-xs px-4 py-2 rounded-xl transition-colors flex items-center gap-1.5"
+                            >
+                              <Truck className="w-3.5 h-3.5 text-amber-400" />
+                              <span>TRACKING</span>
+                            </Link>
+                          </div>
                         </div>
                       </div>
                     ))}

@@ -280,13 +280,25 @@ export default function OrdersPage() {
                   </div>
                 </div>
 
-                <button
-                  onClick={() => setShowTrackingModal(true)}
-                  className="w-full sm:w-auto bg-amber-400 hover:bg-amber-500 text-[#001B3A] font-extrabold text-xs px-5 py-3 rounded-xl transition-all shadow-md flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer"
-                >
-                  <Truck className="w-4 h-4 text-[#001B3A]" />
-                  <span>VIEW LIVE TRACKING INSIDE WEBSITE</span>
-                </button>
+                <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
+                  <a
+                    href={`/api/orders/${searchedOrderData.orderId}/invoice`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full sm:w-auto bg-white/10 hover:bg-white/20 border border-white/30 text-white font-extrabold text-xs px-4 py-3 rounded-xl transition-all shadow-sm flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer backdrop-blur-xs"
+                  >
+                    <Download className="w-4 h-4 text-amber-400" />
+                    <span>TAX INVOICE</span>
+                  </a>
+
+                  <button
+                    onClick={() => setShowTrackingModal(true)}
+                    className="w-full sm:w-auto bg-amber-400 hover:bg-amber-500 text-[#001B3A] font-extrabold text-xs px-5 py-3 rounded-xl transition-all shadow-md flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer"
+                  >
+                    <Truck className="w-4 h-4 text-[#001B3A]" />
+                    <span>VIEW LIVE TRACKING</span>
+                  </button>
+                </div>
               </div>
             </div>
 

@@ -20,6 +20,7 @@ import {
   Truck,
   Send,
   ShieldCheck,
+  Download,
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 
@@ -181,6 +182,40 @@ export default function AdminPage() {
     showToast(`🗑️ Book deleted from Railway PostgreSQL!`);
   };
 
+  const handleExportOrdersCsv = () => {
+    if (orders.length === 0) {
+      showToast('⚠️ No orders available to export.');
+      return;
+    }
+
+    const headers = ['Order ID', 'Date', 'Customer Name', 'Phone', 'Address', 'City', 'Pincode', 'Total Amount', 'Payment Method', 'Payment Status', 'Courier Status', 'Docket AWB'];
+    const rows = orders.map((o) => [
+      `"${o.orderId || ''}"`,
+      `"${o.createdAt || ''}"`,
+      `"${(o.customerName || '').replace(/"/g, '""')}"`,
+      `"${o.customerPhone || ''}"`,
+      `"${(o.address || '').replace(/"/g, '""')}"`,
+      `"${o.city || ''}"`,
+      `"${o.pincode || ''}"`,
+      `"${o.totalAmount || 0}"`,
+      `"${o.paymentMethod || ''}"`,
+      `"${o.paymentStatus || ''}"`,
+      `"${o.courierStatus || ''}"`,
+      `"${o.trackingNumber || ''}"`,
+    ]);
+
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `blessing_orders_report_${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    showToast('📥 Orders CSV exported successfully for accounting & shipping!');
+  };
+
   // Analytics Metrics
   const totalRevenue = orders.reduce((sum, o) => sum + Number(o.totalAmount || 0), 0);
 
@@ -271,7 +306,7 @@ export default function AdminPage() {
           </div>
 
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-purple-400">
+            <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-users text-purple-400">
               <Users className="w-5 h-5" />
             </div>
             <div>
@@ -292,15 +327,27 @@ export default function AdminPage() {
             </p>
           </div>
 
-          {activeTab === 'catalog' && (
-            <button
-              onClick={() => setShowAddForm(!showAddForm)}
-              className="bg-gradient-to-r from-amber-400 to-amber-500 text-[#001B3A] font-extrabold text-xs px-5 py-3 rounded-xl shadow-md hover:shadow-lg transition-all uppercase tracking-wider flex items-center gap-2"
-            >
-              <Plus className="w-4 h-4" />
-              <span>{showAddForm ? 'CLOSE FORM' : '+ ADD NEW GUIDE BOOK'}</span>
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            {activeTab === 'orders' && (
+              <button
+                onClick={handleExportOrdersCsv}
+                className="bg-slate-800 hover:bg-slate-700 text-amber-400 border border-amber-400/30 font-extrabold text-xs px-4 py-3 rounded-xl shadow-md transition-all uppercase tracking-wider flex items-center gap-2 cursor-pointer"
+              >
+                <Download className="w-4 h-4 text-amber-400" />
+                <span>EXPORT CSV</span>
+              </button>
+            )}
+
+            {activeTab === 'catalog' && (
+              <button
+                onClick={() => setShowAddForm(!showAddForm)}
+                className="bg-gradient-to-r from-amber-400 to-amber-500 text-[#001B3A] font-extrabold text-xs px-5 py-3 rounded-xl shadow-md hover:shadow-lg transition-all uppercase tracking-wider flex items-center gap-2 cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>{showAddForm ? 'CLOSE FORM' : '+ ADD NEW GUIDE BOOK'}</span>
+              </button>
+            )}
+          </div>
         </div>
 
         {activeTab === 'catalog' ? (

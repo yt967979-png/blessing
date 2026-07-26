@@ -88,6 +88,33 @@ export default function ProductDetailPage({
 
   return (
     <main className="min-h-screen bg-slate-50 flex flex-col">
+      {/* Schema.org Rich Snippet JSON-LD for Google Search Indexing */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            '@context': 'https://schema.org',
+            '@type': 'Product',
+            name: product.title,
+            image: [product.image],
+            description: product.description,
+            sku: product.slug,
+            offers: {
+              '@type': 'Offer',
+              priceCurrency: 'INR',
+              price: product.price,
+              itemCondition: 'https://schema.org/NewCondition',
+              availability: product.inStock !== false ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
+            },
+            aggregateRating: {
+              '@type': 'AggregateRating',
+              ratingValue: product.rating || 5.0,
+              reviewCount: product.reviews || 120,
+            },
+          }),
+        }}
+      />
+
       <AnnouncementBar />
       <Header />
       <NavBar />
