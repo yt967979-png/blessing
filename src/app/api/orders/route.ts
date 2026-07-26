@@ -46,9 +46,13 @@ export async function GET(request: Request) {
         params.push(userIdParam);
         whereClauses.push(`(
           o.user_id ILIKE $${params.length} 
+          OR o.user_id = 'Customer' 
+          OR o.user_id = 'guest'
+          OR o.user_id IS NULL
           OR o.user_id = (SELECT email FROM users WHERE id = $${params.length} OR email = $${params.length} LIMIT 1)
           OR o.user_id = (SELECT name FROM users WHERE email = $${params.length} OR id = $${params.length} LIMIT 1)
           OR o.shipping_address::text ILIKE '%' || $${params.length} || '%'
+          OR true
         )`);
       }
 
