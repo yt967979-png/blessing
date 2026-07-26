@@ -25,14 +25,30 @@ export const Footer = () => {
             Quality Guides for Better Preparation and Brighter Results for 6th to 12th Standard Students.
           </p>
           <div className="flex gap-2">
-            {['📘 Facebook', '📸 Instagram', '▶️ YouTube'].map((social, i) => (
-              <span
-                key={i}
-                className="bg-white/5 border border-white/10 px-2.5 py-1 rounded text-[10px] text-slate-300 font-medium cursor-pointer hover:bg-white/10 transition-colors"
-              >
-                {social}
-              </span>
-            ))}
+            <a
+              href="https://facebook.com"
+              target="_blank"
+              rel="noreferrer"
+              className="bg-white/5 border border-white/10 px-2.5 py-1 rounded text-[10px] text-slate-300 font-medium cursor-pointer hover:bg-blue-600 hover:text-white transition-colors"
+            >
+              📘 Facebook
+            </a>
+            <a
+              href="https://instagram.com"
+              target="_blank"
+              rel="noreferrer"
+              className="bg-white/5 border border-white/10 px-2.5 py-1 rounded text-[10px] text-slate-300 font-medium cursor-pointer hover:bg-pink-600 hover:text-white transition-colors"
+            >
+              📸 Instagram
+            </a>
+            <a
+              href="https://youtube.com"
+              target="_blank"
+              rel="noreferrer"
+              className="bg-white/5 border border-white/10 px-2.5 py-1 rounded text-[10px] text-slate-300 font-medium cursor-pointer hover:bg-red-600 hover:text-white transition-colors"
+            >
+              ▶️ YouTube
+            </a>
           </div>
         </div>
 
@@ -87,7 +103,7 @@ export const Footer = () => {
         {/* Col 4 */}
         <div>
           <h4 className="font-heading font-bold text-sm text-white uppercase tracking-wider mb-4">
-            CONTACT US
+            CONTACT & LOCATION
           </h4>
           <div className="space-y-2 font-medium text-slate-300">
             <p className="font-bold text-white">
@@ -97,6 +113,14 @@ export const Footer = () => {
             <p className="text-slate-400 leading-relaxed">
               No.12, Ganesh Apartment, Trust Square Street, Medavakkam, Agaramthen, Chennai — 600012
             </p>
+            <a
+              href="https://maps.google.com/?q=Medavakkam+Agaramthen+Chennai+600012"
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-[11px] text-blue-400 hover:text-amber-400 font-bold underline transition-colors pt-1"
+            >
+              📍 Open Google Maps Location
+            </a>
             <p className="text-amber-400 font-bold pt-1">📞 +91 98404 18228</p>
             <p className="text-slate-400">✉️ blessingpowerguide@gmail.com</p>
           </div>
