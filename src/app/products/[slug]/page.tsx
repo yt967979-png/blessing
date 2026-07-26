@@ -19,6 +19,7 @@ import { Footer } from '@/components/layout/Footer';
 import { ProductCard } from '@/components/ui/ProductCard';
 import { CartDrawer } from '@/components/cart/CartDrawer';
 import { Modals } from '@/components/modals/Modals';
+import { getSTCourierDeliveryEstimate } from '@/lib/deliveryEstimator';
 
 export default function ProductDetailPage({
   params,
@@ -71,6 +72,11 @@ export default function ProductDetailPage({
   }, [product.id]);
   const [pincode, setPincode] = useState('600012');
   const [pincodeMsg, setPincodeMsg] = useState('✓ Delivery available in 2-3 business days (Express Post)');
+  const [showReviewForm, setShowReviewForm] = useState(false);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewText, setReviewText] = useState('');
+  const [reviewName, setReviewName] = useState('');
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
 
   if (!product) return null;
 
@@ -80,7 +86,9 @@ export default function ProductDetailPage({
   const checkPincode = (e: React.FormEvent) => {
     e.preventDefault();
     if (pincode.length === 6) {
-      setPincodeMsg(`✓ Delivery available to ${pincode} in 2-3 days via Speed Post`);
+      const isTN = ['6', '60', '62', '63', '64'].some(p => pincode.startsWith(p));
+      const estimate = getSTCourierDeliveryEstimate(isTN ? 'Tamil Nadu' : 'Other State');
+      setPincodeMsg(`✓ Delivery to ${pincode} by ${estimate.formattedDate}, ${estimate.formattedTime} via ST Courier Express (${isTN ? '2 days' : '3-4 days'})`);
     } else {
       setPincodeMsg('⚠️ Please enter a valid 6-digit Indian Pincode');
     }
@@ -228,25 +236,47 @@ export default function ProductDetailPage({
               </div>
             </div>
 
-            {/* Pincode Estimator */}
+            {/* Pincode Delivery Estimator — Flipkart Style */}
             <div className="border-t border-slate-200 pt-6 mb-6">
-              <h4 className="font-heading font-bold text-xs text-[#001B3A] uppercase tracking-wider mb-2 flex items-center gap-2">
+              <h4 className="font-heading font-bold text-xs text-[#001B3A] uppercase tracking-wider mb-3 flex items-center gap-2">
                 <Truck className="w-4 h-4 text-blue-600" />
-                <span>CHECK DELIVERY ESTIMATE</span>
+                <span>DELIVERY OPTIONS</span>
               </h4>
               <form onSubmit={checkPincode} className="flex gap-2 max-w-sm">
-                <input
-                  type="text"
-                  maxLength={6}
-                  value={pincode}
-                  onChange={(e) => setPincode(e.target.value)}
-                  className="px-3 py-2 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-600"
-                />
-                <button type="submit" className="bg-[#001B3A] text-white font-bold text-xs px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors">
-                  CHECK
-                </button>
+                <div className="flex-1 relative">
+                  <input
+                    type="text"
+                    maxLength={6}
+                    placeholder="Enter delivery pincode"
+                    value={pincode}
+                    onChange={(e) => setPincode(e.target.value.replace(/\D/g, ''))}
+                    className="w-full px-3.5 py-2.5 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-600 font-bold pr-16"
+                  />
+                  <button type="submit" className="absolute right-1 top-1 bottom-1 bg-blue-600 text-white font-extrabold text-[10px] px-3 rounded-md hover:bg-blue-700 transition-colors uppercase cursor-pointer">
+                    CHECK
+                  </button>
+                </div>
               </form>
-              <p className="text-[11px] font-semibold text-emerald-700 mt-2">{pincodeMsg}</p>
+
+              {pincodeMsg && (
+                <div className="mt-3 space-y-2">
+                  <p className={`text-xs font-bold flex items-center gap-1.5 ${pincodeMsg.startsWith('✓') ? 'text-emerald-700' : 'text-red-600'}`}>
+                    {pincodeMsg.startsWith('✓') && <CheckCircle className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />}
+                    {pincodeMsg}
+                  </p>
+                  {pincodeMsg.startsWith('✓') && (
+                    <div className="flex flex-wrap gap-3 text-[11px]">
+                      <span className="text-emerald-700 font-bold flex items-center gap-1">
+                        <Truck className="w-3 h-3" /> FREE Delivery
+                      </span>
+                      <span className="text-slate-500 font-semibold">•</span>
+                      <span className="text-blue-700 font-bold">₹0 Shipping Charges</span>
+                      <span className="text-slate-500 font-semibold">•</span>
+                      <span className="text-amber-700 font-bold">Cash on Delivery Available</span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Actions */}
@@ -276,19 +306,94 @@ export default function ProductDetailPage({
                   ))}
                 </div>
                 <span className="font-extrabold text-slate-900 text-sm">{product.rating} / 5.0</span>
-                <span className="text-slate-400 text-xs">• Based on 140+ student ratings</span>
+                <span className="text-slate-400 text-xs">• Based on {dbReviews.length > 0 ? dbReviews.length : '140'}+ student ratings</span>
               </div>
             </div>
-            <a
-              href="https://wa.me/919840418228?text=Hello%20Blessing%20Power%20Guide!%20I%20want%20to%20submit%20my%20book%20review"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="bg-amber-400 hover:bg-amber-500 text-[#001B3A] font-extrabold text-xs px-5 py-3 rounded-xl flex items-center justify-center gap-2 transition-all shadow-xs"
+            <button
+              onClick={() => setShowReviewForm(!showReviewForm)}
+              className="bg-amber-400 hover:bg-amber-500 text-[#001B3A] font-extrabold text-xs px-5 py-3 rounded-xl flex items-center justify-center gap-2 transition-all shadow-xs cursor-pointer"
             >
               <Star className="w-4 h-4 fill-[#001B3A]" />
-              <span>WRITE A STUDENT REVIEW</span>
-            </a>
+              <span>{showReviewForm ? 'CLOSE FORM' : 'WRITE A STUDENT REVIEW'}</span>
+            </button>
           </div>
+
+          {/* Inline Review Form */}
+          {showReviewForm && (
+            <div className="bg-blue-50/50 border border-blue-200 rounded-xl p-5 mb-6 space-y-4">
+              <h4 className="font-heading font-black text-sm text-[#001B3A]">📝 RATE & REVIEW THIS BOOK</h4>
+
+              {/* Star Rating Picker */}
+              <div>
+                <span className="text-xs font-bold text-slate-700 block mb-1.5">Your Rating *</span>
+                <div className="flex gap-1">
+                  {[1, 2, 3, 4, 5].map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => setReviewRating(s)}
+                      className="p-1 cursor-pointer transition-transform hover:scale-110"
+                    >
+                      <Star className={`w-7 h-7 ${s <= reviewRating ? 'fill-amber-400 text-amber-400' : 'text-slate-300'}`} />
+                    </button>
+                  ))}
+                  <span className="text-xs font-bold text-slate-500 ml-2 self-center">{reviewRating}/5</span>
+                </div>
+              </div>
+
+              {/* Name Input */}
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Your Name *</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Karthik M (10th Standard)"
+                  value={reviewName}
+                  onChange={(e) => setReviewName(e.target.value)}
+                  className="w-full px-3.5 py-2.5 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-600 font-semibold bg-white"
+                />
+              </div>
+
+              {/* Comment Textarea */}
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Your Review *</label>
+                <textarea
+                  placeholder="Share how this book helped you prepare for your exams..."
+                  value={reviewText}
+                  onChange={(e) => setReviewText(e.target.value)}
+                  rows={3}
+                  className="w-full px-3.5 py-2.5 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-600 font-semibold bg-white resize-none"
+                />
+              </div>
+
+              <button
+                disabled={isSubmittingReview || !reviewName.trim() || !reviewText.trim()}
+                onClick={async () => {
+                  setIsSubmittingReview(true);
+                  try {
+                    await fetch('/api/reviews', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        bookId: product.id,
+                        userName: reviewName,
+                        rating: reviewRating,
+                        review: reviewText,
+                      }),
+                    });
+                    setDbReviews(prev => [{ studentName: reviewName, rating: reviewRating, comment: reviewText }, ...prev]);
+                    setReviewName('');
+                    setReviewText('');
+                    setReviewRating(5);
+                    setShowReviewForm(false);
+                  } catch (_) {}
+                  setIsSubmittingReview(false);
+                }}
+                className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-extrabold text-xs px-6 py-3 rounded-xl transition-all shadow-md cursor-pointer uppercase tracking-wider flex items-center gap-2"
+              >
+                {isSubmittingReview ? 'SUBMITTING...' : '⭐ SUBMIT YOUR REVIEW'}
+              </button>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {(dbReviews.length > 0
@@ -303,6 +408,16 @@ export default function ProductDetailPage({
                     studentName: 'Ananya S (12th Standard)',
                     rating: 5,
                     comment: 'Very clear step-by-step explanations and diagrams for Physics & Chemistry. Delivered in 24 hours via ST Courier!',
+                  },
+                  {
+                    studentName: 'Priya R (11th Standard)',
+                    rating: 5,
+                    comment: 'Best guide for Tamil Nadu State Board! The solved question papers are exactly like the real exam. Highly recommended!',
+                  },
+                  {
+                    studentName: 'Ravi K (10th Standard)',
+                    rating: 4,
+                    comment: 'Good book with chapter-wise important questions. Helped me score 90+ in all subjects. Fast delivery too!',
                   },
                 ]
             ).map((rev: any, idx: number) => (
