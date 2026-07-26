@@ -20,6 +20,8 @@ export async function GET(request: Request) {
   let liveStatus = 'Handed to ST Courier';
   let events: Array<{ time: string; activity: string; location: string }> = [];
 
+  let isVerifiedInNetwork = false;
+
   try {
     const res = await fetch(officialUrl, {
       headers: {
@@ -30,15 +32,28 @@ export async function GET(request: Request) {
 
     if (res.ok) {
       const html = await res.text();
+      const lower = html.toLowerCase();
+
+      // Check if ST Courier explicitly reports docket not found
+      if (lower.includes('invalid docket') || lower.includes('no record found') || lower.includes('docket not found')) {
+        return NextResponse.json({
+          isValid: false,
+          verified: false,
+          error: `ST Courier Docket '${cleanDocket}' not found in ST Courier Express network system. Please verify the docket number on your booking receipt.`,
+          docket: cleanDocket,
+        }, { status: 404 });
+      }
+
+      isVerifiedInNetwork = true;
 
       // Check for delivery indicators in ST Courier HTML
-      if (html.toLowerCase().includes('delivered') || html.toLowerCase().includes('successful')) {
+      if (lower.includes('delivered') || lower.includes('successful')) {
         liveStatus = 'Delivered';
-      } else if (html.toLowerCase().includes('out for delivery')) {
+      } else if (lower.includes('out for delivery')) {
         liveStatus = 'Out for Delivery';
-      } else if (html.toLowerCase().includes('in transit') || html.toLowerCase().includes('dispatched')) {
+      } else if (lower.includes('in transit') || lower.includes('dispatched')) {
         liveStatus = 'In Transit';
-      } else if (html.toLowerCase().includes('booked') || html.toLowerCase().includes('received')) {
+      } else if (lower.includes('booked') || lower.includes('received')) {
         liveStatus = 'Handed to ST Courier';
       }
     }
