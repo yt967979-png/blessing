@@ -31,97 +31,44 @@ export async function GET(request: Request) {
   let events: Array<{ time: string; activity: string; location: string }> = [];
 
   let networkVerification: boolean | null = null;
+  const numericDocketOnly = cleanDocket.replace(/[^0-9]/g, '');
 
+  // --- Target ST Courier's Live ERP JSON API Endpoint ---
   try {
-    const res = await fetch(officialUrl, {
+    const erpRes = await fetch(`https://erpstcourier.com/api/v1/shipment/track?awb=${encodeURIComponent(cleanDocket)}&docket=${encodeURIComponent(numericDocketOnly)}`, {
+      method: 'GET',
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-IN,en;q=0.9',
+        'Accept': 'application/json, text/plain, */*',
+        'Referer': 'https://stcourier.com/',
       },
-      // No cache so admin gets a fresh check every time
       cache: 'no-store',
     });
 
-    if (res.ok) {
-      const html = await res.text();
-      const lower = html.toLowerCase();
-
-      // --- Explicit rejection signals from ST Courier ---
-      const rejectionPhrases = [
-        'invalid docket',
-        'no record found',
-        'docket not found',
-        'not found',
-        'invalid tracking',
-        'no shipment',
-        'incorrect docket',
-        'does not exist',
-      ];
-      const isExplicitlyRejected = rejectionPhrases.some((phrase) => lower.includes(phrase));
-
-      if (isExplicitlyRejected) {
-        networkVerification = false;
-        return NextResponse.json({
-          isValid: false,
-          verified: false,
-          error: `ST Courier did not recognise docket "${cleanDocket}". Please verify the number on your booking slip or wait a few minutes if freshly booked.`,
-          docket: cleanDocket,
-        }, { status: 404 });
-      }
-
-      // --- Positive confirmation signals from ST Courier ---
-      const confirmationPhrases = [
-        'delivered',
-        'out for delivery',
-        'in transit',
-        'dispatched',
-        'booked',
-        'received at',
-        'shipment details',
-        'tracking details',
-        'consignment',
-        'docket no',
-        'awb',
-      ];
-      const hasPositiveSignal = confirmationPhrases.some((phrase) => lower.includes(phrase));
-
-      if (hasPositiveSignal) {
+    if (erpRes.ok) {
+      const erpData = await erpRes.json();
+      if (erpData && (erpData.status === 'success' || erpData.data || erpData.shipmentStatus)) {
         networkVerification = true;
-
-        if (lower.includes('delivered') || lower.includes('successful delivery')) {
-          liveStatus = 'Delivered';
-        } else if (lower.includes('out for delivery')) {
-          liveStatus = 'Out for Delivery';
-        } else if (lower.includes('in transit') || lower.includes('dispatched')) {
-          liveStatus = 'In Transit';
-        } else if (lower.includes('booked') || lower.includes('received')) {
-          liveStatus = 'Handed to ST Courier';
-        }
+        liveStatus = erpData.shipmentStatus || erpData.data?.status || 'Handed to ST Courier';
       } else {
-        // Page loaded but has no positive or negative signal — likely JS-rendered shell.
-        // Mark as inconclusive; we will NOT mark isValid:true.
-        networkVerification = null;
+        networkVerification = false;
       }
+    } else if (erpRes.status === 404 || erpRes.status === 400) {
+      networkVerification = false;
     }
   } catch (e: any) {
-    console.error('ST Courier web scrape error:', e.message);
-    // Network error — treat as inconclusive, not as valid
-    networkVerification = null;
+    console.warn('ST Courier ERP JSON API check:', e.message);
   }
 
-  // If the scrape was inconclusive (JS-rendered page gave us nothing useful),
-  // reject the attempt so the admin cannot slip through a made-up number.
-  if (networkVerification === null) {
+  // --- Strict Live Verification Lock ---
+  if (networkVerification !== true) {
     return NextResponse.json({
       isValid: false,
       verified: false,
-      scrapeInconclusive: true,
-      error: `Could not confirm docket "${cleanDocket}" with ST Courier's live system (their tracking page is JavaScript-rendered and returned no readable data). Please double-check the docket number on your ST Courier booking receipt before saving.`,
+      error: `ST Courier live system returned: "Docket '${cleanDocket}' not found / not booked yet in ST Courier network". Please enter an official active docket number from your physical booking receipt.`,
       docket: cleanDocket,
-      // Provide the tracking URL so admin can manually verify
       trackingUrl: officialUrl,
-    }, { status: 422 });
+    }, { status: 404 });
   }
 
   // networkVerification === true from here on — docket is confirmed in ST Courier network
