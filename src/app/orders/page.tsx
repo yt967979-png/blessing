@@ -20,7 +20,11 @@ import {
   ExternalLink,
   ShieldCheck,
   Building2,
-  AlertCircle
+  AlertCircle,
+  MapPin,
+  Check,
+  PackageCheck,
+  Sparkles
 } from 'lucide-react';
 import { downloadTaxInvoice } from '@/lib/invoiceGenerator';
 
@@ -41,12 +45,12 @@ function OrdersContent() {
 
   // Recommended 8 Status Flow
   const ALL_STATUS_STEPS = [
-    { key: 'Order Placed', label: 'Order Placed', desc: 'Order submitted by customer' },
-    { key: 'Payment Confirmed', label: 'Payment Confirmed', desc: 'Payment verified & approved' },
+    { key: 'Order Placed', label: 'Order Placed', desc: 'Order submitted & logged' },
+    { key: 'Payment Confirmed', label: 'Payment Confirmed', desc: 'Razorpay UPI payment verified' },
     { key: 'Preparing Order', label: 'Preparing Order', desc: 'Retrieving books from inventory' },
     { key: 'Packed', label: 'Packed', desc: 'Parcel packaged & sealed' },
     { key: 'Handed to ST Courier', label: 'Handed to ST Courier', desc: 'Dispatched to ST Courier Hub' },
-    { key: 'In Transit', label: 'In Transit', desc: 'En route via ST Courier express network' },
+    { key: 'In Transit', label: 'In Transit', desc: 'En route via ST Courier express route' },
     { key: 'Out for Delivery', label: 'Out for Delivery', desc: 'Courier executive out for delivery' },
     { key: 'Delivered', label: 'Delivered', desc: 'Successfully delivered to student' },
   ];
@@ -160,20 +164,22 @@ function OrdersContent() {
 
   const currentStepIdx = searchedOrderData ? getCurrentStepIndex(searchedOrderData.courierStatus) : 0;
   const isOfficialAwb = searchedOrderData?.trackingNumber && (searchedOrderData.trackingNumber.startsWith('STC') || !searchedOrderData.trackingNumber.startsWith('SHP-'));
+  const progressPercent = Math.min(100, Math.max(12, ((currentStepIdx + 1) / 8) * 100));
 
   return (
     <div className="space-y-8 pb-16">
       {/* Page Title & Order Search Bar */}
       <div className="bg-gradient-to-br from-[#001B3A] via-[#002B5B] to-[#0044AA] rounded-3xl p-6 sm:p-10 text-white shadow-xl">
         <div className="max-w-2xl">
-          <span className="text-[10px] font-extrabold text-amber-300 uppercase tracking-widest bg-amber-400/10 border border-amber-400/30 px-3 py-1 rounded-full">
-            REALTIME ST COURIER ORDER TRACKING
+          <span className="text-[10px] font-extrabold text-amber-300 uppercase tracking-widest bg-amber-400/10 border border-amber-400/30 px-3 py-1 rounded-full flex items-center gap-1.5 w-fit">
+            <Sparkles className="w-3 h-3 text-amber-400" />
+            <span>AMAZON &amp; FLIPKART-GRADE LIVE TRACKING</span>
           </span>
           <h1 className="font-heading font-black text-2xl sm:text-4xl text-white mt-3 mb-2">
-            Track Your Shipment
+            Track Your Package Live
           </h1>
           <p className="text-xs sm:text-sm text-slate-300 mb-6">
-            Enter your Order ID (e.g. BPG-1082) or ST Courier Docket Number to view live status updates &amp; download tax invoices.
+            View realtime shipment location, ST Courier transit log, estimated delivery, and tax invoice.
           </p>
 
           <form onSubmit={handleSearchOrder} className="flex gap-2">
@@ -204,8 +210,8 @@ function OrdersContent() {
         </div>
       ) : searchedOrderData ? (
         <div className="space-y-6">
-          {/* 1. Main Order Summary Card */}
-          <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-xs space-y-6">
+          {/* 1. Amazon / Flipkart-Style Horizontal Connected Stepper */}
+          <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-xs space-y-8">
             <div className="flex flex-wrap justify-between items-center gap-4 pb-6 border-b border-slate-100 text-xs">
               <div>
                 <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider block">ORDER ID</span>
@@ -213,20 +219,21 @@ function OrdersContent() {
               </div>
 
               <div>
-                <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider block">ORDER DATE</span>
+                <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider block">ORDER PLACED DATE</span>
                 <span className="font-bold text-slate-800 text-sm">{searchedOrderData.createdAt}</span>
+              </div>
+
+              <div>
+                <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider block">ESTIMATED DELIVERY</span>
+                <span className="font-bold text-emerald-600 text-sm flex items-center gap-1">
+                  <Clock className="w-4 h-4 text-emerald-500" />
+                  <span>2 - 3 Business Days (ST Courier)</span>
+                </span>
               </div>
 
               <div>
                 <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider block">TOTAL AMOUNT</span>
                 <span className="font-black text-slate-900 text-base">₹{searchedOrderData.totalAmount}</span>
-              </div>
-
-              <div>
-                <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider block">PAYMENT METHOD</span>
-                <span className="font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 inline-block mt-0.5">
-                  {searchedOrderData.paymentMethod || 'Razorpay UPI'} • {searchedOrderData.paymentStatus || 'Payment Confirmed'}
-                </span>
               </div>
 
               <button
@@ -238,15 +245,145 @@ function OrdersContent() {
               </button>
             </div>
 
-            {/* 2. Official E-Commerce Recommended 8-Status Checklist */}
-            <div>
-              <div className="flex items-center justify-between mb-4">
+            {/* Amazon / Flipkart Horizontal Connected Stepper Line */}
+            <div className="pt-2 pb-4">
+              <div className="relative">
+                {/* Background Line */}
+                <div className="absolute left-0 top-5 w-full h-1.5 bg-slate-100 rounded-full z-0" />
+
+                {/* Animated Gradient Active Progress Line */}
+                <div
+                  className="absolute left-0 top-5 h-1.5 bg-gradient-to-r from-emerald-500 via-amber-400 to-blue-600 rounded-full z-0 transition-all duration-700 shadow-sm"
+                  style={{ width: `${progressPercent}%` }}
+                />
+
+                {/* 4 Major E-Commerce Milestones */}
+                <div className="relative z-10 flex justify-between items-start text-center">
+                  {/* Milestone 1: Order Placed */}
+                  <div className="flex flex-col items-center">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shadow-md ring-4 ring-white ${currentStepIdx >= 0 ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-400'}`}>
+                      <Check className="w-5 h-5" />
+                    </div>
+                    <span className="font-heading font-black text-xs text-slate-900 mt-3">Order Placed</span>
+                    <span className="text-[10px] font-semibold text-slate-500 mt-0.5">{searchedOrderData.createdAt}</span>
+                  </div>
+
+                  {/* Milestone 2: Packed */}
+                  <div className="flex flex-col items-center">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shadow-md ring-4 ring-white ${currentStepIdx >= 3 ? 'bg-emerald-600 text-white' : currentStepIdx >= 1 ? 'bg-amber-400 text-[#001B3A] animate-pulse' : 'bg-slate-200 text-slate-400'}`}>
+                      <PackageCheck className="w-5 h-5" />
+                    </div>
+                    <span className="font-heading font-black text-xs text-slate-900 mt-3">Packed &amp; Sealed</span>
+                    <span className="text-[10px] font-semibold text-slate-500 mt-0.5">{searchedOrderData.packedAt || 'Fulfillment Center'}</span>
+                  </div>
+
+                  {/* Milestone 3: Handed to Courier / In Transit */}
+                  <div className="flex flex-col items-center">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shadow-md ring-4 ring-white ${currentStepIdx >= 5 ? 'bg-emerald-600 text-white' : currentStepIdx >= 4 ? 'bg-blue-600 text-white animate-bounce' : 'bg-slate-200 text-slate-400'}`}>
+                      <Truck className="w-5 h-5" />
+                    </div>
+                    <span className="font-heading font-black text-xs text-slate-900 mt-3">ST Courier Transit</span>
+                    <span className="text-[10px] font-semibold text-slate-500 mt-0.5">{searchedOrderData.shippedAt || 'Express Route'}</span>
+                  </div>
+
+                  {/* Milestone 4: Delivered */}
+                  <div className="flex flex-col items-center">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shadow-md ring-4 ring-white ${currentStepIdx >= 7 ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-400'}`}>
+                      <CheckCircle2 className="w-5 h-5" />
+                    </div>
+                    <span className="font-heading font-black text-xs text-slate-900 mt-3">Delivered</span>
+                    <span className="text-[10px] font-semibold text-slate-500 mt-0.5">{searchedOrderData.deliveredAt || 'Est: 2-3 Days'}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 2. Realtime Current Situation & Location Card */}
+            <div className="bg-gradient-to-br from-slate-900 via-[#001B3A] to-slate-900 rounded-3xl p-6 text-white space-y-4 shadow-xl border border-slate-800">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-amber-400/20 border border-amber-400/30 flex items-center justify-center text-amber-400">
+                    <MapPin className="w-5 h-5 animate-bounce" />
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-extrabold text-amber-400 uppercase tracking-widest block">CURRENT PACKAGE SITUATION</span>
+                    <h3 className="font-heading font-black text-lg text-white">{searchedOrderData.courierStatus || 'Order Placed'}</h3>
+                  </div>
+                </div>
+
+                <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-extrabold text-xs px-3.5 py-1.5 rounded-full flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                  <span>LIVE DATABASE TRACKING ACTIVE</span>
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+                <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+                  <span className="text-[10px] text-slate-400 font-bold uppercase block mb-1">COURIER LOGISTICS PARTNER</span>
+                  <div className="font-extrabold text-amber-300 text-sm">{searchedOrderData.courierName || 'ST Courier Express'}</div>
+                  <div className="text-[11px] text-slate-300 mt-0.5">Tamil Nadu Express Hub Network</div>
+                </div>
+
+                <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+                  <span className="text-[10px] text-slate-400 font-bold uppercase block mb-1">DOCKET / SHIPMENT ID</span>
+                  {isOfficialAwb ? (
+                    <>
+                      <div className="font-mono font-black text-amber-400 text-sm">{searchedOrderData.trackingNumber}</div>
+                      <div className="text-[11px] text-emerald-400 font-bold mt-0.5">Official ST Courier Docket</div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="font-mono font-bold text-amber-300 text-xs">{searchedOrderData.shipmentId || searchedOrderData.trackingNumber || 'SHP-20260726-000101'}</div>
+                      <div className="text-[11px] text-slate-400 mt-0.5">Pending Official Booking</div>
+                    </>
+                  )}
+                </div>
+
+                <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+                  <span className="text-[10px] text-slate-400 font-bold uppercase block mb-1">DESTINATION ADDRESS</span>
+                  <div className="font-extrabold text-white truncate">{searchedOrderData.customerName}</div>
+                  <div className="text-[11px] text-slate-300 truncate">{searchedOrderData.city || 'Chennai'}, Tamil Nadu</div>
+                </div>
+              </div>
+
+              {/* Direct Actions Banner */}
+              <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3">
+                <div className="text-xs text-slate-300 flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                  <span>Free WhatsApp notification sent to <strong>+91 {searchedOrderData.customerPhone}</strong></span>
+                </div>
+
+                {isOfficialAwb ? (
+                  <a
+                    href={searchedOrderData.trackingUrl || `https://stcourier.com/track/shipment?docket=${searchedOrderData.trackingNumber}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full sm:w-auto bg-amber-400 hover:bg-amber-500 text-[#001B3A] font-extrabold text-xs px-6 py-3 rounded-xl transition-all shadow-md flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer"
+                  >
+                    <ExternalLink className="w-4 h-4 text-[#001B3A]" />
+                    <span>TRACK ON ST COURIER SITE</span>
+                  </a>
+                ) : (
+                  <button
+                    onClick={() => setShowTrackingModal(true)}
+                    className="w-full sm:w-auto bg-white/10 hover:bg-white/20 border border-white/30 text-white font-extrabold text-xs px-6 py-3 rounded-xl transition-all flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer backdrop-blur-xs"
+                  >
+                    <Send className="w-4 h-4 text-amber-400" />
+                    <span>VIEW LIVE TIMELINE LOG</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* 3. Detailed 8-Stage Progress Checklist */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
                 <h3 className="font-heading font-black text-sm text-[#001B3A] flex items-center gap-2">
                   <ShieldCheck className="w-4 h-4 text-blue-600" />
-                  <span>Order Progress Checklist</span>
+                  <span>Detailed E-Commerce Milestone Audit</span>
                 </h3>
                 <span className="text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-full border border-blue-200">
-                  Current Status: {searchedOrderData.courierStatus || 'Order Placed'}
+                  Step {currentStepIdx + 1} of 8 Complete
                 </span>
               </div>
 
@@ -276,56 +413,6 @@ function OrdersContent() {
                     </div>
                   );
                 })}
-              </div>
-            </div>
-
-            {/* 3. Logistics & Docket Number Banner */}
-            <div className="bg-gradient-to-r from-[#001B3A] via-[#002B5B] to-[#0044AA] rounded-2xl p-5 text-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-md">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center text-amber-400 flex-shrink-0">
-                  <Truck className="w-6 h-6" />
-                </div>
-                <div>
-                  <div className="text-[10px] font-extrabold text-amber-300 uppercase tracking-wider">
-                    COURIER PARTNER: ST COURIER EXPRESS
-                  </div>
-                  <h4 className="font-heading font-black text-base text-white">
-                    {isOfficialAwb ? (
-                      <>
-                        Docket Number: <span className="text-amber-400 font-mono font-extrabold">{searchedOrderData.trackingNumber}</span>
-                      </>
-                    ) : (
-                      <>
-                        Shipment ID: <span className="text-amber-300 font-mono font-bold">{searchedOrderData.shipmentId || searchedOrderData.trackingNumber || 'Pending ST Courier Booking'}</span>
-                      </>
-                    )}
-                  </h4>
-                  <p className="text-xs text-slate-300 mt-0.5">
-                    {isOfficialAwb ? 'Official ST Courier AWB assigned & active' : 'Internal Shipment Created • Official ST Courier Docket pending booking'}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                {isOfficialAwb ? (
-                  <a
-                    href={searchedOrderData.trackingUrl || `https://stcourier.com/track/shipment?docket=${searchedOrderData.trackingNumber}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-full sm:w-auto bg-amber-400 hover:bg-amber-500 text-[#001B3A] font-extrabold text-xs px-5 py-3 rounded-xl transition-all shadow-md flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer"
-                  >
-                    <ExternalLink className="w-4 h-4 text-[#001B3A]" />
-                    <span>TRACK ON ST COURIER</span>
-                  </a>
-                ) : (
-                  <button
-                    onClick={() => setShowTrackingModal(true)}
-                    className="w-full sm:w-auto bg-white/10 hover:bg-white/20 border border-white/30 text-white font-extrabold text-xs px-5 py-3 rounded-xl transition-all flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer backdrop-blur-xs"
-                  >
-                    <Send className="w-4 h-4 text-amber-400" />
-                    <span>VIEW LIVE TIMELINE</span>
-                  </button>
-                )}
               </div>
             </div>
           </div>
