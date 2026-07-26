@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getDbClient } from '@/lib/db';
+import { applyRateLimit, verifyAdminRequest } from '@/lib/serverSecurity';
 
 // Stage metadata - mirrors ST Courier's real logistics stages
 const STAGE_META: Record<string, { emoji: string; label: string; whatsappTitle: string; whatsappDesc: string }> = {
@@ -21,6 +22,19 @@ async function ensureColumns(client: any) {
 
 // POST /api/orders/timeline — Add a new tracking event
 export async function POST(request: Request) {
+  // Rate limit protection
+  const ip = request.headers.get('x-forwarded-for') || 'anonymous';
+  const { allowed } = applyRateLimit(ip, 20, 60000);
+  if (!allowed) {
+    return NextResponse.json({ error: 'Too many requests. Please try again in 1 minute.' }, { status: 429 });
+  }
+
+  // Admin Authorization Guard
+  const auth = await verifyAdminRequest(request);
+  if (!auth.isAdmin) {
+    return NextResponse.json({ error: auth.error || 'Admin authorization required' }, { status: 403 });
+  }
+
   const client = await getDbClient();
   try {
     const body = await request.json();

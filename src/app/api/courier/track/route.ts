@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getDbClient } from '@/lib/db';
+import { applyRateLimit } from '@/lib/serverSecurity';
 
 /**
  * Strict ST Courier AWB docket rules:
@@ -11,6 +12,13 @@ import { getDbClient } from '@/lib/db';
 const VALID_DOCKET_PATTERN = /^(STC[0-9]{9}|STCOE[0-9]{7,10}|[A-Z]{2,3}[0-9]{8,12}|[0-9]{10,13})$/;
 
 export async function GET(request: Request) {
+  // Rate limiting on public courier tracking route (max 30 queries/minute)
+  const ip = request.headers.get('x-forwarded-for') || 'anonymous';
+  const { allowed } = applyRateLimit(`courier-${ip}`, 30, 60000);
+  if (!allowed) {
+    return NextResponse.json({ error: 'Too many tracking checks. Please wait 1 minute.' }, { status: 429 });
+  }
+
   const { searchParams } = new URL(request.url);
   const docket = searchParams.get('docket');
 
