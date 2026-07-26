@@ -54,12 +54,15 @@ export default function AdminPage() {
   const handleRequestPairingCode = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!waPhoneInput) return;
+    showToast('⏳ Generating 8-Digit Pairing Code...');
     try {
       const res = await fetch(`/api/whatsapp/qr?phone=${encodeURIComponent(waPhoneInput)}`);
       const data = await res.json();
       if (data.pairingCode) {
         setWaPairingCode(data.pairingCode);
-        showToast('✅ 8-Digit Pairing Code Generated!');
+        showToast(`✅ Pairing Code: ${data.pairingCode}`);
+      } else if (data.error) {
+        showToast(`⚠️ ${data.error}`);
       }
     } catch (e) {
       showToast('❌ Error generating pairing code.');

@@ -2,7 +2,26 @@ import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 
-export async function GET() {
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const phone = searchParams.get('phone');
+
+  // If phone parameter is provided, request 8-digit Pairing Code from Baileys process (port 4000)
+  if (phone) {
+    try {
+      const resPair = await fetch(`http://127.0.0.1:4000/pair?phone=${encodeURIComponent(phone)}`, { cache: 'no-store' });
+      if (resPair.ok) {
+        const pairData = await resPair.json();
+        return NextResponse.json(pairData);
+      } else {
+        const errData = await resPair.json();
+        return NextResponse.json({ error: errData.error || 'Failed to generate pairing code' }, { status: 400 });
+      }
+    } catch (e: any) {
+      return NextResponse.json({ error: 'WhatsApp service offline on port 4000' }, { status: 500 });
+    }
+  }
+
   // 1. Try polling live Baileys background service on port 4000 first
   try {
     const resPort = await fetch('http://127.0.0.1:4000/status', { cache: 'no-store' });
