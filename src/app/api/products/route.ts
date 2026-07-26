@@ -1,13 +1,32 @@
 import { NextResponse } from 'next/server';
 import { getDbClient } from '@/lib/db';
 
+// High-concurrency in-memory RAM cache (60-second TTL)
+let productsCache: { data: any[]; timestamp: number } | null = null;
+const CACHE_TTL_MS = 60000;
+
+export function invalidateProductsCache() {
+  productsCache = null;
+}
+
 export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const cls = searchParams.get('cls');
+  const search = searchParams.get('search');
+
+  // Serve from zero-latency memory cache if no specific search query
+  const now = Date.now();
+  if (!cls && !search && productsCache && (now - productsCache.timestamp < CACHE_TTL_MS)) {
+    return NextResponse.json(productsCache.data, {
+      headers: {
+        'Cache-Control': 'public, max-age=60, s-maxage=300, stale-while-revalidate=600',
+        'X-Cache-Status': 'HIT_MEMORY_RAM',
+      },
+    });
+  }
+
   const client = await getDbClient();
   try {
-    const { searchParams } = new URL(request.url);
-    const cls = searchParams.get('cls');
-    const search = searchParams.get('search');
-
     if (client) {
       let sql = `
         SELECT b.*, 
@@ -67,7 +86,15 @@ export async function GET(request: Request) {
             inStock: d.status !== 'out_of_stock' && (d.stock === undefined || d.stock === null || Number(d.stock) > 0),
           };
         });
-        return NextResponse.json(mapped);
+        if (!cls && !search) {
+          productsCache = { data: mapped, timestamp: Date.now() };
+        }
+        return NextResponse.json(mapped, {
+          headers: {
+            'Cache-Control': 'public, max-age=60, s-maxage=300, stale-while-revalidate=600',
+            'X-Cache-Status': 'MISS_FETCHED_DB',
+          },
+        });
       }
     }
   } catch (err: any) {
@@ -140,6 +167,7 @@ export async function PATCH(request: Request) {
       if (fields.length > 0) {
         values.push(id);
         await client.query(`UPDATE books SET ${fields.join(', ')} WHERE id = $${idx}`, values);
+        invalidateProductsCache();
       }
 
       return NextResponse.json({ success: true, id });
