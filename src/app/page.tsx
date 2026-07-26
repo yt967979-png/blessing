@@ -18,6 +18,8 @@ import { CartDrawer } from '@/components/cart/CartDrawer';
 import { Modals } from '@/components/modals/Modals';
 import { Toast } from '@/components/ui/Toast';
 
+import { MobileBottomNav } from '@/components/layout/MobileBottomNav';
+
 export default function Home() {
   const router = useRouter();
   const { user } = useStore();
@@ -29,7 +31,7 @@ export default function Home() {
     }
   }, [user, router]);
   return (
-    <main className="min-h-screen bg-slate-50 flex flex-col">
+    <main className="min-h-screen bg-slate-50 flex flex-col pb-16 md:pb-0">
       <Toast />
       <AnnouncementBar />
       <Header />
@@ -44,6 +46,7 @@ export default function Home() {
       <FloatingActions />
       <CartDrawer />
       <Modals />
+      <MobileBottomNav />
     </main>
   );
 }
