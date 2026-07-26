@@ -1,5 +1,5 @@
 /**
- * ST Courier Delivery Estimator (Flipkart & Amazon Style)
+ * ST Courier Express Delivery Estimator
  * Calculates precise estimated delivery date based on current time & ST Courier logistics speed.
  */
 export function getSTCourierDeliveryEstimate(stateOrCity: string = 'Tamil Nadu'): {

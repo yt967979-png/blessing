@@ -180,10 +180,10 @@ function OrdersContent() {
         <div className="max-w-2xl">
           <span className="text-[10px] font-extrabold text-amber-300 uppercase tracking-widest bg-amber-400/10 border border-amber-400/30 px-3 py-1 rounded-full flex items-center gap-1.5 w-fit">
             <Sparkles className="w-3 h-3 text-amber-400" />
-            <span>AMAZON &amp; FLIPKART-GRADE LIVE TRACKING</span>
+            <span>ST COURIER LIVE EXPRESS LOGISTICS</span>
           </span>
           <h1 className="font-heading font-black text-2xl sm:text-4xl text-white mt-3 mb-2">
-            Track Your Package Live
+            My Orders &amp; Live Tracking
           </h1>
           <p className="text-xs sm:text-sm text-slate-300 mb-6">
             View realtime shipment location, ST Courier transit log, estimated delivery, and tax invoice.
@@ -204,7 +204,7 @@ function OrdersContent() {
               type="submit"
               className="bg-amber-400 hover:bg-amber-500 text-[#001B3A] font-extrabold text-xs sm:text-sm px-6 py-3.5 rounded-2xl shadow-lg transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap"
             >
-              <span>TRACK LIVE</span>
+              <span>TRACK ORDER</span>
             </button>
           </form>
         </div>
@@ -217,7 +217,17 @@ function OrdersContent() {
         </div>
       ) : searchedOrderData ? (
         <div className="space-y-6">
-          {/* 1. Amazon / Flipkart-Style Horizontal Connected Stepper */}
+          {/* Header Controls: Back Button if multiple orders exist */}
+          {userOrders.length > 1 && (
+            <button
+              onClick={() => setSearchedOrderData(null)}
+              className="text-xs font-extrabold text-[#001B3A] hover:text-blue-600 bg-white border border-slate-200 px-4 py-2 rounded-xl flex items-center gap-1.5 shadow-xs transition-all cursor-pointer w-fit"
+            >
+              <span>← View All My Orders ({userOrders.length})</span>
+            </button>
+          )}
+
+          {/* 1. Connected Stepper & Order Details */}
           <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-xs space-y-8">
             <div className="flex flex-wrap justify-between items-center gap-4 pb-6 border-b border-slate-100 text-xs">
               <div>
@@ -491,12 +501,72 @@ function OrdersContent() {
             </div>
           </div>
         </div>
+      ) : userOrders.length > 0 ? (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <h2 className="font-heading font-black text-xl text-[#001B3A] flex items-center gap-2">
+              <Package className="w-5 h-5 text-amber-500" />
+              <span>My Recent Orders ({userOrders.length})</span>
+            </h2>
+            <span className="text-xs text-slate-500 font-bold">Select an order to view live tracking</span>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4">
+            {userOrders.map((ord: any) => (
+              <div
+                key={ord.orderId}
+                onClick={() => setSearchedOrderData(ord)}
+                className="bg-white border border-slate-200 hover:border-amber-400/80 rounded-3xl p-6 shadow-xs hover:shadow-md transition-all cursor-pointer space-y-4"
+              >
+                <div className="flex flex-wrap justify-between items-center gap-3 text-xs pb-3 border-b border-slate-100">
+                  <div>
+                    <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider block">ORDER ID</span>
+                    <span className="font-heading font-black text-lg text-[#001B3A]">{ord.orderId}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider block">DATE</span>
+                    <span className="font-bold text-slate-700">{ord.createdAt}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider block">TOTAL</span>
+                    <span className="font-black text-slate-900 text-sm">₹{ord.totalAmount}</span>
+                  </div>
+                  <span className="bg-emerald-50 text-emerald-700 font-black text-xs px-3 py-1 rounded-full border border-emerald-200">
+                    {ord.courierStatus || 'Order Placed'}
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
+                  <div className="space-y-1">
+                    <span className="font-bold text-slate-800">
+                      Purchased Items ({ord.items?.length || 1}):
+                    </span>
+                    <p className="text-slate-600 font-medium">
+                      {ord.items?.map((i: any) => i.title).join(', ') || 'Educational Guide Books'}
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSearchedOrderData(ord);
+                    }}
+                    className="bg-[#001B3A] hover:bg-blue-600 text-white font-extrabold text-xs px-5 py-2.5 rounded-xl shadow-xs transition-all flex items-center gap-2 cursor-pointer"
+                  >
+                    <Truck className="w-4 h-4 text-amber-400" />
+                    <span>TRACK PACKAGE &amp; VIEW DETAILS →</span>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       ) : (
-        <div className="bg-white border border-slate-200 rounded-3xl p-12 text-center max-w-md mx-auto space-y-4">
+        <div className="bg-white border border-slate-200 rounded-3xl p-12 text-center max-w-md mx-auto space-y-4 shadow-xs">
           <AlertCircle className="w-12 h-12 text-amber-500 mx-auto opacity-80" />
           <h3 className="font-heading font-black text-lg text-slate-900">No Active Order Selected</h3>
-          <p className="text-xs text-slate-500">
-            Enter your Order ID (e.g. BPG-1082) in the search box above to track your ST Courier shipment!
+          <p className="text-xs text-slate-500 leading-relaxed">
+            Enter your Order ID (e.g. BPG-1082) in the search box above to view shipment progress &amp; ST Courier live tracking!
           </p>
         </div>
       )}
