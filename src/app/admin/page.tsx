@@ -1104,10 +1104,12 @@ export default function AdminPage() {
                               const verifyRes = await fetch(`/api/courier/track?docket=${encodeURIComponent(awb)}`);
                               const verifyData = await verifyRes.json();
 
-                              if (!verifyRes.ok || verifyData.isValid === false) {
-                                const reason = verifyData.error || 'Invalid ST Courier docket number format.';
-                                showToast(`❌ INVALID DOCKET: ${reason}`);
-                                alert(`⚠️ ST COURIER DOCKET REJECTED!\n\n${reason}\n\nValid format example: STC241568974`);
+                              const isPositivelyVerified = verifyRes.ok && verifyData.isValid === true && verifyData.verified === true;
+
+                              if (!isPositivelyVerified) {
+                                const reason = verifyData.error || 'ST Courier did not confirm this docket number in their live system.';
+                                showToast(`❌ FAKE/UNVERIFIED DOCKET: ${reason}`);
+                                alert(`⚠️ ST COURIER DOCKET REJECTED!\n\n${reason}\n\nPlease enter an official active ST Courier docket number from your physical booking receipt.`);
                                 return;
                               }
 
