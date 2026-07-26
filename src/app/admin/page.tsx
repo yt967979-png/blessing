@@ -1124,13 +1124,22 @@ export default function AdminPage() {
 
                           <button
                             onClick={async () => {
+                              const awb = (shiprocketAwbInput[o.orderId] || o.trackingNumber || '').trim();
+                              if (awb) {
+                                const verifyRes = await fetch(`/api/courier/track?docket=${encodeURIComponent(awb)}`);
+                                const verifyData = await verifyRes.json();
+                                if (!verifyRes.ok || verifyData.isValid === false) {
+                                  alert(`⚠️ ST COURIER AWB REJECTED!\n\n${verifyData.error || 'Invalid format'}\n\nPlease enter a valid docket (e.g. STC241568974).`);
+                                  return;
+                                }
+                              }
                               const hub = prompt('Enter Current Hub City (e.g. Chennai Central Hub, Madurai Hub):', o.city ? `${o.city} Sorting Hub` : 'Regional Sorting Hub');
                               if (!hub) return;
                               showToast(`⏳ Updating stage: In Transit at ${hub}...`);
                               await fetch('/api/orders/timeline', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ orderId: o.orderId, status: 'IN_TRANSIT', hubCity: hub }),
+                                body: JSON.stringify({ orderId: o.orderId, status: 'IN_TRANSIT', hubCity: hub, awbNumber: awb || undefined }),
                               });
                               showToast(`✅ Stage updated: In Transit at ${hub}!`);
                               loadLiveOrders();
