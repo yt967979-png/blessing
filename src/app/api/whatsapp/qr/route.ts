@@ -3,7 +3,16 @@ import fs from 'fs';
 import path from 'path';
 
 export async function GET() {
-  // 1. Read directly from Railway PostgreSQL DB first
+  // 1. Try polling live Baileys background service on port 4000 first
+  try {
+    const resPort = await fetch('http://127.0.0.1:4000/status', { cache: 'no-store' });
+    if (resPort.ok) {
+      const liveData = await resPort.json();
+      return NextResponse.json(liveData);
+    }
+  } catch (_) {}
+
+  // 2. Read directly from Railway PostgreSQL DB
   try {
     const db = await import('@/lib/db');
     const client = await db.getDbClient();
@@ -20,7 +29,7 @@ export async function GET() {
     }
   } catch (_) {}
 
-  // 2. Fallback to local status file
+  // 3. Fallback to local status file
   const statusFile = path.join(process.cwd(), 'public', 'whatsapp_status.json');
 
   if (fs.existsSync(statusFile)) {
