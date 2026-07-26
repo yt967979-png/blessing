@@ -1101,10 +1101,12 @@ export default function AdminPage() {
                               const verifyRes = await fetch(`/api/courier/track?docket=${encodeURIComponent(awb)}`);
                               const verifyData = await verifyRes.json();
 
-                              if (!verifyRes.ok || verifyData.isValid === false) {
-                                const reason = verifyData.error || 'Invalid ST Courier docket number format.';
+                              const isPositivelyVerified = verifyRes.ok && verifyData.isValid === true && verifyData.verified === true;
+
+                              if (!isPositivelyVerified) {
+                                const reason = verifyData.error || 'ST Courier did not confirm this docket number in their live system.';
                                 showToast(`❌ INVALID AWB: ${reason}`);
-                                alert(`⚠️ ST COURIER AWB REJECTED!\n\n${reason}\n\nValid examples: STC241568974, TN12345678, 123456789012`);
+                                alert(`⚠️ ST COURIER DOCKET REJECTED!\n\n${reason}\n\nPlease enter an official active ST Courier docket number from your booking receipt.`);
                                 return;
                               }
 
@@ -1128,8 +1130,9 @@ export default function AdminPage() {
                               if (awb) {
                                 const verifyRes = await fetch(`/api/courier/track?docket=${encodeURIComponent(awb)}`);
                                 const verifyData = await verifyRes.json();
-                                if (!verifyRes.ok || verifyData.isValid === false) {
-                                  alert(`⚠️ ST COURIER AWB REJECTED!\n\n${verifyData.error || 'Invalid format'}\n\nPlease enter a valid docket (e.g. STC241568974).`);
+                                const isPositivelyVerified = verifyRes.ok && verifyData.isValid === true && verifyData.verified === true;
+                                if (!isPositivelyVerified) {
+                                  alert(`⚠️ ST COURIER DOCKET REJECTED!\n\n${verifyData.error || 'ST Courier did not confirm this docket.'}\n\nPlease enter an official active ST Courier docket number.`);
                                   return;
                                 }
                               }
