@@ -158,6 +158,27 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.method === 'POST' && (reqUrl.pathname === '/unlink' || reqUrl.pathname === '/logout')) {
+    try {
+      if (sock) {
+        try { await sock.logout(); } catch (_) {}
+      }
+      isConnected = false;
+      if (fs.existsSync(SESSION_DIR)) {
+        try { fs.rmSync(SESSION_DIR, { recursive: true, force: true }); } catch (e) {}
+        fs.mkdirSync(SESSION_DIR, { recursive: true });
+      }
+      updateStateFile({ status: 'DISCONNECTED', connected: false, message: 'Unlinked by Admin. Scan new QR code.' });
+      setTimeout(connectToWhatsApp, 2000);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, message: 'WhatsApp session unlinked successfully.' }));
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: e.message }));
+    }
+    return;
+  }
+
   res.writeHead(404, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ error: 'Not Found' }));
 });

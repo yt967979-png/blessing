@@ -29,7 +29,7 @@ export default function AdminPage() {
   const router = useRouter();
   const { products, updateProductInDb, addNewProductToDb, deleteProductFromDb, showToast, logoutUser } = useStore();
   const [activeTab, setActiveTab] = useState<'catalog' | 'orders' | 'whatsapp'>('catalog');
-  const [waStatus, setWaStatus] = useState<{ status: string; qrImage?: string; pairingCode?: string; message?: string }>({ status: 'LOADING' });
+  const [waStatus, setWaStatus] = useState<{ status: string; connected?: boolean; qrImage?: string; pairingCode?: string; message?: string }>({ status: 'LOADING', connected: false });
   const [waPhoneInput, setWaPhoneInput] = useState('');
   const [waPairingCode, setWaPairingCode] = useState<string | null>(null);
 
@@ -350,6 +350,19 @@ export default function AdminPage() {
       }
     } catch (e) {
       showToast(`❌ Error sending WhatsApp message.`);
+    }
+  };
+
+  const handleUnlinkWhatsApp = async () => {
+    if (!confirm('Are you sure you want to unlink this WhatsApp session? You will need to scan a new QR code.')) return;
+    try {
+      const res = await fetch('/api/whatsapp/qr', { method: 'DELETE' });
+      if (res.ok) {
+        showToast('✅ WhatsApp session unlinked. Generating fresh QR code...');
+        setWaStatus({ status: 'DISCONNECTED', connected: false });
+      }
+    } catch (e) {
+      showToast('❌ Error unlinking WhatsApp session.');
     }
   };
 
@@ -939,15 +952,40 @@ export default function AdminPage() {
               </p>
             </div>
 
-            {waStatus.status === 'CONNECTED' ? (
-              <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-6 space-y-3">
-                <div className="w-12 h-12 bg-emerald-500 text-white rounded-full flex items-center justify-center mx-auto text-xl font-bold">
+            {waStatus.status === 'CONNECTED' || waStatus.connected ? (
+              <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-6 text-center space-y-4">
+                <div className="w-14 h-14 bg-emerald-500 text-white rounded-full flex items-center justify-center mx-auto text-2xl font-bold shadow-lg ring-8 ring-emerald-500/20">
                   ✓
                 </div>
-                <h3 className="font-extrabold text-emerald-400 text-base">WHATSAPP BOT CONNECTED &amp; ACTIVE</h3>
-                <p className="text-xs text-emerald-200">
-                  Your WhatsApp phone is authenticated! The bot will automatically send order updates, ST Courier dockets, and live tracking links to your students.
-                </p>
+                <div>
+                  <h3 className="font-heading font-black text-emerald-400 text-lg">
+                    🟢 WHATSAPP BOT IS PERMANENTLY CONNECTED &amp; ACTIVE
+                  </h3>
+                  <p className="text-xs text-emerald-200 mt-1 max-w-md mx-auto">
+                    Your WhatsApp session is locked &amp; permanently saved inside your server (`./whatsapp_session`). It will stay connected forever across all server restarts and navigation.
+                  </p>
+                </div>
+
+                <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5 text-xs text-slate-300 text-left space-y-1 font-mono max-w-sm mx-auto">
+                  <div className="flex justify-between">
+                    <span className="text-slate-400 font-bold">SESSION LOCK:</span>
+                    <span className="text-emerald-400 font-bold">PERMANENT / PROTECTED</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400 font-bold">STATUS:</span>
+                    <span className="text-emerald-400 font-bold">ONLINE ($0 FEES)</span>
+                  </div>
+                </div>
+
+                <div className="pt-2">
+                  <button
+                    onClick={handleUnlinkWhatsApp}
+                    className="bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-500/40 font-extrabold text-xs px-5 py-2.5 rounded-xl transition-all cursor-pointer uppercase tracking-wider inline-flex items-center gap-2"
+                  >
+                    <Trash2 className="w-4 h-4 text-red-400" />
+                    <span>UNLINK WHATSAPP SESSION</span>
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="space-y-6">
