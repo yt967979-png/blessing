@@ -30,8 +30,6 @@ export async function GET(request: Request) {
   let liveStatus = 'Handed to ST Courier';
   let events: Array<{ time: string; activity: string; location: string }> = [];
 
-  // Tri-state: true = confirmed in ST Courier network, false = explicitly rejected,
-  // null = scrape was inconclusive (JS-rendered page returned no data).
   let networkVerification: boolean | null = null;
 
   try {
