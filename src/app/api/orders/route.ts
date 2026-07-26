@@ -1,5 +1,6 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { getDbClient } from '@/lib/db';
+import { broadcastOrderChange } from '@/app/api/orders/stream/route';
 
 export async function GET(request: Request) {
   const client = await getDbClient();
@@ -316,6 +317,11 @@ export async function PATCH(request: NextRequest) {
     } catch (waErr) {
       console.error('Auto WhatsApp dispatch error:', waErr);
     }
+
+    // Broadcast real-time SSE instant update (Firebase style)
+    try {
+      broadcastOrderChange({ type: 'ORDER_UPDATED', orderId, status: newStatus, awbNumber, timestamp: Date.now() });
+    } catch (_) {}
 
     return NextResponse.json({ success: true, orderId, status: newStatus, awbNumber, trackingUrl });
   } catch (err: any) {

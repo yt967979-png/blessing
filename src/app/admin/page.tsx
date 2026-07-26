@@ -111,7 +111,22 @@ export default function AdminPage() {
 
   useEffect(() => {
     loadLiveOrders();
-    // Auto-sync live orders from Railway PostgreSQL every 4 seconds
+
+    // Firebase-style Instant Real-Time Order Stream
+    let eventSource: EventSource | null = null;
+    try {
+      eventSource = new EventSource('/api/orders/stream');
+      eventSource.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          if (payload.type === 'ORDER_UPDATED') {
+            loadLiveOrders();
+          }
+        } catch (_) {}
+      };
+    } catch (_) {}
+
+    // Backup polling every 4 seconds
     const interval = setInterval(loadLiveOrders, 4000);
 
     // Load live DB stats for users + books
@@ -127,7 +142,10 @@ export default function AdminPage() {
       })
       .catch(() => {});
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      if (eventSource) eventSource.close();
+    };
   }, [activeTab]);
 
   const handleImageFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {

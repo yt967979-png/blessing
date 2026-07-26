@@ -108,6 +108,24 @@ function OrdersContent() {
     };
 
     fetchOrders();
+
+    // Firebase-style Instant Real-Time Sync Stream
+    let eventSource: EventSource | null = null;
+    try {
+      eventSource = new EventSource('/api/orders/stream');
+      eventSource.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          if (payload.type === 'ORDER_UPDATED') {
+            fetchOrders();
+          }
+        } catch (_) {}
+      };
+    } catch (_) {}
+
+    return () => {
+      if (eventSource) eventSource.close();
+    };
   }, [user, queryOrderId]);
 
   const handleSearchOrder = async (e: React.FormEvent) => {

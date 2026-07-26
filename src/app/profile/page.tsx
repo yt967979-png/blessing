@@ -85,8 +85,26 @@ export default function ProfilePage() {
     };
 
     fetchUserLiveOrders();
+
+    // Firebase-style Instant Real-Time Sync Stream
+    let eventSource: EventSource | null = null;
+    try {
+      eventSource = new EventSource('/api/orders/stream');
+      eventSource.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          if (payload.type === 'ORDER_UPDATED') {
+            fetchUserLiveOrders();
+          }
+        } catch (_) {}
+      };
+    } catch (_) {}
+
     const interval = setInterval(fetchUserLiveOrders, 4000);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      if (eventSource) eventSource.close();
+    };
   }, [user]);
 
   const saveAddressesToStorage = (updatedList: any[]) => {
