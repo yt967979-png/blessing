@@ -75,7 +75,7 @@ export async function POST(request: Request) {
 
     await client.end();
 
-    // Fire WhatsApp
+    // Fire WhatsApp directly in-process
     const order = orderRes.rows[0];
     if (order) {
       try {
@@ -88,24 +88,15 @@ export async function POST(request: Request) {
         const hubInfo = hubCity ? `\n📍 *Current Hub:* ${hubCity}` : '';
         const trackUrl = `https://blessing-production.up.railway.app/profile`;
 
-        if (phone) {
+        if (phone && meta) {
           const message = `*BLESSING POWER GUIDE*\n*${meta.whatsappTitle}*\n\nDear *${name}*,\n${meta.whatsappDesc}\n\n📦 *Order ID:* ${order.order_number}\n🚚 *Partner:* ST Courier Express\n📍 *Docket AWB:* ${awb}${hubInfo}\n\n👉 *Track Live:* ${trackUrl}`;
 
-          await fetch(`https://blessing-production.up.railway.app/api/whatsapp`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              step: status,
-              customerPhone: phone,
-              customerName: name,
-              orderId: order.order_number,
-              totalAmount: order.total_amount,
-              trackingNumber: awb,
-              customMessage: message,
-            }),
-          });
+          const { sendWhatsAppMessageInProcess } = await import('@/lib/whatsapp');
+          await sendWhatsAppMessageInProcess(phone, message);
         }
-      } catch (_) {}
+      } catch (err: any) {
+        console.error('Error firing WhatsApp in timeline route:', err.message);
+      }
     }
 
     return NextResponse.json({ success: true, eventId, status, statusLabel });
