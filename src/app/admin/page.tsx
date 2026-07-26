@@ -79,6 +79,7 @@ export default function AdminPage() {
   const [editMrp, setEditMrp] = useState(0);
   const [editBadge, setEditBadge] = useState('');
   const [editBadgeEnabled, setEditBadgeEnabled] = useState(true);
+  const [editDiscountEnabled, setEditDiscountEnabled] = useState(true);
 
   // New product form state
   const [showAddForm, setShowAddForm] = useState(false);
@@ -197,30 +198,32 @@ export default function AdminPage() {
     setEditMrp(p.mrp);
     setEditBadge(p.badge || '');
     setEditBadgeEnabled(!!p.badge);
+    setEditDiscountEnabled(p.price < p.mrp);
   };
 
   const saveProductChanges = async (id: string | number) => {
+    const finalPrice = editDiscountEnabled ? editPrice : editMrp;
     const finalBadge = editBadgeEnabled ? (editBadge.trim() || 'BESTSELLER') : '';
-    const calculatedDiscount = Math.round(((editMrp - editPrice) / editMrp) * 100);
+    const calculatedDiscount = Math.round(((editMrp - finalPrice) / editMrp) * 100);
 
     // Save to Railway PostgreSQL via API
     try {
       await fetch('/api/products', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, price: editPrice, mrp: editMrp, badge: finalBadge }),
+        body: JSON.stringify({ id, price: finalPrice, mrp: editMrp, badge: finalBadge }),
       });
     } catch (_) {}
 
     // Also update local products state via StoreContext
     updateProductInDb(id, {
-      price: Number(editPrice),
+      price: Number(finalPrice),
       mrp: Number(editMrp),
       discount: calculatedDiscount > 0 ? calculatedDiscount : 0,
       badge: finalBadge,
     });
     setEditingId(null);
-    showToast(`✅ Product #${id} updated — saved securely to Railway PostgreSQL!`);
+    showToast(`✅ Product #${id} updated to ₹${finalPrice} — saved securely to Railway PostgreSQL!`);
   };
 
   const handleCreateProduct = (e: React.FormEvent) => {
@@ -869,14 +872,29 @@ export default function AdminPage() {
 
                             <td className="py-3 px-2 font-bold">
                               {isEditing ? (
-                                <input
-                                  type="number"
-                                  value={editPrice}
-                                  onChange={(e) => setEditPrice(Number(e.target.value))}
-                                  className="w-20 px-2 py-1 bg-slate-800 border border-amber-400 rounded text-amber-300 font-bold outline-none"
-                                />
+                                <div className="flex items-center gap-1.5">
+                                  <input
+                                    type="checkbox"
+                                    id={`discount-check-${p.id}`}
+                                    checked={editDiscountEnabled}
+                                    onChange={(e) => setEditDiscountEnabled(e.target.checked)}
+                                    title="Enable Offer / Sale Discounted Price"
+                                    className="w-3.5 h-3.5 accent-amber-500 rounded cursor-pointer"
+                                  />
+                                  <input
+                                    type="number"
+                                    disabled={!editDiscountEnabled}
+                                    value={editDiscountEnabled ? editPrice : editMrp}
+                                    onChange={(e) => setEditPrice(Number(e.target.value))}
+                                    className={`w-20 px-2 py-1 bg-slate-800 border rounded font-bold outline-none ${
+                                      editDiscountEnabled ? 'border-amber-400 text-amber-300' : 'border-slate-700 text-slate-500 opacity-40'
+                                    }`}
+                                  />
+                                </div>
                               ) : (
-                                <span>₹{p.price}</span>
+                                <span className={p.price < p.mrp ? 'text-amber-400 font-black' : 'text-white'}>
+                                  ₹{p.price}
+                                </span>
                               )}
                             </td>
 
@@ -885,7 +903,11 @@ export default function AdminPage() {
                                 <input
                                   type="number"
                                   value={editMrp}
-                                  onChange={(e) => setEditMrp(Number(e.target.value))}
+                                  onChange={(e) => {
+                                    const val = Number(e.target.value);
+                                    setEditMrp(val);
+                                    if (!editDiscountEnabled) setEditPrice(val);
+                                  }}
                                   className="w-20 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-slate-300 font-bold outline-none"
                                 />
                               ) : (
