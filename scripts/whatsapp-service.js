@@ -22,6 +22,68 @@ const STATUS_FILE = path.join(PUBLIC_DIR, 'whatsapp_status.json');
 const QR_IMAGE_FILE = path.join(PUBLIC_DIR, 'whatsapp_qr.png');
 const RAILWAY_DB_FALLBACK = process.env.DATABASE_URL || "postgresql://postgres:USdOHOzspyXMPFmDnfsjkxoSIGedYwgk@sakura.proxy.rlwy.net:32874/railway";
 
+async function backupSessionToDb() {
+  let client = null;
+  try {
+    if (!fs.existsSync(SESSION_DIR)) return;
+    const files = fs.readdirSync(SESSION_DIR);
+    const sessionMap = {};
+    for (const f of files) {
+      if (f.endsWith('.json')) {
+        sessionMap[f] = fs.readFileSync(path.join(SESSION_DIR, f), 'utf8');
+      }
+    }
+    const sessionJson = JSON.stringify(sessionMap);
+    if (Object.keys(sessionMap).length === 0) return;
+
+    client = new Client({
+      connectionString: RAILWAY_DB_FALLBACK,
+      ssl: RAILWAY_DB_FALLBACK.includes('railway') || RAILWAY_DB_FALLBACK.includes('rlwy.net') ? { rejectUnauthorized: false } : false,
+    });
+    await client.connect();
+    await client.query(
+      `INSERT INTO whatsapp_sessions (id, status, connected, session_data, updated_at)
+       VALUES ('default', 'CONNECTED', true, $1, NOW())
+       ON CONFLICT (id) DO UPDATE 
+       SET session_data = EXCLUDED.session_data,
+           status = 'CONNECTED',
+           connected = true,
+           updated_at = NOW()`,
+      [sessionJson]
+    );
+  } catch (e) {
+    console.error('Error backing up session to DB:', e.message);
+  } finally {
+    if (client) try { await client.end(); } catch (_) {}
+  }
+}
+
+async function restoreSessionFromDb() {
+  let client = null;
+  try {
+    client = new Client({
+      connectionString: RAILWAY_DB_FALLBACK,
+      ssl: RAILWAY_DB_FALLBACK.includes('railway') || RAILWAY_DB_FALLBACK.includes('rlwy.net') ? { rejectUnauthorized: false } : false,
+    });
+    await client.connect();
+    const res = await client.query(`SELECT session_data FROM whatsapp_sessions WHERE id = 'default' LIMIT 1`);
+    if (res.rows.length > 0 && res.rows[0].session_data) {
+      const sessionMap = JSON.parse(res.rows[0].session_data);
+      if (!fs.existsSync(SESSION_DIR)) {
+        fs.mkdirSync(SESSION_DIR, { recursive: true });
+      }
+      for (const [filename, content] of Object.entries(sessionMap)) {
+        fs.writeFileSync(path.join(SESSION_DIR, filename), content as string);
+      }
+      console.log('✅ WhatsApp Auth Credentials successfully restored from Railway PostgreSQL database!');
+    }
+  } catch (e) {
+    console.error('DB session restore notice:', e.message);
+  } finally {
+    if (client) try { await client.end(); } catch (_) {}
+  }
+}
+
 async function saveToDatabase(data) {
   let client = null;
   try {
@@ -65,6 +127,7 @@ let sock = null;
 let isConnected = false;
 
 async function connectToWhatsApp() {
+  await restoreSessionFromDb();
   const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
 
   sock = makeWASocket({
@@ -73,7 +136,10 @@ async function connectToWhatsApp() {
     browser: ['Blessing Power Guide', 'Chrome', '1.0.0'],
   });
 
-  sock.ev.on('creds.update', saveCreds);
+  sock.ev.on('creds.update', async () => {
+    await saveCreds();
+    backupSessionToDb();
+  });
 
   sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect, qr } = update;
@@ -127,6 +193,8 @@ async function connectToWhatsApp() {
       if (fs.existsSync(QR_IMAGE_FILE)) {
         try { fs.unlinkSync(QR_IMAGE_FILE); } catch (e) {}
       }
+
+      backupSessionToDb();
 
       updateStateFile({
         status: 'CONNECTED',
