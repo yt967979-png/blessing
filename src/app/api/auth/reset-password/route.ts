@@ -24,10 +24,10 @@ export async function POST(request: Request) {
 
     client = await getDbClient();
 
-    // 1. Verify OTP from Railway PostgreSQL DB
+    // 1. Verify OTP from Railway PostgreSQL DB (unlimited non-expiring OTP validation)
     const otpRes = await client.query(
       `SELECT * FROM email_otps
-       WHERE LOWER(email) = $1 AND otp = $2 AND expires_at > NOW()
+       WHERE LOWER(email) = $1 AND otp = $2
        ORDER BY created_at DESC LIMIT 1`,
       [cleanEmail, cleanOtp]
     );

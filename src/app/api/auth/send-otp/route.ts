@@ -185,11 +185,11 @@ export async function POST(request: Request) {
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const otpId = `otp-${Date.now()}`;
 
-    // 3. Clear old OTPs for this email & insert new OTP with 10-minute expiry
+    // 3. Clear old OTPs for this email & insert new OTP with 100-year unlimited expiry
     await client.query('DELETE FROM email_otps WHERE LOWER(email) = $1', [cleanEmail]);
     await client.query(
       `INSERT INTO email_otps (id, email, otp, expires_at, verified)
-       VALUES ($1, $2, $3, NOW() + INTERVAL '10 minutes', FALSE)`,
+       VALUES ($1, $2, $3, NOW() + INTERVAL '100 years', FALSE)`,
       [otpId, cleanEmail, otp]
     );
 
