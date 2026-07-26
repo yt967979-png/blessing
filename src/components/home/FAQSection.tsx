@@ -30,37 +30,46 @@ export const FAQSection = () => {
   const [openIdx, setOpenIdx] = useState<number | null>(0);
 
   return (
-    <section className="py-12 bg-slate-50 border-t border-slate-200">
+    <section className="py-14 bg-gradient-to-b from-slate-50 to-white border-t border-slate-200">
       <div className="max-w-4xl mx-auto px-4">
-        <div className="text-center mb-8">
-          <h2 className="font-heading font-extrabold text-2xl md:text-3xl text-[#001B3A] uppercase tracking-wide inline-flex items-center gap-4">
-            <span className="w-8 h-0.5 bg-slate-300 hidden sm:inline-block" />
+        <div className="text-center mb-10">
+          <span className="text-xs font-black uppercase tracking-widest text-blue-600 bg-blue-100/70 border border-blue-200 px-3.5 py-1 rounded-full inline-block mb-2">
+            GOT QUESTIONS?
+          </span>
+          <h2 className="font-heading font-black text-2xl sm:text-3xl md:text-4xl text-[#001226] tracking-tight uppercase">
             FREQUENTLY ASKED QUESTIONS
-            <span className="w-8 h-0.5 bg-slate-300 hidden sm:inline-block" />
           </h2>
+          <p className="text-slate-500 text-xs sm:text-sm font-medium mt-1">
+            Everything you need to know about delivery, syllabus coverage, and book content
+          </p>
         </div>
 
-        <div className="space-y-3">
+        <div className="space-y-3.5">
           {FAQS.map((faq, idx) => {
             const isOpen = openIdx === idx;
             return (
               <div
                 key={idx}
-                className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs"
+                className="bg-white/80 backdrop-blur-md border border-slate-200/90 rounded-2xl overflow-hidden shadow-xs transition-all duration-200 hover:border-blue-300"
               >
                 <button
                   onClick={() => setOpenIdx(isOpen ? null : idx)}
-                  className="w-full p-4 text-left font-heading font-bold text-sm text-[#001B3A] flex justify-between items-center gap-4 hover:bg-slate-50 transition-colors"
+                  className="w-full p-4 sm:p-5 text-left font-heading font-extrabold text-xs sm:text-sm text-[#001226] flex justify-between items-center gap-4 hover:bg-blue-50/40 transition-colors cursor-pointer"
                 >
-                  <span>{faq.q}</span>
+                  <span className="flex items-center gap-3">
+                    <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-xs flex items-center justify-center font-black flex-shrink-0">
+                      ?
+                    </span>
+                    {faq.q}
+                  </span>
                   <ChevronDown
-                    className={`w-4 h-4 text-slate-500 transition-transform ${
+                    className={`w-4 h-4 text-blue-600 transition-transform duration-300 flex-shrink-0 ${
                       isOpen ? 'rotate-180' : ''
                     }`}
                   />
                 </button>
                 {isOpen && (
-                  <div className="px-4 pb-4 text-xs text-slate-600 border-t border-slate-100 pt-3 leading-relaxed">
+                  <div className="px-5 pb-5 pt-1 text-slate-600 text-xs sm:text-sm font-medium leading-relaxed border-t border-slate-100 bg-slate-50/50">
                     {faq.a}
                   </div>
                 )}
