@@ -2,10 +2,10 @@ import { NextResponse } from 'next/server';
 
 /**
  * UNIVERSAL MULTI-PROVIDER WHATSAPP AUTOMATION SERVICE
- * Supported Providers:
- * 1. UltraMsg / Whapi.cloud / Green API (Instant QR Code scan — NO Meta template approval needed!)
- * 2. Meta Cloud API (Official Template API)
- * 3. Wati / Interakt / Twilio (Enterprise BSP API)
+ * Priority Order:
+ * 1. Baileys Free Unlimited Engine (Self-Hosted Node/Railway Service — $0.00 / 100% FREE UNLIMITED!)
+ * 2. UltraMsg / Whapi.cloud (QR API)
+ * 3. Meta Cloud API (Official Template API)
  * 4. Direct 1-Click WhatsApp Link (`wa.me`)
  */
 
@@ -55,7 +55,31 @@ export async function POST(request: Request) {
 
     const fullFormattedText = `*BLESSING POWER GUIDE*\n*${stepTitle}*\n\nDear *${customerName || 'Student'}*,\n${stepDescription}\n\n📦 *Order ID:* ${orderId || ''}\n📖 *Books:* ${bookTitle}\n💰 *Total:* ₹${totalAmount || 0}\n🚚 *Courier:* ST Courier Express\n📍 *Docket AWB:* ${trackingNo}\n\n👉 *Click to Track Live on Website:* ${websiteTrackingUrl}`;
 
-    // Provider Strategy 1: UltraMsg / Whapi (QR-code based — 0 Meta template rejections!)
+    // Priority Strategy 1: Baileys Free Unlimited Self-Hosted Engine (Port 4000)
+    try {
+      const baileysRes = await fetch('http://127.0.0.1:4000/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: phoneWithCountry,
+          message: fullFormattedText,
+        }),
+      });
+
+      if (baileysRes.ok) {
+        const bData = await baileysRes.json();
+        return NextResponse.json({
+          success: true,
+          provider: 'BAILEYS_FREE_UNLIMITED',
+          response: bData,
+          message: `Instant FREE WhatsApp message sent to +${phoneWithCountry} via Baileys Engine ($0 cost)!`,
+        });
+      }
+    } catch (e: any) {
+      // Baileys local service not running or connecting
+    }
+
+    // Priority Strategy 2: UltraMsg / Whapi (QR API)
     if (ultramsgInstanceId && ultramsgToken) {
       try {
         const uRes = await fetch(`https://api.ultramsg.com/${ultramsgInstanceId}/messages/chat`, {
@@ -76,12 +100,10 @@ export async function POST(request: Request) {
             message: `Instant WhatsApp notification sent to +${phoneWithCountry} via UltraMsg!`,
           });
         }
-      } catch (e: any) {
-        console.error('UltraMsg API Dispatch Error:', e.message);
-      }
+      } catch (e: any) {}
     }
 
-    // Provider Strategy 2: Official Meta Cloud API (Requires approved template)
+    // Priority Strategy 3: Official Meta Cloud API
     if (metaApiToken && phoneNumberId) {
       try {
         const metaRes = await fetch(`https://graph.facebook.com/v18.0/${phoneNumberId}/messages`, {
@@ -130,12 +152,10 @@ export async function POST(request: Request) {
             message: `Official Meta WhatsApp notification sent to +${phoneWithCountry}`,
           });
         }
-      } catch (e: any) {
-        console.error('Meta API Dispatch Error:', e.message);
-      }
+      } catch (e: any) {}
     }
 
-    // Provider Strategy 3: Direct 1-Click WhatsApp Link Generator (Guaranteed Fallback)
+    // Priority Strategy 4: Direct 1-Click WhatsApp Link Generator (Guaranteed Fallback)
     const encodedMsg = encodeURIComponent(fullFormattedText);
     const fallbackLink = `https://wa.me/${phoneWithCountry}?text=${encodedMsg}`;
 
