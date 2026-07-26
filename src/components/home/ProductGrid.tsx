@@ -19,6 +19,9 @@ export const ProductGrid = () => {
 
   const filteredProducts = useMemo(() => {
     return products.filter((product) => {
+      // Hide out-of-stock products from storefront
+      if (product.inStock === false) return false;
+
       const clsFilter = (selectedClass || 'all').toLowerCase();
       const catFilter = (selectedCategory || 'all').toLowerCase();
 

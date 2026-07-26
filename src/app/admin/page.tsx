@@ -103,6 +103,7 @@ export default function AdminPage() {
   const [newMrp, setNewMrp] = useState(240);
   const [newBadge, setNewBadge] = useState('BESTSELLER');
   const [newBadgeEnabled, setNewBadgeEnabled] = useState(true);
+  const [newDiscountEnabled, setNewDiscountEnabled] = useState(true);
   const [newImg, setNewImg] = useState('https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80');
 
   // Live Orders from Database
@@ -241,15 +242,18 @@ export default function AdminPage() {
 
   const handleCreateProduct = (e: React.FormEvent) => {
     e.preventDefault();
-    const calculatedDiscount = Math.round(((newMrp - newPrice) / newMrp) * 100);
+    const finalPrice = newDiscountEnabled ? Number(newPrice) : Number(newMrp);
+    const finalBadge = newBadgeEnabled ? (newBadge.trim() || 'BESTSELLER') : '';
+    const calculatedDiscount = Math.round(((newMrp - finalPrice) / newMrp) * 100);
+
     addNewProductToDb({
       title: newTitle,
       cls: newCls,
       category: newCat,
-      price: Number(newPrice),
+      price: finalPrice,
       mrp: Number(newMrp),
       discount: calculatedDiscount > 0 ? calculatedDiscount : 0,
-      badge: newBadge,
+      badge: finalBadge,
       image: newImg,
       description: `Complete ${newCls} Standard ${newTitle} for State Board / CBSE exams.`,
     });
@@ -943,13 +947,27 @@ export default function AdminPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Sale Price (₹)</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1.5">
+                      <input
+                        type="checkbox"
+                        checked={newDiscountEnabled}
+                        onChange={(e) => {
+                          setNewDiscountEnabled(e.target.checked);
+                          if (!e.target.checked) setNewPrice(newMrp);
+                        }}
+                        className="w-3.5 h-3.5 accent-[#2874f0] rounded cursor-pointer"
+                      />
+                      <span>Sale Price (₹)</span>
+                    </label>
                     <input
                       type="number"
                       required
-                      value={newPrice}
+                      disabled={!newDiscountEnabled}
+                      value={newDiscountEnabled ? newPrice : newMrp}
                       onChange={(e) => setNewPrice(Number(e.target.value))}
-                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-md text-sm text-gray-900 outline-none focus:border-[#2874f0]"
+                      className={`w-full px-3 py-2 bg-white border rounded-md text-sm outline-none ${
+                        newDiscountEnabled ? 'border-[#2874f0] text-gray-900' : 'border-gray-200 text-gray-400 bg-gray-50'
+                      }`}
                     />
                   </div>
                   <div>
@@ -958,19 +976,33 @@ export default function AdminPage() {
                       type="number"
                       required
                       value={newMrp}
-                      onChange={(e) => setNewMrp(Number(e.target.value))}
+                      onChange={(e) => {
+                        const val = Number(e.target.value);
+                        setNewMrp(val);
+                        if (!newDiscountEnabled) setNewPrice(val);
+                      }}
                       className="w-full px-3 py-2 bg-white border border-gray-200 rounded-md text-sm text-gray-900 outline-none focus:border-[#2874f0]"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Offer Badge</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1.5">
+                      <input
+                        type="checkbox"
+                        checked={newBadgeEnabled}
+                        onChange={(e) => setNewBadgeEnabled(e.target.checked)}
+                        className="w-3.5 h-3.5 accent-[#2874f0] rounded cursor-pointer"
+                      />
+                      <span>Offer Badge</span>
+                    </label>
                     <input
                       type="text"
-                      required
+                      disabled={!newBadgeEnabled}
                       placeholder="e.g. BESTSELLER"
                       value={newBadge}
                       onChange={(e) => setNewBadge(e.target.value)}
-                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-md text-sm text-gray-900 outline-none focus:border-[#2874f0] uppercase"
+                      className={`w-full px-3 py-2 bg-white border rounded-md text-sm uppercase outline-none ${
+                        newBadgeEnabled ? 'border-[#2874f0] text-gray-900' : 'border-gray-200 text-gray-400 bg-gray-50'
+                      }`}
                     />
                   </div>
                   <div className="sm:col-span-2 lg:col-span-1">
