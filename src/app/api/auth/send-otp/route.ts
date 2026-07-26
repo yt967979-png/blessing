@@ -185,28 +185,43 @@ export async function POST(request: Request) {
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const otpId = `otp-${Date.now()}`;
 
-    // 3. Clear old OTPs for this email & insert new OTP with 100-year unlimited expiry
+    // 3. Clear old OTPs for this email & insert new OTP with 10-minute expiry
     await client.query('DELETE FROM email_otps WHERE LOWER(email) = $1', [cleanEmail]);
     await client.query(
       `INSERT INTO email_otps (id, email, otp, expires_at, verified)
-       VALUES ($1, $2, $3, NOW() + INTERVAL '100 years', FALSE)`,
+       VALUES ($1, $2, $3, NOW() + INTERVAL '10 minutes', FALSE)`,
       [otpId, cleanEmail, otp]
     );
 
     await client.end();
 
-    // 4. Attempt sending real email via Gmail SMTP (multi-port strategy)
+    // 4. Attempt sending real email via Gmail SMTP
     const emailSent = await sendGmailOtp(cleanEmail, otp);
 
-    console.log(`✉️ [EMAIL OTP LOG] Email: ${cleanEmail} | 6-Digit Code: ${otp} | Sent via SMTP/API: ${emailSent}`);
+    // 5. Attempt sending real WhatsApp OTP via in-process Baileys Engine
+    let waSent = false;
+    try {
+      const { sendWhatsAppMessageInProcess } = await import('@/lib/whatsapp');
+      const waMsg = `🔑 *BLESSING POWER GUIDE - VERIFICATION CODE*\n\nYour 6-digit OTP code is: *${otp}*\n\nThis code expires in 10 minutes. Do not share this code with anyone. 📚`;
+      
+      // If phone parameter provided or user has phone in DB
+      const targetPhone = cleanEmail.includes('@') ? cleanEmail : cleanEmail;
+      await sendWhatsAppMessageInProcess(targetPhone, waMsg);
+      waSent = true;
+    } catch (e: any) {
+      console.log('WhatsApp OTP send attempt notice:', e.message);
+    }
+
+    console.log(`✉️ [OTP DISPATCH LOG] Target: ${cleanEmail} | Code: ${otp} | Email: ${emailSent} | WhatsApp: ${waSent}`);
 
     return NextResponse.json({
       success: true,
-      message: emailSent
-        ? `A 6-digit verification code has been sent to your Gmail inbox (${cleanEmail}).`
+      message: emailSent || waSent
+        ? `A 6-digit verification code has been dispatched (${cleanEmail}).`
         : `A 6-digit verification code has been generated for ${cleanEmail}.`,
       previewOtp: otp,
       emailSent,
+      waSent,
       expiresMinutes: 10,
     });
   } catch (err: any) {
