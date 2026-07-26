@@ -1,464 +1,447 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import Link from 'next/link';
+import { useState, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { Header } from '@/components/layout/Header';
+import { Footer } from '@/components/layout/Footer';
+import { CartDrawer } from '@/components/cart/CartDrawer';
+import { Modals } from '@/components/modals/Modals';
+import { useStore } from '@/context/StoreContext';
 import {
   Package,
   Truck,
   CheckCircle2,
-  PackageCheck,
-  Send,
   Clock,
-  ChevronRight,
-  Download,
   Search,
-  BookOpen,
+  Download,
+  Send,
   Star,
   X,
+  ExternalLink,
+  ShieldCheck,
+  Building2,
+  AlertCircle
 } from 'lucide-react';
-import { useStore } from '@/context/StoreContext';
-import { Header } from '@/components/layout/Header';
-import { NavBar } from '@/components/layout/NavBar';
-import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
-import { Footer } from '@/components/layout/Footer';
-import { CartDrawer } from '@/components/cart/CartDrawer';
-import { Modals } from '@/components/modals/Modals';
-
 import { downloadTaxInvoice } from '@/lib/invoiceGenerator';
 
-export default function OrdersPage() {
-  const { user, showToast } = useStore();
-  const [searchOrder, setSearchOrder] = useState('');
-  const [searchedOrderData, setSearchedOrderData] = useState<any | null>(null);
-  const [allOrders, setAllOrders] = useState<any[]>([]);
-  const [searchError, setSearchError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+function OrdersContent() {
+  const { user } = useStore();
+  const searchParams = useSearchParams();
+  const queryOrderId = searchParams.get('orderId');
 
-  // Review & Tracking Modal State
-  const [reviewModalItem, setReviewModalItem] = useState<any | null>(null);
+  const [orderSearchInput, setOrderSearchInput] = useState('');
+  const [searchedOrderData, setSearchedOrderData] = useState<any>(null);
+  const [userOrders, setUserOrders] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [showTrackingModal, setShowTrackingModal] = useState(false);
+  const [reviewModalItem, setReviewModalItem] = useState<any>(null);
   const [rating, setRating] = useState(5);
   const [reviewComment, setReviewComment] = useState('');
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
-  const [showTrackingModal, setShowTrackingModal] = useState(false);
+
+  // Recommended 8 Status Flow
+  const ALL_STATUS_STEPS = [
+    { key: 'Order Placed', label: 'Order Placed', desc: 'Order submitted by customer' },
+    { key: 'Payment Confirmed', label: 'Payment Confirmed', desc: 'Payment verified & approved' },
+    { key: 'Preparing Order', label: 'Preparing Order', desc: 'Retrieving books from inventory' },
+    { key: 'Packed', label: 'Packed', desc: 'Parcel packaged & sealed' },
+    { key: 'Handed to ST Courier', label: 'Handed to ST Courier', desc: 'Dispatched to ST Courier Hub' },
+    { key: 'In Transit', label: 'In Transit', desc: 'En route via ST Courier express network' },
+    { key: 'Out for Delivery', label: 'Out for Delivery', desc: 'Courier executive out for delivery' },
+    { key: 'Delivered', label: 'Delivered', desc: 'Successfully delivered to student' },
+  ];
+
+  const getCurrentStepIndex = (status: string) => {
+    const s = (status || '').toLowerCase();
+    if (s.includes('delivered')) return 7;
+    if (s.includes('out for delivery')) return 6;
+    if (s.includes('in transit') || s.includes('shipped')) return 5;
+    if (s.includes('handed to st courier')) return 4;
+    if (s.includes('packed')) return 3;
+    if (s.includes('preparing')) return 2;
+    if (s.includes('payment confirmed') || s.includes('paid')) return 1;
+    return 0; // Order Placed
+  };
 
   useEffect(() => {
-    async function loadDbOrders() {
+    const fetchOrders = async () => {
+      setIsLoading(true);
       try {
-        const urlParams = new URLSearchParams(window.location.search);
-        const urlOrderId = urlParams.get('orderId');
-
-        if (urlOrderId) {
-          setSearchOrder(urlOrderId);
-          const res = await fetch(`/api/orders?orderId=${encodeURIComponent(urlOrderId.trim())}`);
+        if (queryOrderId) {
+          const res = await fetch(`/api/orders?orderId=${encodeURIComponent(queryOrderId)}`);
           if (res.ok) {
             const data = await res.json();
-            if (data && data.length > 0) {
+            if (data.length > 0) {
               setSearchedOrderData(data[0]);
-              setShowTrackingModal(true);
-            }
-          }
-        } else {
-          const res = await fetch('/api/orders');
-          if (res.ok) {
-            const data = await res.json();
-            setAllOrders(data);
-            if (data && data.length > 0) {
-              setSearchedOrderData(data[0]); // Load latest DB order by default
+              setOrderSearchInput(queryOrderId);
             }
           }
         }
-      } catch (err) {}
-      setIsLoading(false);
-    }
-    loadDbOrders();
-  }, []);
+
+        if (user) {
+          const res = await fetch(`/api/orders?userId=${encodeURIComponent(user.id || user.email || '')}`);
+          if (res.ok) {
+            const data = await res.json();
+            setUserOrders(data);
+            if (!queryOrderId && data.length > 0) {
+              setSearchedOrderData(data[0]);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error loading orders:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchOrders();
+  }, [user, queryOrderId]);
 
   const handleSearchOrder = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSearchError(null);
-    if (!searchOrder.trim()) return;
+    if (!orderSearchInput.trim()) return;
 
+    setIsLoading(true);
     try {
-      const res = await fetch(`/api/orders?orderId=${encodeURIComponent(searchOrder.trim())}`);
+      const res = await fetch(`/api/orders?orderId=${encodeURIComponent(orderSearchInput.trim())}`);
       if (res.ok) {
         const data = await res.json();
-        if (data && data.length > 0) {
+        if (data.length > 0) {
           setSearchedOrderData(data[0]);
         } else {
-          setSearchError(`No order found matching Order ID "${searchOrder.toUpperCase()}".`);
+          alert('No order found with ID #' + orderSearchInput);
+          setSearchedOrderData(null);
         }
       }
-    } catch (err) {
-      setSearchError('Error retrieving order details from database.');
+    } catch (e) {
+      alert('Error searching for order.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleReviewSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!reviewComment.trim()) return;
-    setIsSubmittingReview(true);
+  const handleOpenReviewModal = (item: any) => {
+    setReviewModalItem(item);
+    setRating(5);
+    setReviewComment('');
+  };
 
+  const handleSubmitReview = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reviewModalItem) return;
+
+    setIsSubmittingReview(true);
     try {
-      await fetch('/api/reviews', {
+      const res = await fetch('/api/reviews', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          bookId: reviewModalItem.id || '10th-maths',
-          studentName: user?.name || searchedOrderData?.customerName || 'Student Buyer',
+          bookId: reviewModalItem.id,
+          userName: user?.name || searchedOrderData?.customerName || 'Verified Buyer',
+          userEmail: user?.email || 'customer@blessing.com',
           rating,
           comment: reviewComment,
         }),
       });
 
-      showToast('⭐ Verified Student Review published successfully to database!');
-      setReviewModalItem(null);
-      setReviewComment('');
+      if (res.ok) {
+        alert('Thank you! Your verified review has been published on the book page.');
+        setReviewModalItem(null);
+      } else {
+        alert('Failed to submit review. Please try again.');
+      }
     } catch (err) {
-      showToast('⚠️ Could not publish review. Please try again.');
+      alert('Error submitting review.');
+    } finally {
+      setIsSubmittingReview(false);
     }
-    setIsSubmittingReview(false);
   };
 
+  const currentStepIdx = searchedOrderData ? getCurrentStepIndex(searchedOrderData.courierStatus) : 0;
+  const isOfficialAwb = searchedOrderData?.trackingNumber && (searchedOrderData.trackingNumber.startsWith('STC') || !searchedOrderData.trackingNumber.startsWith('SHP-'));
+
   return (
-    <main className="min-h-screen bg-slate-50 flex flex-col">
-      <AnnouncementBar />
-      <Header />
-      <NavBar />
+    <div className="space-y-8 pb-16">
+      {/* Page Title & Order Search Bar */}
+      <div className="bg-gradient-to-br from-[#001B3A] via-[#002B5B] to-[#0044AA] rounded-3xl p-6 sm:p-10 text-white shadow-xl">
+        <div className="max-w-2xl">
+          <span className="text-[10px] font-extrabold text-amber-300 uppercase tracking-widest bg-amber-400/10 border border-amber-400/30 px-3 py-1 rounded-full">
+            REALTIME ST COURIER ORDER TRACKING
+          </span>
+          <h1 className="font-heading font-black text-2xl sm:text-4xl text-white mt-3 mb-2">
+            Track Your Shipment
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-300 mb-6">
+            Enter your Order ID (e.g. BPG-1082) or ST Courier Docket Number to view live status updates &amp; download tax invoices.
+          </p>
 
-      {/* Breadcrumb */}
-      <div className="bg-white border-b border-slate-200 py-3">
-        <div className="max-w-7xl mx-auto px-4 text-xs font-semibold text-slate-500 flex items-center gap-2">
-          <Link href="/" className="hover:text-blue-600">Home</Link>
-          <ChevronRight className="w-3.5 h-3.5" />
-          <Link href="/profile" className="hover:text-blue-600">My Account</Link>
-          <ChevronRight className="w-3.5 h-3.5" />
-          <span className="text-slate-900">Track Order & Write Reviews</span>
-        </div>
-      </div>
-
-      <div className="max-w-7xl mx-auto px-4 py-8 flex-1 w-full">
-        {/* Top Header & Search */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
-          <div>
-            <h1 className="font-heading font-black text-2xl md:text-3xl text-[#001B3A]">
-              Track Your Order & ST Courier Delivery
-            </h1>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Enter your Order ID to track delivery status & submit verified reviews
-            </p>
-          </div>
-
-          <form onSubmit={handleSearchOrder} className="flex gap-2 w-full sm:w-80">
+          <form onSubmit={handleSearchOrder} className="flex gap-2">
             <div className="relative flex-1">
+              <Search className="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
-                placeholder="Enter your Order ID..."
-                value={searchOrder}
-                onChange={(e) => setSearchOrder(e.target.value)}
-                className="w-full pl-9 pr-3 py-2.5 bg-white border border-slate-300 rounded-xl text-xs outline-none focus:border-blue-600 shadow-xs uppercase"
+                placeholder="Enter Order ID (e.g. BPG-1082)..."
+                value={orderSearchInput}
+                onChange={(e) => setOrderSearchInput(e.target.value)}
+                className="w-full pl-11 pr-4 py-3.5 bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl text-white placeholder-slate-400 text-xs sm:text-sm outline-none focus:border-amber-400 transition-all font-bold"
               />
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
             </div>
             <button
               type="submit"
-              className="bg-[#001B3A] hover:bg-blue-600 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl transition-colors shadow-xs cursor-pointer"
+              className="bg-amber-400 hover:bg-amber-500 text-[#001B3A] font-extrabold text-xs sm:text-sm px-6 py-3.5 rounded-2xl shadow-lg transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap"
             >
-              TRACK
+              <span>TRACK LIVE</span>
             </button>
           </form>
         </div>
-
-        {searchError && (
-          <div className="bg-red-50 border border-red-200 text-red-700 text-xs font-bold p-4 rounded-xl mb-6">
-            {searchError}
-          </div>
-        )}
-
-        {/* Live Tracked Order Box */}
-        {searchedOrderData ? (
-          <div className="space-y-6">
-            {/* 1. Main Order Summary Card */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs">
-              <div className="flex flex-wrap justify-between items-center gap-4 pb-4 border-b border-slate-100 text-xs">
-                <div>
-                  <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider block">ORDER ID</span>
-                  <span className="font-heading font-black text-lg text-[#001B3A]">{searchedOrderData.orderId}</span>
-                </div>
-
-                <div>
-                  <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider block">ORDER DATE</span>
-                  <span className="font-bold text-slate-800 text-sm">{searchedOrderData.createdAt}</span>
-                </div>
-
-                <div>
-                  <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider block">TOTAL AMOUNT</span>
-                  <span className="font-black text-slate-900 text-base">₹{searchedOrderData.totalAmount}</span>
-                </div>
-
-                <div>
-                  <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider block">PAYMENT METHOD</span>
-                  <span className="font-bold text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded border border-emerald-200">
-                    {searchedOrderData.paymentMethod || 'Razorpay UPI'}
-                  </span>
-                </div>
-
-                <button
-                  onClick={() => downloadTaxInvoice(searchedOrderData)}
-                  className="bg-slate-900 hover:bg-blue-600 text-white font-extrabold text-xs px-4 py-2 rounded-xl flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
-                >
-                  <Download className="w-4 h-4 text-amber-400" />
-                  <span>TAX INVOICE PDF</span>
-                </button>
-              </div>
-
-              {/* 2. Visual Stepper Line (Flipkart / Amazon Style) */}
-              <div className="pt-8 pb-4 px-2">
-                <div className="relative flex items-center justify-between">
-                  {/* Connecting Progress Line */}
-                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-full h-1 bg-slate-200 z-0 rounded-full" />
-                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-3/4 h-1 bg-gradient-to-r from-emerald-500 via-emerald-600 to-amber-500 z-0 rounded-full" />
-
-                  {/* Step 1: Confirmed */}
-                  <div className="relative z-10 flex flex-col items-center text-center">
-                    <div className="w-10 h-10 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-sm shadow-md ring-4 ring-white">
-                      <CheckCircle2 className="w-6 h-6" />
-                    </div>
-                    <span className="font-heading font-black text-xs text-slate-900 mt-2">Order Placed</span>
-                    <span className="text-[10px] font-semibold text-slate-500">Confirmed</span>
-                  </div>
-
-                  {/* Step 2: Packed & Dispatched */}
-                  <div className="relative z-10 flex flex-col items-center text-center">
-                    <div className="w-10 h-10 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-sm shadow-md ring-4 ring-white">
-                      <PackageCheck className="w-6 h-6" />
-                    </div>
-                    <span className="font-heading font-black text-xs text-slate-900 mt-2">Packed & Dispatched</span>
-                    <span className="text-[10px] font-semibold text-slate-500">ST Courier Hub</span>
-                  </div>
-
-                  {/* Step 3: In-Transit ST Courier */}
-                  <div className="relative z-10 flex flex-col items-center text-center">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-amber-400 to-amber-500 text-[#001B3A] flex items-center justify-center font-black text-sm shadow-lg ring-4 ring-white animate-pulse">
-                      <Truck className="w-6 h-6" />
-                    </div>
-                    <span className="font-heading font-black text-xs text-amber-900 mt-2">Shipped via ST Courier</span>
-                    <span className="text-[10px] font-bold text-blue-600">{searchedOrderData.status || 'In Transit'}</span>
-                  </div>
-
-                  {/* Step 4: Delivered */}
-                  <div className="relative z-10 flex flex-col items-center text-center opacity-50">
-                    <div className="w-10 h-10 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center font-bold text-sm ring-4 ring-white">
-                      <Clock className="w-5 h-5" />
-                    </div>
-                    <span className="font-heading font-bold text-xs text-slate-600 mt-2">Delivery</span>
-                    <span className="text-[10px] font-semibold text-slate-400">Est: Tomorrow 5 PM</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* ST Courier Live Docket Details Banner */}
-              <div className="mt-6 bg-gradient-to-r from-[#001B3A] via-[#002B5B] to-[#0044AA] rounded-2xl p-5 text-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-md">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center text-amber-400 flex-shrink-0">
-                    <Send className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <div className="text-[10px] font-extrabold text-amber-300 uppercase tracking-wider">
-                      ST COURIER OFFICIAL LOGISTICS PARTNER
-                    </div>
-                    <h4 className="font-heading font-black text-base text-white">
-                      {searchedOrderData.trackingNumber
-                        ? <>
-                            Docket No: <span className="text-amber-400">{searchedOrderData.trackingNumber}</span>
-                          </>
-                        : <span className="text-amber-300 text-sm">Tracking number will be updated soon</span>
-                      }
-                    </h4>
-                    <p className="text-xs text-slate-300">
-                      Status: {searchedOrderData.status || 'Processing your order'}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
-                  <a
-                    href={`/api/orders/${searchedOrderData.orderId}/invoice`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-full sm:w-auto bg-white/10 hover:bg-white/20 border border-white/30 text-white font-extrabold text-xs px-4 py-3 rounded-xl transition-all shadow-sm flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer backdrop-blur-xs"
-                  >
-                    <Download className="w-4 h-4 text-amber-400" />
-                    <span>TAX INVOICE</span>
-                  </a>
-
-                  <button
-                    onClick={() => setShowTrackingModal(true)}
-                    className="w-full sm:w-auto bg-amber-400 hover:bg-amber-500 text-[#001B3A] font-extrabold text-xs px-5 py-3 rounded-xl transition-all shadow-md flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer"
-                  >
-                    <Truck className="w-4 h-4 text-[#001B3A]" />
-                    <span>VIEW LIVE TRACKING</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* 3. Customer Address & Dynamic Items Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-              {/* Delivery Address Card */}
-              <div className="md:col-span-5 bg-white border border-slate-200 rounded-2xl p-6 shadow-xs">
-                <h3 className="font-heading font-black text-sm text-[#001B3A] mb-3 flex items-center gap-2 pb-3 border-b border-slate-100">
-                  <Truck className="w-4 h-4 text-blue-600" />
-                  <span>Delivery Address</span>
-                </h3>
-                <div className="space-y-1 text-xs">
-                  <div className="font-extrabold text-slate-900 text-sm mb-1">{searchedOrderData.customerName}</div>
-                  {searchedOrderData.address ? (
-                    <p className="text-slate-600 leading-relaxed font-medium">
-                      {searchedOrderData.address}{searchedOrderData.city ? `, ${searchedOrderData.city}` : ''}{searchedOrderData.pincode ? ` - ${searchedOrderData.pincode}` : ''}{searchedOrderData.state ? `, ${searchedOrderData.state}` : ''}
-                    </p>
-                  ) : (
-                    <p className="text-slate-400 italic text-xs">No delivery address on file</p>
-                  )}
-                  {searchedOrderData.customerPhone && (
-                    <div className="pt-2 text-slate-700 font-bold flex items-center gap-1">
-                      <span>📱 Phone:</span>
-                      <span className="text-blue-600">{searchedOrderData.customerPhone}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Order Items Card with Flipkart/Amazon Style Write Review Button */}
-              <div className="md:col-span-7 bg-white border border-slate-200 rounded-2xl p-6 shadow-xs">
-                <h3 className="font-heading font-black text-sm text-[#001B3A] mb-3 flex items-center gap-2 pb-3 border-b border-slate-100 justify-between">
-                  <div className="flex items-center gap-2">
-                    <Package className="w-4 h-4 text-amber-500" />
-                    <span>Items in Shipment ({searchedOrderData.items?.length || 1})</span>
-                  </div>
-                  <span className="text-[10px] font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded">
-                    VERIFIED BUYER ACCESS
-                  </span>
-                </h3>
-
-                <div className="space-y-4">
-                  {(searchedOrderData.items && searchedOrderData.items.length > 0
-                    ? searchedOrderData.items
-                    : []
-                  ).map((item: any, idx: number) => (
-                    <div key={idx} className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-slate-100 pb-3 gap-3">
-                      <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center font-bold text-slate-700 text-xs flex-shrink-0">
-                          📚
-                        </div>
-                        <div className="text-xs">
-                          <h4 className="font-heading font-extrabold text-slate-900">{item.title}</h4>
-                          <p className="text-slate-500 font-medium mt-0.5">Qty: {item.qty || 1} • Price: ₹{item.price}</p>
-                        </div>
-                      </div>
-
-                      {/* Flipkart / Amazon Style Verified Review Button */}
-                      <button
-                        onClick={() => setReviewModalItem(item)}
-                        className="bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-[#001B3A] font-extrabold text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-all shadow-xs cursor-pointer whitespace-nowrap"
-                      >
-                        <Star className="w-3.5 h-3.5 fill-[#001B3A]" />
-                        <span>WRITE A REVIEW</span>
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="py-16 text-center bg-white border border-dashed border-slate-300 rounded-2xl p-8 max-w-xl mx-auto">
-            <BookOpen className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-            <h3 className="font-heading font-black text-lg text-[#001B3A] mb-1">
-              Enter Your Order ID to Track ST Courier Delivery
-            </h3>
-            <p className="text-xs text-slate-500 max-w-sm mx-auto">
-              When you place an order, you will receive an Order ID (e.g. BPG-1082). Enter it above to see live ST Courier Express tracking!
-            </p>
-          </div>
-        )}
       </div>
 
-      {/* Flipkart/Amazon Style Write Review Modal */}
-      {reviewModalItem && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 border border-slate-200 animate-in fade-in zoom-in-95">
-            <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+      {isLoading ? (
+        <div className="py-20 text-center space-y-3">
+          <div className="w-10 h-10 border-4 border-amber-400 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-xs font-bold text-slate-600">Retrieving Order Details from Database...</p>
+        </div>
+      ) : searchedOrderData ? (
+        <div className="space-y-6">
+          {/* 1. Main Order Summary Card */}
+          <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-xs space-y-6">
+            <div className="flex flex-wrap justify-between items-center gap-4 pb-6 border-b border-slate-100 text-xs">
               <div>
-                <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded uppercase">
-                  VERIFIED PURCHASER REVIEW
-                </span>
-                <h3 className="font-heading font-black text-lg text-[#001B3A] mt-1">
-                  Rate & Review Your Book
-                </h3>
+                <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider block">ORDER ID</span>
+                <span className="font-heading font-black text-xl text-[#001B3A]">{searchedOrderData.orderId}</span>
               </div>
+
+              <div>
+                <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider block">ORDER DATE</span>
+                <span className="font-bold text-slate-800 text-sm">{searchedOrderData.createdAt}</span>
+              </div>
+
+              <div>
+                <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider block">TOTAL AMOUNT</span>
+                <span className="font-black text-slate-900 text-base">₹{searchedOrderData.totalAmount}</span>
+              </div>
+
+              <div>
+                <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider block">PAYMENT METHOD</span>
+                <span className="font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 inline-block mt-0.5">
+                  {searchedOrderData.paymentMethod || 'Razorpay UPI'} • {searchedOrderData.paymentStatus || 'Payment Confirmed'}
+                </span>
+              </div>
+
               <button
-                onClick={() => setReviewModalItem(null)}
-                className="p-1 text-slate-400 hover:text-slate-700 rounded-full hover:bg-slate-100"
+                onClick={() => downloadTaxInvoice(searchedOrderData)}
+                className="bg-slate-900 hover:bg-blue-600 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                <Download className="w-4 h-4 text-amber-400" />
+                <span>TAX INVOICE PDF</span>
               </button>
             </div>
 
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex items-center gap-3">
-              <span className="text-2xl">📚</span>
-              <div className="text-xs">
-                <div className="font-bold text-slate-900">{reviewModalItem.title}</div>
-                <div className="text-[11px] text-slate-500">Order ID: {searchedOrderData?.orderId}</div>
+            {/* 2. Official E-Commerce Recommended 8-Status Checklist */}
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-heading font-black text-sm text-[#001B3A] flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-blue-600" />
+                  <span>Order Progress Checklist</span>
+                </h3>
+                <span className="text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-full border border-blue-200">
+                  Current Status: {searchedOrderData.courierStatus || 'Order Placed'}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                {ALL_STATUS_STEPS.map((step, idx) => {
+                  const isDone = idx <= currentStepIdx;
+                  return (
+                    <div
+                      key={step.key}
+                      className={`p-3.5 rounded-2xl border transition-all flex items-start gap-3 ${
+                        isDone
+                          ? 'bg-emerald-50/80 border-emerald-200 text-emerald-950'
+                          : 'bg-slate-50/60 border-slate-200 text-slate-400 opacity-60'
+                      }`}
+                    >
+                      <div
+                        className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs flex-shrink-0 mt-0.5 ${
+                          isDone ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-500'
+                        }`}
+                      >
+                        {isDone ? '✔' : '○'}
+                      </div>
+                      <div>
+                        <div className="font-extrabold text-xs">{step.label}</div>
+                        <div className="text-[10px] text-slate-500 mt-0.5 leading-tight">{step.desc}</div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
-            <form onSubmit={handleReviewSubmit} className="space-y-4">
+            {/* 3. Logistics & Docket Number Banner */}
+            <div className="bg-gradient-to-r from-[#001B3A] via-[#002B5B] to-[#0044AA] rounded-2xl p-5 text-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-md">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center text-amber-400 flex-shrink-0">
+                  <Truck className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="text-[10px] font-extrabold text-amber-300 uppercase tracking-wider">
+                    COURIER PARTNER: ST COURIER EXPRESS
+                  </div>
+                  <h4 className="font-heading font-black text-base text-white">
+                    {isOfficialAwb ? (
+                      <>
+                        Docket Number: <span className="text-amber-400 font-mono font-extrabold">{searchedOrderData.trackingNumber}</span>
+                      </>
+                    ) : (
+                      <>
+                        Shipment ID: <span className="text-amber-300 font-mono font-bold">{searchedOrderData.shipmentId || searchedOrderData.trackingNumber || 'Pending ST Courier Booking'}</span>
+                      </>
+                    )}
+                  </h4>
+                  <p className="text-xs text-slate-300 mt-0.5">
+                    {isOfficialAwb ? 'Official ST Courier AWB assigned & active' : 'Internal Shipment Created • Official ST Courier Docket pending booking'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                {isOfficialAwb ? (
+                  <a
+                    href={searchedOrderData.trackingUrl || `https://stcourier.com/track/shipment?docket=${searchedOrderData.trackingNumber}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full sm:w-auto bg-amber-400 hover:bg-amber-500 text-[#001B3A] font-extrabold text-xs px-5 py-3 rounded-xl transition-all shadow-md flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer"
+                  >
+                    <ExternalLink className="w-4 h-4 text-[#001B3A]" />
+                    <span>TRACK ON ST COURIER</span>
+                  </a>
+                ) : (
+                  <button
+                    onClick={() => setShowTrackingModal(true)}
+                    className="w-full sm:w-auto bg-white/10 hover:bg-white/20 border border-white/30 text-white font-extrabold text-xs px-5 py-3 rounded-xl transition-all flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer backdrop-blur-xs"
+                  >
+                    <Send className="w-4 h-4 text-amber-400" />
+                    <span>VIEW LIVE TIMELINE</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* 4. Delivery Address & Purchased Guide Books Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+            <div className="md:col-span-5 bg-white border border-slate-200 rounded-3xl p-6 shadow-xs space-y-3">
+              <h3 className="font-heading font-black text-sm text-[#001B3A] pb-3 border-b border-slate-100 flex items-center gap-2">
+                <Building2 className="w-4 h-4 text-blue-600" />
+                <span>Delivery Address</span>
+              </h3>
+              <div className="text-xs space-y-1">
+                <div className="font-extrabold text-slate-900 text-sm">{searchedOrderData.customerName}</div>
+                {searchedOrderData.address ? (
+                  <p className="text-slate-600 font-medium leading-relaxed">
+                    {searchedOrderData.address}{searchedOrderData.city ? `, ${searchedOrderData.city}` : ''}{searchedOrderData.pincode ? ` - ${searchedOrderData.pincode}` : ''}
+                  </p>
+                ) : (
+                  <p className="text-slate-400 italic">Address on file</p>
+                )}
+                {searchedOrderData.customerPhone && (
+                  <div className="pt-2 font-bold text-slate-700">
+                    <span>📱 Phone: </span>
+                    <span className="text-blue-600">+91 {searchedOrderData.customerPhone}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="md:col-span-7 bg-white border border-slate-200 rounded-3xl p-6 shadow-xs space-y-4">
+              <h3 className="font-heading font-black text-sm text-[#001B3A] pb-3 border-b border-slate-100 flex items-center gap-2">
+                <Package className="w-4 h-4 text-blue-600" />
+                <span>Purchased Guide Books ({searchedOrderData.items?.length || 1})</span>
+              </h3>
+              <div className="space-y-3">
+                {searchedOrderData.items?.map((item: any, idx: number) => (
+                  <div
+                    key={idx}
+                    className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between gap-3 text-xs"
+                  >
+                    <div>
+                      <div className="font-extrabold text-slate-900">{item.title}</div>
+                      <div className="text-[11px] text-slate-500 mt-0.5">
+                        Qty: {item.qty || 1} • Price: ₹{item.price}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleOpenReviewModal(item)}
+                      className="bg-amber-400/20 text-amber-900 hover:bg-amber-400/30 border border-amber-300 font-extrabold text-[11px] px-3 py-1.5 rounded-xl transition-all flex items-center gap-1 cursor-pointer"
+                    >
+                      <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
+                      <span>WRITE REVIEW</span>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="bg-white border border-slate-200 rounded-3xl p-12 text-center max-w-md mx-auto space-y-4">
+          <AlertCircle className="w-12 h-12 text-amber-500 mx-auto opacity-80" />
+          <h3 className="font-heading font-black text-lg text-slate-900">No Active Order Selected</h3>
+          <p className="text-xs text-slate-500">
+            Enter your Order ID (e.g. BPG-1082) in the search box above to track your ST Courier shipment!
+          </p>
+        </div>
+      )}
+
+      {/* Review Modal */}
+      {reviewModalItem && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <h3 className="font-heading font-black text-base text-slate-900">Review Guide Book</h3>
+            <p className="text-xs text-slate-500 font-medium">{reviewModalItem.title}</p>
+            <form onSubmit={handleSubmitReview} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">Star Rating</label>
                 <div className="flex gap-2">
                   {[1, 2, 3, 4, 5].map((star) => (
                     <button
-                      type="button"
                       key={star}
+                      type="button"
                       onClick={() => setRating(star)}
-                      className="p-2 bg-slate-50 hover:bg-amber-50 rounded-xl border border-slate-200 cursor-pointer transition-colors"
+                      className="p-2 bg-slate-100 hover:bg-amber-100 rounded-xl transition-colors cursor-pointer"
                     >
-                      <Star
-                        className={`w-6 h-6 ${
-                          star <= rating ? 'fill-amber-400 text-amber-400' : 'text-slate-300'
-                        }`}
-                      />
+                      <Star className={`w-5 h-5 ${star <= rating ? 'fill-amber-400 text-amber-400' : 'text-slate-300'}`} />
                     </button>
                   ))}
                 </div>
               </div>
-
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Your Review & Feedback</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Your Review Comment</label>
                 <textarea
-                  rows={4}
+                  rows={3}
                   required
-                  placeholder="Share how this guide book helped your exam preparation, question quality, delivery speed..."
+                  placeholder="Share feedback on book content, printing quality, delivery speed..."
                   value={reviewComment}
                   onChange={(e) => setReviewComment(e.target.value)}
                   className="w-full p-3 border border-slate-300 rounded-xl text-xs outline-none focus:border-blue-600 bg-white"
                 />
               </div>
-
-              <div className="flex justify-end gap-2 pt-2">
+              <div className="flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setReviewModalItem(null)}
-                  className="px-4 py-2.5 rounded-xl border border-slate-300 font-bold text-xs text-slate-700 hover:bg-slate-50"
+                  className="px-4 py-2 rounded-xl border border-slate-300 text-xs font-bold text-slate-700"
                 >
                   CANCEL
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmittingReview}
-                  className="px-5 py-2.5 rounded-xl bg-[#001B3A] hover:bg-blue-600 text-white font-extrabold text-xs shadow-md transition-colors cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-[#001B3A] text-white text-xs font-extrabold shadow-md cursor-pointer"
                 >
-                  {isSubmittingReview ? 'SUBMITTING...' : 'SUBMIT VERIFIED REVIEW'}
+                  {isSubmittingReview ? 'SUBMITTING...' : 'SUBMIT REVIEW'}
                 </button>
               </div>
             </form>
@@ -466,106 +449,80 @@ export default function OrdersPage() {
         </div>
       )}
 
-      {/* In-Website Live ST Courier Tracking Portal Modal */}
+      {/* In-Website ST Courier Tracking Timeline Modal */}
       {showTrackingModal && searchedOrderData && (
         <div
           onClick={() => setShowTrackingModal(false)}
-          className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 overflow-y-auto"
+          className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-white rounded-3xl max-w-xl w-full relative shadow-2xl overflow-hidden border border-slate-100 my-auto"
+            className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-100"
           >
-            {/* Modal Header */}
-            <div className="bg-gradient-to-r from-[#001B3A] via-[#002B5B] to-[#0044AA] text-white p-6 relative">
+            <div className="bg-gradient-to-r from-[#001B3A] to-[#0044AA] text-white p-6 relative">
               <button
                 onClick={() => setShowTrackingModal(false)}
-                className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer"
+                className="absolute top-4 right-4 text-white/80 hover:text-white cursor-pointer"
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5" />
               </button>
-
-              <div className="flex items-center gap-2 mb-2">
-                <Send className="w-5 h-5 text-amber-400" />
-                <span className="font-heading font-black text-xs text-amber-300 tracking-wider uppercase">
-                  ST COURIER OFFICIAL LOGISTICS PARTNER
-                </span>
-              </div>
-              <h3 className="font-heading font-black text-xl text-white">
-                Live Shipment Tracking Portal
-              </h3>
+              <div className="text-[10px] font-extrabold text-amber-300 uppercase">ST COURIER LOGISTICS PORTAL</div>
+              <h3 className="font-heading font-black text-xl text-white mt-1">Live Shipment Status</h3>
               <p className="text-xs text-slate-300 mt-1">
-                Docket No: <span className="font-mono font-bold text-amber-400">{searchedOrderData.trackingNumber || 'STC-TN-984210'}</span> • Order #{searchedOrderData.orderId}
+                Order #{searchedOrderData.orderId} • Docket/ID: <span className="font-mono text-amber-400 font-bold">{searchedOrderData.trackingNumber || searchedOrderData.shipmentId}</span>
               </p>
             </div>
 
-            {/* Modal Content - Live In-Website Tracking Info */}
-            <div className="p-6 space-y-6">
-              {/* Realtime Status Banner */}
-              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center justify-between">
-                <div>
-                  <span className="text-[10px] font-extrabold uppercase text-amber-700 block">CURRENT SHIPMENT STATUS</span>
-                  <span className="font-heading font-black text-lg text-[#001B3A]">{searchedOrderData.courierStatus || 'Shipped via ST Courier'}</span>
-                </div>
-                <span className="bg-emerald-600 text-white text-xs font-black px-3 py-1.5 rounded-xl shadow-xs">
-                  LIVE TRACKING ACTIVE
-                </span>
-              </div>
-
-              {/* In-Website Dynamic Live Activity Timeline */}
-              <div className="space-y-4 text-xs">
-                <h4 className="font-heading font-black text-slate-900 uppercase text-xs tracking-wider flex items-center gap-2 border-b border-slate-100 pb-2">
-                  <Truck className="w-4 h-4 text-blue-600" />
-                  <span>Shipment Activity &amp; Transit Log</span>
-                </h4>
-
-                <div className="relative pl-6 space-y-6 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-blue-200">
-                  <div className="relative">
-                    <div className="absolute -left-6 top-0 w-4 h-4 rounded-full bg-emerald-500 ring-4 ring-emerald-100 flex items-center justify-center">
-                      <CheckCircle2 className="w-3 h-3 text-white" />
+            <div className="p-6 space-y-4 text-xs">
+              <div className="space-y-3">
+                {ALL_STATUS_STEPS.map((step, idx) => {
+                  const isDone = idx <= currentStepIdx;
+                  return (
+                    <div key={step.key} className="flex items-center gap-3">
+                      <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${isDone ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-400'}`}>
+                        {isDone ? '✔' : '○'}
+                      </div>
+                      <div className={`font-bold ${isDone ? 'text-slate-900' : 'text-slate-400'}`}>{step.label}</div>
                     </div>
-                    <div className="font-extrabold text-slate-900">Order Dispatched &amp; Handed to ST Courier</div>
-                    <div className="text-[11px] text-slate-500 font-medium">Origin Facility: Express Logistics Sorting Hub</div>
-                    <div className="text-[10px] text-slate-400 mt-0.5">{searchedOrderData.createdAt}</div>
-                  </div>
+                  );
+                })}
+              </div>
 
-                  <div className="relative">
-                    <div className="absolute -left-6 top-0 w-4 h-4 rounded-full bg-blue-600 ring-4 ring-blue-100 animate-pulse" />
-                    <div className="font-extrabold text-blue-900">In-Transit via ST Courier Express Route</div>
-                    <div className="text-[11px] text-slate-600 font-medium">Docket #{searchedOrderData.trackingNumber || 'Pending AWB Assignment'}</div>
-                    <div className="text-[10px] text-blue-600 font-bold mt-0.5">Estimated Delivery: Next Business Day by 5:00 PM</div>
-                  </div>
-
-                  <div className="relative opacity-60">
-                    <div className="absolute -left-6 top-0 w-4 h-4 rounded-full bg-slate-300 ring-4 ring-slate-100" />
-                    <div className="font-bold text-slate-600">Out for Delivery to Student Address</div>
-                    <div className="text-[11px] text-slate-500">{searchedOrderData.address || 'Destination Address'}{searchedOrderData.city ? `, ${searchedOrderData.city}` : ''}</div>
-                  </div>
+              {isOfficialAwb && (
+                <div className="pt-4 border-t border-slate-100 flex justify-between items-center">
+                  <a
+                    href={searchedOrderData.trackingUrl || `https://stcourier.com/track/shipment?docket=${searchedOrderData.trackingNumber}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 hover:text-blue-800 font-bold underline text-xs"
+                  >
+                    Open Official ST Courier Site ↗
+                  </a>
+                  <button
+                    onClick={() => setShowTrackingModal(false)}
+                    className="bg-[#001B3A] text-white font-extrabold text-xs px-5 py-2 rounded-xl"
+                  >
+                    CLOSE
+                  </button>
                 </div>
-              </div>
-
-              {/* Direct Official ST Courier Web Link Option */}
-              <div className="pt-4 border-t border-slate-100 flex items-center justify-between gap-4">
-                <a
-                  href={searchedOrderData.trackingUrl || (searchedOrderData.trackingNumber ? `https://stcourier.com/track/shipment?docket=${searchedOrderData.trackingNumber}` : 'https://stcourier.com')}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs font-bold text-blue-600 hover:text-blue-800 underline flex items-center gap-1"
-                >
-                  <span>Open Official ST Courier Site ↗</span>
-                </a>
-                <button
-                  onClick={() => setShowTrackingModal(false)}
-                  className="bg-[#001B3A] text-white font-black text-xs px-6 py-2.5 rounded-xl hover:bg-blue-600 transition-colors shadow-sm cursor-pointer"
-                >
-                  CLOSE TRACKING
-                </button>
-              </div>
+              )}
             </div>
           </div>
         </div>
       )}
+    </div>
+  );
+}
 
+export default function OrdersPage() {
+  return (
+    <main className="min-h-screen bg-[#F4F6F9] text-slate-900 font-sans">
+      <Header />
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-16">
+        <Suspense fallback={<div className="py-20 text-center">Loading...</div>}>
+          <OrdersContent />
+        </Suspense>
+      </div>
       <Footer />
       <CartDrawer />
       <Modals />

@@ -60,10 +60,12 @@ export async function GET(request: Request) {
           }
         }
 
-        const awb = o.awb_number || '';
-        const trackingUrl = o.tracking_url || (awb ? `https://stcourier.com/track/shipment?docket=${awb}` : 'https://stcourier.com');
+        const awb = o.awb_number || o.shipment_id || '';
+        const isOfficialAwb = awb.startsWith('STC') || (awb && !awb.startsWith('SHP-'));
+        const trackingUrl = o.tracking_url || (isOfficialAwb ? `https://stcourier.com/track/shipment?docket=${awb}` : 'https://stcourier.com');
 
         return {
+          id: o.id,
           orderId: o.order_number || o.id,
           customerName: addrObj.name || o.user_id || 'Customer',
           customerPhone: addrObj.phone || '',
@@ -73,12 +75,17 @@ export async function GET(request: Request) {
           state: addrObj.state || 'Tamil Nadu',
           totalAmount: Number(o.total_amount || 0),
           paymentMethod: o.payment_method || 'Razorpay',
-          paymentStatus: o.payment_status || 'Pending',
+          paymentStatus: o.payment_status || 'Payment Confirmed',
           courierStatus: o.order_status || 'Order Placed',
+          shipmentId: o.shipment_id || `SHP-${new Date().toISOString().slice(0,10).replace(/-/g,'')}-000101`,
           trackingNumber: awb,
+          isOfficialAwb: isOfficialAwb,
           trackingUrl: trackingUrl,
           courierName: o.courier_name || 'ST Courier Express',
           items: Array.isArray(o.items) ? o.items : [],
+          packedAt: o.packed_at ? new Date(o.packed_at).toLocaleString('en-IN') : null,
+          shippedAt: o.shipped_at ? new Date(o.shipped_at).toLocaleString('en-IN') : null,
+          deliveredAt: o.delivered_at ? new Date(o.delivered_at).toLocaleString('en-IN') : null,
           createdAt: new Date(o.ordered_at || Date.now()).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
         };
       });
@@ -102,8 +109,10 @@ export async function POST(request: Request) {
 
     const id = `ord-${Date.now()}`;
     const orderNumber = 'BPG-' + Math.floor(1000 + Math.random() * 9000);
+    const ymd = new Date().toISOString().slice(0,10).replace(/-/g,'');
+    const internalShipmentId = `SHP-${ymd}-${Math.floor(100000 + Math.random() * 900000)}`;
+
     const parsedItems = Array.isArray(items) ? items : [];
-    // Server-side Price Verification against Railway PostgreSQL DB to prevent client tampering
     let calculatedTotal = 0;
     const verifiedItems = [];
 
@@ -141,13 +150,13 @@ export async function POST(request: Request) {
     });
 
     if (client) {
-      // 1. Insert Order into PostgreSQL orders table (status: 'Order Placed')
+      // Insert Order into PostgreSQL orders table with initial internal shipment_id
       const sqlOrder = `
-        INSERT INTO orders (id, order_number, user_id, subtotal, total_amount, payment_method, payment_status, order_status, courier_name, shipping_address)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'ST Courier Express', $9)
+        INSERT INTO orders (id, order_number, user_id, subtotal, total_amount, payment_method, payment_status, order_status, courier_name, shipment_id, awb_number, shipping_address)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'ST Courier Express', $9, $9, $10)
         RETURNING *
       `;
-      const payStat = paymentStatus || (paymentMethod?.toLowerCase().includes('razorpay') ? 'PAID' : 'Pending COD');
+      const payStat = paymentStatus || (paymentMethod?.toLowerCase().includes('razorpay') ? 'Payment Confirmed' : 'Pending COD');
       const initialStatus = 'Order Placed';
 
       await client.query(sqlOrder, [
@@ -159,10 +168,10 @@ export async function POST(request: Request) {
         paymentMethod || 'Razorpay UPI',
         payStat,
         initialStatus,
+        internalShipmentId,
         shippingAddressObj,
       ]);
 
-      // 2. Insert Order Items into order_items table
       for (const item of verifiedItems) {
         const itemId = `item-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
         await client.query(
@@ -172,7 +181,6 @@ export async function POST(request: Request) {
         );
       }
 
-      // 3. Insert Order Timeline entry
       const timelineId = `tl-${Date.now()}`;
       await client.query(
         `INSERT INTO order_timeline (id, order_id, status, remarks) VALUES ($1, $2, 'Order Placed', 'Order placed by customer in Railway PostgreSQL DB')`,
@@ -181,6 +189,7 @@ export async function POST(request: Request) {
 
       return NextResponse.json({
         orderId: orderNumber,
+        shipmentId: internalShipmentId,
         totalAmount,
         status: initialStatus,
         paymentMethod,
@@ -188,7 +197,7 @@ export async function POST(request: Request) {
       }, { status: 201 });
     }
 
-    return NextResponse.json({ orderId: orderNumber, totalAmount, status: 'Order Placed' }, { status: 201 });
+    return NextResponse.json({ orderId: orderNumber, shipmentId: internalShipmentId, totalAmount, status: 'Order Placed' }, { status: 201 });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   } finally {
@@ -196,7 +205,7 @@ export async function POST(request: Request) {
   }
 }
 
-// PATCH /api/orders — Admin accepts order & updates order status + AWB docket number
+// PATCH /api/orders — Update order status, timestamp & official ST Courier AWB docket number
 export async function PATCH(request: NextRequest) {
   let client: any = null;
   try {
@@ -208,26 +217,35 @@ export async function PATCH(request: NextRequest) {
     const db = await import('@/lib/db');
     client = await db.getDbClient();
 
-    const newStatus = status || 'Shipped via ST Courier';
-    const trackingUrl = awbNumber ? `https://stcourier.com/track/shipment?docket=${awbNumber}` : null;
+    const newStatus = status || 'Handed to ST Courier';
+    const isOfficial = awbNumber && (awbNumber.startsWith('STC') || !awbNumber.startsWith('SHP-'));
+    const trackingUrl = isOfficial ? `https://stcourier.com/track/shipment?docket=${awbNumber}` : 'https://stcourier.com';
+
+    let timestampUpdate = '';
+    if (newStatus === 'Packed') {
+      timestampUpdate = ', packed_at = NOW()';
+    } else if (newStatus === 'Handed to ST Courier' || newStatus === 'In Transit') {
+      timestampUpdate = ', shipped_at = NOW()';
+    } else if (newStatus === 'Delivered') {
+      timestampUpdate = ', delivered_at = NOW()';
+    }
 
     await client.query(
       `UPDATE orders 
        SET order_status = $1, 
            awb_number = COALESCE($2, awb_number), 
            tracking_url = COALESCE($3, tracking_url), 
-           updated_at = NOW() 
+           updated_at = NOW() ${timestampUpdate}
        WHERE order_number = $4 OR id = $4`,
       [newStatus, awbNumber || null, trackingUrl, orderId]
     );
 
-    // Add timeline event
     const timelineId = `tl-${Date.now()}`;
     try {
       await client.query(
         `INSERT INTO order_timeline (id, order_id, status, remarks) 
          VALUES ($1, (SELECT id FROM orders WHERE order_number = $2 OR id::text = $2 LIMIT 1), $3, $4)`,
-        [timelineId, orderId, newStatus, `Admin assigned AWB: ${awbNumber || 'N/A'} & set status: ${newStatus}`]
+        [timelineId, orderId, newStatus, `Admin updated status to [${newStatus}] with AWB: ${awbNumber || 'N/A'}`]
       );
     } catch (_) {}
 

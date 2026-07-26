@@ -157,6 +157,9 @@ async function migrateDatabase(connStr, dbName) {
         estimated_delivery VARCHAR(100),
         invoice_number VARCHAR(255),
         shipping_address TEXT,
+        packed_at TIMESTAMP,
+        shipped_at TIMESTAMP,
+        delivered_at TIMESTAMP,
         ordered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
@@ -250,6 +253,9 @@ async function migrateDatabase(connStr, dbName) {
       );
 
       ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_address TEXT;
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS packed_at TIMESTAMP;
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipped_at TIMESTAMP;
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMP;
       ALTER TABLE reviews ADD COLUMN IF NOT EXISTS user_name VARCHAR(255);
     `);
 

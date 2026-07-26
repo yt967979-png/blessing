@@ -737,26 +737,20 @@ export default function AdminPage() {
                           Current Status
                         </span>
                         <span className="font-bold text-emerald-400 block">{o.courierStatus}</span>
-                        {o.trackingNumber ? (
-                          <span className="text-[11px] font-mono text-amber-300 font-bold">
-                            AWB: {o.trackingNumber}
+                        {o.trackingNumber && (o.trackingNumber.startsWith('STC') || !o.trackingNumber.startsWith('SHP-')) ? (
+                          <span className="text-[11px] font-mono text-amber-300 font-bold block">
+                            OFFICIAL AWB: {o.trackingNumber}
                           </span>
                         ) : (
-                          <span className="text-[10px] bg-amber-400/20 text-amber-300 px-2 py-0.5 rounded font-bold">
-                            AWB NOT ASSIGNED YET
+                          <span className="text-[10px] bg-amber-400/20 text-amber-300 px-2 py-0.5 rounded font-bold block">
+                            INTERNAL ID: {o.shipmentId || o.trackingNumber || 'Pending Official Docket'}
                           </span>
                         )}
                       </div>
                       <div className="flex flex-col justify-center">
-                        <button
-                          onClick={() => {
-                            const autoAwb = 'STC-TN-' + Math.floor(100000 + Math.random() * 900000);
-                            setShiprocketAwbInput({ ...shiprocketAwbInput, [o.orderId]: autoAwb });
-                          }}
-                          className="text-[10px] text-amber-400 hover:text-amber-300 font-bold underline mb-1 text-left cursor-pointer"
-                        >
-                          ⚡ Auto-Generate ST Courier Docket
-                        </button>
+                        <span className="text-[10px] text-slate-400 font-bold">
+                          Enter official ST Courier Docket when booked:
+                        </span>
                       </div>
                     </div>
 
@@ -765,24 +759,27 @@ export default function AdminPage() {
                         <Truck className="w-4 h-4 text-amber-400 flex-shrink-0" />
                         <input
                           type="text"
-                          placeholder="Enter ST Courier Docket No (e.g. STC-TN-984210)..."
-                          value={shiprocketAwbInput[o.orderId] ?? o.trackingNumber ?? ''}
+                          placeholder="Enter Official ST Courier Docket No (e.g. STC241568974)..."
+                          value={shiprocketAwbInput[o.orderId] ?? (o.isOfficialAwb ? o.trackingNumber : '')}
                           onChange={(e) =>
                             setShiprocketAwbInput({
                               ...shiprocketAwbInput,
                               [o.orderId]: e.target.value,
                             })
                           }
-                          className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-xs outline-none focus:border-amber-400 uppercase flex-1 min-w-[200px]"
+                          className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-xs outline-none focus:border-amber-400 uppercase flex-1 min-w-[220px]"
                         />
                         <select
-                          value={orderStatuses[o.orderId] || o.courierStatus || 'Shipped via ST Courier'}
+                          value={orderStatuses[o.orderId] || o.courierStatus || 'Handed to ST Courier'}
                           onChange={(e) => setOrderStatuses({ ...orderStatuses, [o.orderId]: e.target.value })}
                           className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-xs outline-none focus:border-amber-400 font-bold"
                         >
                           <option value="Order Placed">Order Placed</option>
-                          <option value="Packed &amp; Dispatched">Packed &amp; Dispatched</option>
-                          <option value="Shipped via ST Courier">Shipped via ST Courier</option>
+                          <option value="Payment Confirmed">Payment Confirmed</option>
+                          <option value="Preparing Order">Preparing Order</option>
+                          <option value="Packed">Packed</option>
+                          <option value="Handed to ST Courier">Handed to ST Courier</option>
+                          <option value="In Transit">In Transit</option>
                           <option value="Out for Delivery">Out for Delivery</option>
                           <option value="Delivered">Delivered</option>
                         </select>
@@ -793,7 +790,7 @@ export default function AdminPage() {
                         className="w-full sm:w-auto bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-black text-xs px-5 py-2.5 rounded-xl shadow-md uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
                       >
                         <Send className="w-3.5 h-3.5" />
-                        <span>ACCEPT ORDER &amp; ASSIGN AWB</span>
+                        <span>UPDATE STATUS &amp; AWB</span>
                       </button>
                     </div>
                   </div>
