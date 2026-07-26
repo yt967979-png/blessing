@@ -1059,20 +1059,107 @@ export default function AdminPage() {
                         </div>
                       </div>
 
-                      {/* ST Courier Hub Movement Feed */}
-                      <div className="bg-slate-950/80 border border-slate-800/80 rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-[11px]">
-                        <div className="flex items-center gap-2">
-                          <MapPin className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
-                          <span className="font-bold text-slate-300">Hub Route:</span>
-                          <span className="text-white font-extrabold">Chennai Hub</span>
-                          <span className="text-slate-500">➔</span>
-                          <span className="text-amber-300 font-extrabold">{o.city ? `${o.city} Hub` : 'Regional Hub'}</span>
-                          <span className="text-slate-500">➔</span>
-                          <span className="text-emerald-400 font-extrabold">{o.city ? `${o.city} Branch` : 'Local Branch'}</span>
+                      {/* Custom ST Courier Stage Management Controls */}
+                      <div className="bg-slate-950/90 border border-slate-800 rounded-xl p-3.5 space-y-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="font-bold text-slate-300 text-[11px] flex items-center gap-1.5">
+                            <Truck className="w-3.5 h-3.5 text-amber-400" />
+                            <span>Update Logistics Stage:</span>
+                          </span>
+                          <span className="text-[10px] text-emerald-400 font-extrabold uppercase bg-emerald-950/80 border border-emerald-500/30 px-2 py-0.5 rounded">
+                            Current: {o.courierStatus || 'Order Placed'}
+                          </span>
                         </div>
-                        <span className="text-[10px] font-mono text-slate-400">
-                          AWB: <strong className="text-amber-400">{o.trackingNumber || o.shipmentId}</strong>
-                        </span>
+
+                        {/* Stage Buttons Grid */}
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-1.5 text-[10px] font-bold">
+                          <button
+                            onClick={async () => {
+                              showToast('⏳ Updating stage: Packed & Sealed...');
+                              await fetch('/api/orders/timeline', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ orderId: o.orderId, status: 'PACKED' }),
+                              });
+                              showToast('✅ Stage updated to Packed & Sealed!');
+                              loadLiveOrders();
+                            }}
+                            className="bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 p-2 rounded-lg transition-all text-center cursor-pointer font-extrabold"
+                          >
+                            📦 PACKED
+                          </button>
+
+                          <button
+                            onClick={async () => {
+                              const awb = shiprocketAwbInput[o.orderId] || o.trackingNumber;
+                              if (!awb) {
+                                alert('Please enter an ST Courier Docket Number first!');
+                                return;
+                              }
+                              showToast('⏳ Updating stage: Handed to ST Courier...');
+                              await fetch('/api/orders/timeline', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ orderId: o.orderId, status: 'HANDED_TO_ST_COURIER', awbNumber: awb }),
+                              });
+                              showToast('✅ Stage updated: Handed to ST Courier!');
+                              loadLiveOrders();
+                            }}
+                            className="bg-blue-900/60 hover:bg-blue-800 text-blue-200 border border-blue-700/50 p-2 rounded-lg transition-all text-center cursor-pointer font-extrabold"
+                          >
+                            🚚 HAND TO COURIER
+                          </button>
+
+                          <button
+                            onClick={async () => {
+                              const hub = prompt('Enter Current Hub City (e.g. Chennai Central Hub, Madurai Hub):', o.city ? `${o.city} Sorting Hub` : 'Regional Sorting Hub');
+                              if (!hub) return;
+                              showToast(`⏳ Updating stage: In Transit at ${hub}...`);
+                              await fetch('/api/orders/timeline', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ orderId: o.orderId, status: 'IN_TRANSIT', hubCity: hub }),
+                              });
+                              showToast(`✅ Stage updated: In Transit at ${hub}!`);
+                              loadLiveOrders();
+                            }}
+                            className="bg-amber-900/40 hover:bg-amber-800/60 text-amber-200 border border-amber-700/50 p-2 rounded-lg transition-all text-center cursor-pointer font-extrabold"
+                          >
+                            ⚡ IN TRANSIT (HUB)
+                          </button>
+
+                          <button
+                            onClick={async () => {
+                              showToast('⏳ Updating stage: Out for Delivery...');
+                              await fetch('/api/orders/timeline', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ orderId: o.orderId, status: 'OUT_FOR_DELIVERY', hubCity: o.city ? `${o.city} Branch` : 'Local Branch' }),
+                              });
+                              showToast('✅ Stage updated to Out for Delivery!');
+                              loadLiveOrders();
+                            }}
+                            className="bg-purple-900/40 hover:bg-purple-800/60 text-purple-200 border border-purple-700/50 p-2 rounded-lg transition-all text-center cursor-pointer font-extrabold"
+                          >
+                            🛵 OUT FOR DELIVERY
+                          </button>
+
+                          <button
+                            onClick={async () => {
+                              showToast('⏳ Updating stage: Delivered...');
+                              await fetch('/api/orders/timeline', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ orderId: o.orderId, status: 'DELIVERED', hubCity: o.city ? `${o.city} Destination` : 'Delivered' }),
+                              });
+                              showToast('🎉 Order marked as Delivered!');
+                              loadLiveOrders();
+                            }}
+                            className="bg-emerald-900/60 hover:bg-emerald-800 text-emerald-200 border border-emerald-700/50 p-2 rounded-lg transition-all text-center cursor-pointer font-extrabold col-span-2 sm:col-span-1"
+                          >
+                            ✅ DELIVERED
+                          </button>
+                        </div>
                       </div>
 
                       {/* Customer Details & Action Inputs */}
@@ -1095,28 +1182,8 @@ export default function AdminPage() {
                                 [o.orderId]: e.target.value,
                               })
                             }
-                            disabled={o.isOfficialAwb && o.courierStatus === 'Delivered'}
-                            className={`px-3 py-1.5 bg-slate-950 border rounded-lg text-white text-xs outline-none uppercase min-w-[180px] ${
-                              o.isOfficialAwb ? 'border-emerald-500/40 text-amber-300 font-bold' : 'border-slate-700 focus:border-amber-400'
-                            }`}
+                            className="px-3 py-1.5 bg-slate-950 border border-slate-700 rounded-lg text-white text-xs outline-none focus:border-amber-400 uppercase min-w-[180px]"
                           />
-                          <select
-                            value={orderStatuses[o.orderId] || o.courierStatus || 'Handed to ST Courier'}
-                            onChange={(e) => setOrderStatuses({ ...orderStatuses, [o.orderId]: e.target.value })}
-                            disabled={o.isOfficialAwb}
-                            className={`px-2.5 py-1.5 bg-slate-950 border rounded-lg text-white text-xs outline-none font-bold ${
-                              o.isOfficialAwb ? 'border-emerald-500/40 text-emerald-300 opacity-90' : 'border-slate-700 focus:border-amber-400'
-                            }`}
-                          >
-                            <option value="Order Placed">Order Placed</option>
-                            <option value="Payment Confirmed">Payment Confirmed</option>
-                            <option value="Preparing Order">Preparing Order</option>
-                            <option value="Packed">Packed</option>
-                            <option value="Handed to ST Courier">Handed to ST Courier</option>
-                            <option value="In Transit">In Transit</option>
-                            <option value="Out for Delivery">Out for Delivery</option>
-                            <option value="Delivered">Delivered</option>
-                          </select>
 
                           <button
                             onClick={() => handlePrintShippingLabel(o)}
@@ -1132,14 +1199,6 @@ export default function AdminPage() {
                           >
                             <MessageSquare className="w-3.5 h-3.5" />
                             <span>WHATSAPP</span>
-                          </button>
-
-                          <button
-                            onClick={() => handleDispatchOrder(o.orderId)}
-                            className="bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs px-4 py-1.5 rounded-lg transition-all shadow-md flex items-center gap-1 cursor-pointer"
-                          >
-                            <Send className="w-3.5 h-3.5" />
-                            <span>UPDATE</span>
                           </button>
                         </div>
                       </div>
