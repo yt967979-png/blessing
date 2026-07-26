@@ -218,15 +218,35 @@ export default function AdminPage() {
   };
 
   const handleDispatchOrder = async (orderId: string, newStatus?: string) => {
-    const trackingNo = shiprocketAwbInput[orderId] || '';
+    const trackingNo = (shiprocketAwbInput[orderId] || '').trim();
     const currentOrderObj = orders.find((o) => o.orderId === orderId);
     let status = newStatus || orderStatuses[orderId];
 
-    // If Admin entered an AWB number and didn't select a status, auto-advance to Handed to ST Courier
-    if (!status && trackingNo) {
-      status = 'Handed to ST Courier';
-    } else if (!status) {
-      status = currentOrderObj?.courierStatus || 'Packed';
+    if (trackingNo) {
+      showToast('⏳ Verifying ST Courier Docket Number with ST Courier Live API...');
+      try {
+        const verifyRes = await fetch(`/api/courier/track?docket=${encodeURIComponent(trackingNo)}`);
+        const verifyData = await verifyRes.json();
+
+        if (!verifyRes.ok || verifyData.isValid === false) {
+          showToast(`❌ INVALID ST COURIER DOCKET: ST Courier system did not recognize '${trackingNo}'. Please enter a valid ST Courier AWB.`);
+          alert(`⚠️ Invalid ST Courier Docket Number!\n\nThe docket number '${trackingNo}' could not be verified with ST Courier.\n\nPlease enter a valid official ST Courier docket number (e.g. STC241568974).`);
+          return;
+        }
+
+        // Auto-adopt live scraped status from ST Courier if available
+        if (verifyData.status && verifyData.status !== 'Shipped via ST Courier') {
+          status = verifyData.status;
+        } else if (!status) {
+          status = 'Handed to ST Courier';
+        }
+      } catch (err) {
+        showToast('⚠️ Could not connect to ST Courier API. Proceeding with manual input.');
+      }
+    }
+
+    if (!status) {
+      status = currentOrderObj?.courierStatus || 'Handed to ST Courier';
     }
 
     try {
@@ -235,7 +255,7 @@ export default function AdminPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ orderId, status, awbNumber: trackingNo }),
       });
-      showToast(`✅ Order #${orderId} updated → [${status}] with AWB [${trackingNo || 'N/A'}]. Auto-dispatched WhatsApp!`);
+      showToast(`🔒 Order #${orderId} VERIFIED & LOCKED INTO ST COURIER AUTO-PILOT! Current Status: [${status}].`);
       loadLiveOrders();
     } catch (e) {
       showToast(`✓ Order #${orderId} updated locally.`);
@@ -1043,12 +1063,18 @@ export default function AdminPage() {
                                 [o.orderId]: e.target.value,
                               })
                             }
-                            className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-xs outline-none focus:border-amber-400 uppercase flex-1 min-w-[220px]"
+                            disabled={o.isOfficialAwb && o.courierStatus === 'Delivered'}
+                            className={`px-3 py-2 bg-slate-800 border rounded-lg text-white text-xs outline-none focus:border-amber-400 uppercase flex-1 min-w-[220px] ${
+                              o.isOfficialAwb ? 'border-emerald-500/50 bg-emerald-950/20 font-bold text-amber-300' : 'border-slate-700'
+                            }`}
                           />
                           <select
                             value={orderStatuses[o.orderId] || o.courierStatus || 'Handed to ST Courier'}
                             onChange={(e) => setOrderStatuses({ ...orderStatuses, [o.orderId]: e.target.value })}
-                            className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-xs outline-none focus:border-amber-400 font-bold"
+                            disabled={o.isOfficialAwb}
+                            className={`px-3 py-2 bg-slate-800 border rounded-lg text-white text-xs outline-none font-bold ${
+                              o.isOfficialAwb ? 'border-emerald-500/50 text-emerald-300 opacity-90 cursor-not-allowed' : 'border-slate-700 focus:border-amber-400'
+                            }`}
                           >
                             <option value="Order Placed">Order Placed</option>
                             <option value="Payment Confirmed">Payment Confirmed</option>
@@ -1059,6 +1085,12 @@ export default function AdminPage() {
                             <option value="Out for Delivery">Out for Delivery</option>
                             <option value="Delivered">Delivered</option>
                           </select>
+
+                          {o.isOfficialAwb && (
+                            <span className="text-[10px] font-black text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-1 rounded-lg uppercase tracking-wider flex items-center gap-1">
+                              🔒 ST COURIER AUTO-PILOT ACTIVE
+                            </span>
+                          )}
                         </div>
 
                         <div className="flex items-center gap-2 w-full sm:w-auto">
