@@ -1,31 +1,25 @@
 import { NextResponse } from 'next/server';
+import fs from 'fs';
+import path from 'path';
 
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const phone = searchParams.get('phone');
+export async function GET() {
+  const statusFile = path.join(process.cwd(), 'public', 'whatsapp_status.json');
 
-  try {
-    if (phone) {
-      const pRes = await fetch(`http://127.0.0.1:4000/pair?phone=${encodeURIComponent(phone)}`, { cache: 'no-store' });
-      if (pRes.ok) {
-        const pData = await pRes.json();
-        return NextResponse.json(pData);
-      }
-    }
-
-    const res = await fetch('http://127.0.0.1:4000/status', { cache: 'no-store' });
-    if (res.ok) {
-      const data = await res.json();
+  if (fs.existsSync(statusFile)) {
+    try {
+      const content = fs.readFileSync(statusFile, 'utf8');
+      const data = JSON.parse(content);
       return NextResponse.json(data);
+    } catch (e: any) {
+      console.error('Error reading whatsapp_status.json:', e.message);
     }
-  } catch (err: any) {
-    // Service initializing
   }
 
+  // Fallback if status file is generating
   return NextResponse.json({
     status: 'INITIALIZING',
     connected: false,
     qrImage: null,
-    message: 'WhatsApp Service is initializing on port 4000...',
+    message: 'Generating WhatsApp QR Code & Session...',
   });
 }
