@@ -511,10 +511,19 @@ function OrdersContent() {
                       key={idx}
                       className="p-4 bg-white border border-slate-200 rounded-2xl flex items-center justify-between gap-3 text-xs shadow-2xs"
                     >
-                      <div>
-                        <div className="font-extrabold text-slate-900 text-sm">{item.title}</div>
-                        <div className="text-[11px] text-slate-500 mt-0.5">
-                          Qty: {item.qty || 1} • Price: ₹{item.price}
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-14 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden flex-shrink-0 flex items-center justify-center">
+                          {item.image ? (
+                            <img src={item.image} alt={item.title} className="w-full h-full object-cover" />
+                          ) : (
+                            <Package className="w-6 h-6 text-amber-500 opacity-60" />
+                          )}
+                        </div>
+                        <div>
+                          <div className="font-heading font-extrabold text-slate-900 text-sm">{item.title}</div>
+                          <div className="text-[11px] text-slate-500 mt-0.5">
+                            Qty: {item.qty || 1} • Price: <strong className="text-slate-800">₹{item.price}</strong>
+                          </div>
                         </div>
                       </div>
                       <button
