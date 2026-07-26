@@ -1075,7 +1075,13 @@ export default function AdminPage() {
                           <input
                             type="text"
                             placeholder="Enter ST Courier Docket AWB (e.g. STC241568974)..."
-                            value={shiprocketAwbInput[o.orderId] ?? (o.trackingNumber || '')}
+                            value={
+                              shiprocketAwbInput[o.orderId] !== undefined
+                                ? shiprocketAwbInput[o.orderId]
+                                : o.trackingNumber && !o.trackingNumber.startsWith('SHP-')
+                                ? o.trackingNumber
+                                : ''
+                            }
                             onChange={(e) =>
                               setShiprocketAwbInput({
                                 ...shiprocketAwbInput,
@@ -1087,11 +1093,12 @@ export default function AdminPage() {
 
                           <button
                             onClick={async () => {
-                              const awb = (shiprocketAwbInput[o.orderId] || o.trackingNumber || '').trim();
-                              if (!awb) {
-                                alert('⚠️ Please enter an ST Courier Docket Number first!');
+                              const inputVal = (shiprocketAwbInput[o.orderId] ?? (o.trackingNumber && !o.trackingNumber.startsWith('SHP-') ? o.trackingNumber : '')).trim();
+                              if (!inputVal) {
+                                alert('⚠️ Please enter an official ST Courier Docket Number (e.g. STC241568974) in the input box first!');
                                 return;
                               }
+                              const awb = inputVal;
 
                               showToast('⏳ Validating ST Courier Docket AWB format...');
                               const verifyRes = await fetch(`/api/courier/track?docket=${encodeURIComponent(awb)}`);
