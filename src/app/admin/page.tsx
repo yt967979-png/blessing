@@ -183,14 +183,23 @@ export default function AdminPage() {
 
   const handleDispatchOrder = async (orderId: string, newStatus?: string) => {
     const trackingNo = shiprocketAwbInput[orderId] || '';
-    const status = newStatus || orderStatuses[orderId] || 'Packed & Dispatched';
+    const currentOrderObj = orders.find((o) => o.orderId === orderId);
+    let status = newStatus || orderStatuses[orderId];
+
+    // If Admin entered an AWB number and didn't select a status, auto-advance to Handed to ST Courier
+    if (!status && trackingNo) {
+      status = 'Handed to ST Courier';
+    } else if (!status) {
+      status = currentOrderObj?.courierStatus || 'Packed';
+    }
+
     try {
       await fetch('/api/orders', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ orderId, status, awbNumber: trackingNo }),
       });
-      showToast(`✅ Order #${orderId} status → ${status}. Saved to Railway PostgreSQL!`);
+      showToast(`✅ Order #${orderId} updated → [${status}] with AWB [${trackingNo || 'N/A'}]. Auto-dispatched WhatsApp!`);
       loadLiveOrders();
     } catch (e) {
       showToast(`✓ Order #${orderId} updated locally.`);
