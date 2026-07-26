@@ -24,17 +24,17 @@ export async function POST(request: Request) {
 
     client = await getDbClient();
 
-    // 1. Verify OTP from Railway PostgreSQL DB
+    // 1. Verify OTP from Railway PostgreSQL DB (whatsapp_otps table)
     const otpRes = await client.query(
-      `SELECT * FROM email_otps
-       WHERE LOWER(email) = $1 AND otp = $2 AND expires_at > NOW()
+      `SELECT * FROM whatsapp_otps
+       WHERE (LOWER(email) = $1 OR phone = $1) AND otp = $2 AND expires_at > NOW()
        ORDER BY created_at DESC LIMIT 1`,
       [cleanEmail, cleanOtp]
     );
 
     if (otpRes.rows.length === 0) {
       await client.end();
-      return NextResponse.json({ error: 'Invalid or expired OTP code. Please try again.' }, { status: 400 });
+      return NextResponse.json({ error: 'Invalid or expired WhatsApp OTP code. Please check WhatsApp.' }, { status: 400 });
     }
 
     // 2. Hash new password & update user in DB
@@ -50,7 +50,7 @@ export async function POST(request: Request) {
     }
 
     // 3. Clean up OTP
-    await client.query(`DELETE FROM email_otps WHERE LOWER(email) = $1`, [cleanEmail]);
+    await client.query(`DELETE FROM whatsapp_otps WHERE LOWER(email) = $1 OR phone = $1`, [cleanEmail]);
     await client.end();
 
     return NextResponse.json({

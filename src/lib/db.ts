@@ -196,9 +196,10 @@ export async function getDbClient() {
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
-        CREATE TABLE IF NOT EXISTS email_otps (
+        CREATE TABLE IF NOT EXISTS whatsapp_otps (
           id VARCHAR(255) PRIMARY KEY,
-          email VARCHAR(255) NOT NULL,
+          phone VARCHAR(255) NOT NULL,
+          email VARCHAR(255),
           otp VARCHAR(10) NOT NULL,
           expires_at TIMESTAMP NOT NULL,
           verified BOOLEAN DEFAULT FALSE,

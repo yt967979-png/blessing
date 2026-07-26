@@ -181,12 +181,12 @@ export async function POST(request: Request) {
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const otpId = `otp-${Date.now()}`;
 
-    // 3. Save OTP in Railway PostgreSQL with 10-minute expiry
-    await client.query('DELETE FROM email_otps WHERE LOWER(email) = $1', [cleanEmail]);
+    // 3. Save OTP in Railway PostgreSQL whatsapp_otps table with 10-minute expiry
+    await client.query('DELETE FROM whatsapp_otps WHERE LOWER(email) = $1 OR phone = $2', [cleanEmail, finalPhone]);
     await client.query(
-      `INSERT INTO email_otps (id, email, otp, expires_at, verified)
-       VALUES ($1, $2, $3, NOW() + INTERVAL '10 minutes', FALSE)`,
-      [otpId, cleanEmail, otp]
+      `INSERT INTO whatsapp_otps (id, phone, email, otp, expires_at, verified)
+       VALUES ($1, $2, $3, $4, NOW() + INTERVAL '10 minutes', FALSE)`,
+      [otpId, finalPhone, cleanEmail, otp]
     );
 
     await client.end();
