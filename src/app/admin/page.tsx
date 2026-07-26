@@ -27,11 +27,14 @@ import { useStore } from '@/context/StoreContext';
 
 export default function AdminPage() {
   const router = useRouter();
-  const { products, updateProductInDb, addNewProductToDb, deleteProductFromDb, showToast, logoutUser } = useStore();
+  const { user, setIsAuthOpen, products, updateProductInDb, addNewProductToDb, deleteProductFromDb, showToast, logoutUser } = useStore();
   const [activeTab, setActiveTab] = useState<'catalog' | 'orders' | 'whatsapp'>('catalog');
   const [waStatus, setWaStatus] = useState<{ status: string; connected?: boolean; qrImage?: string; pairingCode?: string; message?: string }>({ status: 'LOADING', connected: false });
   const [waPhoneInput, setWaPhoneInput] = useState('');
   const [waPairingCode, setWaPairingCode] = useState<string | null>(null);
+
+  // Check if current logged-in user has Admin privileges
+  const isAdmin = !!user && (user.role === 'admin' || (user.email && user.email.toLowerCase().includes('admin')));
 
   // Poll WhatsApp service status from Next.js internal API
   useEffect(() => {
@@ -394,6 +397,57 @@ export default function AdminPage() {
 
   // Analytics Metrics
   const totalRevenue = orders.reduce((sum, o) => sum + Number(o.totalAmount || 0), 0);
+
+  if (!isAdmin) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-6">
+        <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-8 text-center space-y-6 shadow-2xl relative overflow-hidden">
+          <div className="w-16 h-16 bg-red-500/10 border border-red-500/30 text-red-400 rounded-2xl flex items-center justify-center mx-auto text-3xl shadow-lg ring-8 ring-red-500/10">
+            <ShieldCheck className="w-8 h-8 text-red-400" />
+          </div>
+
+          <div>
+            <span className="text-[10px] font-black tracking-widest text-red-400 uppercase bg-red-500/10 px-3 py-1 rounded-full border border-red-500/20">
+              RESTRICTED ACCESS AREA
+            </span>
+            <h2 className="font-heading font-black text-xl text-white mt-3">
+              Admin Authorization Required
+            </h2>
+            <p className="text-xs text-slate-400 mt-2 leading-relaxed">
+              {user ? (
+                <>
+                  Logged in as <strong className="text-slate-200">{user.email}</strong>. This account does not have administrator privileges.
+                </>
+              ) : (
+                'You must be signed in with an administrator account to access the store management dashboard.'
+              )}
+            </p>
+          </div>
+
+          <div className="space-y-3 pt-2">
+            <button
+              onClick={() => router.push('/')}
+              className="w-full py-3 bg-amber-400 hover:bg-amber-500 text-[#001B3A] font-extrabold text-xs rounded-xl shadow-lg transition-all uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Return to Storefront</span>
+            </button>
+
+            <button
+              onClick={() => {
+                logoutUser();
+                setIsAuthOpen(true);
+                router.push('/');
+              }}
+              className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl border border-slate-700 transition-all uppercase tracking-wider cursor-pointer"
+            >
+              Sign In as Administrator
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col md:flex-row">
