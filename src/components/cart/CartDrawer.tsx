@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ShoppingBag, X, Truck, Plus, Minus, ArrowRight } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
+import { getSTCourierDeliveryEstimate } from '@/lib/deliveryEstimator';
 
 export const CartDrawer = () => {
   const {
@@ -134,9 +135,9 @@ export const CartDrawer = () => {
             {/* Footer */}
             {cart.length > 0 && (
               <div className="bg-slate-50 border-t border-slate-200 p-4 space-y-3">
-                <div className="flex justify-between items-center font-black text-base text-[#001B3A]">
-                  <span>Total Payable:</span>
-                  <span className="text-xl">₹{cartTotal}</span>
+                <div className="bg-emerald-50 border border-emerald-200/80 rounded-xl p-2.5 flex items-center gap-2 text-xs text-emerald-800 font-extrabold">
+                  <Truck className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>ST Courier Express: Arriving by {getSTCourierDeliveryEstimate('Tamil Nadu').formattedDate} before 11 PM</span>
                 </div>
 
                 <button

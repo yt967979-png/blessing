@@ -32,6 +32,7 @@ import {
   checkPasswordCriteria,
   isStrongPassword,
 } from '@/lib/authValidation';
+import { getSTCourierDeliveryEstimate } from '@/lib/deliveryEstimator';
 
 export const Modals = () => {
   const router = useRouter();
@@ -1284,13 +1285,15 @@ export const Modals = () => {
                 </div>
 
                 <div className="flex items-center justify-between pt-1">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-xl bg-blue-600/10 text-blue-700 flex items-center justify-center">
-                      <Truck className="w-4 h-4" />
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center shrink-0 border border-amber-400/30">
+                      <Truck className="w-5 h-5 text-amber-500" />
                     </div>
                     <div>
-                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">LOGISTICS NETWORK</span>
-                      <span className="font-extrabold text-slate-900 text-xs">ST Courier Express (2-3 Business Days)</span>
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">GUARANTEED ST COURIER DELIVERY</span>
+                      <span className="font-black text-[#001B3A] text-xs sm:text-sm">
+                        Arriving by {getSTCourierDeliveryEstimate(orderSuccessData.city).formattedDate} before 11 PM
+                      </span>
                     </div>
                   </div>
                 </div>

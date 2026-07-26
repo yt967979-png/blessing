@@ -27,6 +27,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { downloadTaxInvoice } from '@/lib/invoiceGenerator';
+import { getSTCourierDeliveryEstimate } from '@/lib/deliveryEstimator';
 
 function OrdersContent() {
   const { user } = useStore();
@@ -225,9 +226,9 @@ function OrdersContent() {
 
               <div>
                 <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider block">ESTIMATED DELIVERY</span>
-                <span className="font-bold text-emerald-600 text-sm flex items-center gap-1">
-                  <Clock className="w-4 h-4 text-emerald-500" />
-                  <span>2 - 3 Business Days (ST Courier)</span>
+                <span className="font-extrabold text-emerald-700 text-sm flex items-center gap-1.5 bg-emerald-50 border border-emerald-200/80 px-3 py-1 rounded-xl">
+                  <Truck className="w-4 h-4 text-emerald-600" />
+                  <span>Arriving by {getSTCourierDeliveryEstimate(searchedOrderData?.shippingAddress?.city).formattedDate} before 11 PM</span>
                 </span>
               </div>
 
