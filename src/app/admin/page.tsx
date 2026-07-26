@@ -110,6 +110,9 @@ export default function AdminPage() {
 
   useEffect(() => {
     loadLiveOrders();
+    // Auto-sync live orders from Railway PostgreSQL every 4 seconds
+    const interval = setInterval(loadLiveOrders, 4000);
+
     // Load live DB stats for users + books
     fetch('/api/db-status')
       .then((r) => r.json())
@@ -122,6 +125,8 @@ export default function AdminPage() {
         }
       })
       .catch(() => {});
+
+    return () => clearInterval(interval);
   }, [activeTab]);
 
   const handleImageFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -618,7 +623,7 @@ export default function AdminPage() {
           </div>
         </div>
 
-        {activeTab === 'catalog' ? (
+        {activeTab === 'catalog' && (
           <>
             {/* Add Product Form */}
             {showAddForm && (
@@ -883,18 +888,23 @@ export default function AdminPage() {
               )}
             </div>
           </>
-        ) : (
-          /* Live Incoming Orders & Fulfillment */
+        )}
+
+        {activeTab === 'orders' && (
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 mb-8">
-            <div className="flex justify-between items-center mb-6">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
               <div>
-                <h3 className="font-heading font-black text-lg text-white flex items-center gap-2">
-                  <Truck className="w-5 h-5 text-amber-400" />
-                  <span>Live Customer Orders in Railway Database ({orders.length})</span>
-                </h3>
+                <h2 className="font-heading font-black text-xl text-white">Live Orders Management</h2>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  When customers place COD or Razorpay orders, view and accept them live from the database!
+                  View and update customer order states live from Railway PostgreSQL database.
                 </p>
+              </div>
+
+              <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/30 px-3 py-1.5 rounded-full">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                <span className="text-[10px] font-black text-emerald-400 tracking-wider uppercase">
+                  🟢 LIVE AUTO-SYNC ACTIVE (DB POLL: 4S)
+                </span>
               </div>
             </div>
 
@@ -908,72 +918,117 @@ export default function AdminPage() {
               </div>
             ) : (
               <div className="space-y-4">
-                {orders.map((o) => (
-                  <div
-                    key={o.orderId}
-                    className="bg-slate-800/90 border border-slate-700 rounded-2xl p-5 text-xs space-y-4"
-                  >
-                    <div className="flex flex-wrap justify-between items-center gap-2 pb-3 border-b border-slate-700">
-                      <div className="flex items-center gap-3">
-                        <span className="font-extrabold text-amber-400 text-sm">
-                          Order ID: {o.orderId}
-                        </span>
-                        <span className="bg-blue-500/20 text-blue-300 border border-blue-500/30 px-2.5 py-0.5 rounded font-extrabold text-[10px] uppercase">
-                          {o.paymentMethod} • {o.paymentStatus}
-                        </span>
+                {orders.map((o) => {
+                  const currentStatus = o.courierStatus || 'Order Placed';
+                  const allSteps = [
+                    'Order Placed',
+                    'Payment Confirmed',
+                    'Preparing Order',
+                    'Packed',
+                    'Handed to ST Courier',
+                    'In Transit',
+                    'Out for Delivery',
+                    'Delivered',
+                  ];
+                  const activeIdx = allSteps.findIndex((s) => s.toLowerCase() === currentStatus.toLowerCase());
+                  const stepIdx = activeIdx >= 0 ? activeIdx : 0;
+
+                  return (
+                    <div
+                      key={o.orderId}
+                      className="bg-slate-800/90 border border-slate-700 rounded-2xl p-5 text-xs space-y-4 shadow-md"
+                    >
+                      <div className="flex flex-wrap justify-between items-center gap-2 pb-3 border-b border-slate-700">
+                        <div className="flex items-center gap-3">
+                          <span className="font-heading font-black text-amber-400 text-base">
+                            Order #{o.orderId}
+                          </span>
+                          <span className="bg-blue-500/20 text-blue-300 border border-blue-500/30 px-2.5 py-0.5 rounded font-extrabold text-[10px] uppercase">
+                            {o.paymentMethod} • {o.paymentStatus}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2 text-emerald-400 font-bold bg-emerald-500/10 px-3 py-1 rounded-lg border border-emerald-500/20">
+                          <MessageSquare className="w-4 h-4 text-emerald-400" />
+                          <span>WhatsApp: +91 {o.customerPhone || 'N/A'}</span>
+                        </div>
                       </div>
 
-                      <div className="flex items-center gap-2 text-emerald-400 font-bold">
-                        <MessageSquare className="w-4 h-4 animate-pulse" />
-                        <span>WhatsApp Number: +91 {o.customerPhone}</span>
+                      {/* 8-Stage Milestone Visual Progress Tracker */}
+                      <div className="bg-slate-900/90 border border-slate-700/80 rounded-xl p-3 space-y-2">
+                        <div className="flex justify-between items-center text-[10px] font-extrabold uppercase">
+                          <span className="text-slate-400">Order State Progress (Stage {stepIdx + 1} of 8):</span>
+                          <span className="text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30">
+                            Current: {currentStatus}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-1.5 text-[9px] text-center">
+                          {allSteps.map((s, idx) => {
+                            const isDone = idx <= stepIdx;
+                            const isCur = idx === stepIdx;
+                            return (
+                              <div
+                                key={s}
+                                className={`py-1.5 px-1 rounded-lg border font-bold truncate transition-all ${
+                                  isCur
+                                    ? 'bg-blue-600 text-white border-blue-400 font-black shadow-sm'
+                                    : isDone
+                                    ? 'bg-emerald-950/60 text-emerald-300 border-emerald-500/40'
+                                    : 'bg-slate-800 text-slate-500 border-slate-700'
+                                }`}
+                              >
+                                {isDone ? '✓ ' : ''}{s}
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-slate-300">
-                      <div>
-                        <span className="text-slate-500 font-bold uppercase block text-[10px]">
-                          Customer & Address
-                        </span>
-                        <span className="font-bold text-white">{o.customerName}</span>
-                        <p className="text-[11px] text-slate-400">
-                          {o.address}{o.city ? `, ${o.city}` : ''}
-                        </p>
-                        {o.customerPhone && (
-                          <span className="text-[11px] font-bold text-blue-400 block mt-0.5">
-                            📱 +91 {o.customerPhone}
+                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-slate-300">
+                        <div>
+                          <span className="text-slate-500 font-bold uppercase block text-[10px]">
+                            Customer & Address
                           </span>
-                        )}
-                      </div>
-                      <div>
-                        <span className="text-slate-500 font-bold uppercase block text-[10px]">
-                          Order Details
-                        </span>
-                        <span className="font-black text-amber-400 text-sm block">₹{o.totalAmount}</span>
-                        <span className="text-[11px] text-slate-400">
-                          {o.items?.length || 1} Item(s) • {o.createdAt}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-slate-500 font-bold uppercase block text-[10px]">
-                          Current Status
-                        </span>
-                        <span className="font-bold text-emerald-400 block">{o.courierStatus}</span>
-                        {o.trackingNumber && (o.trackingNumber.startsWith('STC') || !o.trackingNumber.startsWith('SHP-')) ? (
-                          <span className="text-[11px] font-mono text-amber-300 font-bold block">
-                            OFFICIAL AWB: {o.trackingNumber}
+                          <span className="font-bold text-white">{o.customerName}</span>
+                          <p className="text-[11px] text-slate-400">
+                            {o.address}{o.city ? `, ${o.city}` : ''}
+                          </p>
+                          {o.customerPhone && (
+                            <span className="text-[11px] font-bold text-blue-400 block mt-0.5">
+                              📱 +91 {o.customerPhone}
+                            </span>
+                          )}
+                        </div>
+                        <div>
+                          <span className="text-slate-500 font-bold uppercase block text-[10px]">
+                            Order Details
                           </span>
-                        ) : (
-                          <span className="text-[10px] bg-amber-400/20 text-amber-300 px-2 py-0.5 rounded font-bold block">
-                            INTERNAL ID: {o.shipmentId || o.trackingNumber || 'Pending Official Docket'}
+                          <span className="font-black text-amber-400 text-sm block">₹{o.totalAmount}</span>
+                          <span className="text-[11px] text-slate-400">
+                            {o.items?.length || 1} Item(s) • {o.createdAt}
                           </span>
-                        )}
+                        </div>
+                        <div>
+                          <span className="text-slate-500 font-bold uppercase block text-[10px]">
+                            Current Status
+                          </span>
+                          <span className="font-bold text-emerald-400 block">{o.courierStatus}</span>
+                          {o.trackingNumber && (o.trackingNumber.startsWith('STC') || !o.trackingNumber.startsWith('SHP-')) ? (
+                            <span className="text-[11px] font-mono text-amber-300 font-bold block">
+                              OFFICIAL AWB: {o.trackingNumber}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] bg-amber-400/20 text-amber-300 px-2 py-0.5 rounded font-bold block">
+                              INTERNAL ID: {o.shipmentId || o.trackingNumber || 'Pending Official Docket'}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex flex-col justify-center">
+                          <span className="text-[10px] text-slate-400 font-bold">
+                            Enter official ST Courier Docket when booked:
+                          </span>
+                        </div>
                       </div>
-                      <div className="flex flex-col justify-center">
-                        <span className="text-[10px] text-slate-400 font-bold">
-                          Enter official ST Courier Docket when booked:
-                        </span>
-                      </div>
-                    </div>
 
                     <div className="bg-slate-900 border border-slate-700 rounded-xl p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                       <div className="flex items-center gap-2 flex-wrap flex-1">
@@ -1034,8 +1089,8 @@ export default function AdminPage() {
                         </button>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
