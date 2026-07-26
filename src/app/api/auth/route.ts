@@ -43,16 +43,18 @@ export async function POST(request: Request) {
   let client: any = null;
   try {
     const body = await request.json();
-    const { action, email, password, name, phone } = body;
+    const { action, email, phone, password, name } = body;
+    const loginIdentifier = String(phone || email || '').trim();
 
-    if (!email || !password) {
-      return NextResponse.json({ error: 'Email and password are required.' }, { status: 400 });
+    if (!loginIdentifier || !password) {
+      return NextResponse.json({ error: 'Phone number/email and password are required.' }, { status: 400 });
     }
     if (!action || (action !== 'register' && action !== 'login')) {
       return NextResponse.json({ error: 'action must be register or login.' }, { status: 400 });
     }
 
-    const cleanEmail = email.toLowerCase().trim();
+    const cleanIdentifier = loginIdentifier.toLowerCase();
+    const cleanPhoneDigits = loginIdentifier.replace(/\D/g, '');
     const passHash = hashPassword(password);
 
     client = await getDbClient();
@@ -61,28 +63,28 @@ export async function POST(request: Request) {
     // REGISTER
     // ─────────────────────────────────────────────
     if (action === 'register') {
+      const cleanEmail = String(email || '').toLowerCase().trim();
+      const cleanPhone = String(phone || '').trim();
+
       const existing = await client.query(
-        'SELECT id FROM users WHERE LOWER(email) = $1',
-        [cleanEmail]
+        'SELECT id FROM users WHERE LOWER(email) = $1 OR phone = $2',
+        [cleanEmail, cleanPhone]
       );
       if (existing.rows.length > 0) {
         await client.end();
         return NextResponse.json(
-          { error: 'An account with this email already exists. Please sign in instead.' },
+          { error: 'An account with this email or phone number already exists. Please sign in instead.' },
           { status: 409 }
         );
       }
 
-
-
       const userId = `usr-${Date.now()}`;
       const userName = String(name).trim();
-      const userPhone = String(phone || '').trim();
 
       await client.query(
         `INSERT INTO users (id, name, email, phone, password_hash, role, status)
          VALUES ($1, $2, $3, $4, $5, 'customer', 'active')`,
-        [userId, userName, cleanEmail, userPhone, passHash]
+        [userId, userName, cleanEmail, cleanPhone, passHash]
       );
 
       // Create empty cart row for this user
@@ -93,7 +95,7 @@ export async function POST(request: Request) {
 
       await client.end();
       return NextResponse.json({
-        user: { id: userId, name: userName, email: cleanEmail, phone: userPhone, role: 'customer' },
+        user: { id: userId, name: userName, email: cleanEmail, phone: cleanPhone, role: 'customer' },
         cart: [],
         wishlist: [],
         addresses: [],
@@ -101,17 +103,21 @@ export async function POST(request: Request) {
     }
 
     // ─────────────────────────────────────────────
-    // LOGIN
+    // LOGIN (Supports Phone Number OR Email)
     // ─────────────────────────────────────────────
     const userRes = await client.query(
-      'SELECT * FROM users WHERE LOWER(email) = $1',
-      [cleanEmail]
+      `SELECT * FROM users 
+       WHERE LOWER(email) = $1 
+          OR phone = $1 
+          OR phone = $2 
+          OR REPLACE(phone, '+', '') = $2`,
+      [cleanIdentifier, cleanPhoneDigits || cleanIdentifier]
     );
 
     if (userRes.rows.length === 0) {
       await client.end();
       return NextResponse.json(
-        { error: 'No account found with this email. Please register first.' },
+        { error: 'No account found with this phone number or email. Please register first.' },
         { status: 404 }
       );
     }
