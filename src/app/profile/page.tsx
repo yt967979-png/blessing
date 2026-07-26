@@ -33,7 +33,7 @@ import { Modals } from '@/components/modals/Modals';
 export default function ProfilePage() {
   const router = useRouter();
   const { user, loginUser, logoutUser, wishlist, products, showToast, setIsAuthOpen } = useStore();
-  const [activeTab, setActiveTab] = useState<'profile' | 'orders' | 'addresses' | 'wishlist'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'orders' | 'addresses' | 'wishlist'>('orders');
 
   // Dynamic user edit form state
   const [isEditing, setIsEditing] = useState(false);
@@ -258,21 +258,6 @@ export default function ProfilePage() {
               )}
 
               <button
-                onClick={() => setActiveTab('profile')}
-                className={`w-full text-left px-4 py-3.5 rounded-xl flex items-center justify-between transition-colors ${
-                  activeTab === 'profile'
-                    ? 'bg-blue-50 text-blue-700 font-black'
-                    : 'text-slate-700 hover:bg-slate-50'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <User className="w-4 h-4 text-blue-600" />
-                  <span>Personal Info & Security</span>
-                </div>
-                <ChevronRight className="w-4 h-4 text-slate-400" />
-              </button>
-
-              <button
                 onClick={() => setActiveTab('orders')}
                 className={`w-full text-left px-4 py-3.5 rounded-xl flex items-center justify-between transition-colors ${
                   activeTab === 'orders'
@@ -282,7 +267,22 @@ export default function ProfilePage() {
               >
                 <div className="flex items-center gap-3">
                   <Package className="w-4 h-4 text-amber-500" />
-                  <span>My Orders & Live Tracking ({liveOrders.length})</span>
+                  <span>My Orders &amp; Live Tracking ({liveOrders.length})</span>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-400" />
+              </button>
+
+              <button
+                onClick={() => setActiveTab('profile')}
+                className={`w-full text-left px-4 py-3.5 rounded-xl flex items-center justify-between transition-colors ${
+                  activeTab === 'profile'
+                    ? 'bg-blue-50 text-blue-700 font-black'
+                    : 'text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <User className="w-4 h-4 text-blue-600" />
+                  <span>Personal Info &amp; Security</span>
                 </div>
                 <ChevronRight className="w-4 h-4 text-slate-400" />
               </button>
