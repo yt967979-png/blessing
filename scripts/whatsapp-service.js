@@ -159,7 +159,15 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'GET' && (reqUrl.pathname === '/status' || reqUrl.pathname === '/api/status')) {
     let statusData = { status: isConnected ? 'CONNECTED' : 'INITIALIZING', connected: isConnected };
     if (fs.existsSync(STATUS_FILE)) {
-      try { statusData = JSON.parse(fs.readFileSync(STATUS_FILE, 'utf8')); } catch (e) {}
+      try {
+        const fileData = JSON.parse(fs.readFileSync(STATUS_FILE, 'utf8'));
+        statusData = { ...fileData };
+        if (isConnected) {
+          statusData.status = 'CONNECTED';
+          statusData.connected = true;
+          statusData.qrImage = null;
+        }
+      } catch (e) {}
     }
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(statusData));
