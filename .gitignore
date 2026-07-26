@@ -41,3 +41,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# whatsapp local session
+whatsapp_session/
+public/whatsapp_qr.png
+public/whatsapp_status.json
+
