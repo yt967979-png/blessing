@@ -197,15 +197,26 @@ export default function ProductDetailPage({
             </div>
 
             {/* Ratings */}
-            <div className="flex items-center gap-2 mb-4">
-              <div className="flex text-amber-400">
-                {[...Array(5)].map((_, i) => (
-                  <Star key={i} className="w-4 h-4 fill-amber-400" />
-                ))}
-              </div>
-              <span className="text-xs font-bold text-slate-700">{product.rating}</span>
-              <span className="text-xs text-slate-400">• ({product.reviews} Verified Reviews)</span>
-            </div>
+            {(() => {
+              const actualCount = dbReviews.length > 0 ? dbReviews.length : (product.reviews || 0);
+              const calculatedAvg = dbReviews.length > 0 
+                ? (dbReviews.reduce((sum, r) => sum + Number(r.rating || 5), 0) / dbReviews.length).toFixed(1)
+                : (product.rating || 5.0).toFixed(1);
+              return (
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="flex text-amber-400">
+                    {[...Array(5)].map((_, i) => (
+                      <Star
+                        key={i}
+                        className={`w-4 h-4 ${i < Math.round(Number(calculatedAvg)) ? 'fill-amber-400 text-amber-400' : 'text-slate-300'}`}
+                      />
+                    ))}
+                  </div>
+                  <span className="text-xs font-bold text-slate-700">{calculatedAvg}</span>
+                  <span className="text-xs text-slate-400">• ({actualCount} {actualCount === 1 ? 'Review' : 'Reviews'})</span>
+                </div>
+              );
+            })()}
 
             {/* Price Box */}
             <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-6 flex items-baseline gap-3">
