@@ -603,6 +603,7 @@ function OrdersContent() {
           <p className="text-xs text-slate-500 leading-relaxed max-w-xs mx-auto">
             Enter your Order ID (e.g. BPG-1082) in the search box above to view shipment progress &amp; ST Courier live tracking!
           </p>
+        </div>
       )}
 
       {/* Review Modal */}
