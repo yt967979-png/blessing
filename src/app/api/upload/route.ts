@@ -23,7 +23,7 @@ export async function POST(request: Request) {
       const cldFormData = new FormData();
       cldFormData.append('file', base64Data);
       cldFormData.append('api_key', apiKey);
-      if (uploadPreset) cldFormData.append('upload_preset', uploadPreset);
+      cldFormData.append('upload_preset', uploadPreset || 'ml_default');
       cldFormData.append('folder', folder);
 
       const cldRes = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
@@ -38,6 +38,9 @@ export async function POST(request: Request) {
           public_id: cldData.public_id,
           provider: 'cloudinary',
         });
+      } else {
+        const errText = await cldRes.text();
+        console.warn('Cloudinary upload response notice:', errText);
       }
     }
 
