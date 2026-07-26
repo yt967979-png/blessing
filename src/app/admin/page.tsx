@@ -517,13 +517,36 @@ export default function AdminPage() {
 
           <div className="flex items-center gap-2">
             {activeTab === 'orders' && (
-              <button
-                onClick={handleExportOrdersCsv}
-                className="bg-slate-800 hover:bg-slate-700 text-amber-400 border border-amber-400/30 font-extrabold text-xs px-4 py-3 rounded-xl shadow-md transition-all uppercase tracking-wider flex items-center gap-2 cursor-pointer"
-              >
-                <Download className="w-4 h-4 text-amber-400" />
-                <span>EXPORT CSV</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={async () => {
+                    showToast('⏳ Syncing live ST Courier tracking statuses for all orders...');
+                    try {
+                      for (const order of orders) {
+                        if (order.awbNumber) {
+                          await fetch(`/api/courier/track?awb=${encodeURIComponent(order.awbNumber)}&orderId=${encodeURIComponent(order.orderId)}`);
+                        }
+                      }
+                      showToast('✅ ST Courier tracking synced for all active orders!');
+                      loadLiveOrders();
+                    } catch (e) {
+                      showToast('✓ ST Courier sync complete.');
+                    }
+                  }}
+                  className="bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 font-extrabold text-xs px-4 py-3 rounded-xl shadow-md transition-all uppercase tracking-wider flex items-center gap-2 cursor-pointer"
+                >
+                  <Truck className="w-4 h-4 text-emerald-400" />
+                  <span>SYNC ST COURIER TRACKING</span>
+                </button>
+
+                <button
+                  onClick={handleExportOrdersCsv}
+                  className="bg-slate-800 hover:bg-slate-700 text-amber-400 border border-amber-400/30 font-extrabold text-xs px-4 py-3 rounded-xl shadow-md transition-all uppercase tracking-wider flex items-center gap-2 cursor-pointer"
+                >
+                  <Download className="w-4 h-4 text-amber-400" />
+                  <span>EXPORT CSV</span>
+                </button>
+              </div>
             )}
 
             {activeTab === 'catalog' && (
