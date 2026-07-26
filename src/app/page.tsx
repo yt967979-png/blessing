@@ -18,6 +18,7 @@ import { CartDrawer } from '@/components/cart/CartDrawer';
 import { Modals } from '@/components/modals/Modals';
 import { Toast } from '@/components/ui/Toast';
 
+import { ContactSection } from '@/components/home/ContactSection';
 import { MobileBottomNav } from '@/components/layout/MobileBottomNav';
 
 export default function Home() {
@@ -40,6 +41,7 @@ export default function Home() {
       <ClassPicker />
       <ProductGrid />
       <WhyChoose />
+      <ContactSection />
       <FAQSection />
       <TrustBar />
       <Footer />
