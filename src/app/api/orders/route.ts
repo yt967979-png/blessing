@@ -103,7 +103,34 @@ export async function POST(request: Request) {
     const id = `ord-${Date.now()}`;
     const orderNumber = 'BPG-' + Math.floor(1000 + Math.random() * 9000);
     const parsedItems = Array.isArray(items) ? items : [];
-    const totalAmount = parsedItems.reduce((sum: number, i: any) => sum + (i.price || 0) * (i.qty || 1), 0) || 360;
+    // Server-side Price Verification against Railway PostgreSQL DB to prevent client tampering
+    let calculatedTotal = 0;
+    const verifiedItems = [];
+
+    for (const item of parsedItems) {
+      let unitPrice = Number(item.price || 0);
+      if (client && item.id) {
+        try {
+          const dbBook = await client.query(`SELECT price FROM books WHERE id = $1 LIMIT 1`, [item.id]);
+          if (dbBook.rows.length > 0 && dbBook.rows[0].price) {
+            unitPrice = Number(dbBook.rows[0].price);
+          }
+        } catch (e) {}
+      }
+      const itemQty = Math.max(1, Number(item.qty || 1));
+      const subtotal = unitPrice * itemQty;
+      calculatedTotal += subtotal;
+
+      verifiedItems.push({
+        id: item.id || `bpg-${Date.now()}`,
+        title: item.title || 'Guide Book',
+        price: unitPrice,
+        qty: itemQty,
+        subtotal: subtotal,
+      });
+    }
+
+    const totalAmount = calculatedTotal > 0 ? calculatedTotal : (Number(body.totalAmount) || 360);
 
     const shippingAddressObj = JSON.stringify({
       name: customerName,
@@ -136,12 +163,12 @@ export async function POST(request: Request) {
       ]);
 
       // 2. Insert Order Items into order_items table
-      for (const item of parsedItems) {
+      for (const item of verifiedItems) {
         const itemId = `item-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
         await client.query(
           `INSERT INTO order_items (id, order_id, book_id, book_title, book_price, quantity, subtotal)
            VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-          [itemId, id, item.id || 'bpg-101', item.title || 'Master Guide', item.price || 360, item.qty || 1, (item.price || 360) * (item.qty || 1)]
+          [itemId, id, item.id, item.title, item.price, item.qty, item.subtotal]
         );
       }
 
