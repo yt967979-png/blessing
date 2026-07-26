@@ -249,6 +249,42 @@ export async function PATCH(request: NextRequest) {
       );
     } catch (_) {}
 
+    // Auto-dispatch WhatsApp Notification to Student
+    try {
+      const orderRes = await client.query(
+        `SELECT order_number, user_id, shipping_address, awb_number, tracking_url FROM orders WHERE order_number = $1 OR id::text = $1 LIMIT 1`,
+        [orderId]
+      );
+      if (orderRes.rows.length > 0) {
+        const orderRow = orderRes.rows[0];
+        let phone = '';
+        let customerName = 'Customer';
+        try {
+          const addr = typeof orderRow.shipping_address === 'string' ? JSON.parse(orderRow.shipping_address) : orderRow.shipping_address;
+          phone = addr?.phone || '';
+          customerName = addr?.name || 'Customer';
+        } catch (_) {}
+
+        if (phone) {
+          fetch(`${request.nextUrl.origin}/api/whatsapp`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              customerPhone: phone,
+              customerName: customerName,
+              orderId: orderRow.order_number || orderId,
+              bookTitle: 'Educational Guide Book',
+              courierName: 'ST Courier Express',
+              awbNumber: awbNumber || orderRow.awb_number || 'STC-TN-EXPRESS',
+              trackingUrl: trackingUrl || orderRow.tracking_url,
+            }),
+          }).catch(() => {});
+        }
+      }
+    } catch (waErr) {
+      console.error('Auto WhatsApp dispatch error:', waErr);
+    }
+
     return NextResponse.json({ success: true, orderId, status: newStatus, awbNumber, trackingUrl });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
