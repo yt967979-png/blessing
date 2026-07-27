@@ -251,9 +251,13 @@ export async function POST(request: Request) {
       addresses,
     });
     return setSessionCookie(response, token);
-  } catch {
+  } catch (err: any) {
+    console.error('Auth error detail:', err?.message || err);
     if (client) { try { await client.end(); } catch (_) {} }
-    return NextResponse.json({ error: 'Database connection failed. Please try again.' }, { status: 503 });
+    return NextResponse.json(
+      { error: `Database connection failed (${err?.message || 'Check Railway DATABASE_URL'}).` },
+      { status: 503 }
+    );
   }
 }
 
