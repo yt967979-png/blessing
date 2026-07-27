@@ -430,7 +430,9 @@ async function ensureAdminUser(client: any) {
     if (existing.rows.length === 0) {
       await client.query(
         `INSERT INTO users (id, name, email, phone, password_hash, role, status)
-         VALUES ($1, $2, $3, $4, $5, 'admin', 'active')`,
+         VALUES ($1, $2, $3, $4, $5, 'admin', 'active')
+         ON CONFLICT (email) DO UPDATE
+         SET role = 'admin', status = 'active', password_hash = EXCLUDED.password_hash`,
         [userId, name, email, phone, passwordHash]
       );
       await client.query(
@@ -440,16 +442,14 @@ async function ensureAdminUser(client: any) {
       console.log(`[db] admin created: phone ${phone}`);
     } else {
       const id = existing.rows[0].id;
-      // Promote / refresh credentials only when env explicitly sets ADMIN_PASSWORD,
-      // or when role is not admin yet (so empty-DB first boot still gets a working admin).
       const forcePassword = Boolean(process.env.ADMIN_PASSWORD);
       if (forcePassword) {
         await client.query(
           `UPDATE users
-           SET name = $1, email = $2, phone = $3, password_hash = $4,
+           SET name = $1, phone = $2, password_hash = $3,
                role = 'admin', status = 'active', updated_at = NOW()
-           WHERE id = $5`,
-          [name, email, phone, passwordHash, id]
+           WHERE id = $4`,
+          [name, phone, passwordHash, id]
         );
       } else {
         await client.query(
