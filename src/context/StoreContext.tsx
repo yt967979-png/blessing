@@ -83,6 +83,7 @@ interface StoreContextType {
   cartCount: number;
   checkoutTotal: number;
   setCheckoutTotal: (amount: number) => void;
+  productsLoading: boolean;
   orderSuccessData: any | null;
   setOrderSuccessData: (data: any | null) => void;
   showToast: (msg: string) => void;
@@ -116,6 +117,7 @@ function readLocalWishlist(): (string | number)[] {
 
 export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [products, setProducts] = useState<Product[]>([]);
+  const [productsLoading, setProductsLoading] = useState(true);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [wishlist, setWishlist] = useState<(string | number)[]>([]);
   const [user, setUser] = useState<UserData | null>(null);
@@ -142,12 +144,14 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const refreshProducts = () => {
+    setProductsLoading(true);
     fetch('/api/products')
       .then((res) => res.json())
       .then((data) => {
         if (Array.isArray(data)) setProducts(data);
       })
-      .catch(() => setProducts([]));
+      .catch(() => setProducts([]))
+      .finally(() => setProductsLoading(false));
   };
 
   // Hydrate cart/wishlist/user BEFORE any sync (prevents empty-cart wipe)
@@ -206,17 +210,18 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     if (syncTimer.current) clearTimeout(syncTimer.current);
     syncTimer.current = setTimeout(() => {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (user.token) headers.Authorization = `Bearer ${user.token}`;
       fetch('/api/user/sync', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
-          userId: user.id,
           cart,
           wishlist,
         }),
       })
         .then((res) => {
-          if (res.status === 404) {
+          if (res.status === 404 || res.status === 401) {
             setUser(null);
             setCart([]);
             setWishlist([]);
@@ -245,7 +250,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const getAdminHeaders = (): Record<string, string> => {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (user?.token) headers.Authorization = `Bearer ${user.token}`;
-    if (user?.id) headers['x-admin-user-id'] = String(user.id);
     return headers;
   };
 
@@ -432,6 +436,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     <StoreContext.Provider
       value={{
         products,
+        productsLoading,
         cart,
         wishlist,
         user,

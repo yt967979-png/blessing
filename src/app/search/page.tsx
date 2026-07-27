@@ -8,8 +8,6 @@ import { NavBar } from '@/components/layout/NavBar';
 import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
 import { Footer } from '@/components/layout/Footer';
 import { ProductCard } from '@/components/ui/ProductCard';
-import { CartDrawer } from '@/components/cart/CartDrawer';
-import { Modals } from '@/components/modals/Modals';
 import { useStore } from '@/context/StoreContext';
 
 function SearchContent() {
@@ -263,8 +261,6 @@ function SearchContent() {
       </main>
 
       <Footer />
-      <CartDrawer />
-      <Modals />
     </div>
   );
 }

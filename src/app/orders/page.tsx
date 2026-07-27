@@ -4,9 +4,8 @@ import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
-import { CartDrawer } from '@/components/cart/CartDrawer';
-import { Modals } from '@/components/modals/Modals';
 import { useStore } from '@/context/StoreContext';
+import { authHeaders } from '@/lib/clientAuth';
 import {
   Package,
   Truck,
@@ -72,8 +71,10 @@ function OrdersContent() {
     const fetchOrders = async () => {
       setIsLoading(true);
       try {
-        if (queryOrderId) {
-          const res = await fetch(`/api/orders?orderId=${encodeURIComponent(queryOrderId)}`);
+        if (queryOrderId && user) {
+          const res = await fetch(`/api/orders?orderId=${encodeURIComponent(queryOrderId)}`, {
+            headers: authHeaders(user),
+          });
           if (res.ok) {
             const data = await res.json();
             if (data.length > 0) {
@@ -87,8 +88,7 @@ function OrdersContent() {
         }
 
         if (user) {
-          const userQueryTerm = user.email || user.name || user.phone || user.id || '';
-          const res = await fetch(`/api/orders?userId=${encodeURIComponent(userQueryTerm)}`);
+          const res = await fetch(`/api/orders`, { headers: authHeaders(user) });
           if (res.ok) {
             const data = await res.json();
             setUserOrders(data);
@@ -109,7 +109,6 @@ function OrdersContent() {
 
     fetchOrders();
 
-    // Firebase-style Instant Real-Time Sync Stream
     let eventSource: EventSource | null = null;
     try {
       eventSource = new EventSource('/api/orders/stream');
@@ -130,11 +129,13 @@ function OrdersContent() {
 
   const handleSearchOrder = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!orderSearchInput.trim()) return;
+    if (!orderSearchInput.trim() || !user) return;
 
     setIsLoading(true);
     try {
-      const res = await fetch(`/api/orders?orderId=${encodeURIComponent(orderSearchInput.trim())}`);
+      const res = await fetch(`/api/orders?orderId=${encodeURIComponent(orderSearchInput.trim())}`, {
+        headers: authHeaders(user),
+      });
       if (res.ok) {
         const data = await res.json();
         if (data.length > 0) {
@@ -810,8 +811,6 @@ export default function OrdersPage() {
         </Suspense>
       </div>
       <Footer />
-      <CartDrawer />
-      <Modals />
     </main>
   );
 }

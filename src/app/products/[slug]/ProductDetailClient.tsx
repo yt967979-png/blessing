@@ -17,8 +17,6 @@ import { NavBar } from '@/components/layout/NavBar';
 import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
 import { Footer } from '@/components/layout/Footer';
 import { ProductCard } from '@/components/ui/ProductCard';
-import { CartDrawer } from '@/components/cart/CartDrawer';
-import { Modals } from '@/components/modals/Modals';
 import { getSTCourierDeliveryEstimate } from '@/lib/deliveryEstimator';
 
 export default function ProductDetailClient({ slug }: { slug: string }) {
@@ -501,8 +499,6 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
       </div>
 
       <Footer />
-      <CartDrawer />
-      <Modals />
     </main>
   );
 }

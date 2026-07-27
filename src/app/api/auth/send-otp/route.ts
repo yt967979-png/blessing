@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getDbClient } from '@/lib/db';
 import nodemailer from 'nodemailer';
-import { applyRateLimit } from '@/lib/serverSecurity';
+import { applyRateLimitAsync, clientIp } from '@/lib/serverSecurity';
 
 function buildOtpHtml(otp: string): string {
   return `
@@ -90,8 +90,8 @@ async function sendWhatsAppOtp(phone: string, message: string): Promise<{ sent: 
 }
 
 export async function POST(request: Request) {
-  const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
-  const rate = applyRateLimit(`otp:${ip}`, 5, 600000);
+  const ip = clientIp(request);
+  const rate = await applyRateLimitAsync(`otp:${ip}`, 5, 600000);
   if (!rate.allowed) {
     return NextResponse.json({ error: 'Too many OTP requests. Please wait 10 minutes.' }, { status: 429 });
   }

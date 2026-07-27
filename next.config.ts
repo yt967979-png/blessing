@@ -4,7 +4,10 @@ const nextConfig: NextConfig = {
   compress: true,
   poweredByHeader: false,
 
-  // Image optimization domains (Cloudinary, Unsplash)
+  experimental: {
+    optimizePackageImports: ["lucide-react", "framer-motion"],
+  },
+
   images: {
     remotePatterns: [
       {
@@ -17,12 +20,19 @@ const nextConfig: NextConfig = {
       },
     ],
     formats: ["image/avif", "image/webp"],
-    minimumCacheTTL: 86400, // 24 hours
+    minimumCacheTTL: 86400,
   },
 
-  // CDN & Browser Cache Headers for 3x Faster Response Times
   async headers() {
     return [
+      {
+        source: "/(.*)",
+        headers: [
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+        ],
+      },
       {
         source: "/_next/static/(.*)",
         headers: [

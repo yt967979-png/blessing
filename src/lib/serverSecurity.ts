@@ -2,14 +2,63 @@ import { NextResponse } from 'next/server';
 import { getDbClient } from '@/lib/db';
 import { getTokenFromRequest, verifySessionToken } from '@/lib/auth';
 
-interface RateLimitEntry {
-  count: number;
-  resetTime: number;
+/** In-memory fallback when DB rate_limits is unavailable */
+const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
+
+async function ensureRateLimitTable(client: any) {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS rate_limits (
+      key TEXT PRIMARY KEY,
+      count INTEGER NOT NULL DEFAULT 0,
+      reset_at TIMESTAMPTZ NOT NULL
+    )
+  `);
 }
 
-const rateLimitMap = new Map<string, RateLimitEntry>();
+/** Durable rate limit via Postgres (falls back to memory) */
+export async function applyRateLimitAsync(
+  key: string,
+  limit: number = 30,
+  windowMs: number = 60000
+): Promise<{ allowed: boolean; remaining: number }> {
+  const now = Date.now();
+  let client: any = null;
+  try {
+    client = await getDbClient();
+    await ensureRateLimitTable(client);
+    const res = await client.query(`SELECT count, reset_at FROM rate_limits WHERE key = $1`, [key]);
+    if (res.rows.length === 0 || new Date(res.rows[0].reset_at).getTime() <= now) {
+      const resetAt = new Date(now + windowMs);
+      await client.query(
+        `INSERT INTO rate_limits (key, count, reset_at) VALUES ($1, 1, $2)
+         ON CONFLICT (key) DO UPDATE SET count = 1, reset_at = EXCLUDED.reset_at`,
+        [key, resetAt.toISOString()]
+      );
+      return { allowed: true, remaining: limit - 1 };
+    }
+    const count = Number(res.rows[0].count);
+    if (count >= limit) {
+      return { allowed: false, remaining: 0 };
+    }
+    await client.query(`UPDATE rate_limits SET count = count + 1 WHERE key = $1`, [key]);
+    return { allowed: true, remaining: limit - count - 1 };
+  } catch {
+    return applyRateLimit(key, limit, windowMs);
+  } finally {
+    if (client) {
+      try {
+        await client.end();
+      } catch (_) {}
+    }
+  }
+}
 
-export function applyRateLimit(ip: string, limit: number = 30, windowMs: number = 60000): { allowed: boolean; remaining: number } {
+/** Sync in-memory limiter (kept for backward-compatible call sites) */
+export function applyRateLimit(
+  ip: string,
+  limit: number = 30,
+  windowMs: number = 60000
+): { allowed: boolean; remaining: number } {
   const now = Date.now();
   const entry = rateLimitMap.get(ip);
 
@@ -26,52 +75,35 @@ export function applyRateLimit(ip: string, limit: number = 30, windowMs: number 
   return { allowed: true, remaining: limit - entry.count };
 }
 
-if (typeof setInterval !== 'undefined') {
-  setInterval(() => {
-    const now = Date.now();
-    for (const [key, value] of rateLimitMap.entries()) {
-      if (now > value.resetTime) {
-        rateLimitMap.delete(key);
-      }
-    }
-  }, 300000);
+export function clientIp(request: Request): string {
+  return (
+    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+    request.headers.get('x-real-ip') ||
+    'unknown'
+  );
 }
 
-export async function getAuthenticatedUser(request: Request): Promise<{ userId: string; role: string } | null> {
+export async function getAuthenticatedUser(
+  request: Request
+): Promise<{ userId: string; role: string } | null> {
   const token = getTokenFromRequest(request);
   if (!token) return null;
   return verifySessionToken(token);
 }
 
-export async function verifyAdminRequest(request: Request): Promise<{ isAdmin: boolean; error?: string; user?: { userId: string; role: string } }> {
+/** Admin only from verified session — no header/query spoofing */
+export async function verifyAdminRequest(
+  request: Request
+): Promise<{ isAdmin: boolean; error?: string; user?: { userId: string; role: string } }> {
   try {
     const session = await getAuthenticatedUser(request);
     if (session?.role === 'admin') {
       return { isAdmin: true, user: session };
     }
-
-    const url = new URL(request.url);
-    const userIdHeader = request.headers.get('x-admin-user-id') || '';
-    const userIdQuery = url.searchParams.get('adminUserId') || '';
-    const targetUserId = session?.userId || userIdHeader || userIdQuery;
-
-    if (!targetUserId) {
-      return { isAdmin: false, error: 'Unauthorized: Missing session or admin identification' };
+    if (!session) {
+      return { isAdmin: false, error: 'Unauthorized: Missing session' };
     }
-
-    const client = await getDbClient();
-    try {
-      const res = await client.query('SELECT id, email, role FROM users WHERE id = $1', [targetUserId]);
-      if (res.rows.length > 0) {
-        const user = res.rows[0];
-        if (user.role === 'admin') {
-          return { isAdmin: true, user: { userId: user.id, role: 'admin' } };
-        }
-      }
-      return { isAdmin: false, error: 'Forbidden: Admin privilege required' };
-    } finally {
-      await client.end();
-    }
+    return { isAdmin: false, error: 'Forbidden: Admin privilege required' };
   } catch {
     return { isAdmin: false, error: 'Server authentication check error' };
   }

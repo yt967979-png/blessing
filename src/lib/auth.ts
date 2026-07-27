@@ -1,11 +1,27 @@
 import crypto from 'crypto';
 
-const SESSION_SECRET =
-  process.env.SESSION_SECRET ||
-  process.env.RAZORPAY_KEY_SECRET ||
-  'bpg-dev-session-secret-change-in-production';
+function resolveSessionSecret(): string {
+  const secret = process.env.SESSION_SECRET || process.env.RAZORPAY_KEY_SECRET;
+  if (secret) return secret;
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('SESSION_SECRET must be set in production');
+  }
+  return 'bpg-dev-session-secret-change-in-production';
+}
 
+const SESSION_SECRET = resolveSessionSecret();
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+function timingSafeHexEqual(a: string, b: string): boolean {
+  try {
+    const bufA = Buffer.from(a, 'hex');
+    const bufB = Buffer.from(b, 'hex');
+    if (bufA.length !== bufB.length) return false;
+    return crypto.timingSafeEqual(bufA, bufB);
+  } catch {
+    return false;
+  }
+}
 
 export function hashPassword(password: string): string {
   const salt = crypto.randomBytes(16).toString('hex');
@@ -20,11 +36,7 @@ export function verifyPassword(password: string, stored: string): boolean {
   }
   const [salt, hash] = stored.split(':');
   const verify = crypto.scryptSync(password, salt, 64).toString('hex');
-  try {
-    return crypto.timingSafeEqual(Buffer.from(hash, 'hex'), Buffer.from(verify, 'hex'));
-  } catch {
-    return false;
-  }
+  return timingSafeHexEqual(hash, verify);
 }
 
 export function createSessionToken(userId: string, role: string): string {
@@ -40,7 +52,7 @@ export function verifySessionToken(token: string): { userId: string; role: strin
     const payloadStr = decoded.p as string;
     const sig = decoded.s as string;
     const expected = crypto.createHmac('sha256', SESSION_SECRET).update(payloadStr).digest('hex');
-    if (sig !== expected) return null;
+    if (!timingSafeHexEqual(sig, expected)) return null;
     const payload = JSON.parse(payloadStr);
     if (payload.exp < Date.now()) return null;
     return { userId: payload.userId, role: payload.role };

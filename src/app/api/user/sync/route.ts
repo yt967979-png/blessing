@@ -1,38 +1,37 @@
 import { NextResponse } from 'next/server';
 import { getDbClient } from '@/lib/db';
+import { getAuthenticatedUser, unauthorizedResponse } from '@/lib/serverSecurity';
 
-// Cross-device sync handler for Cart, Wishlist, and Addresses in Railway PostgreSQL
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const { userId, cart, wishlist, addresses } = body;
-
-    if (!userId) {
-      return NextResponse.json({ message: 'Guest user, local state kept.' });
+    const session = await getAuthenticatedUser(request);
+    if (!session) {
+      return unauthorizedResponse('Please login to sync cart.');
     }
+
+    const body = await request.json();
+    const { cart, wishlist, addresses } = body;
+    const userId = session.userId;
 
     const client = await getDbClient();
 
     try {
-      // 0. Verify user exists in Railway PostgreSQL DB
       const userCheck = await client.query('SELECT id FROM users WHERE id = $1', [String(userId)]);
       if (userCheck.rows.length === 0) {
         await client.end();
-        return NextResponse.json({ error: 'USER_NOT_FOUND', message: 'User account not found in database.' }, { status: 404 });
+        return NextResponse.json(
+          { error: 'USER_NOT_FOUND', message: 'User account not found in database.' },
+          { status: 404 }
+        );
       }
 
-      // 1. Sync Cart
       if (Array.isArray(cart)) {
         const cartId = `cart-${userId}`;
-        await client.query(
-          `INSERT INTO cart (id, user_id) VALUES ($1, $2) ON CONFLICT (user_id) DO NOTHING`,
-          [cartId, userId]
-        );
-
-        // Clear previous cart items
+        await client.query(`INSERT INTO cart (id, user_id) VALUES ($1, $2) ON CONFLICT (user_id) DO NOTHING`, [
+          cartId,
+          userId,
+        ]);
         await client.query(`DELETE FROM cart_items WHERE cart_id = $1`, [cartId]);
-
-        // Insert updated cart items
         for (const item of cart) {
           const itemId = `ci-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
           await client.query(
@@ -42,19 +41,18 @@ export async function POST(request: Request) {
         }
       }
 
-      // 2. Sync Wishlist
       if (Array.isArray(wishlist)) {
         await client.query(`DELETE FROM wishlist WHERE user_id = $1`, [userId]);
         for (const bookId of wishlist) {
           const wishId = `w-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-          await client.query(
-            `INSERT INTO wishlist (id, user_id, book_id) VALUES ($1, $2, $3)`,
-            [wishId, userId, String(bookId)]
-          );
+          await client.query(`INSERT INTO wishlist (id, user_id, book_id) VALUES ($1, $2, $3)`, [
+            wishId,
+            userId,
+            String(bookId),
+          ]);
         }
       }
 
-      // 3. Sync Addresses
       if (Array.isArray(addresses)) {
         for (const addr of addresses) {
           const addrId = String(addr.id || `addr-${Date.now()}`);
@@ -67,13 +65,22 @@ export async function POST(request: Request) {
                address_line1 = EXCLUDED.address_line1,
                city = EXCLUDED.city,
                pincode = EXCLUDED.pincode`,
-            [addrId, userId, addr.name || 'User', addr.phone || '', addr.address || '', addr.city || 'Chennai', addr.pincode || '600012', addr.type || 'HOME']
+            [
+              addrId,
+              userId,
+              addr.name || 'User',
+              addr.phone || '',
+              addr.address || '',
+              addr.city || 'Chennai',
+              addr.pincode || '600012',
+              addr.type || 'HOME',
+            ]
           );
         }
       }
 
       await client.end();
-      return NextResponse.json({ success: true, message: 'Cross-device state synchronized to Railway PostgreSQL.' });
+      return NextResponse.json({ success: true, message: 'Synced.' });
     } catch (err: any) {
       if (client) await client.end();
       return NextResponse.json({ error: err.message }, { status: 500 });

@@ -9,11 +9,11 @@ import { useStore } from '@/context/StoreContext';
 export const MobileBottomNav = () => {
   const pathname = usePathname();
   const router = useRouter();
-  const { cartCount, user, setIsCartOpen, setIsAuthOpen, isCheckoutOpen, isAuthOpen } = useStore();
+  const { cartCount, user, setIsCartOpen, setIsAuthOpen, isCheckoutOpen, isAuthOpen, isCartOpen } = useStore();
 
   // Hide on admin and when full-screen modals are open
   if (pathname?.startsWith('/admin')) return null;
-  if (isCheckoutOpen || isAuthOpen) return null;
+  if (isCartOpen || isCheckoutOpen || isAuthOpen) return null;
 
   const isHome = pathname === '/';
   const isProducts = pathname?.startsWith('/products') || pathname?.startsWith('/search');

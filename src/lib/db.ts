@@ -296,6 +296,12 @@ export async function getDbClient() {
           tax_percentage NUMERIC DEFAULT 0
         );
 
+        CREATE TABLE IF NOT EXISTS rate_limits (
+          key TEXT PRIMARY KEY,
+          count INTEGER NOT NULL DEFAULT 0,
+          reset_at TIMESTAMPTZ NOT NULL
+        );
+
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_address TEXT;
         ALTER TABLE reviews ADD COLUMN IF NOT EXISTS user_name VARCHAR(255);
       `);

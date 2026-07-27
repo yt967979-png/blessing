@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { getDbClient } from '@/lib/db';
 import { createSessionToken, hashPassword, verifyPassword } from '@/lib/auth';
+import { applyRateLimitAsync, clientIp } from '@/lib/serverSecurity';
 
 function setSessionCookie(response: NextResponse, token: string) {
   response.cookies.set('bpg_session', token, {
@@ -98,6 +99,11 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   let client: any = null;
   try {
+    const rl = await applyRateLimitAsync(`auth:${clientIp(request)}`, 20, 60000);
+    if (!rl.allowed) {
+      return NextResponse.json({ error: 'Too many login attempts. Please wait a minute.' }, { status: 429 });
+    }
+
     const body = await request.json();
     const { action, email, phone, password, name } = body;
     const loginIdentifier = String(phone || email || '').trim();

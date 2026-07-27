@@ -24,12 +24,11 @@ import {
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { createUserAddress, deleteUserAddress, migrateLocalAddressesToDb } from '@/lib/addresses';
+import { authHeaders } from '@/lib/clientAuth';
 import { Header } from '@/components/layout/Header';
 import { NavBar } from '@/components/layout/NavBar';
 import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
 import { Footer } from '@/components/layout/Footer';
-import { CartDrawer } from '@/components/cart/CartDrawer';
-import { Modals } from '@/components/modals/Modals';
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -76,12 +75,10 @@ export default function ProfilePage() {
     return () => { cancelled = true; };
   }, [user]);
 
-  // Fetch live orders for logged-in user from backend database with 4-second auto-sync
   useEffect(() => {
     const fetchUserLiveOrders = () => {
       if (user) {
-        const queryTerm = user.email || user.phone || user.name || user.id;
-        fetch(`/api/orders?userId=${encodeURIComponent(queryTerm)}`)
+        fetch(`/api/orders`, { headers: authHeaders(user) })
           .then((res) => res.json())
           .then((data) => {
             if (Array.isArray(data)) {
@@ -96,7 +93,6 @@ export default function ProfilePage() {
 
     fetchUserLiveOrders();
 
-    // Firebase-style Instant Real-Time Sync Stream
     let eventSource: EventSource | null = null;
     try {
       eventSource = new EventSource('/api/orders/stream');
@@ -110,7 +106,7 @@ export default function ProfilePage() {
       };
     } catch (_) {}
 
-    const interval = setInterval(fetchUserLiveOrders, 15000);
+    const interval = setInterval(fetchUserLiveOrders, 45000);
     return () => {
       clearInterval(interval);
       if (eventSource) eventSource.close();
@@ -215,7 +211,6 @@ export default function ProfilePage() {
           </button>
         </div>
         <Footer />
-        <Modals />
       </main>
     );
   }
@@ -779,8 +774,6 @@ export default function ProfilePage() {
       </div>
 
       <Footer />
-      <CartDrawer />
-      <Modals />
     </main>
   );
 }

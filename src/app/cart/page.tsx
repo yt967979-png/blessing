@@ -8,8 +8,6 @@ import { Header } from '@/components/layout/Header';
 import { NavBar } from '@/components/layout/NavBar';
 import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
 import { Footer } from '@/components/layout/Footer';
-import { CartDrawer } from '@/components/cart/CartDrawer';
-import { Modals } from '@/components/modals/Modals';
 
 export default function CartPage() {
   const { cart, updateQty, removeFromCart, cartTotal, setIsCheckoutOpen, user, setIsAuthOpen, setCheckoutTotal } = useStore();
@@ -226,8 +224,6 @@ export default function CartPage() {
       </div>
 
       <Footer />
-      <CartDrawer />
-      <Modals />
     </main>
   );
 }
