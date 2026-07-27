@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getDbClient, releaseDbClient } from '@/lib/db';
+import { tryGetDbClient, releaseDbClient } from '@/lib/db';
 import { verifyAdminRequest, forbiddenResponse } from '@/lib/serverSecurity';
 
 async function ensureFaqsTable(client: any) {
@@ -20,7 +20,7 @@ export async function GET(request: Request) {
   const type = searchParams.get('type') || 'faq';
   const adminAll = searchParams.get('admin') === '1';
 
-  const client = await getDbClient();
+  const client = await tryGetDbClient();
   if (!client) {
     // Soft fail for storefront — empty FAQs / settings
     if (type === 'settings') return NextResponse.json({});
@@ -74,7 +74,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Question and answer are required.' }, { status: 400 });
   }
 
-  const client = await getDbClient();
+  const client = await tryGetDbClient();
   if (!client) {
     return NextResponse.json({ error: 'Database unavailable. Try again.' }, { status: 503 });
   }
@@ -102,7 +102,7 @@ export async function PATCH(request: Request) {
   const id = body.id;
   if (!id) return NextResponse.json({ error: 'FAQ id required' }, { status: 400 });
 
-  const client = await getDbClient();
+  const client = await tryGetDbClient();
   if (!client) {
     return NextResponse.json({ error: 'Database unavailable. Try again.' }, { status: 503 });
   }
@@ -149,7 +149,7 @@ export async function DELETE(request: Request) {
   const id = searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
 
-  const client = await getDbClient();
+  const client = await tryGetDbClient();
   if (!client) {
     return NextResponse.json({ error: 'Database unavailable. Try again.' }, { status: 503 });
   }

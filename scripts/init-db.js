@@ -563,6 +563,38 @@ async function seedCouponsAndFaqs(connStr, dbName) {
   }
 }
 
+async function seedCategories(connStr, dbName) {
+  const client = new Client({
+    connectionString: normalizeConnectionString(connStr),
+    ssl: sslFor(connStr),
+    connectionTimeoutMillis: Number(process.env.DB_CONNECT_TIMEOUT_MS || 15000),
+  });
+  const categories = [
+    ['cat-combos', 'Combo Packs', 'combos'],
+    ['cat-6th', '6th Standard Guides', '6th'],
+    ['cat-7th', '7th Standard Guides', '7th'],
+    ['cat-8th', '8th Standard Guides', '8th'],
+    ['cat-9th', '9th Standard Guides', '9th'],
+    ['cat-10th', '10th Standard Guides', '10th'],
+    ['cat-11th', '11th Standard Guides', '11th'],
+    ['cat-12th', '12th Standard Guides', '12th'],
+  ];
+  try {
+    await client.connect();
+    for (const [id, name, slug] of categories) {
+      await client.query(
+        `INSERT INTO categories (id, name, slug, status) VALUES ($1, $2, $3, 'active') ON CONFLICT (id) DO NOTHING`,
+        [id, name, slug]
+      );
+    }
+    console.log(`✅ [${dbName}] Categories seeded`);
+    await client.end();
+  } catch (err) {
+    console.error(`❌ Categories seed error [${dbName}]:`, err.message);
+    if (client) await client.end();
+  }
+}
+
 async function main() {
   let connectionString;
   try {
@@ -578,6 +610,7 @@ async function main() {
       await migrateDatabase(postgresConnStr, 'postgres');
     }
 
+    await seedCategories(connectionString, targetDbName);
     await seedAdmin(connectionString, targetDbName);
     await seedCouponsAndFaqs(connectionString, targetDbName);
     console.log('✅ Database initialization complete.');

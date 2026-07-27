@@ -426,6 +426,16 @@ export async function getDbClient() {
   throw lastErr || new Error('Could not acquire database client');
 }
 
+/** Soft-fail helper for routes that should degrade gracefully when DB is down. */
+export async function tryGetDbClient(): Promise<any | null> {
+  try {
+    return await getDbClient();
+  } catch (err: any) {
+    console.warn('[db] tryGetDbClient:', err?.message || err);
+    return null;
+  }
+}
+
 /** Never throws if client is null (after connect timeout). */
 export function releaseDbClient(client: any) {
   if (!client) return;
@@ -684,6 +694,37 @@ async function runSchemaInit(client: any) {
           reset_at TIMESTAMPTZ NOT NULL
         );
 
+        CREATE TABLE IF NOT EXISTS contact_submissions (
+          id SERIAL PRIMARY KEY,
+          contact_id VARCHAR(100) UNIQUE,
+          name VARCHAR(255) NOT NULL,
+          email VARCHAR(255),
+          phone VARCHAR(50) NOT NULL,
+          subject VARCHAR(255),
+          message TEXT NOT NULL,
+          status VARCHAR(50) DEFAULT 'unread',
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS notifications (
+          id VARCHAR(255) PRIMARY KEY,
+          user_id VARCHAR(255),
+          title VARCHAR(255) NOT NULL,
+          message TEXT NOT NULL,
+          type VARCHAR(50) DEFAULT 'info',
+          is_read BOOLEAN DEFAULT FALSE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS email_otps (
+          id VARCHAR(255) PRIMARY KEY,
+          email VARCHAR(255) NOT NULL,
+          otp VARCHAR(10) NOT NULL,
+          expires_at TIMESTAMP NOT NULL,
+          verified BOOLEAN DEFAULT FALSE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_address TEXT;
         ALTER TABLE reviews ADD COLUMN IF NOT EXISTS user_name VARCHAR(255);
         ALTER TABLE books ADD COLUMN IF NOT EXISTS badge VARCHAR(100) DEFAULT '';
@@ -695,7 +736,29 @@ async function runSchemaInit(client: any) {
     }
 
     // Ensure default admin exists (empty DB after pointing DATABASE_URL at a new Postgres)
+    await ensureDefaultCategories(client);
     await ensureAdminUser(client);
+}
+
+async function ensureDefaultCategories(client: any) {
+  const categories = [
+    { id: 'cat-combos', name: 'Combo Packs', slug: 'combos' },
+    { id: 'cat-6th', name: '6th Standard Guides', slug: '6th' },
+    { id: 'cat-7th', name: '7th Standard Guides', slug: '7th' },
+    { id: 'cat-8th', name: '8th Standard Guides', slug: '8th' },
+    { id: 'cat-9th', name: '9th Standard Guides', slug: '9th' },
+    { id: 'cat-10th', name: '10th Standard Guides', slug: '10th' },
+    { id: 'cat-11th', name: '11th Standard Guides', slug: '11th' },
+    { id: 'cat-12th', name: '12th Standard Guides', slug: '12th' },
+  ];
+  for (const cat of categories) {
+    await client.query(
+      `INSERT INTO categories (id, name, slug, status)
+       VALUES ($1, $2, $3, 'active')
+       ON CONFLICT (id) DO NOTHING`,
+      [cat.id, cat.name, cat.slug]
+    );
+  }
 }
 
 async function ensureAdminUser(client: any) {

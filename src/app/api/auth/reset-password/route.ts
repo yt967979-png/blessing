@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getDbClient, releaseDbClient } from '@/lib/db';
+import { tryGetDbClient, releaseDbClient } from '@/lib/db';
 import { hashPassword } from '@/lib/auth';
 import { isStrongPassword } from '@/lib/authValidation';
 
@@ -33,7 +33,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Mobile number is required.' }, { status: 400 });
     }
 
-    client = await getDbClient();
+    client = await tryGetDbClient();
     if (!client) {
       return NextResponse.json({ error: 'Database unavailable. Try again.' }, { status: 503 });
     }

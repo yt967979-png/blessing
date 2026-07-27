@@ -428,6 +428,10 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const addNewProductToDb = async (newProdData: Partial<Product>) => {
+    if (!user?.token) {
+      showToast('❌ Please log in again as admin');
+      return;
+    }
     try {
       const res = await fetch('/api/products', {
         method: 'POST',
@@ -443,11 +447,17 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           badge: newProdData.badge || '',
         }),
       });
-      if (!res.ok) throw new Error('Create failed');
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || `Create failed (${res.status})`);
+      }
       refreshProducts();
       showToast(`🎉 Book "${newProdData.title}" saved to database`);
-    } catch {
-      showToast('❌ Failed to add product');
+    } catch (err: any) {
+      const msg = err?.message || 'Unknown error';
+      showToast(msg.includes('Forbidden') || msg.includes('Unauthorized')
+        ? '❌ Admin login required — log out and log in again'
+        : `❌ Failed to add product: ${msg}`);
     }
   };
 

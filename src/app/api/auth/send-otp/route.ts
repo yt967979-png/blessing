@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getDbClient, releaseDbClient } from '@/lib/db';
+import { getDbClient, tryGetDbClient, releaseDbClient } from '@/lib/db';
 import nodemailer from 'nodemailer';
 import { applyRateLimitAsync, clientIp } from '@/lib/serverSecurity';
 
@@ -108,7 +108,7 @@ export async function POST(request: Request) {
     const cleanPhone = normalizePhoneDigits(phone || email || '');
     const isResetMode = mode === 'reset' || mode === 'forgot';
 
-    client = await getDbClient();
+    client = await tryGetDbClient();
     if (!client) {
       return NextResponse.json({ error: 'Database unavailable. Try again shortly.' }, { status: 503 });
     }

@@ -1,29 +1,27 @@
 import { NextResponse } from 'next/server';
-import { getDbClient } from '@/lib/db';
+import { tryGetDbClient, releaseDbClient } from '@/lib/db';
 import { applyRateLimit } from '@/lib/serverSecurity';
 import { sendWhatsAppMessageInProcess } from '@/lib/whatsapp';
 
 export async function POST(request: Request) {
-  // Rate limiting: max 5 messages per 10 minutes per IP
   const ip = request.headers.get('x-forwarded-for') || 'anonymous';
   const { allowed } = applyRateLimit(`contact-${ip}`, 5, 600000);
   if (!allowed) {
     return NextResponse.json({ error: 'Too many messages sent. Please wait a few minutes before trying again.' }, { status: 429 });
   }
 
-  const client = await getDbClient();
+  let client: any = null;
   try {
     const { name, email, phone, subject, message } = await request.json();
 
     if (!name || !phone || !message) {
-      if (client) await client.end();
       return NextResponse.json({ error: 'Name, Phone, and Message are required fields.' }, { status: 400 });
     }
 
-    let contactId = `MSG-${Date.now()}`;
+    const contactId = `MSG-${Date.now()}`;
 
+    client = await tryGetDbClient();
     if (client) {
-      // Ensure contacts table exists in Railway PostgreSQL
       await client.query(`
         CREATE TABLE IF NOT EXISTS contact_submissions (
           id SERIAL PRIMARY KEY,
@@ -43,10 +41,8 @@ export async function POST(request: Request) {
          VALUES ($1, $2, $3, $4, $5, $6)`,
         [contactId, name, email || '', phone, subject || 'General Inquiry', message]
       );
-      await client.end();
     }
 
-    // Auto-notify Admin via WhatsApp
     try {
       const whatsappMsg = `📩 *NEW WEBSITE CONTACT FORM INQUIRY*\n\n👤 *Name:* ${name}\n📞 *Phone:* ${phone}\n✉️ *Email:* ${email || 'N/A'}\n📌 *Subject:* ${subject || 'General Inquiry'}\n\n💬 *Message:* ${message}`;
       await sendWhatsAppMessageInProcess('919840418228', whatsappMsg);
@@ -58,7 +54,8 @@ export async function POST(request: Request) {
       contactId,
     });
   } catch (err: any) {
-    if (client) await client.end();
     return NextResponse.json({ error: err.message || 'Server error processing contact message' }, { status: 500 });
+  } finally {
+    releaseDbClient(client);
   }
 }
