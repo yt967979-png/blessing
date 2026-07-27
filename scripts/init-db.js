@@ -22,11 +22,11 @@ function getConnectionCandidates() {
     raw.push(`postgresql://${user}:${pass}@${host}:${port}/${db}`);
   }
 
-  return [...new Set(raw)].sort((a, b) => {
+  return [...new Set(raw.map(normalizeConnectionString))].sort((a, b) => {
     const score = (u) => {
-      if (u.includes('railway.internal')) return 2;
       if (u.includes('rlwy.net') || u.includes('proxy.rlwy.net')) return 0;
-      return 1;
+      if (u.includes('railway.internal')) return 1;
+      return 2;
     };
     return score(a) - score(b);
   });
@@ -49,13 +49,26 @@ if (dbUrlOnlyInternal) {
 }
 
 function sslFor(connectionString) {
-  return connectionString.includes('railway') ||
-    connectionString.includes('render') ||
+  if (process.env.DATABASE_SSL === 'false') return false;
+  if (process.env.DATABASE_SSL === 'true') return { rejectUnauthorized: false };
+  if (connectionString.includes('railway.internal')) return false;
+  if (
     connectionString.includes('rlwy.net') ||
     connectionString.includes('proxy.rlwy.net') ||
-    connectionString.includes('railway.internal')
-    ? { rejectUnauthorized: false }
-    : false;
+    connectionString.includes('railway.app') ||
+    connectionString.includes('render.com')
+  ) {
+    return { rejectUnauthorized: false };
+  }
+  return false;
+}
+
+function normalizeConnectionString(url) {
+  let u = url.trim();
+  u = u.replace(/([?&])sslmode=[^&]*/gi, '$1');
+  u = u.replace(/([?&])uselibpqcompat=[^&]*/gi, '$1');
+  u = u.replace(/\?&/g, '?').replace(/[?&]$/g, '');
+  return u;
 }
 
 async function connectWithFallback(label) {
@@ -70,7 +83,7 @@ async function connectWithFallback(label) {
     })();
     console.log(`⚡ Connecting to PostgreSQL [${label}] via ${host}…`);
     const client = new Client({
-      connectionString: connStr,
+      connectionString: normalizeConnectionString(connStr),
       ssl: sslFor(connStr),
       connectionTimeoutMillis: Number(process.env.DB_CONNECT_TIMEOUT_MS || 15000),
     });
@@ -94,7 +107,7 @@ async function connectWithFallback(label) {
 
 async function migrateDatabase(connStr, dbName) {
   const client = new Client({
-    connectionString: connStr,
+    connectionString: normalizeConnectionString(connStr),
     ssl: sslFor(connStr),
     connectionTimeoutMillis: Number(process.env.DB_CONNECT_TIMEOUT_MS || 15000),
   });
@@ -429,7 +442,7 @@ const DEFAULT_FAQS = [
 
 async function seedAdmin(connStr, dbName) {
   const client = new Client({
-    connectionString: connStr,
+    connectionString: normalizeConnectionString(connStr),
     ssl: sslFor(connStr),
   });
 
@@ -516,7 +529,7 @@ async function seedAdmin(connStr, dbName) {
 
 async function seedCouponsAndFaqs(connStr, dbName) {
   const client = new Client({
-    connectionString: connStr,
+    connectionString: normalizeConnectionString(connStr),
     ssl: sslFor(connStr),
   });
 

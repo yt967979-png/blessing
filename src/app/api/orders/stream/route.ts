@@ -6,6 +6,9 @@ import { getAuthenticatedUser } from '@/lib/serverSecurity';
 const clients = new Set<ReadableStreamDefaultController>();
 let listenReady: Promise<void> | null = null;
 let listenClient: Client | null = null;
+let listenPingInterval: NodeJS.Timeout | null = null;
+let listenBackoffMs = 1000;
+const LISTEN_BACKOFF_MAX = 30000;
 
 export function broadcastOrderChange(data: any) {
   const message = `data: ${JSON.stringify(data)}\n\n`;
@@ -35,15 +38,40 @@ export async function notifyOrderChanged(data: any) {
   }
 }
 
+function stopListenClient() {
+  if (listenPingInterval) {
+    clearInterval(listenPingInterval);
+    listenPingInterval = null;
+  }
+  listenReady = null;
+  const c = listenClient;
+  listenClient = null;
+  if (c) {
+    try {
+      void c.end();
+    } catch (_) {}
+  }
+}
+
+function scheduleListenReconnect(reason: string) {
+  stopListenClient();
+  console.warn(`[order-listen] reconnect scheduled (${reason}) in ${listenBackoffMs}ms`);
+  setTimeout(() => {
+    void ensureListen();
+  }, listenBackoffMs);
+  listenBackoffMs = Math.min(listenBackoffMs * 2, LISTEN_BACKOFF_MAX);
+}
+
 function ensureListen() {
   if (listenReady) return listenReady;
   listenReady = (async () => {
     try {
-      // Dedicated Client — must NOT use the pool (LISTEN holds the connection forever)
       const cfg = await resolveDbConnectionConfig();
       listenClient = new Client(cfg);
       await listenClient.connect();
       await listenClient.query('LISTEN order_changed');
+      listenBackoffMs = 1000;
+
       listenClient.on('notification', (msg: { channel: string; payload?: string }) => {
         if (msg.channel !== 'order_changed' || !msg.payload) return;
         try {
@@ -52,20 +80,37 @@ function ensureListen() {
           broadcastOrderChange({ type: 'ORDER_UPDATED', timestamp: Date.now() });
         }
       });
-      listenClient.on('error', () => {
-        listenReady = null;
-        try {
-          void listenClient?.end();
-        } catch (_) {}
-        listenClient = null;
+
+      listenClient.on('error', (err: Error) => {
+        scheduleListenReconnect(err.message || 'error');
       });
-    } catch (err) {
-      console.error('LISTEN order_changed failed:', err);
-      listenReady = null;
-      listenClient = null;
+
+      listenClient.on('end', () => {
+        scheduleListenReconnect('connection ended');
+      });
+
+      if (listenPingInterval) clearInterval(listenPingInterval);
+      listenPingInterval = setInterval(async () => {
+        try {
+          if (!listenClient) return;
+          await listenClient.query('SELECT 1');
+        } catch (err: any) {
+          scheduleListenReconnect(err?.message || 'ping failed');
+        }
+      }, 30000);
+
+      console.log('[order-listen] LISTEN order_changed active');
+    } catch (err: any) {
+      console.error('LISTEN order_changed failed:', err?.message || err);
+      scheduleListenReconnect('initial connect failed');
     }
   })();
   return listenReady;
+}
+
+/** Start NOTIFY listener at boot — keeps admin order stream aligned 24/7. */
+export function startOrderListenBroker() {
+  void ensureListen();
 }
 
 export async function GET(req: NextRequest) {

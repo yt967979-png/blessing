@@ -6,15 +6,12 @@ let schemaInitPromise: Promise<void> | null = null;
 let pool: Pool | null = null;
 let activeConnectionString: string | null = null;
 
-/** Collect unique DB URLs — public URL fallback when private `.railway.internal` fails */
+/** Strip sslmode from URL — pg v8 treats sslmode=require as verify-full and breaks Railway proxy. */
 function normalizeConnectionString(url: string): string {
   let u = url.trim();
-  if (
-    (u.includes('rlwy.net') || u.includes('proxy.rlwy.net') || u.includes('railway.internal')) &&
-    !u.includes('sslmode=')
-  ) {
-    u += `${u.includes('?') ? '&' : '?'}sslmode=require`;
-  }
+  u = u.replace(/([?&])sslmode=[^&]*/gi, '$1');
+  u = u.replace(/([?&])uselibpqcompat=[^&]*/gi, '$1');
+  u = u.replace(/\?&/g, '?').replace(/[?&]$/g, '');
   return u;
 }
 
@@ -43,12 +40,11 @@ function getConnectionCandidates(): string[] {
     ].filter(Boolean) as string[])
   );
 
-  // Prefer private network on Railway (same project), then public proxy
-  const onRailway = Boolean(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_PROJECT_ID);
+  // Prefer public TCP proxy first (works across services); private internal as fallback
   const sorted = [...new Set(raw.map(normalizeConnectionString))].sort((a, b) => {
     const score = (u: string) => {
-      if (u.includes('railway.internal')) return onRailway ? 0 : 2;
-      if (u.includes('rlwy.net') || u.includes('proxy.rlwy.net')) return onRailway ? 1 : 0;
+      if (u.includes('rlwy.net') || u.includes('proxy.rlwy.net')) return 0;
+      if (u.includes('railway.internal')) return 1;
       return 2;
     };
     return score(a) - score(b);
@@ -94,17 +90,26 @@ export function logDbConnectionConfig() {
 }
 
 function sslFor(connectionString: string) {
-  return process.env.DATABASE_SSL === 'true' ||
-    connectionString.includes('railway') ||
-    connectionString.includes('render') ||
+  if (process.env.DATABASE_SSL === 'false') return false;
+  if (process.env.DATABASE_SSL === 'true') {
+    return { rejectUnauthorized: false as const };
+  }
+  // Private Railway mesh — plain TCP (no TLS)
+  if (connectionString.includes('railway.internal')) return false;
+  // Public Railway proxy / other hosted Postgres
+  if (
     connectionString.includes('rlwy.net') ||
     connectionString.includes('proxy.rlwy.net') ||
-    connectionString.includes('railway.internal')
-    ? { rejectUnauthorized: false as const }
-    : false;
+    connectionString.includes('railway.app') ||
+    connectionString.includes('render.com')
+  ) {
+    return { rejectUnauthorized: false as const };
+  }
+  return false;
 }
 
-async function destroyPool() {
+async function destroyPool(keepSchema = false) {
+  stopPoolHeartbeat();
   if (pool) {
     try {
       await pool.end();
@@ -112,12 +117,22 @@ async function destroyPool() {
   }
   pool = null;
   activeConnectionString = null;
-  isSchemaInitialized = false;
-  schemaInitPromise = null;
+  lastPoolPingAt = 0;
+  if (!keepSchema) {
+    isSchemaInitialized = false;
+    schemaInitPromise = null;
+  }
   poolReadyPromise = null;
 }
 
+/** Drop broken pool sockets; keep schema flag when DB tables already exist. */
+async function invalidatePool(reason: string) {
+  console.warn('[db] pool invalidated:', reason);
+  await destroyPool(isSchemaInitialized);
+}
+
 let poolReadyPromise: Promise<Pool> | null = null;
+let lastPoolPingAt = 0;
 
 function createPool(connectionString: string): Pool {
   const normalized = normalizeConnectionString(connectionString);
@@ -133,39 +148,86 @@ function createPool(connectionString: string): Pool {
 
   p.on('error', (err) => {
     console.warn('[db] idle pool socket error:', err.message);
+    void invalidatePool('pool socket error');
   });
 
   return p;
 }
 
-// Background heartbeat — started only after first successful pool connection
+// Background heartbeat — keeps pool warm 24/7; reconnects on failure
 let heartbeatInterval: NodeJS.Timeout | null = null;
-function startPoolHeartbeat(activePool: Pool) {
-  if (heartbeatInterval) return;
-  heartbeatInterval = setInterval(async () => {
-    try {
-      if (activePool && !(activePool as any).ending && !(activePool as any).ended) {
-        const client = await activePool.connect();
-        try {
-          await client.query('SELECT 1');
-        } finally {
-          client.release();
-        }
-      }
-    } catch (_) {
-      /* ignore transient ping failure */
-    }
-  }, 60000);
+function stopPoolHeartbeat() {
+  if (heartbeatInterval) {
+    clearInterval(heartbeatInterval);
+    heartbeatInterval = null;
+  }
 }
 
-export function getDbPool(): Pool {
-  if (pool && activeConnectionString && !(pool as any).ending && !(pool as any).ended) {
-    return pool;
+function startPoolHeartbeat(activePool: Pool) {
+  stopPoolHeartbeat();
+  heartbeatInterval = setInterval(async () => {
+    try {
+      if (!pool || (pool as any).ending || (pool as any).ended) {
+        void invalidatePool('heartbeat found dead pool');
+        return;
+      }
+      const client = await activePool.connect();
+      try {
+        await client.query('SELECT 1');
+        lastPoolPingAt = Date.now();
+      } finally {
+        client.release();
+      }
+    } catch (err: any) {
+      console.warn('[db] heartbeat failed:', err?.message || err);
+      void invalidatePool('heartbeat failed');
+    }
+  }, Number(process.env.DB_HEARTBEAT_MS || 45000));
+}
+
+export async function getDbPool(): Promise<Pool> {
+  return ensurePoolReady();
+}
+
+/** Boot-time warmup — call from instrumentation before crons. */
+export async function warmDbConnection(): Promise<boolean> {
+  try {
+    const client = await getDbClient();
+    releaseDbClient(client);
+    console.log('[db] warm connection OK');
+    return true;
+  } catch (err: any) {
+    console.error('[db] warm connection failed:', err?.message || err);
+    return false;
   }
-  const candidates = getConnectionCandidates();
-  activeConnectionString = normalizeConnectionString(candidates[0]);
-  pool = createPool(activeConnectionString);
-  return pool;
+}
+
+/** Readiness probe for Railway / monitoring. */
+export async function pingDb(): Promise<{ ok: boolean; host?: string; message?: string }> {
+  try {
+    const client = await getDbClient();
+    await client.query('SELECT 1');
+    releaseDbClient(client);
+    const host = activeConnectionString
+      ? new URL(activeConnectionString.replace(/^postgres(ql)?:\/\//, 'http://')).hostname
+      : undefined;
+    return { ok: true, host };
+  } catch (err: any) {
+    return { ok: false, message: err?.message || 'Database unreachable' };
+  }
+}
+
+/** Graceful shutdown on SIGTERM (Railway deploy rollover). */
+export async function shutdownDb() {
+  stopPoolHeartbeat();
+  if (pool) {
+    try {
+      await pool.end();
+    } catch (_) {}
+  }
+  pool = null;
+  activeConnectionString = null;
+  poolReadyPromise = null;
 }
 
 async function probeConnection(connStr: string): Promise<void> {
@@ -201,8 +263,15 @@ async function probeConnection(connStr: string): Promise<void> {
 
 /** Config for long-lived dedicated pg Clients (LISTEN / NOTIFY helpers). */
 export function getDbConnectionConfig() {
-  const connectionString = activeConnectionString || getConnectionCandidates()[0];
-  return { connectionString, ssl: sslFor(connectionString) };
+  const connectionString = normalizeConnectionString(
+    activeConnectionString || getConnectionCandidates()[0]
+  );
+  return {
+    connectionString,
+    ssl: sslFor(connectionString),
+    keepAlive: true,
+    connectionTimeoutMillis: Number(process.env.DB_CONNECT_TIMEOUT_MS || 60000),
+  };
 }
 
 /** Resolve a working connection string (warms pool if needed). Use before LISTEN. */
@@ -271,7 +340,14 @@ async function ensureSchemaReady(activePool: Pool) {
 
 /** Single-flight pool setup — prevents connection storms at cold start. */
 async function ensurePoolReady(): Promise<Pool> {
-  if (pool && activeConnectionString && isSchemaInitialized) {
+  const staleMs = Number(process.env.DB_POOL_STALE_MS || 120000);
+  if (
+    pool &&
+    activeConnectionString &&
+    isSchemaInitialized &&
+    lastPoolPingAt > 0 &&
+    Date.now() - lastPoolPingAt < staleMs
+  ) {
     return pool;
   }
   if (poolReadyPromise) return poolReadyPromise;
@@ -286,7 +362,7 @@ async function ensurePoolReady(): Promise<Pool> {
         await probeConnection(normalized);
 
         if (!pool || activeConnectionString !== normalized) {
-          await destroyPool();
+          await destroyPool(isSchemaInitialized);
           activeConnectionString = normalized;
           pool = createPool(normalized);
           const host = (() => {
@@ -300,13 +376,14 @@ async function ensurePoolReady(): Promise<Pool> {
         }
 
         await ensureSchemaReady(pool);
+        lastPoolPingAt = Date.now();
         startPoolHeartbeat(pool);
         return pool;
       } catch (err: any) {
         lastErr = err;
         const msg = String(err?.message || err);
         console.error('[db] connect failed:', msg);
-        await destroyPool();
+        await destroyPool(isSchemaInitialized);
 
         const isPrivateDnsFail =
           msg.includes('ENOTFOUND') && connStr.includes('railway.internal');
@@ -330,10 +407,23 @@ async function ensurePoolReady(): Promise<Pool> {
 }
 
 export async function getDbClient() {
-  const activePool = await ensurePoolReady();
-  const client: any = await activePool.connect();
-  wrapPoolClient(client);
-  return client;
+  const retries = Number(process.env.DB_ACQUIRE_RETRIES || 2);
+  let lastErr: Error | null = null;
+
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      const activePool = await ensurePoolReady();
+      const client: any = await activePool.connect();
+      wrapPoolClient(client);
+      return client;
+    } catch (err: any) {
+      lastErr = err;
+      console.warn(`[db] acquire client attempt ${attempt + 1}/${retries} failed:`, err?.message || err);
+      await invalidatePool('client acquire failed');
+    }
+  }
+
+  throw lastErr || new Error('Could not acquire database client');
 }
 
 /** Never throws if client is null (after connect timeout). */
