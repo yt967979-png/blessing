@@ -24,11 +24,11 @@ function getConnectionCandidates(): string[] {
     raw.push(`postgresql://${user}:${pass}@${host}:${port}/${db}`);
   }
 
-  // Prefer public/proxy URLs over *.railway.internal (broken when Postgres service renamed/deleted)
+  // Public proxy URLs (*.rlwy.net) take 100% priority over private hostnames (*.railway.internal)
   const sorted = [...new Set(raw)].sort((a, b) => {
     const score = (u: string) => {
-      if (u.includes('railway.internal')) return 2;
       if (u.includes('rlwy.net') || u.includes('proxy.rlwy.net')) return 0;
+      if (u.includes('railway.internal')) return 2;
       return 1;
     };
     return score(a) - score(b);
