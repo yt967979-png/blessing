@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { BrandLogo } from '@/components/ui/BrandLogo';
 
 export const Footer = () => {
   return (
@@ -9,9 +10,7 @@ export const Footer = () => {
         {/* Col 1 */}
         <div>
           <div className="flex items-center gap-2 mb-3">
-            <div className="w-8 h-8 bg-gradient-to-br from-[#001B3A] to-[#003B73] border border-[#D4A843] rounded-lg flex items-center justify-center font-bold text-lg text-[#F0C14B]">
-              B
-            </div>
+            <BrandLogo size={32} className="w-8 h-8" />
             <div>
               <h4 className="font-heading font-extrabold text-sm text-white">
                 BLESSING POWER GUIDE

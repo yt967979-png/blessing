@@ -76,7 +76,7 @@ interface StoreContextType {
     restoredAddresses?: any[]
   ) => void;
   logoutUser: () => void;
-  updateProductInDb: (id: string | number, updatedData: Partial<Product>) => void;
+  updateProductInDb: (id: string | number, updatedData: Partial<Product> & { hasDiscount?: boolean }) => void;
   addNewProductToDb: (newProdData: Partial<Product>) => void;
   deleteProductFromDb: (id: string | number) => void;
   cartTotal: number;
@@ -145,7 +145,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const refreshProducts = () => {
     setProductsLoading(true);
-    fetch('/api/products')
+    // Cache-bust so admin price/badge saves are not overwritten by a stale GET
+    fetch(`/api/products?_=${Date.now()}`, { cache: 'no-store' })
       .then((res) => res.json())
       .then((data) => {
         if (Array.isArray(data)) setProducts(data);
@@ -368,31 +369,58 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     showToast('Logged out successfully');
   };
 
-  const updateProductInDb = async (id: string | number, updatedData: Partial<Product>) => {
-    const badge = updatedData.badge !== undefined ? String(updatedData.badge || '').trim() : undefined;
-    const withDerived =
-      badge !== undefined
-        ? {
-            ...updatedData,
-            badge,
-            badgeColor: badge
-              ? badge.toUpperCase().includes('COMBO')
-                ? 'bg-purple-600'
-                : 'bg-blue-600'
-              : '',
-            isBestSeller: badge.toUpperCase().includes('BEST'),
-          }
-        : updatedData;
+  const updateProductInDb = async (
+    id: string | number,
+    updatedData: Partial<Product> & { hasDiscount?: boolean }
+  ) => {
+    const { hasDiscount, ...rest } = updatedData;
+    const badge = rest.badge !== undefined ? String(rest.badge || '').trim() : undefined;
+    let withDerived: Partial<Product> = { ...rest };
+    if (badge !== undefined) {
+      withDerived = {
+        ...withDerived,
+        badge,
+        badgeColor: badge
+          ? badge.toUpperCase().includes('COMBO')
+            ? 'bg-purple-600'
+            : 'bg-blue-600'
+          : '',
+        isBestSeller: badge.toUpperCase().includes('BEST'),
+      };
+    }
+    if (hasDiscount === false && rest.mrp !== undefined) {
+      withDerived.price = Number(rest.mrp);
+      withDerived.discount = 0;
+    } else if (rest.price !== undefined && rest.mrp !== undefined) {
+      const sell = Number(rest.price);
+      const mrp = Number(rest.mrp);
+      if (sell >= mrp) {
+        withDerived.price = mrp;
+        withDerived.discount = 0;
+      } else {
+        withDerived.discount = Math.round(((mrp - sell) / mrp) * 100);
+      }
+    }
+    if (rest.inStock !== undefined) {
+      withDerived.inStock = Boolean(rest.inStock);
+    }
     setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, ...withDerived } : p)));
     try {
       const res = await fetch('/api/products', {
         method: 'PATCH',
         headers: getAdminHeaders(),
-        body: JSON.stringify({ id, ...withDerived }),
+        body: JSON.stringify({ id, ...withDerived, hasDiscount }),
       });
       if (!res.ok) throw new Error('Update failed');
+      // Keep optimistic stock/badge; then sync full catalog fresh
       refreshProducts();
-      showToast(`✓ Product saved to database`);
+      showToast(
+        rest.inStock === false
+          ? '✓ Marked out of stock — hidden from shop'
+          : rest.inStock === true
+            ? '✓ Back in stock — visible on shop'
+            : '✓ Product saved to database'
+      );
     } catch {
       showToast('❌ Failed to save product');
       refreshProducts();

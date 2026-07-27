@@ -7,13 +7,20 @@ export default function manifest(): MetadataRoute.Manifest {
     description: 'Premium educational guide books for classes 6–12 (TN / CBSE).',
     start_url: '/',
     display: 'standalone',
-    background_color: '#f8fafc',
+    background_color: '#001B3A',
     theme_color: '#001B3A',
     icons: [
       {
-        src: '/favicon.ico',
-        sizes: '48x48',
-        type: 'image/x-icon',
+        src: '/logo.png',
+        sizes: '512x512',
+        type: 'image/png',
+        purpose: 'any',
+      },
+      {
+        src: '/icon.png',
+        sizes: '512x512',
+        type: 'image/png',
+        purpose: 'maskable',
       },
     ],
   };

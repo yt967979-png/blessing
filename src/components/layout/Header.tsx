@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Search, Heart, ShoppingBag, User, ShieldCheck } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
+import { BrandLogo } from '@/components/ui/BrandLogo';
 
 export const Header = () => {
   const router = useRouter();
@@ -29,9 +30,10 @@ export const Header = () => {
     ? products
         .filter(
           (p) =>
-            p.title.toLowerCase().includes(queryText.toLowerCase()) ||
-            p.cls.toLowerCase().includes(queryText.toLowerCase()) ||
-            p.subject.toLowerCase().includes(queryText.toLowerCase())
+            p.inStock &&
+            (p.title.toLowerCase().includes(queryText.toLowerCase()) ||
+              p.cls.toLowerCase().includes(queryText.toLowerCase()) ||
+              p.subject.toLowerCase().includes(queryText.toLowerCase()))
         )
         .slice(0, 5)
     : [];
@@ -41,9 +43,7 @@ export const Header = () => {
       <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-3 md:gap-8">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2 flex-shrink-0 group min-w-0 max-w-[55%] sm:max-w-none">
-          <div className="w-9 h-9 sm:w-11 sm:h-11 bg-gradient-to-br from-[#001B3A] to-[#003B73] border-2 border-[#D4A843] rounded-xl flex items-center justify-center font-bold text-xl sm:text-2xl text-[#F0C14B] shadow-md group-hover:scale-105 transition-transform flex-shrink-0">
-            B
-          </div>
+          <BrandLogo size={44} priority className="w-9 h-9 sm:w-11 sm:h-11 shadow-md group-hover:scale-105 transition-transform" />
           <div className="min-w-0">
             <h1 className="font-bold text-xs sm:text-lg text-[#001B3A] tracking-tight leading-tight truncate">
               BLESSING POWER GUIDE

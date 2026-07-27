@@ -33,6 +33,7 @@ import {
 } from '@/lib/authValidation';
 import { getSTCourierDeliveryEstimate } from '@/lib/deliveryEstimator';
 import { createUserAddress, migrateLocalAddressesToDb } from '@/lib/addresses';
+import { BrandLogo } from '@/components/ui/BrandLogo';
 
 export const ModalsBundle = () => {
   const router = useRouter();
@@ -862,9 +863,7 @@ export const ModalsBundle = () => {
                 </button>
 
                 <div className="flex items-center gap-2 mb-2">
-                  <div className="w-8 h-8 bg-gradient-to-br from-amber-400 to-amber-500 text-[#001B3A] rounded-lg flex items-center justify-center font-black text-sm shadow-md">
-                    B
-                  </div>
+                  <BrandLogo size={32} className="w-8 h-8 shadow-md" />
                   <span className="font-heading font-black text-xs text-amber-300 tracking-wider uppercase">
                     BLESSING POWER GUIDE
                   </span>

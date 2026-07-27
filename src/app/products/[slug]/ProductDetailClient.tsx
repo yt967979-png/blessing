@@ -90,7 +90,7 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
   }
 
   const isWishlisted = wishlist.includes(product.id);
-  const relatedProducts = products.filter((p: any) => p.id !== product.id).slice(0, 4);
+  const relatedProducts = products.filter((p: any) => p.id !== product.id && p.inStock).slice(0, 4);
 
   const checkPincode = (e: React.FormEvent) => {
     e.preventDefault();

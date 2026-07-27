@@ -16,6 +16,7 @@ import {
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
+import { BrandLogo } from '@/components/ui/BrandLogo';
 
 function TrackForm() {
   const searchParams = useSearchParams();
@@ -64,6 +65,7 @@ function TrackForm() {
   return (
     <div className="max-w-2xl mx-auto w-full space-y-6">
       <div className="text-center space-y-2">
+        <BrandLogo size={56} className="w-14 h-14 mx-auto mb-1" />
         <div className="inline-flex items-center gap-2 text-amber-700 text-xs font-bold uppercase tracking-wider">
           <Truck className="w-4 h-4" />
           ST Courier live tracking

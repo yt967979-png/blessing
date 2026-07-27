@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { authHeaders } from '@/lib/clientAuth';
+import { BrandLogo } from '@/components/ui/BrandLogo';
 
 const AdminWhatsAppTab = dynamic(() => import('@/components/admin/AdminWhatsAppTab'), {
   ssr: false,
@@ -291,19 +292,38 @@ export default function AdminPage() {
   // ── Catalog handlers
   const startEditing = (p: { id: string | number; price: number; mrp: number; badge?: string }) => { setEditingId(p.id); setEditPrice(p.price); setEditMrp(p.mrp); setEditBadge(p.badge || ''); setEditBadgeEnabled(!!p.badge); setEditDiscountEnabled(p.price < p.mrp); };
   const saveProductChanges = async (id: string | number) => {
-    const fp = editDiscountEnabled ? editPrice : editMrp;
+    const mrp = Number(editMrp);
+    const fp = editDiscountEnabled ? Number(editPrice) : mrp;
+    const hasDiscount = editDiscountEnabled && fp > 0 && fp < mrp;
     const fb = editBadgeEnabled ? (editBadge.trim() || 'BESTSELLER') : '';
-    await updateProductInDb(id, { price: Number(fp), mrp: Number(editMrp), discount: Math.round(((editMrp - fp) / editMrp) * 100), badge: fb });
+    await updateProductInDb(id, {
+      price: hasDiscount ? fp : mrp,
+      mrp,
+      discount: hasDiscount ? Math.round(((mrp - fp) / mrp) * 100) : 0,
+      badge: fb,
+      hasDiscount,
+    });
     setEditingId(null);
   };
   const handleCreateProduct = (e: React.FormEvent) => {
     e.preventDefault();
-    const fp = newDiscountEnabled ? Number(newPrice) : Number(newMrp);
-    addNewProductToDb({ title: newTitle, cls: newCls, category: newCat, price: fp, mrp: Number(newMrp), discount: Math.round(((newMrp - fp) / newMrp) * 100), badge: newBadgeEnabled ? newBadge : '', image: newImg });
+    const mrp = Number(newMrp);
+    const fp = newDiscountEnabled ? Number(newPrice) : mrp;
+    const hasDiscount = newDiscountEnabled && fp > 0 && fp < mrp;
+    addNewProductToDb({
+      title: newTitle,
+      cls: newCls,
+      category: newCat,
+      price: hasDiscount ? fp : mrp,
+      mrp,
+      discount: hasDiscount ? Math.round(((mrp - fp) / mrp) * 100) : 0,
+      badge: newBadgeEnabled ? newBadge : '',
+      image: newImg,
+    });
     setShowAddForm(false); setNewTitle('');
   };
   const toggleStock = async (id: string | number, cur: boolean) => {
-    await updateProductInDb(id, { inStock: !cur });
+    await updateProductInDb(id, { inStock: !Boolean(cur) });
   };
   const handleDeleteProduct = async (id: string | number) => {
     if (!confirm('Delete this book permanently?')) return;
@@ -445,7 +465,7 @@ export default function AdminPage() {
   const handlePrintLabel = (o: Order) => {
     const pw = window.open('','_blank','width=600,height=700'); if (!pw) return;
     const isCod = (o.paymentMethod||'').toLowerCase().includes('cod');
-    pw.document.write(`<!DOCTYPE html><html><head><title>Label #${o.orderId}</title><style>body{font-family:Arial,sans-serif;padding:20px;max-width:450px;margin:auto;border:2.5px solid #000;border-radius:12px}.hdr{text-align:center;border-bottom:2px solid #000;padding-bottom:10px;margin-bottom:15px}.logo{font-size:22px;font-weight:900;color:#001B3A}.box{border:1px solid #000;padding:10px;margin-bottom:10px;border-radius:6px}.t{font-size:10px;font-weight:900;text-transform:uppercase;color:#444}.b{font-size:15px;font-weight:900;margin-top:2px}.cod{font-size:14px;font-weight:900;background:#fffbeb;padding:8px;text-align:center;border:2px dashed #d97706;margin:12px 0;border-radius:6px}.bar{font-family:monospace;font-size:18px;font-weight:900;letter-spacing:3px;text-align:center;margin:12px 0;background:#f1f5f9;padding:8px;border-radius:4px}</style></head><body><div class="hdr"><div class="logo">BLESSING POWER GUIDE</div><div style="font-size:13px;font-weight:800;color:#0044AA">ST COURIER EXPRESS</div></div><div class="bar">||| #${o.orderId} |||</div><div class="box"><div class="t">DELIVER TO:</div><div class="b">${o.customerName||'Customer'}</div><div style="font-size:13px;margin-top:4px">${o.address||''}, ${o.city||''} - ${o.pincode||''}</div><div style="margin-top:6px;font-size:13px"><strong>PHONE:</strong> +91 ${o.customerPhone||''}</div></div><div class="cod">PAYMENT: ${isCod?`₹${o.totalAmount} CASH ON DELIVERY`:'PREPAID — DO NOT COLLECT'}</div><div class="box" style="font-size:11px"><div class="t">RETURN ADDRESS:</div><div><strong>BLESSING POWER GUIDE</strong></div><div>Medavakkam, Chennai 600012 | WA: +91 9840418228</div></div><script>window.onload=function(){window.print();window.close()}</script></body></html>`);
+    pw.document.write(`<!DOCTYPE html><html><head><title>Label #${o.orderId}</title><style>body{font-family:Arial,sans-serif;padding:20px;max-width:450px;margin:auto;border:2.5px solid #000;border-radius:12px}.hdr{text-align:center;border-bottom:2px solid #000;padding-bottom:10px;margin-bottom:15px}.logo{font-size:22px;font-weight:900;color:#001B3A}.box{border:1px solid #000;padding:10px;margin-bottom:10px;border-radius:6px}.t{font-size:10px;font-weight:900;text-transform:uppercase;color:#444}.b{font-size:15px;font-weight:900;margin-top:2px}.cod{font-size:14px;font-weight:900;background:#fffbeb;padding:8px;text-align:center;border:2px dashed #d97706;margin:12px 0;border-radius:6px}.bar{font-family:monospace;font-size:18px;font-weight:900;letter-spacing:3px;text-align:center;margin:12px 0;background:#f1f5f9;padding:8px;border-radius:4px}</style></head><body><div class="hdr"><img src="/logo.png" alt="Blessing Power Guide" width="56" height="56" style="border-radius:14px;margin-bottom:8px"/><div class="logo">BLESSING POWER GUIDE</div><div style="font-size:13px;font-weight:800;color:#0044AA">ST COURIER EXPRESS</div></div><div class="bar">||| #${o.orderId} |||</div><div class="box"><div class="t">DELIVER TO:</div><div class="b">${o.customerName||'Customer'}</div><div style="font-size:13px;margin-top:4px">${o.address||''}, ${o.city||''} - ${o.pincode||''}</div><div style="margin-top:6px;font-size:13px"><strong>PHONE:</strong> +91 ${o.customerPhone||''}</div></div><div class="cod">PAYMENT: ${isCod?`₹${o.totalAmount} CASH ON DELIVERY`:'PREPAID — DO NOT COLLECT'}</div><div class="box" style="font-size:11px"><div class="t">RETURN ADDRESS:</div><div><strong>BLESSING POWER GUIDE</strong></div><div>Medavakkam, Chennai 600012 | WA: +91 9840418228</div></div><script>window.onload=function(){window.print();window.close()}</script></body></html>`);
     pw.document.close();
   };
   const handleUnlinkWhatsApp = async () => {
@@ -497,7 +517,7 @@ export default function AdminPage() {
             <div className="flex items-center gap-2 sm:gap-3">
               <button onClick={() => router.push('/')} className="text-gray-400 hover:text-gray-600 transition-colors p-1 cursor-pointer"><ArrowLeft className="w-5 h-5" /></button>
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 bg-[#2874f0] text-white rounded-lg flex items-center justify-center font-black text-sm select-none">B</div>
+                <BrandLogo size={32} className="w-8 h-8" />
                 <div className="hidden sm:block">
                   <p className="text-sm font-bold text-gray-900 leading-tight">Blessing Store</p>
                   <p className="text-[10px] text-gray-400 font-medium">Admin Dashboard</p>
@@ -1022,7 +1042,7 @@ export default function AdminPage() {
                               ) : p.badge ? <span className="text-[10px] font-bold text-orange-700 bg-orange-50 border border-orange-200 px-1.5 py-0.5 rounded-md uppercase">{p.badge}</span> : <span className="text-gray-300">—</span>}
                             </td>
                             <td className="py-3 px-3">
-                              <button onClick={() => toggleStock(p.id, p.inStock)} className={`text-[10px] font-bold px-2 py-1 rounded-md transition-colors cursor-pointer ${p.inStock ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-600 border border-red-200'}`}>{p.inStock ? 'Active' : 'Off'}</button>
+                              <button onClick={() => toggleStock(p.id, !!p.inStock)} className={`text-[10px] font-bold px-2 py-1 rounded-md transition-colors cursor-pointer ${p.inStock ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-600 border border-red-200'}`}>{p.inStock ? 'Active' : 'Off'}</button>
                             </td>
                             <td className="py-3 px-3 text-right">
                               <div className="flex items-center justify-end gap-1.5">

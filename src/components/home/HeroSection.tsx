@@ -21,7 +21,7 @@ export const HeroSection = () => {
   const [activeSlide, setActiveSlide] = useState(0);
 
   // Dynamically generate slides based on Database Products if available
-  const heroProducts = products.length > 0 ? products.slice(0, 3) : [];
+  const heroProducts = products.filter((p) => p.inStock).slice(0, 3);
 
   const slides = heroProducts.length > 0 ? heroProducts.map((p) => ({
     tag: `${p.cls} STANDARD${p.badge ? ` • ${p.badge}` : ''}`,

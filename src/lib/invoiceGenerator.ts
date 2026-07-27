@@ -51,10 +51,13 @@ export function generateTaxInvoiceHtml(orderData: {
   </div>
   <div class="invoice-card">
     <div class="header">
-      <div>
-        <div class="brand">BLESSING POWER GUIDE</div>
-        <div class="subbrand">Official Tamil Nadu State Board & CBSE Exam Prep Guides</div>
-        <div style="font-size: 11px; color: #475569; margin-top: 4px;">GSTIN: 33AAAC1234F1Z9 | Reg: Chennai, Tamil Nadu</div>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <img src="/logo.png" alt="Blessing Power Guide" width="48" height="48" style="border-radius:12px;" />
+        <div>
+          <div class="brand">BLESSING POWER GUIDE</div>
+          <div class="subbrand">Official Tamil Nadu State Board & CBSE Exam Prep Guides</div>
+          <div style="font-size: 11px; color: #475569; margin-top: 4px;">GSTIN: 33AAAC1234F1Z9 | Reg: Chennai, Tamil Nadu</div>
+        </div>
       </div>
       <div>
         <div class="invoice-title">OFFICIAL TAX INVOICE</div>

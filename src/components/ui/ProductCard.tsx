@@ -133,7 +133,7 @@ export const ProductCard = ({ product }: { product: Product }) => {
         {product.mrp > product.price && (
           <span className="text-xs text-slate-400 line-through font-bold">₹{product.mrp}</span>
         )}
-        {product.discount > 0 && (
+        {product.mrp > product.price && product.discount > 0 && (
           <span className="text-[10px] font-black text-emerald-600">{product.discount}% OFF</span>
         )}
       </div>

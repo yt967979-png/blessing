@@ -33,7 +33,7 @@ function SearchContent() {
 
   const filteredProducts = useMemo(() => {
     let result = products.filter((p) => {
-      if (p.inStock === false) return false;
+      if (!p.inStock) return false;
 
       // Class Filter
       if (selectedClass !== 'all' && p.cls?.toLowerCase() !== selectedClass.toLowerCase()) {
