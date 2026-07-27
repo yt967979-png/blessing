@@ -137,13 +137,26 @@ export async function initWhatsAppInProcess() {
         isConnected = true;
         isInitializing = false;
         await backupSessionToDb();
+        const linkedPhone = sock?.user?.id?.split(':')[0] || sock?.user?.id?.split('@')[0] || null;
         await updateSessionStatus({
           status: 'CONNECTED',
           connected: true,
           qrImage: null,
-          message: 'WhatsApp Bot Connected and Active!',
+          message: linkedPhone
+            ? `Admin WhatsApp linked (+${linkedPhone}). OTPs & order updates will send from this number.`
+            : 'WhatsApp Bot Connected and Active!',
         });
-        console.log('✅ In-Process Baileys WhatsApp Bot Connected and Active!');
+        try {
+          const client = await getDbClient();
+          if (client && linkedPhone) {
+            await client.query(
+              `UPDATE whatsapp_sessions SET pairing_code = $1, updated_at = NOW() WHERE id = 'default'`,
+              [linkedPhone]
+            );
+            await client.end();
+          }
+        } catch (_) {}
+        console.log('✅ In-Process Baileys WhatsApp Bot Connected and Active!', linkedPhone || '');
       }
     });
 
@@ -158,11 +171,14 @@ export async function initWhatsAppInProcess() {
 export async function sendWhatsAppMessageInProcess(to: string, message: string) {
   try {
     const activeSock = await initWhatsAppInProcess();
-    if (!activeSock) {
-      throw new Error('WhatsApp service not initialized');
+    if (!activeSock || !isConnected) {
+      throw new Error('WhatsApp not linked. Open Admin → WhatsApp and scan QR with the admin phone.');
     }
 
     const cleanPhone = to.replace(/\D/g, '');
+    if (cleanPhone.length < 10) {
+      throw new Error('Customer phone number is missing or invalid');
+    }
     const phoneWithCountry = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
     const jid = `${phoneWithCountry}@s.whatsapp.net`;
 
@@ -173,4 +189,8 @@ export async function sendWhatsAppMessageInProcess(to: string, message: string) 
     console.error('Failed to send WhatsApp message in-process:', err.message);
     throw err;
   }
+}
+
+export function getWhatsAppConnectionState() {
+  return { connected: isConnected, hasSocket: !!sock };
 }

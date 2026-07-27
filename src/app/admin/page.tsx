@@ -7,7 +7,7 @@ import {
   Plus, Trash2, MessageSquare, Truck, Send, ShieldCheck,
   Download, X, Search, RefreshCw, TrendingUp, IndianRupee,
   Box, Clock, CheckCircle2, LogOut, BarChart2,
-  CreditCard, Banknote, Smartphone, Star, AlertCircle,
+  CreditCard, Banknote, Smartphone, Star, AlertCircle, Tag,
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { authHeaders } from '@/lib/clientAuth';
@@ -87,13 +87,14 @@ export default function AdminPage() {
   const router = useRouter();
   const { user, setIsAuthOpen, products, updateProductInDb, addNewProductToDb, deleteProductFromDb, showToast, logoutUser } = useStore();
 
-  type Tab = 'analytics' | 'orders' | 'catalog' | 'whatsapp';
+  type Tab = 'analytics' | 'orders' | 'catalog' | 'content' | 'whatsapp';
   const [activeTab, setActiveTab] = useState<Tab>('analytics');
 
   // ── WhatsApp state
-  const [waStatus, setWaStatus] = useState<{ status: string; connected?: boolean; qrImage?: string; pairingCode?: string; message?: string }>({ status: 'LOADING', connected: false });
+  const [waStatus, setWaStatus] = useState<{ status: string; connected?: boolean; qrImage?: string; pairingCode?: string; message?: string; linkedPhone?: string }>({ status: 'LOADING', connected: false });
   const [waPhoneInput, setWaPhoneInput] = useState('');
   const [waPairingCode, setWaPairingCode] = useState<string | null>(null);
+  const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null);
 
   // ── Orders state
   const [orders, setOrders] = useState<Order[]>([]);
@@ -132,7 +133,34 @@ export default function AdminPage() {
   const [newDiscountEnabled, setNewDiscountEnabled] = useState(true);
   const [newImg, setNewImg] = useState('https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80');
 
+  // ── Content (coupons + FAQs)
+  const [coupons, setCoupons] = useState<any[]>([]);
+  const [faqs, setFaqs] = useState<any[]>([]);
+  const [newCouponCode, setNewCouponCode] = useState('');
+  const [newCouponPercent, setNewCouponPercent] = useState(10);
+  const [newCouponMin, setNewCouponMin] = useState(0);
+  const [newFaqQ, setNewFaqQ] = useState('');
+  const [newFaqA, setNewFaqA] = useState('');
+
   const isAdmin = !!user && user.role === 'admin';
+
+  const loadContent = useCallback(async () => {
+    if (!user) return;
+    try {
+      const [cRes, fRes] = await Promise.all([
+        fetch('/api/coupons?admin=1', { headers: authHeaders(user) }),
+        fetch('/api/content?type=faq&admin=1', { headers: authHeaders(user) }),
+      ]);
+      if (cRes.ok) {
+        const d = await cRes.json();
+        if (Array.isArray(d)) setCoupons(d);
+      }
+      if (fRes.ok) {
+        const d = await fRes.json();
+        if (Array.isArray(d)) setFaqs(d);
+      }
+    } catch (_) {}
+  }, [user]);
 
   // ── Data loaders
   const loadLiveOrders = useCallback(async () => {
@@ -164,6 +192,7 @@ export default function AdminPage() {
   // ── Initial load + SSE stream
   useEffect(() => {
     startTransition(() => { void loadLiveOrders(); void loadAnalytics(); });
+    if (activeTab === 'content') startTransition(() => { void loadContent(); });
     let es: EventSource | null = null;
     try {
       es = new EventSource('/api/orders/stream');
@@ -187,6 +216,10 @@ export default function AdminPage() {
 
   // Reload analytics when range changes
   useEffect(() => { if (activeTab === 'analytics') startTransition(() => { void loadAnalytics(); }); }, [analyticsRange, activeTab, loadAnalytics]);
+
+  useEffect(() => {
+    if (activeTab === 'content') startTransition(() => { void loadContent(); });
+  }, [activeTab, loadContent]);
 
   // WhatsApp polling
   useEffect(() => {
@@ -283,7 +316,6 @@ export default function AdminPage() {
       const vd = await vr.json();
       if (!vr.ok || !vd.isValid || !vd.verified) { showToast(`❌ ${vd.error || 'Invalid docket'}`); alert(`Docket verification failed:\n${vd.error || 'Not found in ST Courier network.'}`); return; }
       await fetch('/api/orders/timeline', { method: 'POST', headers: authHeaders(user), body: JSON.stringify({ orderId, status: 'HANDED_TO_ST_COURIER', awbNumber: awb }) });
-      await fetch('/api/orders', { method: 'PATCH', headers: authHeaders(user), body: JSON.stringify({ orderId, status: 'Handed to ST Courier', awbNumber: awb }) });
       showToast(`✅ Dispatched #${orderId}`); loadLiveOrders();
     } catch (_) { showToast('❌ Dispatch error'); }
     finally { setDispatchingOrderIds((p) => ({ ...p, [orderId]: false })); }
@@ -302,10 +334,80 @@ export default function AdminPage() {
 
   // ── WhatsApp
   const handleResendWhatsApp = async (o: Order) => {
-    let ph = (o.customerPhone || '').replace(/\D/g, ''); if (ph.length === 10) ph = '91' + ph;
-    const msg = `Hello ${o.customerName}! 📚\nOrder #${o.orderId} → ${o.courierStatus}\nAWB: ${o.trackingNumber}\nTrack: https://stcourier.com/track/shipment?docket=${o.trackingNumber}`;
-    window.open(`https://api.whatsapp.com/send?phone=${ph}&text=${encodeURIComponent(msg)}`, '_blank');
-    showToast(`📲 WhatsApp opened for +91 ${o.customerPhone}`);
+    if (!o.customerPhone) { showToast('❌ No customer phone on this order'); return; }
+    showToast('📲 Sending WhatsApp from linked admin number...');
+    try {
+      const r = await fetch('/api/whatsapp', {
+        method: 'POST',
+        headers: authHeaders(user),
+        body: JSON.stringify({
+          step: (o.courierStatus || 'ORDER_PLACED').toUpperCase().replace(/\s+/g, '_'),
+          orderId: o.orderId,
+          customerName: o.customerName,
+          customerPhone: o.customerPhone,
+          totalAmount: o.totalAmount,
+          trackingNumber: o.trackingNumber,
+          items: o.items,
+        }),
+      });
+      const d = await r.json();
+      if (r.ok && d.provider === 'BAILEYS_IN_PROCESS') {
+        showToast(`✅ WhatsApp sent to +91 ${o.customerPhone}`);
+      } else if (d.whatsappLink) {
+        showToast('⚠️ Bot not linked — open WhatsApp tab and scan QR first');
+        window.open(d.whatsappLink, '_blank');
+      } else {
+        showToast(`❌ ${d.error || 'Failed to send WhatsApp'}`);
+      }
+    } catch {
+      showToast('❌ WhatsApp send failed');
+    }
+  };
+
+  const ORDER_STATUS_ACTIONS: { label: string; statusKey: string; orderStatus: string }[] = [
+    { label: 'Packed', statusKey: 'PACKED', orderStatus: 'Packed' },
+    { label: 'Hand to Courier', statusKey: 'HANDED_TO_ST_COURIER', orderStatus: 'Handed to ST Courier' },
+    { label: 'In Transit', statusKey: 'IN_TRANSIT', orderStatus: 'In Transit' },
+    { label: 'Out for Delivery', statusKey: 'OUT_FOR_DELIVERY', orderStatus: 'Out for Delivery' },
+    { label: 'Delivered', statusKey: 'DELIVERED', orderStatus: 'Delivered' },
+  ];
+
+  const handleUpdateOrderStatus = async (o: Order, statusKey: string, orderStatus: string) => {
+    setUpdatingStatusId(`${o.orderId}-${statusKey}`);
+    showToast(`Updating → ${orderStatus} & notifying customer...`);
+    try {
+      const r = await fetch('/api/orders/timeline', {
+        method: 'POST',
+        headers: authHeaders(user),
+        body: JSON.stringify({
+          orderId: o.orderId,
+          status: statusKey,
+          awbNumber: o.trackingNumber && !o.trackingNumber.startsWith('SHP-') ? o.trackingNumber : undefined,
+        }),
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        showToast(`❌ ${d.error || 'Failed to update'}`);
+        return;
+      }
+      // Also sync plain status label used in orders list
+      await fetch('/api/orders', {
+        method: 'PATCH',
+        headers: authHeaders(user),
+        body: JSON.stringify({
+          orderId: o.orderId,
+          status: orderStatus,
+          awbNumber: o.trackingNumber && !o.trackingNumber.startsWith('SHP-') ? o.trackingNumber : undefined,
+          skipWhatsApp: true,
+        }),
+      });
+      showToast(`✅ ${orderStatus} — WhatsApp sent to customer`);
+      loadLiveOrders();
+    } catch {
+      showToast('❌ Failed to update status');
+    } finally {
+      setUpdatingStatusId(null);
+    }
   };
   const handlePrintLabel = (o: Order) => {
     const pw = window.open('','_blank','width=600,height=700'); if (!pw) return;
@@ -348,6 +450,7 @@ export default function AdminPage() {
     { id: 'analytics' as Tab, label: 'Analytics', icon: BarChart2 },
     { id: 'orders'    as Tab, label: 'Orders',    icon: ShoppingCart, count: orders.length },
     { id: 'catalog'   as Tab, label: 'Products',  icon: Package, count: products.length },
+    { id: 'content'   as Tab, label: 'Content',   icon: Tag },
     { id: 'whatsapp'  as Tab, label: 'WhatsApp',  icon: MessageSquare },
   ];
 
@@ -743,6 +846,31 @@ export default function AdminPage() {
                           </div>
                         </div>
 
+                        {/* Status steps — each sends WhatsApp from linked admin number */}
+                        <div className="bg-[#f8f9fa] rounded-lg p-3 space-y-2">
+                          <p className="text-[11px] font-semibold text-gray-500">Update status (auto WhatsApp to customer)</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {ORDER_STATUS_ACTIONS.map((a) => {
+                              const busy = updatingStatusId === `${o.orderId}-${a.statusKey}`;
+                              const isCurrent = (o.courierStatus || '').toLowerCase() === a.orderStatus.toLowerCase();
+                              return (
+                                <button
+                                  key={a.statusKey}
+                                  disabled={busy || isCurrent}
+                                  onClick={() => handleUpdateOrderStatus(o, a.statusKey, a.orderStatus)}
+                                  className={`px-2.5 py-1.5 text-[11px] font-semibold rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                                    isCurrent
+                                      ? 'bg-green-100 text-green-700 border border-green-200'
+                                      : 'bg-white text-gray-700 border border-gray-200 hover:border-[#2874f0] hover:text-[#2874f0]'
+                                  }`}
+                                >
+                                  {busy ? '...' : a.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
                         {/* Dispatch */}
                         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-[#f8f9fa] rounded-lg p-3">
                           <div className="flex items-center gap-2 text-xs text-gray-500 shrink-0"><Truck className="w-4 h-4 text-gray-400" /><span className="font-medium">AWB:</span></div>
@@ -885,23 +1013,163 @@ export default function AdminPage() {
         )}
 
         {/* ══════════════════════════════════════════════════════════
+            CONTENT TAB — Coupons + FAQs
+        ══════════════════════════════════════════════════════════ */}
+        {activeTab === 'content' && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
+              <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2"><Tag className="w-4 h-4 text-[#2874f0]" /> Coupons</h3>
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  const r = await fetch('/api/coupons', {
+                    method: 'POST',
+                    headers: authHeaders(user),
+                    body: JSON.stringify({
+                      code: newCouponCode,
+                      discount_type: 'percentage',
+                      discount_value: newCouponPercent,
+                      minimum_amount: newCouponMin,
+                    }),
+                  });
+                  if (r.ok) {
+                    showToast('✅ Coupon saved');
+                    setNewCouponCode('');
+                    loadContent();
+                  } else {
+                    const d = await r.json();
+                    showToast(`❌ ${d.error || 'Failed'}`);
+                  }
+                }}
+                className="grid grid-cols-3 gap-2"
+              >
+                <input value={newCouponCode} onChange={(e) => setNewCouponCode(e.target.value.toUpperCase())} placeholder="CODE" required className="px-2 py-2 text-xs border border-gray-200 rounded-lg outline-none focus:border-[#2874f0]" />
+                <input type="number" value={newCouponPercent} onChange={(e) => setNewCouponPercent(Number(e.target.value))} placeholder="% OFF" className="px-2 py-2 text-xs border border-gray-200 rounded-lg outline-none focus:border-[#2874f0]" />
+                <button type="submit" className="px-2 py-2 text-xs font-semibold text-white bg-[#2874f0] rounded-lg hover:bg-[#1a5dc8] cursor-pointer">Add</button>
+              </form>
+              <input type="number" value={newCouponMin} onChange={(e) => setNewCouponMin(Number(e.target.value))} placeholder="Min order ₹" className="w-full px-2 py-2 text-xs border border-gray-200 rounded-lg outline-none focus:border-[#2874f0]" />
+              <div className="space-y-2 max-h-72 overflow-y-auto">
+                {coupons.length === 0 ? <p className="text-xs text-gray-400">No coupons yet</p> : coupons.map((c) => (
+                  <div key={c.id || c.code} className="flex items-center justify-between gap-2 border border-gray-100 rounded-lg px-3 py-2">
+                    <div>
+                      <p className="text-xs font-bold text-gray-800">{c.code}</p>
+                      <p className="text-[10px] text-gray-400">{c.discount_type === 'flat' ? `₹${c.discount_value} off` : `${c.discount_value}% off`} · min ₹{c.minimum_amount || 0} · {c.status}</p>
+                    </div>
+                    <div className="flex gap-1">
+                      <button
+                        onClick={async () => {
+                          await fetch('/api/coupons', {
+                            method: 'PATCH',
+                            headers: authHeaders(user),
+                            body: JSON.stringify({ id: c.id, status: c.status === 'active' ? 'inactive' : 'active' }),
+                          });
+                          loadContent();
+                        }}
+                        className="text-[10px] font-semibold px-2 py-1 rounded border border-gray-200 hover:bg-gray-50 cursor-pointer"
+                      >
+                        {c.status === 'active' ? 'Disable' : 'Enable'}
+                      </button>
+                      <button
+                        onClick={async () => {
+                          if (!confirm('Delete coupon?')) return;
+                          await fetch(`/api/coupons?id=${encodeURIComponent(c.id)}`, { method: 'DELETE', headers: authHeaders(user) });
+                          loadContent();
+                        }}
+                        className="text-[10px] font-semibold text-red-600 px-2 py-1 rounded border border-red-100 hover:bg-red-50 cursor-pointer"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
+              <h3 className="text-sm font-bold text-gray-900">FAQs</h3>
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  const r = await fetch('/api/content', {
+                    method: 'POST',
+                    headers: authHeaders(user),
+                    body: JSON.stringify({ question: newFaqQ, answer: newFaqA, display_order: faqs.length + 1 }),
+                  });
+                  if (r.ok) {
+                    showToast('✅ FAQ added');
+                    setNewFaqQ('');
+                    setNewFaqA('');
+                    loadContent();
+                  } else {
+                    const d = await r.json();
+                    showToast(`❌ ${d.error || 'Failed'}`);
+                  }
+                }}
+                className="space-y-2"
+              >
+                <input value={newFaqQ} onChange={(e) => setNewFaqQ(e.target.value)} placeholder="Question" required className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg outline-none focus:border-[#2874f0]" />
+                <textarea value={newFaqA} onChange={(e) => setNewFaqA(e.target.value)} placeholder="Answer" required rows={3} className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg outline-none focus:border-[#2874f0]" />
+                <button type="submit" className="px-3 py-2 text-xs font-semibold text-white bg-[#2874f0] rounded-lg hover:bg-[#1a5dc8] cursor-pointer">Add FAQ</button>
+              </form>
+              <div className="space-y-2 max-h-72 overflow-y-auto">
+                {faqs.length === 0 ? <p className="text-xs text-gray-400">No FAQs yet</p> : faqs.map((f) => (
+                  <div key={f.id} className="border border-gray-100 rounded-lg px-3 py-2">
+                    <div className="flex justify-between gap-2">
+                      <p className="text-xs font-bold text-gray-800">{f.question}</p>
+                      <button
+                        onClick={async () => {
+                          if (!confirm('Delete FAQ?')) return;
+                          await fetch(`/api/content?id=${encodeURIComponent(f.id)}`, { method: 'DELETE', headers: authHeaders(user) });
+                          loadContent();
+                        }}
+                        className="text-[10px] font-semibold text-red-600 shrink-0 cursor-pointer"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-gray-500 mt-1">{f.answer}</p>
+                    <p className="text-[10px] text-gray-400 mt-1">{f.status}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════════════════════════
             WHATSAPP TAB
         ══════════════════════════════════════════════════════════ */}
         {activeTab === 'whatsapp' && (
           <div className="max-w-lg mx-auto space-y-4">
             <div className="bg-white rounded-xl border border-gray-200 p-6 text-center">
               <div className="w-12 h-12 bg-[#25d366]/10 text-[#25d366] rounded-full flex items-center justify-center mx-auto mb-3"><MessageSquare className="w-6 h-6" /></div>
-              <h2 className="text-base font-bold text-gray-900">WhatsApp Business Bot</h2>
-              <p className="text-xs text-gray-400 mt-1">Connect your WhatsApp to send automated order updates</p>
+              <h2 className="text-base font-bold text-gray-900">Admin WhatsApp Number</h2>
+              <p className="text-xs text-gray-500 mt-2 leading-relaxed">
+                Link <strong>your shop WhatsApp</strong> here. After linking, the panel sends from <strong>your number</strong> to each <strong>customer&apos;s number</strong>:
+              </p>
+              <ul className="text-left text-xs text-gray-600 mt-3 space-y-1.5 max-w-xs mx-auto">
+                <li>• Registration / reset OTP → customer phone</li>
+                <li>• Order Placed → customer phone</li>
+                <li>• Packed / Shipped / Delivered → customer phone</li>
+              </ul>
             </div>
 
             {waStatus.status === 'CONNECTED' || waStatus.connected ? (
               <div className="bg-white rounded-xl border border-green-200 p-6 text-center space-y-4">
                 <div className="w-12 h-12 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto"><CheckCircle2 className="w-6 h-6" /></div>
-                <div><h3 className="text-sm font-bold text-green-700">WhatsApp Connected</h3><p className="text-xs text-gray-500 mt-1">Session is saved and will persist across restarts.</p></div>
+                <div>
+                  <h3 className="text-sm font-bold text-green-700">Admin WhatsApp Linked</h3>
+                  <p className="text-xs text-gray-500 mt-1">{waStatus.message || 'Ready to send OTP & order updates.'}</p>
+                </div>
                 <div className="bg-gray-50 rounded-lg p-3 text-xs space-y-1.5">
-                  {[['Session','Permanent'],['Status','Online'],['Cost','Free (Baileys)']].map(([k,v]) => (
-                    <div key={k} className="flex justify-between"><span className="text-gray-500">{k}</span><span className="font-semibold text-gray-700">{v}</span></div>
+                  {[
+                    ['Linked as', waStatus.pairingCode ? `+${waStatus.pairingCode}` : 'Admin device'],
+                    ['Sends to', 'Customer phone numbers'],
+                    ['OTP', 'Registration & password reset'],
+                    ['Orders', 'Placed → Packed → Delivered'],
+                    ['Cost', 'Free (your WhatsApp)'],
+                  ].map(([k, v]) => (
+                    <div key={k} className="flex justify-between gap-3"><span className="text-gray-500">{k}</span><span className="font-semibold text-gray-700 text-right">{v}</span></div>
                   ))}
                 </div>
                 <button onClick={handleUnlinkWhatsApp} className="text-xs font-semibold text-red-500 hover:text-red-600 hover:bg-red-50 px-4 py-2 rounded-lg transition-colors cursor-pointer">Unlink Session</button>
@@ -910,27 +1178,27 @@ export default function AdminPage() {
               <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
                 <div className="text-center space-y-1">
                   <p className="text-sm font-bold text-gray-700">
-                    {waStatus.status === 'LOADING' ? 'Connecting...' : waStatus.status === 'INITIALIZING' ? 'WhatsApp Engine Starting...' : 'Not Connected'}
+                    {waStatus.status === 'LOADING' ? 'Connecting...' : waStatus.status === 'INITIALIZING' ? 'WhatsApp Engine Starting...' : 'Link your WhatsApp number'}
                   </p>
-                  <p className="text-xs text-gray-400">{waStatus.message || 'Link using a pairing code or QR code below'}</p>
+                  <p className="text-xs text-gray-400">{waStatus.message || 'Use admin phone — scan QR or enter pairing code'}</p>
                 </div>
 
                 {waStatus.qrImage && (
                   <div className="text-center">
                     <img src={waStatus.qrImage} alt="WhatsApp QR" className="w-48 h-48 mx-auto rounded-xl border border-gray-200 shadow-sm" />
-                    <p className="text-xs text-gray-400 mt-2">Scan this QR code with WhatsApp</p>
+                    <p className="text-xs text-gray-400 mt-2">Open WhatsApp on admin phone → Linked Devices → Scan QR</p>
                   </div>
                 )}
 
                 <div className="border-t border-gray-100 pt-4">
-                  <p className="text-xs font-semibold text-gray-700 mb-3">Or link via Pairing Code</p>
+                  <p className="text-xs font-semibold text-gray-700 mb-3">Or link via Pairing Code (admin number)</p>
                   <form onSubmit={handleRequestPairingCode} className="flex gap-2">
-                    <input type="tel" placeholder="91XXXXXXXXXX" value={waPhoneInput} onChange={(e) => setWaPhoneInput(e.target.value)} required className="flex-1 px-3 py-2 text-xs border border-gray-200 rounded-lg outline-none focus:border-[#2874f0] focus:ring-1 focus:ring-[#2874f0]/20" />
+                    <input type="tel" placeholder="91XXXXXXXXXX (your admin WhatsApp)" value={waPhoneInput} onChange={(e) => setWaPhoneInput(e.target.value)} required className="flex-1 px-3 py-2 text-xs border border-gray-200 rounded-lg outline-none focus:border-[#2874f0] focus:ring-1 focus:ring-[#2874f0]/20" />
                     <button type="submit" className="px-3 py-2 text-xs font-semibold text-white bg-[#2874f0] hover:bg-[#1a5dc8] rounded-lg transition-colors cursor-pointer whitespace-nowrap">Get Code</button>
                   </form>
                   {waPairingCode && (
                     <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg text-center">
-                      <p className="text-xs text-amber-700 font-medium mb-1">Enter this code in WhatsApp → Link a Device → Link with Phone Number:</p>
+                      <p className="text-xs text-amber-700 font-medium mb-1">On admin phone: WhatsApp → Linked Devices → Link with phone number:</p>
                       <p className="text-2xl font-black text-amber-800 tracking-[0.3em]">{waPairingCode}</p>
                     </div>
                   )}

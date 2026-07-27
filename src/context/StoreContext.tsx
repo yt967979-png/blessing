@@ -209,6 +209,15 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const addToCart = (product: Product, qty: number = 1) => {
+    if (!user) {
+      setIsAuthOpen(true);
+      showToast('Please login or register to add items to cart');
+      return;
+    }
+    if (product.inStock === false) {
+      showToast('❌ This book is out of stock');
+      return;
+    }
     setCart((prev) => {
       const existing = prev.find((item) => item.id === product.id);
       let updated: CartItem[];
@@ -223,6 +232,15 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       return updated;
     });
     showToast(`✓ Added "${product.title}" to cart!`);
+  };
+
+  const requestCheckout = (open: boolean) => {
+    if (open && !user) {
+      setIsAuthOpen(true);
+      showToast('Please login or register to place an order');
+      return;
+    }
+    setIsCheckoutOpen(open);
   };
 
   const updateQty = (id: string | number, delta: number) => {
@@ -246,6 +264,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const clearCart = () => setCart([]);
 
   const toggleWishlist = (id: string | number) => {
+    if (!user) {
+      setIsAuthOpen(true);
+      showToast('Please login or register to use wishlist');
+      return;
+    }
     setWishlist((prev) => {
       if (prev.includes(id)) {
         showToast('Item removed from wishlist');
@@ -276,7 +299,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
 
     if (Array.isArray(restoredAddresses)) {
-      localStorage.setItem('bpg_user_addresses', JSON.stringify(restoredAddresses));
+      // Addresses live in DB — clear any legacy localStorage copy
+      localStorage.removeItem('bpg_user_addresses');
     }
 
     showToast(`✓ Account Synced! Welcome back, ${userData.name}!`);
@@ -379,7 +403,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         isCartOpen,
         setIsCartOpen,
         isCheckoutOpen,
-        setIsCheckoutOpen,
+        setIsCheckoutOpen: requestCheckout,
         isTrackOpen,
         setIsTrackOpen,
         isAuthOpen,

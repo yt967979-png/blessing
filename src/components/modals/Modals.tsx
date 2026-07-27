@@ -32,6 +32,7 @@ import {
   isStrongPassword,
 } from '@/lib/authValidation';
 import { getSTCourierDeliveryEstimate } from '@/lib/deliveryEstimator';
+import { createUserAddress, migrateLocalAddressesToDb } from '@/lib/addresses';
 
 export const Modals = () => {
   const router = useRouter();
@@ -61,24 +62,10 @@ export const Modals = () => {
     showToast,
   } = useStore();
 
-  // Saved Addresses
+  // Saved Addresses (from DB — login required for checkout)
   const [savedAddresses, setSavedAddresses] = useState<any[]>([]);
-  const [selectedAddrId, setSelectedAddrId] = useState<number | 'new'>('new');
-
-  useEffect(() => {
-    const saved = localStorage.getItem('bpg_user_addresses');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setSavedAddresses(parsed);
-          setSelectedAddrId(parsed[0].id);
-        }
-      } catch (e) {}
-    }
-  }, [isCheckoutOpen]);
-
-  // New Address Form
+  const [selectedAddrId, setSelectedAddrId] = useState<string | number | 'new'>('new');
+  const [savingAddress, setSavingAddress] = useState(false);
   const [newAddr, setNewAddr] = useState({
     type: 'HOME',
     name: '',
@@ -87,6 +74,30 @@ export const Modals = () => {
     city: '',
     pincode: '',
   });
+
+  useEffect(() => {
+    if (!isCheckoutOpen) return;
+    if (!user?.id) {
+      setIsCheckoutOpen(false);
+      setIsAuthOpen(true);
+      showToast('Please login or register to place an order');
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const list = await migrateLocalAddressesToDb(user);
+      if (cancelled) return;
+      setSavedAddresses(list);
+      if (list.length > 0) setSelectedAddrId(list[0].id);
+      else setSelectedAddrId('new');
+      setNewAddr((prev) => ({
+        ...prev,
+        name: prev.name || user.name || '',
+        phone: prev.phone || user.phone || '',
+      }));
+    })();
+    return () => { cancelled = true; };
+  }, [isCheckoutOpen, user]);
 
   const [paymentMethod, setPaymentMethod] = useState<'razorpay' | 'cod'>('razorpay');
 
@@ -114,36 +125,53 @@ export const Modals = () => {
       ? newAddr
       : savedAddresses.find((a) => a.id === selectedAddrId) || savedAddresses[0];
 
-  const handleSaveInlineAddress = (e?: React.MouseEvent) => {
+  const handleSaveInlineAddress = async (e?: React.MouseEvent) => {
     if (e) e.preventDefault();
+    if (!user?.id) {
+      setIsAuthOpen(true);
+      showToast('Please login or register to save address & order');
+      return false;
+    }
     if (!newAddr.name || !newAddr.address || !newAddr.pincode) {
       alert('Please fill out Receiver Name, Address, and Pincode.');
       return false;
     }
+    if (String(newAddr.pincode).length !== 6) {
+      alert('Please enter a valid 6-digit pincode.');
+      return false;
+    }
 
-    const createdAddr = {
-      id: Date.now(),
-      type: newAddr.type || 'HOME',
-      name: newAddr.name,
-      phone: newAddr.phone || user?.phone || '',
-      address: newAddr.address,
-      city: newAddr.city || 'Chennai',
-      pincode: newAddr.pincode,
-    };
-
-    const updatedList = [...savedAddresses, createdAddr];
-    setSavedAddresses(updatedList);
-    localStorage.setItem('bpg_user_addresses', JSON.stringify(updatedList));
-    setSelectedAddrId(createdAddr.id);
-    showToast('✓ Shipping address saved & selected!');
-    return true;
+    setSavingAddress(true);
+    try {
+      const created = await createUserAddress(user, {
+        type: newAddr.type || 'HOME',
+        name: newAddr.name,
+        phone: newAddr.phone || user.phone || '',
+        address: newAddr.address,
+        city: newAddr.city || 'Chennai',
+        pincode: newAddr.pincode,
+        isDefault: savedAddresses.length === 0,
+      });
+      if (!created) {
+        showToast('❌ Failed to save address to database');
+        return false;
+      }
+      const next = [created, ...savedAddresses];
+      setSavedAddresses(next);
+      setSelectedAddrId(created.id);
+      setNewAddr({ type: 'HOME', name: user.name || '', phone: user.phone || '', address: '', city: '', pincode: '' });
+      showToast('✓ Address saved to your account');
+      return true;
+    } finally {
+      setSavingAddress(false);
+    }
   };
 
   const handlePlaceOrder = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (selectedAddrId === 'new') {
-      const saved = handleSaveInlineAddress();
+      const saved = await handleSaveInlineAddress();
       if (!saved) return;
     }
 
@@ -172,12 +200,24 @@ export const Modals = () => {
           }),
         });
         const orderData = await orderRes.json();
-        if (orderRes.ok && orderData.orderId) {
+        if (!orderRes.ok) {
+          showToast(`❌ ${orderData.error || 'Order failed'}`);
+          return;
+        }
+        if (orderData.orderId) {
           serverOrderId = orderData.orderId;
         }
-      } catch (_) {}
+      } catch (_) {
+        showToast('❌ Could not place order. Try again.');
+        return;
+      }
 
-      const confirmedOrderId = serverOrderId || `BPG-${Math.floor(1000 + Math.random() * 9000)}`;
+      if (!serverOrderId) {
+        showToast('❌ Order was not saved. Please try again.');
+        return;
+      }
+
+      const confirmedOrderId = serverOrderId;
 
       setIsCheckoutOpen(false);
       clearCart();

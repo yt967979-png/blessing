@@ -23,13 +23,19 @@ export const ProductCard = ({ product }: { product: Product }) => {
     >
       {/* Offer Badge Ribbon */}
       <div className="absolute top-3 left-3 z-10 flex flex-col gap-1">
-        <span
-          className={`text-[9px] font-black text-white px-2.5 py-0.5 rounded-full shadow-md uppercase tracking-wider ${
-            product.badgeColor || 'bg-blue-600'
-          }`}
-        >
-          {product.badge}
-        </span>
+        {product.inStock === false ? (
+          <span className="text-[9px] font-black text-white px-2.5 py-0.5 rounded-full shadow-md uppercase tracking-wider bg-slate-700">
+            OUT OF STOCK
+          </span>
+        ) : (
+          <span
+            className={`text-[9px] font-black text-white px-2.5 py-0.5 rounded-full shadow-md uppercase tracking-wider ${
+              product.badgeColor || 'bg-blue-600'
+            }`}
+          >
+            {product.badge}
+          </span>
+        )}
       </div>
 
       {/* Wishlist Button */}
@@ -125,6 +131,15 @@ export const ProductCard = ({ product }: { product: Product }) => {
 
       {/* Action Buttons: Add to Cart & Buy Now */}
       <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
+        {product.inStock === false ? (
+          <button
+            disabled
+            className="col-span-2 bg-slate-200 text-slate-500 font-black text-[10px] sm:text-[11px] py-2.5 sm:py-3 rounded-xl uppercase tracking-wider cursor-not-allowed"
+          >
+            OUT OF STOCK
+          </button>
+        ) : (
+          <>
         <button
           onClick={() => {
             if (!user) { setIsAuthOpen(true); return; }
@@ -147,6 +162,8 @@ export const ProductCard = ({ product }: { product: Product }) => {
           <Zap className="w-3.5 h-3.5 text-[#001226] fill-[#001226] flex-shrink-0" />
           <span className="truncate">BUY NOW</span>
         </button>
+          </>
+        )}
       </div>
     </motion.div>
   );

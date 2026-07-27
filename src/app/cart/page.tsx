@@ -78,14 +78,25 @@ export default function CartPage() {
         {cart.length === 0 ? (
           <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center text-slate-500 max-w-lg mx-auto shadow-xs">
             <ShoppingBag className="w-16 h-16 mx-auto mb-4 opacity-20 text-[#001B3A]" />
-            <h3 className="font-heading font-bold text-lg text-slate-800 mb-1">Your cart is currently empty</h3>
-            <p className="text-xs mb-6">Explore our guides for 6th to 12th standard and add items to your cart.</p>
-            <Link
-              href="/"
-              className="inline-block bg-[#001B3A] text-white font-bold text-xs px-6 py-3 rounded-xl shadow-md hover:bg-blue-600 transition-colors uppercase tracking-wider"
-            >
-              BROWSE GUIDES
-            </Link>
+            <h3 className="font-heading font-bold text-lg text-slate-800 mb-1">Your cart is empty</h3>
+            <p className="text-xs mb-2 text-slate-500">Login, then add guide books for classes 6th–12th.</p>
+            <p className="text-[11px] mb-6 text-slate-400">Empty cart? Browse bestsellers and start your order.</p>
+            <div className="flex flex-col sm:flex-row gap-2 justify-center">
+              {!user && (
+                <button
+                  onClick={() => setIsAuthOpen(true)}
+                  className="inline-block bg-amber-400 text-[#001B3A] font-bold text-xs px-6 py-3 rounded-xl shadow-md hover:bg-amber-500 transition-colors uppercase tracking-wider"
+                >
+                  LOGIN / REGISTER
+                </button>
+              )}
+              <Link
+                href="/search"
+                className="inline-block bg-[#001B3A] text-white font-bold text-xs px-6 py-3 rounded-xl shadow-md hover:bg-blue-600 transition-colors uppercase tracking-wider"
+              >
+                BROWSE GUIDES
+              </Link>
+            </div>
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -261,6 +272,11 @@ export default function CartPage() {
                 >
                   PROCEED TO CHECKOUT
                 </button>
+                {!user && (
+                  <p className="text-[10px] text-center text-slate-500 font-medium">
+                    Login or register required to place an order
+                  </p>
+                )}
 
                 <div className="pt-2 text-[11px] text-slate-500 space-y-2 border-t border-slate-100">
                   <div className="flex items-center gap-2 text-slate-700 font-bold">

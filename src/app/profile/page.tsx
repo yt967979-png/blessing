@@ -23,6 +23,7 @@ import {
   Download,
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
+import { createUserAddress, deleteUserAddress, migrateLocalAddressesToDb } from '@/lib/addresses';
 import { Header } from '@/components/layout/Header';
 import { NavBar } from '@/components/layout/NavBar';
 import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
@@ -32,7 +33,7 @@ import { Modals } from '@/components/modals/Modals';
 
 export default function ProfilePage() {
   const router = useRouter();
-  const { user, loginUser, logoutUser, wishlist, products, showToast, setIsAuthOpen } = useStore();
+  const { user, loginUser, logoutUser, wishlist, products, cart, showToast, setIsAuthOpen } = useStore();
   const [activeTab, setActiveTab] = useState<'profile' | 'orders' | 'addresses' | 'wishlist'>('orders');
 
   // Dynamic user edit form state
@@ -41,8 +42,9 @@ export default function ProfilePage() {
   const [email, setEmail] = useState(user?.email || '');
   const [phone, setPhone] = useState(user?.phone || '');
 
-  // Dynamic User Addresses (saved in localStorage)
+  // Addresses from PostgreSQL
   const [addresses, setAddresses] = useState<any[]>([]);
+  const [addressesLoading, setAddressesLoading] = useState(false);
 
   // Live Orders fetched from API
   const [liveOrders, setLiveOrders] = useState<any[]>([]);
@@ -56,14 +58,22 @@ export default function ProfilePage() {
     }
   }, [user]);
 
-  // Restore & Save Addresses in LocalStorage dynamically
+  // Load addresses from DB (migrate old localStorage once)
   useEffect(() => {
-    const saved = localStorage.getItem('bpg_user_addresses');
-    if (saved) {
-      try {
-        setAddresses(JSON.parse(saved));
-      } catch (e) {}
+    if (!user?.id) {
+      setAddresses([]);
+      return;
     }
+    let cancelled = false;
+    setAddressesLoading(true);
+    migrateLocalAddressesToDb(user)
+      .then((list) => {
+        if (!cancelled) setAddresses(list);
+      })
+      .finally(() => {
+        if (!cancelled) setAddressesLoading(false);
+      });
+    return () => { cancelled = true; };
   }, [user]);
 
   // Fetch live orders for logged-in user from backend database with 4-second auto-sync
@@ -107,11 +117,6 @@ export default function ProfilePage() {
     };
   }, [user]);
 
-  const saveAddressesToStorage = (updatedList: any[]) => {
-    setAddresses(updatedList);
-    localStorage.setItem('bpg_user_addresses', JSON.stringify(updatedList));
-  };
-
   // Save updated user profile info to Railway PostgreSQL
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -128,19 +133,16 @@ export default function ProfilePage() {
         showToast('⚠️ ' + data.error);
         return;
       }
-      // Update local session with DB-returned data
-      loginUser({ ...user, name: data.name || name, phone: data.phone || phone }, [], [], []);
+      loginUser({ ...user, name: data.name || name, phone: data.phone || phone }, cart, wishlist, addresses);
       setIsEditing(false);
       showToast('✓ Profile saved to Database successfully!');
     } catch {
-      // Fallback: save locally if offline
-      loginUser({ ...user, name, phone }, [], [], []);
+      loginUser({ ...user, name, phone }, cart, wishlist, addresses);
       setIsEditing(false);
       showToast('✓ Profile updated (offline).');
     }
   };
 
-  // Dynamic Add Address
   const [showAddAddrForm, setShowAddAddrForm] = useState(false);
   const [newAddrType, setNewAddrType] = useState('HOME');
   const [newAddrName, setNewAddrName] = useState('');
@@ -149,28 +151,43 @@ export default function ProfilePage() {
   const [newAddrCity, setNewAddrCity] = useState('');
   const [newAddrPincode, setNewAddrPincode] = useState('');
 
-  const handleAddAddress = (e: React.FormEvent) => {
+  const handleAddAddress = async (e: React.FormEvent) => {
     e.preventDefault();
-    const created = {
-      id: Date.now(),
+    if (!user?.id) return;
+    if (!newAddrText.trim() || String(newAddrPincode).length !== 6) {
+      showToast('⚠️ Enter full address and 6-digit pincode');
+      return;
+    }
+    const created = await createUserAddress(user, {
       type: newAddrType,
-      name: newAddrName || user?.name || 'Customer',
-      phone: newAddrPhone || user?.phone || '',
+      name: newAddrName || user.name || 'Customer',
+      phone: newAddrPhone || user.phone || '',
       address: newAddrText,
       city: newAddrCity || 'Chennai',
-      pincode: newAddrPincode || '600012',
-    };
-    const updated = [...addresses, created];
-    saveAddressesToStorage(updated);
+      pincode: newAddrPincode,
+      isDefault: addresses.length === 0,
+    });
+    if (!created) {
+      showToast('❌ Failed to save address to database');
+      return;
+    }
+    setAddresses((prev) => [created, ...prev]);
     setShowAddAddrForm(false);
     setNewAddrText('');
-    showToast('✓ Delivery address added!');
+    setNewAddrPincode('');
+    setNewAddrCity('');
+    showToast('✓ Address saved to database');
   };
 
-  const handleDeleteAddress = (id: number) => {
-    const updated = addresses.filter((a) => a.id !== id);
-    saveAddressesToStorage(updated);
-    showToast('🗑️ Address deleted');
+  const handleDeleteAddress = async (id: string | number) => {
+    if (!user?.id) return;
+    const ok = await deleteUserAddress(user, String(id));
+    if (!ok) {
+      showToast('❌ Failed to delete address');
+      return;
+    }
+    setAddresses((prev) => prev.filter((a) => a.id !== id));
+    showToast('🗑️ Address deleted from database');
   };
 
   const wishlistedProducts = products.filter((p) => wishlist.includes(p.id));
@@ -586,9 +603,12 @@ export default function ProfilePage() {
                       Manage Delivery Addresses
                     </h2>
                     <p className="text-xs text-slate-500">
-                      Save your addresses for fast 1-click checkout
+                      Save addresses to your account for fast checkout on any device
                     </p>
                   </div>
+                  {addressesLoading && (
+                    <p className="text-xs text-slate-400 px-1">Loading addresses from database...</p>
+                  )}
                   <button
                     onClick={() => setShowAddAddrForm(!showAddAddrForm)}
                     className="bg-blue-600 hover:bg-[#001B3A] text-white font-extrabold text-xs px-4 py-2 rounded-xl flex items-center gap-1 shadow-xs transition-colors"

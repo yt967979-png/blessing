@@ -150,6 +150,21 @@ export async function POST(request: Request) {
       razorpayPaymentId, razorpayOrderId, razorpaySignature,
     } = body;
 
+    if (!userId || String(userId).startsWith('guest') || userId === 'Customer') {
+      return NextResponse.json({ error: 'Please login or register to place an order.' }, { status: 401 });
+    }
+
+    // Verify account exists
+    if (client) {
+      const userCheck = await client.query(
+        `SELECT id FROM users WHERE id = $1 OR LOWER(email) = LOWER($1) LIMIT 1`,
+        [String(userId)]
+      );
+      if (userCheck.rows.length === 0) {
+        return NextResponse.json({ error: 'Please login or register to place an order.' }, { status: 401 });
+      }
+    }
+
     const id = `ord-${Date.now()}`;
     const orderNumber = 'BPG-' + Math.floor(1000 + Math.random() * 9000);
     const ymd = new Date().toISOString().slice(0, 10).replace(/-/g, '');
@@ -162,26 +177,38 @@ export async function POST(request: Request) {
     for (const item of parsedItems) {
       let unitPrice = Number(item.price || 0);
       let title = item.title || 'Guide Book';
+      const itemQty = Math.max(1, Number(item.qty || 1));
       if (client && item.id) {
         try {
           const dbBook = await client.query(
             `SELECT title, price, discount_price, stock, status FROM books WHERE id = $1 LIMIT 1`,
             [item.id]
           );
-          if (dbBook.rows.length > 0) {
-            const book = dbBook.rows[0];
-            if (book.status === 'out_of_stock' || Number(book.stock) <= 0) {
-              return NextResponse.json({ error: `"${book.title}" is out of stock.` }, { status: 400 });
-            }
-            unitPrice = Number(book.discount_price || book.price);
-            title = book.title;
+          if (dbBook.rows.length === 0) {
+            return NextResponse.json({ error: `Book not found in catalog.` }, { status: 400 });
           }
+          const book = dbBook.rows[0];
+          const stock = Number(book.stock ?? 0);
+          if (book.status === 'out_of_stock' || stock <= 0) {
+            return NextResponse.json({ error: `"${book.title}" is out of stock.` }, { status: 400 });
+          }
+          if (itemQty > stock) {
+            return NextResponse.json(
+              { error: `"${book.title}" — only ${stock} left in stock.` },
+              { status: 400 }
+            );
+          }
+          unitPrice = Number(book.discount_price || book.price);
+          title = book.title;
         } catch (_) {}
       }
-      const itemQty = Math.max(1, Number(item.qty || 1));
       const subtotal = unitPrice * itemQty;
       calculatedSubtotal += subtotal;
       verifiedItems.push({ id: item.id, title, price: unitPrice, qty: itemQty, subtotal });
+    }
+
+    if (verifiedItems.length === 0) {
+      return NextResponse.json({ error: 'Cart is empty. Add books before checkout.' }, { status: 400 });
     }
 
     let discountAmount = 0;
@@ -236,6 +263,16 @@ export async function POST(request: Request) {
            VALUES ($1, $2, $3, $4, $5, $6, $7)`,
           [itemId, id, item.id, item.title, item.price, item.qty, item.subtotal]
         );
+        if (item.id) {
+          await client.query(
+            `UPDATE books
+             SET stock = GREATEST(0, COALESCE(stock, 0) - $1),
+                 status = CASE WHEN GREATEST(0, COALESCE(stock, 0) - $1) <= 0 THEN 'out_of_stock' ELSE status END,
+                 updated_at = NOW()
+             WHERE id = $2`,
+            [item.qty, item.id]
+          );
+        }
       }
 
       if (razorpayPaymentId) {
@@ -296,7 +333,7 @@ export async function PATCH(request: NextRequest) {
 
   let client: any = null;
   try {
-    const { orderId, status, awbNumber } = await request.json();
+    const { orderId, status, awbNumber, skipWhatsApp } = await request.json();
     if (!orderId) {
       return NextResponse.json({ error: 'orderId is required' }, { status: 400 });
     }
@@ -336,34 +373,37 @@ export async function PATCH(request: NextRequest) {
       );
     } catch (_) {}
 
-    // Auto-dispatch WhatsApp Notification to Student
-    try {
-      const orderRes = await client.query(
-        `SELECT order_number, user_id, shipping_address, awb_number, tracking_url FROM orders WHERE order_number = $1 OR id::text = $1 LIMIT 1`,
-        [orderId]
-      );
-      if (orderRes.rows.length > 0) {
-        const orderRow = orderRes.rows[0];
-        let phone = '';
-        let customerName = 'Customer';
-        try {
-          const addr = typeof orderRow.shipping_address === 'string' ? JSON.parse(orderRow.shipping_address) : orderRow.shipping_address;
-          phone = addr?.phone || '';
-          customerName = addr?.name || 'Customer';
-        } catch (_) {}
-
-        if (phone) {
+    // Auto-dispatch WhatsApp Notification to Student (unless already sent via timeline)
+    if (!skipWhatsApp) {
+      try {
+        const orderRes = await client.query(
+          `SELECT order_number, user_id, shipping_address, awb_number, tracking_url FROM orders WHERE order_number = $1 OR id::text = $1 LIMIT 1`,
+          [orderId]
+        );
+        if (orderRes.rows.length > 0) {
+          const orderRow = orderRes.rows[0];
+          let phone = '';
+          let customerName = 'Customer';
           try {
-            const { sendWhatsAppMessageInProcess } = await import('@/lib/whatsapp');
-            const message = `*BLESSING POWER GUIDE*\n*${newStatus.toUpperCase()}*\n\nDear *${customerName}*,\nYour order status has been updated to: *${newStatus}*.\n\n📦 *Order ID:* ${orderRow.order_number || orderId}\n🚚 *Partner:* ST Courier Express\n📍 *Docket AWB:* ${awbNumber || orderRow.awb_number || 'Pending'}\n\n👉 *Track Live:* https://blessing-production.up.railway.app/profile`;
-            await sendWhatsAppMessageInProcess(phone, message);
-          } catch (waErr: any) {
-            console.error('In-process WhatsApp dispatch error in PATCH /api/orders:', waErr.message);
+            const addr = typeof orderRow.shipping_address === 'string' ? JSON.parse(orderRow.shipping_address) : orderRow.shipping_address;
+            phone = addr?.phone || '';
+            customerName = addr?.name || 'Customer';
+          } catch (_) {}
+
+          if (phone) {
+            try {
+              const { sendWhatsAppMessageInProcess } = await import('@/lib/whatsapp');
+              const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://blessing-production.up.railway.app';
+              const message = `*BLESSING POWER GUIDE*\n*${newStatus.toUpperCase()}*\n\nDear *${customerName}*,\nYour order status has been updated to: *${newStatus}*.\n\n📦 *Order ID:* ${orderRow.order_number || orderId}\n🚚 *Partner:* ST Courier Express\n📍 *Docket AWB:* ${awbNumber || orderRow.awb_number || 'Pending'}\n\n👉 *Track Live:* ${siteUrl}/profile`;
+              await sendWhatsAppMessageInProcess(phone, message);
+            } catch (waErr: any) {
+              console.error('In-process WhatsApp dispatch error in PATCH /api/orders:', waErr.message);
+            }
           }
         }
+      } catch (waErr) {
+        console.error('Auto WhatsApp dispatch error:', waErr);
       }
-    } catch (waErr) {
-      console.error('Auto WhatsApp dispatch error:', waErr);
     }
 
     // Broadcast real-time SSE instant update (Firebase style)

@@ -15,6 +15,9 @@ export const CartDrawer = () => {
     updateQty,
     cartTotal,
     setIsCheckoutOpen,
+    user,
+    setIsAuthOpen,
+    showToast,
   } = useStore();
 
   const freeDeliveryThreshold = 499;
@@ -143,11 +146,16 @@ export const CartDrawer = () => {
                 <button
                   onClick={() => {
                     setIsCartOpen(false);
+                    if (!user) {
+                      setIsAuthOpen(true);
+                      showToast('Please login or register to place an order');
+                      return;
+                    }
                     setIsCheckoutOpen(true);
                   }}
                   className="w-full bg-gradient-to-r from-amber-400 to-amber-500 text-[#001B3A] font-extrabold text-xs py-3.5 rounded-xl shadow-md hover:shadow-lg transition-all uppercase tracking-wider text-center"
                 >
-                  PROCEED TO CHECKOUT
+                  {user ? 'PROCEED TO CHECKOUT' : 'LOGIN TO CHECKOUT'}
                 </button>
 
                 <div className="text-center pt-1">

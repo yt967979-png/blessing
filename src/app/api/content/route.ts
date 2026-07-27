@@ -1,15 +1,27 @@
 import { NextResponse } from 'next/server';
 import { getDbClient } from '@/lib/db';
+import { verifyAdminRequest, forbiddenResponse } from '@/lib/serverSecurity';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const type = searchParams.get('type') || 'faq';
+  const adminAll = searchParams.get('admin') === '1';
 
   const client = await getDbClient();
   try {
     if (type === 'settings') {
       const res = await client.query(`SELECT * FROM settings WHERE id = 'main' LIMIT 1`);
       return NextResponse.json(res.rows[0] || {});
+    }
+
+    if (adminAll) {
+      const auth = await verifyAdminRequest(request);
+      if (!auth.isAdmin) return forbiddenResponse(auth.error);
+      const res = await client.query(
+        `SELECT id, question, answer, display_order, status, created_at
+         FROM faqs ORDER BY display_order ASC, created_at ASC`
+      );
+      return NextResponse.json(res.rows);
     }
 
     const res = await client.query(
@@ -19,6 +31,82 @@ export async function GET(request: Request) {
        ORDER BY display_order ASC, created_at ASC`
     );
     return NextResponse.json(res.rows);
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  } finally {
+    await client.end();
+  }
+}
+
+export async function POST(request: Request) {
+  const auth = await verifyAdminRequest(request);
+  if (!auth.isAdmin) return forbiddenResponse(auth.error);
+
+  const body = await request.json();
+  const question = String(body.question || '').trim();
+  const answer = String(body.answer || '').trim();
+  const displayOrder = Number(body.display_order || 0);
+
+  if (!question || !answer) {
+    return NextResponse.json({ error: 'Question and answer are required.' }, { status: 400 });
+  }
+
+  const client = await getDbClient();
+  try {
+    const id = `faq-${Date.now()}`;
+    const res = await client.query(
+      `INSERT INTO faqs (id, question, answer, display_order, status)
+       VALUES ($1, $2, $3, $4, 'active') RETURNING *`,
+      [id, question, answer, displayOrder]
+    );
+    return NextResponse.json(res.rows[0], { status: 201 });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  } finally {
+    await client.end();
+  }
+}
+
+export async function PATCH(request: Request) {
+  const auth = await verifyAdminRequest(request);
+  if (!auth.isAdmin) return forbiddenResponse(auth.error);
+
+  const body = await request.json();
+  const id = body.id;
+  if (!id) return NextResponse.json({ error: 'FAQ id required' }, { status: 400 });
+
+  const client = await getDbClient();
+  try {
+    const fields: string[] = [];
+    const values: any[] = [];
+    let idx = 1;
+    if (body.question !== undefined) { fields.push(`question = $${idx++}`); values.push(String(body.question).trim()); }
+    if (body.answer !== undefined) { fields.push(`answer = $${idx++}`); values.push(String(body.answer).trim()); }
+    if (body.display_order !== undefined) { fields.push(`display_order = $${idx++}`); values.push(Number(body.display_order)); }
+    if (body.status !== undefined) { fields.push(`status = $${idx++}`); values.push(body.status); }
+    if (fields.length === 0) return NextResponse.json({ error: 'Nothing to update' }, { status: 400 });
+    values.push(id);
+    const res = await client.query(`UPDATE faqs SET ${fields.join(', ')} WHERE id = $${idx} RETURNING *`, values);
+    return NextResponse.json(res.rows[0] || { success: true });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  } finally {
+    await client.end();
+  }
+}
+
+export async function DELETE(request: Request) {
+  const auth = await verifyAdminRequest(request);
+  if (!auth.isAdmin) return forbiddenResponse(auth.error);
+
+  const { searchParams } = new URL(request.url);
+  const id = searchParams.get('id');
+  if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
+
+  const client = await getDbClient();
+  try {
+    await client.query(`DELETE FROM faqs WHERE id = $1`, [id]);
+    return NextResponse.json({ success: true });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   } finally {

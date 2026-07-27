@@ -25,12 +25,13 @@ export async function POST(request: Request) {
 
     let rawPhone = (customerPhone || '').replace(/\D/g, '');
     if (rawPhone.length < 10) {
-      rawPhone = '9840418228';
+      return NextResponse.json({ error: 'Valid customer phone number is required to send WhatsApp.' }, { status: 400 });
     }
     const phoneWithCountry = rawPhone.length === 10 ? `91${rawPhone}` : rawPhone;
     const trackingNo = trackingNumber || 'Pending AWB Assignment';
     const bookTitle = items?.[0]?.title || 'Blessing Power Guide Study Book';
-    const websiteTrackingUrl = `https://blessing-production.up.railway.app/orders?orderId=${encodeURIComponent(orderId || '')}`;
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://blessing-production.up.railway.app';
+    const websiteTrackingUrl = `${siteUrl}/orders?orderId=${encodeURIComponent(orderId || '')}`;
 
     // Environment API Credentials
     const ultramsgInstanceId = process.env.ULTRAMSG_INSTANCE_ID;

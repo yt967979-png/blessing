@@ -56,10 +56,10 @@ export async function GET(
         const invoiceHtml = generateTaxInvoiceHtml({
           orderId: o.order_number || o.id,
           customerName: addrObj.name || o.user_id || 'Customer',
-          customerPhone: addrObj.phone || '9840418228',
-          address: addrObj.address || 'Medavakkam, Chennai',
+          customerPhone: addrObj.phone || '—',
+          address: addrObj.address || '—',
           city: addrObj.city || 'Chennai',
-          pincode: addrObj.pincode || '600012',
+          pincode: addrObj.pincode || '',
           totalAmount: Number(o.total_amount || 0),
           paymentMethod: o.payment_method || 'Razorpay UPI',
           paymentStatus: o.payment_status || 'PAID',
@@ -69,15 +69,12 @@ export async function GET(
           createdAt: new Date(o.ordered_at || Date.now()).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }),
         });
 
-        // Add auto-print script so opening the link automatically opens the print/save-as-PDF dialog
-        const printableHtml = invoiceHtml.replace(
-          '</body>',
-          '<script>window.onload = function() { setTimeout(function() { window.print(); }, 500); };</script></body>'
-        );
-
-        return new NextResponse(printableHtml, {
+        const fileName = `invoice-${o.order_number || o.id}.html`;
+        return new NextResponse(invoiceHtml, {
           headers: {
             'Content-Type': 'text/html; charset=utf-8',
+            'Content-Disposition': `inline; filename="${fileName}"`,
+            'Cache-Control': 'no-store',
           },
         });
       }

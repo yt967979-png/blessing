@@ -39,9 +39,16 @@ export function generateTaxInvoiceHtml(orderData: {
     td { padding: 12px; border-bottom: 1px solid #e2e8f0; }
     .total-row { font-weight: 900; font-size: 14px; background: #f1f5f9; }
     .footer { border-top: 1px solid #e2e8f0; padding-top: 16px; font-size: 11px; color: #64748b; text-align: center; }
+    .toolbar { position: sticky; top: 0; background: #001b3a; color: #fff; padding: 12px 20px; display: flex; gap: 12px; justify-content: center; align-items: center; z-index: 10; }
+    .toolbar button { background: #fbbf24; color: #001b3a; border: 0; font-weight: 800; font-size: 12px; padding: 8px 16px; border-radius: 8px; cursor: pointer; }
+    @media print { .toolbar { display: none !important; } body { padding: 0; } .invoice-card { border: none; } }
   </style>
 </head>
 <body>
+  <div class="toolbar">
+    <span style="font-size:12px;font-weight:700;">Invoice ${orderData.orderId}</span>
+    <button onclick="window.print()">Print / Save as PDF</button>
+  </div>
   <div class="invoice-card">
     <div class="header">
       <div>
