@@ -24,28 +24,12 @@ function getConnectionCandidates(): string[] {
     raw.push(`postgresql://${user}:${pass}@${host}:${port}/${db}`);
   }
 
-  // If a raw URL uses postgres.railway.internal, add transformed public proxy candidates
-  const additional: string[] = [];
-  for (const urlStr of raw) {
-    if (urlStr.includes('postgres.railway.internal')) {
-      const publicHost = process.env.RAILWAY_TCP_PROXY_DOMAIN || 'sakura.proxy.rlwy.net';
-      const publicPort = process.env.RAILWAY_TCP_PROXY_PORT || '32874';
-      const transformed = urlStr
-        .replace('postgres.railway.internal:5432', `${publicHost}:${publicPort}`)
-        .replace('postgres.railway.internal', `${publicHost}:${publicPort}`);
-      if (transformed !== urlStr) additional.push(transformed);
-    }
-  }
-  raw.push(...additional);
-
-  // Preserve process.env environment variable candidate order strictly
+  // Prefer public/proxy URLs over *.railway.internal
   const sorted = [...new Set(raw)].sort((a, b) => {
     const score = (u: string) => {
-      // If environment variable explicitly sets DATABASE_URL / POSTGRES_URL, test raw env first
-      if (u === process.env.DATABASE_URL || u === process.env.POSTGRES_URL) return 0;
-      if (u.includes('rlwy.net') || u.includes('proxy.rlwy.net')) return 1;
-      if (u.includes('railway.internal')) return 3;
-      return 2;
+      if (u.includes('railway.internal')) return 2;
+      if (u.includes('rlwy.net') || u.includes('proxy.rlwy.net')) return 0;
+      return 1;
     };
     return score(a) - score(b);
   });
@@ -110,34 +94,37 @@ async function destroyPool() {
   activeConnectionString = null;
   isSchemaInitialized = false;
   schemaInitPromise = null;
+  poolReadyPromise = null;
 }
+
+let poolReadyPromise: Promise<Pool> | null = null;
 
 function createPool(connectionString: string): Pool {
   const p = new Pool({
     connectionString,
-    max: Number(process.env.DB_POOL_MAX || 15),
-    idleTimeoutMillis: 10000,
-    connectionTimeoutMillis: Number(process.env.DB_CONNECT_TIMEOUT_MS || 5000),
+    max: Number(process.env.DB_POOL_MAX || 5),
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: Number(process.env.DB_CONNECT_TIMEOUT_MS || 30000),
     keepAlive: true,
     keepAliveInitialDelayMillis: 10000,
     ssl: sslFor(connectionString),
   });
 
   p.on('error', (err) => {
-    console.warn('[db] idle pool socket error, replacing socket:', err.message);
+    console.warn('[db] idle pool socket error:', err.message);
   });
 
   return p;
 }
 
-// Background heartbeat to keep pool active 24/7
+// Background heartbeat — started only after first successful pool connection
 let heartbeatInterval: NodeJS.Timeout | null = null;
-function startPoolHeartbeat() {
+function startPoolHeartbeat(activePool: Pool) {
   if (heartbeatInterval) return;
   heartbeatInterval = setInterval(async () => {
     try {
-      if (pool && !(pool as any).ending && !(pool as any).ended) {
-        const client = await pool.connect();
+      if (activePool && !(activePool as any).ending && !(activePool as any).ended) {
+        const client = await activePool.connect();
         try {
           await client.query('SELECT 1');
         } finally {
@@ -147,9 +134,8 @@ function startPoolHeartbeat() {
     } catch (_) {
       /* ignore transient ping failure */
     }
-  }, 25000);
+  }, 60000);
 }
-startPoolHeartbeat();
 
 export function getDbPool(): Pool {
   if (pool && activeConnectionString && !(pool as any).ending && !(pool as any).ended) {
@@ -222,40 +208,61 @@ async function ensureSchemaReady(activePool: Pool) {
   await schemaInitPromise;
 }
 
-export async function getDbClient() {
-  const candidates = getConnectionCandidates();
-  let lastErr: Error | null = null;
-
-  for (const connStr of candidates) {
-    try {
-      if (!pool || activeConnectionString !== connStr) {
-        await destroyPool();
-        activeConnectionString = connStr;
-        pool = createPool(connStr);
-        console.log(`[db] connecting via ${connStr.replace(/:[^:@/]+@/, ':***@').slice(0, 80)}…`);
-      }
-
-      await ensureSchemaReady(pool);
-      const client: any = await pool.connect();
-      wrapPoolClient(client);
-      return client;
-    } catch (err: any) {
-      lastErr = err;
-      const msg = String(err?.message || err);
-      console.error('[db] connect failed:', msg);
-      await destroyPool();
-
-      const isPrivateDnsFail =
-        msg.includes('ENOTFOUND') && connStr.includes('railway.internal');
-      if (isPrivateDnsFail) {
-        console.warn('[db] postgres.railway.internal not found — trying public URL next…');
-        continue;
-      }
-      if (candidates.indexOf(connStr) < candidates.length - 1) continue;
-    }
+/** Single-flight pool setup — prevents connection storms at cold start. */
+async function ensurePoolReady(): Promise<Pool> {
+  if (pool && activeConnectionString && isSchemaInitialized) {
+    return pool;
   }
+  if (poolReadyPromise) return poolReadyPromise;
 
-  throw lastErr || new Error('Could not connect to PostgreSQL');
+  poolReadyPromise = (async () => {
+    const candidates = getConnectionCandidates();
+    let lastErr: Error | null = null;
+
+    for (const connStr of candidates) {
+      try {
+        if (!pool || activeConnectionString !== connStr) {
+          await destroyPool();
+          activeConnectionString = connStr;
+          pool = createPool(connStr);
+          console.log(`[db] connecting via ${connStr.replace(/:[^:@/]+@/, ':***@').slice(0, 80)}…`);
+        }
+
+        await ensureSchemaReady(pool);
+        startPoolHeartbeat(pool);
+        return pool;
+      } catch (err: any) {
+        lastErr = err;
+        const msg = String(err?.message || err);
+        console.error('[db] connect failed:', msg);
+        await destroyPool();
+
+        const isPrivateDnsFail =
+          msg.includes('ENOTFOUND') && connStr.includes('railway.internal');
+        if (isPrivateDnsFail) {
+          console.warn('[db] postgres.railway.internal not found — trying public URL next…');
+          continue;
+        }
+        if (candidates.indexOf(connStr) < candidates.length - 1) continue;
+      }
+    }
+
+    throw lastErr || new Error('Could not connect to PostgreSQL');
+  })();
+
+  try {
+    return await poolReadyPromise;
+  } catch (err) {
+    poolReadyPromise = null;
+    throw err;
+  }
+}
+
+export async function getDbClient() {
+  const activePool = await ensurePoolReady();
+  const client: any = await activePool.connect();
+  wrapPoolClient(client);
+  return client;
 }
 
 /** Never throws if client is null (after connect timeout). */

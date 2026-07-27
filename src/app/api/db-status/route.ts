@@ -28,7 +28,9 @@ export async function GET() {
         message: err?.message || 'Could not connect to PostgreSQL.',
         hint: err?.message?.includes('ENOTFOUND') || err?.message?.includes('railway.internal')
           ? 'postgres.railway.internal not found — use the PUBLIC proxy URL, not the private hostname'
-          : undefined,
+          : err?.message?.includes('timeout')
+            ? 'Connection timed out — confirm Postgres service is running and Public Networking is enabled in Railway'
+            : undefined,
         instruction:
           'Railway → Web Service → Variables: set DATABASE_URL = ${{Postgres.DATABASE_PUBLIC_URL}} (host should be *.proxy.rlwy.net). Delete any extra Postgres service. Redeploy.',
         envKeysPresent: Object.keys(process.env).filter(
@@ -43,14 +45,12 @@ export async function GET() {
   try {
     await client.query('SELECT 1');
 
-    const [books, categories, users, orders, reviews, addresses] = await Promise.all([
-      countTable(client, 'books'),
-      countTable(client, 'categories'),
-      countTable(client, 'users'),
-      countTable(client, 'orders'),
-      countTable(client, 'reviews'),
-      countTable(client, 'addresses'),
-    ]);
+    const books = await countTable(client, 'books');
+    const categories = await countTable(client, 'categories');
+    const users = await countTable(client, 'users');
+    const orders = await countTable(client, 'orders');
+    const reviews = await countTable(client, 'reviews');
+    const addresses = await countTable(client, 'addresses');
 
     const missingTables = [
       ['books', books],
