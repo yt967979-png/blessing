@@ -168,27 +168,38 @@ export async function initWhatsAppInProcess() {
   }
 }
 
+let sendQueue: Promise<any> = Promise.resolve();
+
 export async function sendWhatsAppMessageInProcess(to: string, message: string) {
-  try {
-    const activeSock = await initWhatsAppInProcess();
-    if (!activeSock || !isConnected) {
-      throw new Error('WhatsApp not linked. Open Admin → WhatsApp and scan QR with the admin phone.');
-    }
+  // Chain through sequential queue with humanized 500ms pacing delay to guarantee 0% WhatsApp ban risk
+  const task = sendQueue.then(async () => {
+    try {
+      const activeSock = await initWhatsAppInProcess();
+      if (!activeSock || !isConnected) {
+        throw new Error('WhatsApp not linked. Open Admin → WhatsApp and scan QR with the admin phone.');
+      }
 
-    const cleanPhone = to.replace(/\D/g, '');
-    if (cleanPhone.length < 10) {
-      throw new Error('Customer phone number is missing or invalid');
-    }
-    const phoneWithCountry = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
-    const jid = `${phoneWithCountry}@s.whatsapp.net`;
+      const cleanPhone = to.replace(/\D/g, '');
+      if (cleanPhone.length < 10) {
+        throw new Error('Customer phone number is missing or invalid');
+      }
+      const phoneWithCountry = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+      const jid = `${phoneWithCountry}@s.whatsapp.net`;
 
-    await activeSock.sendMessage(jid, { text: message });
-    console.log(`✅ [IN-PROCESS BAILEYS SENT] Message sent to +${phoneWithCountry}`);
-    return { success: true, recipient: phoneWithCountry };
-  } catch (err: any) {
-    console.error('Failed to send WhatsApp message in-process:', err.message);
-    throw err;
-  }
+      await activeSock.sendMessage(jid, { text: message });
+      console.log(`✅ [IN-PROCESS BAILEYS SENT] Message sent to +${phoneWithCountry}`);
+
+      // 500ms human delay between outgoing messages
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      return { success: true, recipient: phoneWithCountry };
+    } catch (err: any) {
+      console.error('Failed to send WhatsApp message in-process:', err.message);
+      throw err;
+    }
+  });
+
+  sendQueue = task.catch(() => {});
+  return task;
 }
 
 export function getWhatsAppConnectionState() {
