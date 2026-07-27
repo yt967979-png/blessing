@@ -24,6 +24,18 @@ function getConnectionCandidates(): string[] {
     raw.push(`postgresql://${user}:${pass}@${host}:${port}/${db}`);
   }
 
+  // If a raw URL uses postgres.railway.internal without a port match, add transformed candidate
+  const additional: string[] = [];
+  for (const urlStr of raw) {
+    if (urlStr.includes('postgres.railway.internal')) {
+      const publicHost = process.env.RAILWAY_TCP_PROXY_DOMAIN || 'shinkansen.proxy.rlwy.net';
+      const publicPort = process.env.RAILWAY_TCP_PROXY_PORT || '43644';
+      const transformed = urlStr.replace('postgres.railway.internal:5432', `${publicHost}:${publicPort}`);
+      if (transformed !== urlStr) additional.push(transformed);
+    }
+  }
+  raw.push(...additional);
+
   // Public proxy URLs (*.rlwy.net) take 100% priority over private hostnames (*.railway.internal)
   const sorted = [...new Set(raw)].sort((a, b) => {
     const score = (u: string) => {
