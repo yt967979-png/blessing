@@ -16,13 +16,9 @@ function mapAddress(row: any) {
   };
 }
 
-async function resolveUserId(request: Request, bodyUserId?: string): Promise<string | null> {
+async function resolveUserId(request: Request): Promise<string | null> {
   const session = await getAuthenticatedUser(request);
-  if (session?.userId) return session.userId;
-
-  const { searchParams } = new URL(request.url);
-  const queryUserId = searchParams.get('userId');
-  return bodyUserId || queryUserId || null;
+  return session?.userId || null;
 }
 
 // GET /api/addresses?userId=xxx
@@ -49,7 +45,7 @@ export async function GET(request: Request) {
 // POST /api/addresses — create one address
 export async function POST(request: Request) {
   const body = await request.json();
-  const userId = await resolveUserId(request, body.userId);
+  const userId = await resolveUserId(request);
   if (!userId) {
     return NextResponse.json({ error: 'Login required to save addresses.' }, { status: 401 });
   }
@@ -96,7 +92,7 @@ export async function POST(request: Request) {
 // PATCH /api/addresses — update address
 export async function PATCH(request: Request) {
   const body = await request.json();
-  const userId = await resolveUserId(request, body.userId);
+  const userId = await resolveUserId(request);
   const id = body.id;
   if (!userId || !id) {
     return NextResponse.json({ error: 'userId and address id are required.' }, { status: 400 });

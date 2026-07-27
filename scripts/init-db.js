@@ -371,6 +371,9 @@ async function migrateDatabase(connStr, dbName) {
       ALTER TABLE coupons ADD COLUMN IF NOT EXISTS used_count INT DEFAULT 0;
       ALTER TABLE coupons ADD COLUMN IF NOT EXISTS show_in_hero BOOLEAN DEFAULT true;
       ALTER TABLE coupons ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+      ALTER TABLE coupons ADD COLUMN IF NOT EXISTS per_user_limit INT DEFAULT 1;
+      ALTER TABLE coupons ADD COLUMN IF NOT EXISTS allowed_classes TEXT;
+      ALTER TABLE coupons ADD COLUMN IF NOT EXISTS allowed_categories TEXT;
       ALTER TABLE orders ADD COLUMN IF NOT EXISTS coupon_code VARCHAR(50);
       ALTER TABLE orders ADD COLUMN IF NOT EXISTS coupon_id VARCHAR(255);
 
@@ -381,6 +384,8 @@ async function migrateDatabase(connStr, dbName) {
         order_id VARCHAR(255),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
+      CREATE INDEX IF NOT EXISTS idx_coupon_redemptions_coupon_user
+        ON coupon_redemptions (coupon_id, user_id);
 
       CREATE TABLE IF NOT EXISTS faqs (
         id VARCHAR(255) PRIMARY KEY,

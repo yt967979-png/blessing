@@ -160,27 +160,31 @@ function OrdersContent() {
 
   const handleSubmitReview = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!reviewModalItem) return;
+    if (!reviewModalItem || !user) return;
+
+    if (reviewComment.trim().length < 10) {
+      alert('Review must be at least 10 characters.');
+      return;
+    }
 
     setIsSubmittingReview(true);
     try {
       const res = await fetch('/api/reviews', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders(user),
         body: JSON.stringify({
-          bookId: reviewModalItem.id,
-          userName: user?.name || searchedOrderData?.customerName || 'Verified Buyer',
-          userEmail: user?.email || 'customer@blessing.com',
+          bookId: reviewModalItem.id || reviewModalItem.bookId,
           rating,
           comment: reviewComment,
         }),
       });
+      const data = await res.json();
 
       if (res.ok) {
-        alert('Thank you! Your verified review has been published on the book page.');
+        alert(data.message || 'Thank you! Your verified review is published.');
         setReviewModalItem(null);
       } else {
-        alert('Failed to submit review. Please try again.');
+        alert(data.error || 'Failed to submit review.');
       }
     } catch (err) {
       alert('Error submitting review.');
@@ -527,13 +531,18 @@ function OrdersContent() {
                           </div>
                         </div>
                       </div>
-                      <button
-                        onClick={() => handleOpenReviewModal(item)}
-                        className="bg-amber-400/10 text-amber-900 hover:bg-amber-400/20 border border-amber-300 font-extrabold text-[11px] px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
-                      >
-                        <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
-                        <span>WRITE REVIEW</span>
-                      </button>
+                      {(searchedOrderData.courierStatus || '').toLowerCase().includes('delivered') ||
+                      (searchedOrderData.orderStatus || '').toLowerCase().includes('delivered') ? (
+                        <button
+                          onClick={() => handleOpenReviewModal({ ...item, id: item.id || item.bookId })}
+                          className="bg-amber-400/10 text-amber-900 hover:bg-amber-400/20 border border-amber-300 font-extrabold text-[11px] px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+                        >
+                          <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
+                          <span>WRITE REVIEW</span>
+                        </button>
+                      ) : (
+                        <span className="text-[10px] font-bold text-slate-400">Review after delivery</span>
+                      )}
                     </div>
                   ))}
                 </div>

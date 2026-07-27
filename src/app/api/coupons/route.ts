@@ -6,10 +6,13 @@ import {
   isCouponExpired,
   mapPublicCoupon,
   normalizeCouponCode,
+  serializeCsvList,
   type CouponDiscountType,
   type CouponOfferType,
   type CouponConditionMode,
+  type CouponRow,
 } from '@/lib/coupons';
+import { scheduleCouponWhatsAppBroadcast } from '@/lib/couponBroadcast';
 
 function mapAdminCoupon(row: any) {
   return {
@@ -26,6 +29,9 @@ function mapAdminCoupon(row: any) {
     expiryDate: row.expiry_date ? new Date(row.expiry_date).toISOString() : null,
     usageLimit: Number(row.usage_limit) || 100,
     usedCount: Number(row.used_count) || 0,
+    perUserLimit: Number(row.per_user_limit ?? 1),
+    allowedClasses: row.allowed_classes ? String(row.allowed_classes).split(',').filter(Boolean) : [],
+    allowedCategories: row.allowed_categories ? String(row.allowed_categories).split(',').filter(Boolean) : [],
     showInHero: row.show_in_hero !== false,
     status: row.status || 'active',
     createdAt: row.created_at ? new Date(row.created_at).toISOString() : null,
@@ -110,8 +116,9 @@ export async function POST(request: NextRequest) {
       `INSERT INTO coupons (
         id, code, title, description, discount_type, discount_value,
         minimum_amount, minimum_quantity, offer_type, condition_mode,
-        expiry_date, usage_limit, used_count, show_in_hero, status
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,0,$13,$14)`,
+        expiry_date, usage_limit, used_count, per_user_limit, allowed_classes, allowed_categories,
+        show_in_hero, status
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,0,$13,$14,$15,$16,$17)`,
       [
         id,
         code,
@@ -125,13 +132,31 @@ export async function POST(request: NextRequest) {
         (body.conditionMode || 'any') as CouponConditionMode,
         expiryDate,
         Math.max(1, Number(body.usageLimit) || 100),
+        body.perUserLimit != null ? Math.max(0, Number(body.perUserLimit)) : 1,
+        serializeCsvList(body.allowedClasses),
+        serializeCsvList(body.allowedCategories),
         body.showInHero !== false,
         body.status === 'inactive' ? 'inactive' : 'active',
       ]
     );
 
     const created = await client.query(`SELECT * FROM coupons WHERE id = $1`, [id]);
-    return NextResponse.json(mapAdminCoupon(created.rows[0]), { status: 201 });
+    const row = created.rows[0] as CouponRow;
+    const notifyWhatsApp = body.notifyWhatsApp !== false;
+    const willBroadcast =
+      notifyWhatsApp && String(row.status || '').toLowerCase() === 'active';
+
+    if (willBroadcast) {
+      scheduleCouponWhatsAppBroadcast(row);
+    }
+
+    return NextResponse.json(
+      {
+        ...mapAdminCoupon(row),
+        whatsappBroadcast: willBroadcast ? 'scheduled' : 'skipped',
+      },
+      { status: 201 }
+    );
   } catch (err: any) {
     if (err?.code === '23505') {
       return NextResponse.json({ error: 'Coupon code already exists.' }, { status: 409 });
@@ -182,8 +207,11 @@ export async function PATCH(request: NextRequest) {
         condition_mode = COALESCE($10, condition_mode),
         expiry_date = CASE WHEN $11::text = 'KEEP' THEN expiry_date ELSE $12 END,
         usage_limit = COALESCE($13, usage_limit),
-        show_in_hero = COALESCE($14, show_in_hero),
-        status = COALESCE($15, status)
+        per_user_limit = COALESCE($14, per_user_limit),
+        allowed_classes = CASE WHEN $15::text = 'KEEP' THEN allowed_classes ELSE $16 END,
+        allowed_categories = CASE WHEN $17::text = 'KEEP' THEN allowed_categories ELSE $18 END,
+        show_in_hero = COALESCE($19, show_in_hero),
+        status = COALESCE($20, status)
        WHERE id = $1`,
       [
         id,
@@ -199,6 +227,11 @@ export async function PATCH(request: NextRequest) {
         expiryDate === undefined ? 'KEEP' : 'SET',
         expiryDate === undefined ? null : expiryDate,
         body.usageLimit != null ? Math.max(1, Number(body.usageLimit)) : null,
+        body.perUserLimit != null ? Math.max(0, Number(body.perUserLimit)) : null,
+        body.allowedClasses === undefined ? 'KEEP' : 'SET',
+        body.allowedClasses === undefined ? null : serializeCsvList(body.allowedClasses),
+        body.allowedCategories === undefined ? 'KEEP' : 'SET',
+        body.allowedCategories === undefined ? null : serializeCsvList(body.allowedCategories),
         body.showInHero != null ? Boolean(body.showInHero) : null,
         body.status || null,
       ]

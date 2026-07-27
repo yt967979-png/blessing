@@ -1,12 +1,14 @@
 import { NextResponse } from 'next/server';
-import { getDbClient } from '@/lib/db';
+import { getDbClient, releaseDbClient } from '@/lib/db';
 import {
   getAuthenticatedUser,
   unauthorizedResponse,
   applyRateLimitAsync,
   clientIp,
 } from '@/lib/serverSecurity';
-import { priceCartItems, verifyRazorpayPayment } from '@/lib/orderPricing';
+import { priceCheckoutOrder } from '@/lib/checkoutPricing';
+import { ensureCouponSchema } from '@/lib/coupons';
+import { verifyRazorpayPayment } from '@/lib/orderPricing';
 
 export async function POST(request: Request) {
   const session = await getAuthenticatedUser(request);
@@ -20,24 +22,45 @@ export async function POST(request: Request) {
   let client: any = null;
   try {
     const body = await request.json();
-    const { items, currency = 'INR', receipt } = body;
+    const {
+      items,
+      currency = 'INR',
+      receipt,
+      couponCode,
+      freeBookId,
+    } = body;
 
     const keyId = process.env.RAZORPAY_KEY_ID;
     const keySecret = process.env.RAZORPAY_KEY_SECRET;
     if (!keyId || !keySecret) {
-      return NextResponse.json({ error: 'Razorpay is not configured on this server.' }, { status: 503 });
+      return NextResponse.json(
+        {
+          error:
+            'Razorpay is not configured yet. Add RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in Railway after your domain is approved.',
+          needsConfig: true,
+        },
+        { status: 503 }
+      );
     }
 
     client = await getDbClient();
     await client.query('BEGIN');
-    const priced = await priceCartItems(client, items);
+    await ensureCouponSchema(client);
+
+    const checkout = await priceCheckoutOrder(client, {
+      items,
+      userId: session.userId,
+      couponCode: couponCode || null,
+      freeBookId: freeBookId || null,
+      lockCoupon: false,
+    });
     await client.query('ROLLBACK');
 
-    if (!priced.ok) {
-      return NextResponse.json({ error: priced.error }, { status: priced.status });
+    if (!checkout.ok) {
+      return NextResponse.json({ error: checkout.error }, { status: checkout.status });
     }
 
-    const amountRupees = priced.total;
+    const amountRupees = checkout.totalAmount;
     if (amountRupees <= 0) {
       return NextResponse.json({ error: 'Invalid order amount.' }, { status: 400 });
     }
@@ -54,7 +77,10 @@ export async function POST(request: Request) {
         currency,
         receipt: receipt || `rcpt_${Date.now()}`,
         payment_capture: 1,
-        notes: { userId: session.userId },
+        notes: {
+          userId: session.userId,
+          coupon: checkout.appliedCouponCode || '',
+        },
       }),
     });
 
@@ -70,6 +96,9 @@ export async function POST(request: Request) {
       currency: orderData.currency,
       key: keyId,
       expectedRupees: amountRupees,
+      subtotal: checkout.subtotal,
+      discountAmount: checkout.discountAmount,
+      couponCode: checkout.appliedCouponCode,
     });
   } catch (err: any) {
     if (client) {
@@ -79,11 +108,7 @@ export async function POST(request: Request) {
     }
     return NextResponse.json({ error: err.message || 'Payment error' }, { status: 500 });
   } finally {
-    if (client) {
-      try {
-        await client.end();
-      } catch (_) {}
-    }
+    releaseDbClient(client);
   }
 }
 
@@ -91,6 +116,7 @@ export async function PUT(request: Request) {
   const session = await getAuthenticatedUser(request);
   if (!session) return unauthorizedResponse('Please login.');
 
+  let client: any = null;
   try {
     const {
       razorpay_order_id,
@@ -98,6 +124,8 @@ export async function PUT(request: Request) {
       razorpay_signature,
       expectedRupees,
       items,
+      couponCode,
+      freeBookId,
     } = await request.json();
 
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
@@ -106,15 +134,18 @@ export async function PUT(request: Request) {
 
     let amount = Number(expectedRupees || 0);
     if ((!amount || amount <= 0) && Array.isArray(items)) {
-      const client = await getDbClient();
-      try {
-        await client.query('BEGIN');
-        const priced = await priceCartItems(client, items);
-        await client.query('ROLLBACK');
-        if (priced.ok) amount = priced.total;
-      } finally {
-        await client.end();
-      }
+      client = await getDbClient();
+      await client.query('BEGIN');
+      await ensureCouponSchema(client);
+      const checkout = await priceCheckoutOrder(client, {
+        items,
+        userId: session.userId,
+        couponCode: couponCode || null,
+        freeBookId: freeBookId || null,
+        lockCoupon: false,
+      });
+      await client.query('ROLLBACK');
+      if (checkout.ok) amount = checkout.totalAmount;
     }
 
     if (!amount || amount <= 0) {
@@ -132,8 +163,10 @@ export async function PUT(request: Request) {
       return NextResponse.json({ verified: false, error: verified.error }, { status: 400 });
     }
 
-    return NextResponse.json({ verified: true });
+    return NextResponse.json({ verified: true, expectedRupees: amount });
   } catch (err: any) {
     return NextResponse.json({ verified: false, error: err.message }, { status: 500 });
+  } finally {
+    releaseDbClient(client);
   }
 }

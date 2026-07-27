@@ -109,7 +109,7 @@ export async function GET(request: Request) {
       let sql = `
         SELECT b.*, 
                COALESCE(COUNT(r.id), 0)::int as review_count,
-               COALESCE(AVG(r.rating), 5.0)::numeric(3,1) as avg_rating
+               COALESCE(AVG(r.rating), 0)::numeric(3,1) as avg_rating
         FROM books b
         LEFT JOIN reviews r ON b.id = r.book_id
         WHERE 1=1
@@ -157,7 +157,7 @@ export async function GET(request: Request) {
             price,
             mrp,
             discount,
-            rating: Number(d.avg_rating || 5.0),
+            rating: Number(d.review_count) > 0 ? Number(d.avg_rating || 0) : 0,
             reviews: Number(d.review_count || 0),
             badge: (d.badge && String(d.badge).trim()) || '',
             badgeColor: (d.badge && String(d.badge).trim())

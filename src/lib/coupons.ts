@@ -16,6 +16,9 @@ export interface CouponRow {
   expiry_date: string | Date | null;
   usage_limit: number;
   used_count: number;
+  per_user_limit: number;
+  allowed_classes: string | null;
+  allowed_categories: string | null;
   show_in_hero: boolean;
   status: string;
 }
@@ -33,6 +36,8 @@ export interface PublicCoupon {
   conditionMode: CouponConditionMode;
   expiryDate: string | null;
   label: string;
+  allowedClasses: string[];
+  allowedCategories: string[];
 }
 
 function num(v: unknown, fallback = 0) {
@@ -74,12 +79,55 @@ export function couponConditionLabel(c: Pick<CouponRow, 'minimum_amount' | 'mini
   return parts.join(' or ');
 }
 
+function parseCsvList(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  return String(raw)
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+export function serializeCsvList(values: string[] | null | undefined): string | null {
+  if (!values?.length) return null;
+  const cleaned = [...new Set(values.map((v) => v.trim().toLowerCase()).filter(Boolean))];
+  return cleaned.length ? cleaned.join(',') : null;
+}
+
+/** Match product API class/category inference from a books row. */
+export function bookMetaFromRow(row: {
+  title?: string;
+  category_id?: string;
+  department?: string;
+}) {
+  const isCombo =
+    row.category_id === 'cat-combos' || String(row.title || '').toLowerCase().includes('combo');
+  const classMatch = String(row.title || row.department || '').match(/(6th|7th|8th|9th|10th|11th|12th)/i);
+  const cls = classMatch ? classMatch[0].toLowerCase() : '10th';
+  const category = isCombo ? 'combo' : 'guide';
+  return { cls, category };
+}
+
+export function restrictionLabel(coupon: Pick<CouponRow, 'allowed_classes' | 'allowed_categories'>) {
+  const classes = parseCsvList(coupon.allowed_classes);
+  const categories = parseCsvList(coupon.allowed_categories);
+  const parts: string[] = [];
+  if (classes.length) parts.push(`${classes.join(', ')} std`);
+  if (categories.length) parts.push(categories.map((c) => (c === 'combo' ? 'combos' : 'guides')).join(', '));
+  return parts.length ? parts.join(' · ') : '';
+}
+
 export function mapPublicCoupon(row: CouponRow): PublicCoupon {
+  const allowedClasses = parseCsvList(row.allowed_classes);
+  const allowedCategories = parseCsvList(row.allowed_categories);
+  const restriction = restrictionLabel(row);
   return {
     id: row.id,
     code: row.code,
     title: row.title || row.code,
-    description: row.description || couponConditionLabel(row),
+    description:
+      row.description ||
+      [couponConditionLabel(row), restriction].filter(Boolean).join(' · ') ||
+      couponConditionLabel(row),
     offerType: (row.offer_type as CouponOfferType) || 'discount',
     discountType: (row.discount_type as CouponDiscountType) || 'percentage',
     discountValue: num(row.discount_value),
@@ -88,7 +136,86 @@ export function mapPublicCoupon(row: CouponRow): PublicCoupon {
     conditionMode: (row.condition_mode as CouponConditionMode) || 'any',
     expiryDate: row.expiry_date ? new Date(row.expiry_date).toISOString() : null,
     label: couponOfferLabel(row),
+    allowedClasses,
+    allowedCategories,
   };
+}
+
+export async function checkCouponCartRestrictions(
+  client: any,
+  coupon: CouponRow,
+  bookIds: string[]
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const allowedClasses = parseCsvList(coupon.allowed_classes);
+  const allowedCategories = parseCsvList(coupon.allowed_categories);
+  if (allowedClasses.length === 0 && allowedCategories.length === 0) return { ok: true };
+  if (bookIds.length === 0) {
+    return { ok: false, message: 'Cart is empty.' };
+  }
+
+  const res = await client.query(
+    `SELECT b.id, b.title, b.department, b.category_id FROM books b WHERE b.id = ANY($1)`,
+    [bookIds]
+  );
+  const byId = new Map<string, { cls: string; category: string }>(
+    res.rows.map((r: any) => [r.id as string, bookMetaFromRow(r)])
+  );
+
+  for (const id of bookIds) {
+    const meta = byId.get(id);
+    if (!meta) {
+      return { ok: false, message: 'A cart item is no longer in the catalog.' };
+    }
+    if (allowedClasses.length && !allowedClasses.includes(meta.cls)) {
+      return {
+        ok: false,
+        message: `This coupon applies to ${allowedClasses.join(', ')} standard books only.`,
+      };
+    }
+    if (allowedCategories.length && !allowedCategories.includes(meta.category)) {
+      const label = allowedCategories.includes('combo') ? 'combo packs' : 'guides';
+      return {
+        ok: false,
+        message: `This coupon applies to ${label} only.`,
+      };
+    }
+  }
+
+  return { ok: true };
+}
+
+export async function getUserCouponRedemptionCount(
+  client: any,
+  couponId: string,
+  userId: string
+): Promise<number> {
+  const res = await client.query(
+    `SELECT COUNT(*)::int AS c FROM coupon_redemptions WHERE coupon_id = $1 AND user_id = $2`,
+    [couponId, userId]
+  );
+  return Number(res.rows[0]?.c || 0);
+}
+
+/** Enforce once-per-user (or custom per_user_limit; 0 = unlimited per user). */
+export async function checkUserCouponLimit(
+  client: any,
+  coupon: CouponRow,
+  userId: string
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const limit = num(coupon.per_user_limit, 1);
+  if (limit <= 0) return { ok: true };
+
+  const usedByUser = await getUserCouponRedemptionCount(client, coupon.id, userId);
+  if (usedByUser >= limit) {
+    return {
+      ok: false,
+      message:
+        limit === 1
+          ? 'You have already used this coupon.'
+          : `You can use this coupon at most ${limit} time(s).`,
+    };
+  }
+  return { ok: true };
 }
 
 export function checkCouponEligibility(
@@ -168,6 +295,9 @@ export async function ensureCouponSchema(client: any) {
     ALTER TABLE coupons ADD COLUMN IF NOT EXISTS used_count INT DEFAULT 0;
     ALTER TABLE coupons ADD COLUMN IF NOT EXISTS show_in_hero BOOLEAN DEFAULT true;
     ALTER TABLE coupons ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+    ALTER TABLE coupons ADD COLUMN IF NOT EXISTS per_user_limit INT DEFAULT 1;
+    ALTER TABLE coupons ADD COLUMN IF NOT EXISTS allowed_classes TEXT;
+    ALTER TABLE coupons ADD COLUMN IF NOT EXISTS allowed_categories TEXT;
     ALTER TABLE orders ADD COLUMN IF NOT EXISTS coupon_code VARCHAR(50);
     ALTER TABLE orders ADD COLUMN IF NOT EXISTS coupon_id VARCHAR(255);
     CREATE TABLE IF NOT EXISTS coupon_redemptions (
@@ -177,5 +307,7 @@ export async function ensureCouponSchema(client: any) {
       order_id VARCHAR(255),
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
+    CREATE INDEX IF NOT EXISTS idx_coupon_redemptions_coupon_user
+      ON coupon_redemptions (coupon_id, user_id);
   `);
 }

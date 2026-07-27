@@ -774,6 +774,12 @@ async function runSchemaInit(client: any) {
 
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_address TEXT;
         ALTER TABLE reviews ADD COLUMN IF NOT EXISTS user_name VARCHAR(255);
+        ALTER TABLE reviews ADD COLUMN IF NOT EXISTS order_id VARCHAR(255);
+        ALTER TABLE reviews ADD COLUMN IF NOT EXISTS images JSONB DEFAULT '[]'::jsonb;
+        ALTER TABLE reviews ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+        ALTER TABLE reviews ADD COLUMN IF NOT EXISTS verified_purchase BOOLEAN DEFAULT TRUE;
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_reviews_user_book
+          ON reviews (user_id, book_id) WHERE user_id IS NOT NULL AND book_id IS NOT NULL;
         ALTER TABLE books ADD COLUMN IF NOT EXISTS badge VARCHAR(100) DEFAULT '';
         ALTER TABLE books ADD COLUMN IF NOT EXISTS stock INT DEFAULT 50;
         ALTER TABLE users DROP COLUMN IF EXISTS email_verified;
@@ -786,6 +792,9 @@ async function runSchemaInit(client: any) {
         ALTER TABLE coupons ADD COLUMN IF NOT EXISTS used_count INT DEFAULT 0;
         ALTER TABLE coupons ADD COLUMN IF NOT EXISTS show_in_hero BOOLEAN DEFAULT true;
         ALTER TABLE coupons ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+        ALTER TABLE coupons ADD COLUMN IF NOT EXISTS per_user_limit INT DEFAULT 1;
+        ALTER TABLE coupons ADD COLUMN IF NOT EXISTS allowed_classes TEXT;
+        ALTER TABLE coupons ADD COLUMN IF NOT EXISTS allowed_categories TEXT;
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS coupon_code VARCHAR(50);
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS coupon_id VARCHAR(255);
 
@@ -796,6 +805,8 @@ async function runSchemaInit(client: any) {
           order_id VARCHAR(255),
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
+        CREATE INDEX IF NOT EXISTS idx_coupon_redemptions_coupon_user
+          ON coupon_redemptions (coupon_id, user_id);
       `);
     } catch (e) {
       /* schema already exists or partial — safe to continue */

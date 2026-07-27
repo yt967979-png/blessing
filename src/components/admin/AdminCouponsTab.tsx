@@ -19,9 +19,18 @@ export interface AdminCoupon {
   expiryDate: string | null;
   usageLimit: number;
   usedCount: number;
+  perUserLimit: number;
+  allowedClasses: string[];
+  allowedCategories: string[];
   showInHero: boolean;
   status: string;
 }
+
+const CLASS_OPTIONS = ['6th', '7th', '8th', '9th', '10th', '11th', '12th'] as const;
+const CATEGORY_OPTIONS = [
+  { id: 'guide', label: 'Guides' },
+  { id: 'combo', label: 'Combo packs' },
+] as const;
 
 const emptyForm = {
   code: '',
@@ -35,6 +44,10 @@ const emptyForm = {
   conditionMode: 'any' as 'any' | 'all' | 'amount' | 'quantity',
   expiryDate: '',
   usageLimit: 100,
+  perUserLimit: 1,
+  allowedClasses: [] as string[],
+  allowedCategories: [] as string[],
+  notifyWhatsApp: true,
   showInHero: true,
   status: 'active' as 'active' | 'inactive',
 };
@@ -51,6 +64,27 @@ export default function AdminCouponsTab({
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ ...emptyForm });
   const [showForm, setShowForm] = useState(false);
+  const [redemptions, setRedemptions] = useState<any[]>([]);
+
+  const toggleFormList = (key: 'allowedClasses' | 'allowedCategories', value: string) => {
+    setForm((prev) => {
+      const list = prev[key];
+      const next = list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
+      return { ...prev, [key]: next };
+    });
+  };
+
+  const loadRedemptions = useCallback(async () => {
+    try {
+      const res = await fetch('/api/coupons/redemptions?limit=50', { headers: authHeaders(user) });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) setRedemptions(data);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [user]);
 
   const loadCoupons = useCallback(async () => {
     setLoading(true);
@@ -69,7 +103,8 @@ export default function AdminCouponsTab({
 
   useEffect(() => {
     void loadCoupons();
-  }, [loadCoupons]);
+    void loadRedemptions();
+  }, [loadCoupons, loadRedemptions]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -92,10 +127,15 @@ export default function AdminCouponsTab({
         showToast(`❌ ${data.error || 'Failed to create coupon'}`);
         return;
       }
-      showToast(`✅ Coupon ${data.code} created`);
+      showToast(
+        data.whatsappBroadcast === 'scheduled'
+          ? `✅ Coupon ${data.code} created — WhatsApp alerts sending to all users`
+          : `✅ Coupon ${data.code} created`
+      );
       setForm({ ...emptyForm });
       setShowForm(false);
       await loadCoupons();
+      await loadRedemptions();
     } finally {
       setSaving(false);
     }
@@ -111,6 +151,7 @@ export default function AdminCouponsTab({
     if (res.ok) {
       showToast(next === 'active' ? 'Coupon activated' : 'Coupon deactivated');
       await loadCoupons();
+      await loadRedemptions();
     }
   };
 
@@ -123,6 +164,7 @@ export default function AdminCouponsTab({
     if (res.ok) {
       showToast('Coupon deleted');
       await loadCoupons();
+      await loadRedemptions();
     }
   };
 
@@ -304,7 +346,7 @@ export default function AdminCouponsTab({
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label className="text-[10px] font-black uppercase text-gray-500">Usage Limit</label>
+              <label className="text-[10px] font-black uppercase text-gray-500">Usage Limit (total)</label>
               <input
                 type="number"
                 min={1}
@@ -313,7 +355,26 @@ export default function AdminCouponsTab({
                 className="w-full mt-1 px-3 py-2 border rounded-lg text-sm"
               />
             </div>
+            <div>
+              <label className="text-[10px] font-black uppercase text-gray-500">Per Customer Limit</label>
+              <input
+                type="number"
+                min={0}
+                value={form.perUserLimit}
+                onChange={(e) => setForm({ ...form, perUserLimit: Number(e.target.value) })}
+                className="w-full mt-1 px-3 py-2 border rounded-lg text-sm"
+              />
+              <p className="text-[10px] text-gray-400 mt-1">1 = once per user (recommended). 0 = unlimited per user.</p>
+            </div>
             <label className="flex items-center gap-2 mt-6 text-sm font-semibold">
+              <input
+                type="checkbox"
+                checked={form.notifyWhatsApp}
+                onChange={(e) => setForm({ ...form, notifyWhatsApp: e.target.checked })}
+              />
+              Notify all users on WhatsApp (with expiry)
+            </label>
+            <label className="flex items-center gap-2 text-sm font-semibold">
               <input
                 type="checkbox"
                 checked={form.showInHero}
@@ -321,6 +382,44 @@ export default function AdminCouponsTab({
               />
               Show in homepage hero
             </label>
+          </div>
+
+          <p className="text-[10px] text-gray-500">
+            WhatsApp needs Admin → WhatsApp linked. Each registered user gets one message with code and expiry.
+          </p>
+
+          <div className="border rounded-xl p-4 space-y-3 bg-gray-50">
+            <p className="text-[10px] font-black uppercase text-gray-500">Restrict to (optional — leave empty for all)</p>
+            <div>
+              <p className="text-xs font-bold text-gray-700 mb-2">Standard / Class</p>
+              <div className="flex flex-wrap gap-2">
+                {CLASS_OPTIONS.map((cls) => (
+                  <label key={cls} className="inline-flex items-center gap-1.5 text-xs font-semibold bg-white border rounded-lg px-2.5 py-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={form.allowedClasses.includes(cls)}
+                      onChange={() => toggleFormList('allowedClasses', cls)}
+                    />
+                    {cls}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div>
+              <p className="text-xs font-bold text-gray-700 mb-2">Product type</p>
+              <div className="flex flex-wrap gap-2">
+                {CATEGORY_OPTIONS.map((cat) => (
+                  <label key={cat.id} className="inline-flex items-center gap-1.5 text-xs font-semibold bg-white border rounded-lg px-2.5 py-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={form.allowedCategories.includes(cat.id)}
+                      onChange={() => toggleFormList('allowedCategories', cat.id)}
+                    />
+                    {cat.label}
+                  </label>
+                ))}
+              </div>
+            </div>
           </div>
 
           <button
@@ -383,6 +482,16 @@ export default function AdminCouponsTab({
                   {fmtExpiry(c.expiryDate)}
                   {' · Used: '}
                   {c.usedCount}/{c.usageLimit}
+                  {' · Per user: '}
+                  {c.perUserLimit === 0 ? '∞' : c.perUserLimit}
+                  {(c.allowedClasses?.length || c.allowedCategories?.length) ? (
+                    <>
+                      {' · '}
+                      {c.allowedClasses?.length ? `${c.allowedClasses.join(', ')} std` : ''}
+                      {c.allowedClasses?.length && c.allowedCategories?.length ? ' · ' : ''}
+                      {c.allowedCategories?.length ? c.allowedCategories.join(', ') : ''}
+                    </>
+                  ) : null}
                 </p>
               </div>
               <div className="flex gap-2">
@@ -405,6 +514,59 @@ export default function AdminCouponsTab({
           ))}
         </div>
       )}
+
+      <div className="bg-white border rounded-xl p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-bold text-gray-900">Recent redemptions</h3>
+          <button
+            type="button"
+            onClick={() => void loadRedemptions()}
+            className="text-xs font-bold text-[#2874f0] hover:underline"
+          >
+            Refresh
+          </button>
+        </div>
+        {redemptions.length === 0 ? (
+          <p className="text-xs text-gray-500">No coupon uses yet.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-left text-gray-500 border-b">
+                  <th className="py-2 pr-3">When</th>
+                  <th className="py-2 pr-3">Coupon</th>
+                  <th className="py-2 pr-3">Customer</th>
+                  <th className="py-2 pr-3">Order</th>
+                </tr>
+              </thead>
+              <tbody>
+                {redemptions.map((r) => (
+                  <tr key={r.id} className="border-b border-gray-100">
+                    <td className="py-2 pr-3 whitespace-nowrap">
+                      {r.usedAt
+                        ? new Date(r.usedAt).toLocaleString('en-IN', {
+                            day: 'numeric',
+                            month: 'short',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })
+                        : '—'}
+                    </td>
+                    <td className="py-2 pr-3 font-bold text-[#2874f0]">{r.couponCode}</td>
+                    <td className="py-2 pr-3">
+                      {r.userName || '—'}
+                      {r.userPhone ? ` · ${r.userPhone}` : ''}
+                    </td>
+                    <td className="py-2 pr-3">
+                      {r.orderId} · ₹{Number(r.orderTotal || 0).toLocaleString('en-IN')}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -10,13 +10,8 @@ import {
   clientIp,
 } from '@/lib/serverSecurity';
 import { priceCartItems, verifyRazorpayPayment } from '@/lib/orderPricing';
-import {
-  checkCouponEligibility,
-  computeDiscountAmount,
-  ensureCouponSchema,
-  fetchCouponByCode,
-  normalizeCouponCode,
-} from '@/lib/coupons';
+import { priceCheckoutOrder } from '@/lib/checkoutPricing';
+import { ensureCouponSchema } from '@/lib/coupons';
 
 function mapOrderRow(o: any) {
   let addrObj: any = {};
@@ -167,88 +162,32 @@ export async function POST(request: Request) {
     await client.query('BEGIN');
     await ensureCouponSchema(client);
 
-    const priced = await priceCartItems(client, items);
-    if (!priced.ok) {
+    const checkout = await priceCheckoutOrder(client, {
+      items,
+      userId,
+      couponCode: couponCode || null,
+      freeBookId: freeBookId || null,
+      lockCoupon: true,
+    });
+
+    if (!checkout.ok) {
       await client.query('ROLLBACK');
-      return NextResponse.json({ error: priced.error }, { status: priced.status });
+      return NextResponse.json({ error: checkout.error }, { status: checkout.status });
     }
 
-    let { total: totalAmount, verifiedItems } = priced;
-    const calculatedSubtotal = totalAmount;
-    let discountAmount = 0;
-    let appliedCouponId: string | null = null;
-    let appliedCouponCode: string | null = null;
+    const {
+      subtotal: calculatedSubtotal,
+      discountAmount,
+      totalAmount,
+      verifiedItems,
+      appliedCouponId,
+      appliedCouponCode,
+      coupon,
+    } = checkout;
 
-    const normalizedCoupon = couponCode ? normalizeCouponCode(String(couponCode)) : '';
-    if (normalizedCoupon) {
-      const coupon = await fetchCouponByCode(client, normalizedCoupon);
-      if (!coupon) {
-        await client.query('ROLLBACK');
-        return NextResponse.json({ error: 'Invalid coupon code.' }, { status: 400 });
-      }
-
-      const cartQty = verifiedItems.reduce((s, i) => s + Number(i.qty || 0), 0);
-      const eligible = checkCouponEligibility(coupon, calculatedSubtotal, cartQty);
-      if (!eligible.ok) {
-        await client.query('ROLLBACK');
-        return NextResponse.json({ error: eligible.message }, { status: 400 });
-      }
-
-      if (coupon.offer_type === 'free_book') {
-        const pickId = freeBookId ? String(freeBookId) : '';
-        if (!pickId) {
-          await client.query('ROLLBACK');
-          return NextResponse.json({ error: 'Please select your free book for this coupon.' }, { status: 400 });
-        }
-
-        const bookRes = await client.query(
-          `SELECT id, title, price, discount_price, stock, status FROM books WHERE id = $1 LIMIT 1 FOR UPDATE`,
-          [pickId]
-        );
-        if (!bookRes.rows.length) {
-          await client.query('ROLLBACK');
-          return NextResponse.json({ error: 'Free book not found.' }, { status: 400 });
-        }
-        const book = bookRes.rows[0];
-        const stock = Number(book.stock ?? 0);
-        if (book.status === 'out_of_stock' || stock <= 0) {
-          await client.query('ROLLBACK');
-          return NextResponse.json({ error: `"${book.title}" is out of stock.` }, { status: 409 });
-        }
-
-        const mrp = Number(book.price) || 0;
-        const rawSale =
-          book.discount_price == null || book.discount_price === '' ? NaN : Number(book.discount_price);
-        const unitPrice =
-          Number.isFinite(rawSale) && rawSale > 0 && rawSale < mrp ? rawSale : mrp;
-        const cap = Number(coupon.discount_value) || 0;
-        if (cap > 0 && unitPrice > cap) {
-          await client.query('ROLLBACK');
-          return NextResponse.json({ error: `Free book must be ₹${cap} or less.` }, { status: 400 });
-        }
-
-        discountAmount = unitPrice;
-        verifiedItems = [
-          ...verifiedItems,
-          {
-            id: book.id,
-            title: `(FREE) ${book.title}`,
-            price: 0,
-            qty: 1,
-            subtotal: 0,
-            isFreeGift: true,
-          },
-        ];
-      } else {
-        discountAmount = computeDiscountAmount(coupon, calculatedSubtotal);
-        totalAmount = Math.max(0, calculatedSubtotal - discountAmount);
-      }
-
-      appliedCouponId = coupon.id;
-      appliedCouponCode = coupon.code;
-
+    if (appliedCouponId && coupon) {
       await client.query(`UPDATE coupons SET used_count = COALESCE(used_count, 0) + 1 WHERE id = $1`, [
-        coupon.id,
+        appliedCouponId,
       ]);
     }
 
@@ -257,6 +196,22 @@ export async function POST(request: Request) {
         await client.query('ROLLBACK');
         return NextResponse.json({ error: 'Payment details required for online checkout.' }, { status: 400 });
       }
+
+      const dupPay = await client.query(
+        `SELECT order_number, id, total_amount FROM orders WHERE razorpay_payment_id = $1 LIMIT 1`,
+        [razorpayPaymentId]
+      );
+      if (dupPay.rows.length) {
+        await client.query('ROLLBACK');
+        const existing = dupPay.rows[0];
+        return NextResponse.json({
+          orderId: existing.order_number,
+          duplicate: true,
+          totalAmount: Number(existing.total_amount || totalAmount),
+          message: 'Payment already processed — returning your existing order.',
+        });
+      }
+
       const verified = await verifyRazorpayPayment({
         razorpayOrderId,
         razorpayPaymentId,

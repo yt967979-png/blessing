@@ -59,6 +59,7 @@ export const ModalsBundle = () => {
     clearAppliedCoupon,
     pendingCouponCode,
     products,
+    publicCoupons,
     clearCart,
     addToCart,
     user,
@@ -166,6 +167,19 @@ export const ModalsBundle = () => {
       ? newAddr
       : savedAddresses.find((a) => a.id === selectedAddrId) || savedAddresses[0];
 
+  const couponMeta =
+    appliedCoupon ||
+    publicCoupons.find((c) => c.code === pendingCouponCode || c.code === couponInput.toUpperCase());
+
+  const freeBookOptions = products.filter((p) => {
+    if (!p.inStock) return false;
+    const classes = couponMeta?.allowedClasses || [];
+    const categories = couponMeta?.allowedCategories || [];
+    if (classes.length && !classes.includes(String(p.cls).toLowerCase())) return false;
+    if (categories.length && !categories.includes(p.category)) return false;
+    return true;
+  });
+
   const handleSaveInlineAddress = async (e?: React.MouseEvent) => {
     if (e) e.preventDefault();
     if (!user?.id) {
@@ -251,6 +265,9 @@ export const ModalsBundle = () => {
         if (orderData.orderId) {
           serverOrderId = orderData.orderId;
         }
+        if (orderData.duplicate) {
+          showToast('ℹ️ Payment already recorded — order restored.');
+        }
       } catch (_) {
         showToast('❌ Could not place order. Try again.');
         return;
@@ -289,12 +306,23 @@ export const ModalsBundle = () => {
             'Content-Type': 'application/json',
             ...(user?.token ? { Authorization: `Bearer ${user.token}` } : {}),
           },
-          body: JSON.stringify({ items: cartPayload, receipt: receiptId }),
+          body: JSON.stringify({
+            items: cartPayload,
+            receipt: receiptId,
+            couponCode: appliedCoupon?.code || null,
+            freeBookId: appliedCoupon?.freeBookId || null,
+          }),
         });
         const rzpData = await res.json();
 
         if (!res.ok || !rzpData.id) {
-          showToast('❌ Could not create payment order. Please try again.');
+          if (rzpData.needsConfig) {
+            showToast('⚠️ Razorpay not configured — use COD or add API keys in Railway.');
+            window.location.href = '/payment/failed?reason=no_config';
+            return;
+          }
+          showToast(`❌ ${rzpData.error || 'Could not create payment order.'}`);
+          window.location.href = '/payment/failed?reason=create_failed';
           return;
         }
 
@@ -325,12 +353,15 @@ export const ModalsBundle = () => {
                   razorpay_signature: response.razorpay_signature,
                   items: cartPayload,
                   expectedRupees: rzpData.expectedRupees,
+                  couponCode: appliedCoupon?.code || null,
+                  freeBookId: appliedCoupon?.freeBookId || null,
                 }),
               });
               const verifyData = await verifyRes.json();
 
               if (!verifyData.verified) {
                 showToast(`❌ ${verifyData.error || 'Payment verification failed.'}`);
+                window.location.href = '/payment/failed?reason=verify_failed';
                 return;
               }
 
@@ -343,12 +374,15 @@ export const ModalsBundle = () => {
             },
             modal: {
               ondismiss: function () {
-                showToast('Payment popup closed. You can retry anytime.');
+                window.location.href = '/payment/failed?reason=dismissed';
               },
             },
           };
 
           const rzp = new (window as any).Razorpay(options);
+          rzp.on('payment.failed', function () {
+            window.location.href = '/payment/failed?reason=failed';
+          });
           rzp.open();
           return;
         }
@@ -796,9 +830,7 @@ export const ModalsBundle = () => {
                         className="w-full px-3 py-2 border rounded-lg text-xs bg-white"
                       >
                         <option value="">Select a book…</option>
-                        {products
-                          .filter((p) => p.inStock)
-                          .map((p) => (
+                        {freeBookOptions.map((p) => (
                             <option key={p.id} value={String(p.id)}>
                               {p.title} — ₹{p.price}
                             </option>

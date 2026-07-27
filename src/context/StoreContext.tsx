@@ -53,6 +53,8 @@ export interface PublicCoupon {
   conditionMode: string;
   expiryDate: string | null;
   label: string;
+  allowedClasses?: string[];
+  allowedCategories?: string[];
 }
 
 export interface AppliedCoupon {
@@ -63,6 +65,8 @@ export interface AppliedCoupon {
   total: number;
   freeBookId?: string;
   freeBookTitle?: string;
+  allowedClasses?: string[];
+  allowedCategories?: string[];
 }
 
 interface StoreContextType {
@@ -546,10 +550,18 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       showToast('Add books to cart before applying a coupon');
       return false;
     }
+    if (!user?.token) {
+      showToast('Please login to apply a coupon');
+      setIsAuthOpen(true);
+      return false;
+    }
     try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (user?.token) headers.Authorization = `Bearer ${user.token}`;
+
       const res = await fetch('/api/coupons/validate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           code: trimmed,
           items: cart.map((i) => ({ id: i.id, qty: i.qty })),
@@ -565,7 +577,15 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (data.needsFreeBook) {
         showToast('Select your free book below');
         setPendingCouponCode(trimmed);
-        setAppliedCoupon(null);
+        setAppliedCoupon({
+          code: data.coupon.code,
+          label: data.coupon.label,
+          offerType: 'free_book',
+          discountAmount: 0,
+          total: data.total ?? cartTotal,
+          allowedClasses: data.coupon.allowedClasses || [],
+          allowedCategories: data.coupon.allowedCategories || [],
+        });
         return false;
       }
       setAppliedCoupon({
@@ -576,6 +596,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         total: data.total ?? cartTotal,
         freeBookId: data.freeBook?.id,
         freeBookTitle: data.freeBook?.title,
+        allowedClasses: data.coupon.allowedClasses || [],
+        allowedCategories: data.coupon.allowedCategories || [],
       });
       setPendingCouponCode('');
       showToast(`✅ Coupon ${data.coupon.code} applied`);

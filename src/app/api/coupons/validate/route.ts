@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDbClient, releaseDbClient } from '@/lib/db';
+import { getAuthenticatedUser } from '@/lib/serverSecurity';
 import { priceCartItems } from '@/lib/orderPricing';
 import {
   checkCouponEligibility,
+  checkCouponCartRestrictions,
+  checkUserCouponLimit,
   computeDiscountAmount,
   ensureCouponSchema,
   fetchCouponByCode,
@@ -37,9 +40,24 @@ export async function POST(request: NextRequest) {
     }
 
     const cartQty = priced.verifiedItems.reduce((s, i) => s + Number(i.qty || 0), 0);
+    const cartBookIds = priced.verifiedItems.map((i) => String(i.id));
+
     const eligible = checkCouponEligibility(coupon, priced.total, cartQty);
     if (!eligible.ok) {
       return NextResponse.json({ valid: false, error: eligible.message });
+    }
+
+    const cartRules = await checkCouponCartRestrictions(client, coupon, cartBookIds);
+    if (!cartRules.ok) {
+      return NextResponse.json({ valid: false, error: cartRules.message });
+    }
+
+    const session = await getAuthenticatedUser(request);
+    if (session?.userId) {
+      const userLimit = await checkUserCouponLimit(client, coupon, session.userId);
+      if (!userLimit.ok) {
+        return NextResponse.json({ valid: false, error: userLimit.message });
+      }
     }
 
     let discountAmount = 0;

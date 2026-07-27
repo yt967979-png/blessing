@@ -115,7 +115,7 @@ export const ProductCard = ({ product }: { product: Product }) => {
         <div className="flex items-center gap-1 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200/80">
           <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
           <span className="text-[10px] font-black text-slate-900">
-            {product.rating || 5.0}
+            {(product.reviews ?? 0) > 0 ? (product.rating || 0).toFixed(1) : 'New'}
           </span>
           <span className="text-[9px] text-slate-500 font-bold">
             ({product.reviews ?? 0})
