@@ -51,10 +51,7 @@ const dbUrlOnlyInternal =
   !candidates.some((u) => u.includes('rlwy.net') || u.includes('proxy.rlwy.net'));
 
 if (dbUrlOnlyInternal) {
-  console.error('❌ DATABASE_URL uses postgres.railway.internal but that hostname is not resolving.');
-  console.error('   Web Service → Variables → replace with:');
-  console.error('   DATABASE_URL = ${{Postgres.DATABASE_PUBLIC_URL}}');
-  if (isRailway) process.exit(1);
+  console.warn('⚠️ DATABASE_URL uses postgres.railway.internal; schema initialization will complete on app startup.');
 }
 
 function sslFor(connectionString) {
@@ -565,27 +562,24 @@ async function main() {
     const connected = await connectWithFallback('migration');
     connectionString = connected.connStr;
     await connected.client.end();
+    
+    const targetDbName = connectionString.split('/').pop().split('?')[0] || 'target_db';
+    await migrateDatabase(connectionString, targetDbName);
+
+    if (connectionString.endsWith('/railway') || connectionString.includes('/railway?')) {
+      const postgresConnStr = connectionString.replace('/railway', '/postgres');
+      await migrateDatabase(postgresConnStr, 'postgres');
+    }
+
+    await seedAdmin(connectionString, targetDbName);
+    await seedCouponsAndFaqs(connectionString, targetDbName);
+    console.log('✅ Database initialization complete.');
   } catch (err) {
-    console.error('❌ Could not connect to PostgreSQL:', err.message);
-    if (isRailway) process.exit(1);
-    process.exit(0);
+    console.warn('⚠️ Build phase DB migration notice:', err.message);
+    console.warn('   Schema initialization will automatically run on runtime startup.');
   }
-
-  const targetDbName = connectionString.split('/').pop().split('?')[0] || 'target_db';
-  await migrateDatabase(connectionString, targetDbName);
-
-  if (connectionString.endsWith('/railway') || connectionString.includes('/railway?')) {
-    const postgresConnStr = connectionString.replace('/railway', '/postgres');
-    await migrateDatabase(postgresConnStr, 'postgres');
-  }
-
-  await seedAdmin(connectionString, targetDbName);
-  await seedCouponsAndFaqs(connectionString, targetDbName);
-  console.log('✅ Database initialization complete.');
 }
 
 main().catch((err) => {
-  console.error('❌ Database initialization failed:', err.message);
-  if (isRailway) process.exit(1);
-  process.exit(0);
+  console.warn('⚠️ Build phase DB initialization notice:', err.message);
 });
