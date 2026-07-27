@@ -113,18 +113,13 @@ async function destroyPool() {
 }
 
 function createPool(connectionString: string): Pool {
-  const p = new Pool({
+  return new Pool({
     connectionString,
-    max: Number(process.env.DB_POOL_MAX || 5),
-    idleTimeoutMillis: 20000,
-    connectionTimeoutMillis: Number(process.env.DB_CONNECT_TIMEOUT_MS || 15000),
-    allowExitOnIdle: true,
+    max: Number(process.env.DB_POOL_MAX || 10),
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: Number(process.env.DB_CONNECT_TIMEOUT_MS || 5000),
     ssl: sslFor(connectionString),
   });
-  p.on('error', (err) => {
-    console.error('[db] idle client error:', err.message);
-  });
-  return p;
 }
 
 export function getDbPool(): Pool {
