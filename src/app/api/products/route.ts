@@ -2,28 +2,53 @@ import { NextResponse } from 'next/server';
 import { getDbClient } from '@/lib/db';
 import { verifyAdminRequest, forbiddenResponse } from '@/lib/serverSecurity';
 
-// High-concurrency in-memory RAM cache (60-second TTL)
-let productsCache: { data: any[]; timestamp: number } | null = null;
-const CACHE_TTL_MS = 60000;
+// Shared catalog cache: same search/class/slug reused without hitting DB again
+const queryCache = new Map<string, { data: any[]; timestamp: number }>();
+const CACHE_TTL_MS = 120000; // 2 minutes RAM
+const MAX_CACHE_KEYS = 80;
 
 export function invalidateProductsCache() {
-  productsCache = null;
+  queryCache.clear();
 }
+
+function cacheKey(cls: string | null, search: string | null, slug: string | null) {
+  return `c=${cls || ''}|s=${(search || '').trim().toLowerCase()}|g=${slug || ''}`;
+}
+
+function readCache(key: string) {
+  const hit = queryCache.get(key);
+  if (!hit) return null;
+  if (Date.now() - hit.timestamp > CACHE_TTL_MS) {
+    queryCache.delete(key);
+    return null;
+  }
+  return hit.data;
+}
+
+function writeCache(key: string, data: any[]) {
+  if (queryCache.size >= MAX_CACHE_KEYS) {
+    const first = queryCache.keys().next().value;
+    if (first) queryCache.delete(first);
+  }
+  queryCache.set(key, { data, timestamp: Date.now() });
+}
+
+const CDN_HEADERS = {
+  'Cache-Control': 'public, max-age=60, s-maxage=300, stale-while-revalidate=600',
+  Vary: 'Accept-Encoding',
+};
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const cls = searchParams.get('cls');
   const search = searchParams.get('search');
   const slug = searchParams.get('slug');
+  const key = cacheKey(cls, search, slug);
 
-  // Serve from zero-latency memory cache if no specific search query
-  const now = Date.now();
-  if (!cls && !search && !slug && productsCache && (now - productsCache.timestamp < CACHE_TTL_MS)) {
-    return NextResponse.json(productsCache.data, {
-      headers: {
-        'Cache-Control': 'public, max-age=60, s-maxage=300, stale-while-revalidate=600',
-        'X-Cache-Status': 'HIT_MEMORY_RAM',
-      },
+  const cached = readCache(key);
+  if (cached) {
+    return NextResponse.json(cached, {
+      headers: { ...CDN_HEADERS, 'X-Cache-Status': 'HIT_MEMORY' },
     });
   }
 
@@ -94,14 +119,9 @@ export async function GET(request: Request) {
             inStock: d.status !== 'out_of_stock' && (d.stock === undefined || d.stock === null || Number(d.stock) > 0),
           };
         });
-        if (!cls && !search && !slug) {
-          productsCache = { data: mapped, timestamp: Date.now() };
-        }
+        writeCache(key, mapped);
         return NextResponse.json(mapped, {
-          headers: {
-            'Cache-Control': 'public, max-age=60, s-maxage=300, stale-while-revalidate=600',
-            'X-Cache-Status': 'MISS_FETCHED_DB',
-          },
+          headers: { ...CDN_HEADERS, 'X-Cache-Status': 'MISS_DB' },
         });
       }
     }

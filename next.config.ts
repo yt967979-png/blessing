@@ -43,11 +43,38 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        source: "/api/products/(.*)",
+        source: "/api/products",
         headers: [
           {
             key: "Cache-Control",
             value: "public, max-age=60, s-maxage=300, stale-while-revalidate=600",
+          },
+        ],
+      },
+      {
+        source: "/api/products/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=60, s-maxage=300, stale-while-revalidate=600",
+          },
+        ],
+      },
+      {
+        source: "/track",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=0, s-maxage=30, stale-while-revalidate=60",
+          },
+        ],
+      },
+      {
+        source: "/",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=0, s-maxage=60, stale-while-revalidate=300",
           },
         ],
       },
