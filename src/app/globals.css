@@ -15,6 +15,58 @@ body {
   background-color: #f8fafc;
   color: #0f172a;
   overflow-x: hidden;
+  -webkit-tap-highlight-color: transparent;
+  text-size-adjust: 100%;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Mobile page shell — clears fixed bottom nav */
+.page-mobile-nav {
+  padding-bottom: calc(4.75rem + env(safe-area-inset-bottom, 0px));
+}
+
+@media (min-width: 768px) {
+  .page-mobile-nav {
+    padding-bottom: 0;
+  }
+}
+
+.touch-target {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* Horizontal scroll chips (filters, admin tabs) */
+.scroll-chips {
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.scroll-chips::-webkit-scrollbar {
+  display: none;
+}
+
+input, select, textarea, button {
+  font-size: 16px;
+}
+
+@media (min-width: 640px) {
+  input, select, textarea, button {
+    font-size: inherit;
+  }
 }
 
 h1, h2, h3, h4, h5, h6, .font-heading {

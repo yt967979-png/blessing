@@ -254,7 +254,7 @@ function TrackForm() {
 
 export default function TrackPage() {
   return (
-    <main className="min-h-screen bg-slate-50 flex flex-col pb-24 md:pb-0">
+    <main className="min-h-screen bg-slate-50 flex flex-col page-mobile-nav">
       <AnnouncementBar />
       <Header />
       <div className="flex-1 px-4 py-8">

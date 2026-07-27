@@ -19,6 +19,7 @@ export interface Product {
   description: string;
   features: string[];
   inStock: boolean;
+  stock?: number;
   isNew?: boolean;
   isBestSeller?: boolean;
   isTrending?: boolean;

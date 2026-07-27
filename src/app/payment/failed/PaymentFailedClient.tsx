@@ -24,7 +24,7 @@ export default function PaymentFailedPage() {
           : 'Your online payment did not complete. No money was charged if you cancelled.';
 
   return (
-    <main className="min-h-screen bg-slate-50 flex flex-col pb-24">
+    <main className="min-h-screen bg-slate-50 flex flex-col page-mobile-nav">
       <Header />
       <NavBar />
 

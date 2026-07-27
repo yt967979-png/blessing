@@ -24,6 +24,7 @@ function SearchContent() {
   const [selectedCategory, setSelectedCategory] = useState(categoryParam);
   const [maxPrice, setMaxPrice] = useState<number>(1000);
   const [sortBy, setSortBy] = useState<'relevance' | 'price-low' | 'price-high' | 'discount'>('relevance');
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
 
   useEffect(() => {
     setSearchTerm(queryParam);
@@ -84,7 +85,7 @@ function SearchContent() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] text-slate-800 pb-24 md:pb-0" style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
+    <div className="min-h-screen bg-[#f8fafc] text-slate-800 page-mobile-nav" style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
       <AnnouncementBar />
       <Header />
       <NavBar />
@@ -122,8 +123,22 @@ function SearchContent() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+          {/* Mobile filter toggle */}
+          <button
+            type="button"
+            onClick={() => setShowMobileFilters((v) => !v)}
+            className="lg:hidden flex items-center justify-center gap-2 w-full py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-800 shadow-xs touch-target"
+          >
+            <Filter className="w-4 h-4 text-[#2874f0]" />
+            {showMobileFilters ? 'Hide Filters' : 'Show Filters & Sort'}
+          </button>
+
           {/* Sidebar Filters */}
-          <aside className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs h-fit space-y-6">
+          <aside
+            className={`bg-white p-5 rounded-2xl border border-slate-200 shadow-xs h-fit space-y-6 ${
+              showMobileFilters ? 'block' : 'hidden lg:block'
+            }`}
+          >
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="font-bold text-sm text-slate-900 flex items-center gap-2">
                 <SlidersHorizontal className="w-4 h-4 text-[#2874f0]" /> Filters

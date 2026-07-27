@@ -58,15 +58,15 @@ export const ProductGrid = () => {
             </p>
           </div>
 
-          {/* Filter Pills */}
-          <div className="flex flex-wrap items-center gap-2">
+          {/* Filter Pills — horizontal scroll on mobile */}
+          <div className="flex flex-nowrap sm:flex-wrap items-center gap-2 overflow-x-auto scroll-chips w-full sm:w-auto pb-1 -mx-1 px-1">
             <button
               onClick={() => {
                 setSelectedClass('all');
                 setSelectedCategory('all');
                 setSearchQuery('');
               }}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all ${
+              className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all shrink-0 min-h-[40px] ${
                 selectedClass === 'all' && selectedCategory === 'all' && !searchQuery
                   ? 'bg-[#001B3A] text-amber-400 shadow-md'
                   : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
@@ -79,7 +79,7 @@ export const ProductGrid = () => {
               <button
                 key={cls}
                 onClick={() => setSelectedClass(cls)}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all ${
+                className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all shrink-0 min-h-[40px] ${
                   selectedClass === cls
                     ? 'bg-[#001B3A] text-amber-400 shadow-md'
                     : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
@@ -91,7 +91,7 @@ export const ProductGrid = () => {
 
             <button
               onClick={() => setSelectedCategory('combo')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all ${
+              className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all shrink-0 min-h-[40px] ${
                 selectedCategory === 'combo'
                   ? 'bg-[#001B3A] text-amber-400 shadow-md'
                   : 'bg-slate-100 text-slate-700 hover:bg-slate-200'

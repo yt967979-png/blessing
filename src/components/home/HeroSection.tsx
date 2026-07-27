@@ -85,7 +85,7 @@ export const HeroSection = () => {
   };
 
   return (
-    <section className="relative bg-gradient-to-br from-[#020B19] via-[#001E42] to-[#003478] text-white overflow-hidden py-10 md:py-16">
+    <section className="relative bg-gradient-to-br from-[#020B19] via-[#001E42] to-[#003478] text-white overflow-hidden py-8 md:py-16">
       {/* Background glowing particle effects & glassmorphic ambient lighting */}
       <div className="absolute -top-32 -right-32 w-96 h-96 bg-amber-400/15 rounded-full blur-3xl pointer-events-none animate-pulse" />
       <div className="absolute -bottom-32 -left-32 w-96 h-96 bg-blue-500/20 rounded-full blur-3xl pointer-events-none" />
@@ -201,9 +201,9 @@ export const HeroSection = () => {
             </AnimatePresence>
           </div>
 
-          {/* 3D Floating Book Glass Showcase */}
-          <div className="lg:col-span-5 relative flex justify-center items-center mt-4 lg:mt-0">
-            <div className="relative w-72 sm:w-80 h-72">
+          {/* 3D Floating Book Glass Showcase — compact on mobile */}
+          <div className="lg:col-span-5 relative flex justify-center items-center mt-2 lg:mt-0">
+            <div className="relative w-60 sm:w-80 h-56 sm:h-72">
               {/* Glass container glow */}
               <div className="absolute inset-0 bg-blue-500/10 backdrop-blur-2xl rounded-3xl border border-white/10 shadow-2xl" />
 
@@ -238,18 +238,22 @@ export const HeroSection = () => {
           </div>
         </div>
 
-        {/* Carousel Arrow Controls */}
+        {/* Carousel controls — visible on mobile too */}
         {slides.length > 1 && (
-          <div className="absolute top-1/2 left-2 right-2 -translate-y-1/2 flex justify-between pointer-events-none z-30 hidden md:flex">
+          <div className="absolute top-1/2 left-1 right-1 sm:left-2 sm:right-2 -translate-y-1/2 flex justify-between pointer-events-none z-30">
             <button
+              type="button"
               onClick={prevSlide}
-              className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/25 border border-white/20 text-white backdrop-blur-lg flex items-center justify-center pointer-events-auto transition-all shadow-xl"
+              aria-label="Previous slide"
+              className="w-11 h-11 rounded-full bg-white/15 hover:bg-white/25 border border-white/25 text-white backdrop-blur-lg flex items-center justify-center pointer-events-auto transition-all shadow-xl touch-target"
             >
               <ChevronLeft className="w-5 h-5" />
             </button>
             <button
+              type="button"
               onClick={nextSlide}
-              className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/25 border border-white/20 text-white backdrop-blur-lg flex items-center justify-center pointer-events-auto transition-all shadow-xl"
+              aria-label="Next slide"
+              className="w-11 h-11 rounded-full bg-white/15 hover:bg-white/25 border border-white/25 text-white backdrop-blur-lg flex items-center justify-center pointer-events-auto transition-all shadow-xl touch-target"
             >
               <ChevronRight className="w-5 h-5" />
             </button>

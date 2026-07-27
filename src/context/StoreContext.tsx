@@ -22,6 +22,7 @@ export interface Product {
   description: string;
   features: string[];
   inStock: boolean;
+  stock?: number;
   isNew?: boolean;
   isBestSeller?: boolean;
   isTrending?: boolean;
@@ -441,6 +442,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (rest.inStock !== undefined) {
       withDerived.inStock = Boolean(rest.inStock);
     }
+    if (rest.stock !== undefined) {
+      const qty = Math.max(0, Math.floor(Number(rest.stock) || 0));
+      withDerived.stock = qty;
+      withDerived.inStock = qty > 0;
+    }
     setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, ...withDerived } : p)));
     try {
       const res = await fetch('/api/products', {
@@ -452,11 +458,13 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       // Keep optimistic stock/badge; then sync full catalog fresh
       refreshProducts();
       showToast(
-        rest.inStock === false
-          ? '✓ Marked out of stock — hidden from shop'
-          : rest.inStock === true
-            ? '✓ Back in stock — visible on shop'
-            : '✓ Product saved to database'
+        rest.stock !== undefined
+          ? `✓ Stock updated — ${Math.max(0, Math.floor(Number(rest.stock) || 0))} units`
+          : rest.inStock === false
+            ? '✓ Marked out of stock — hidden from shop'
+            : rest.inStock === true
+              ? '✓ Back in stock — visible on shop'
+              : '✓ Product saved to database'
       );
     } catch {
       showToast('❌ Failed to save product');

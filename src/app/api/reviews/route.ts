@@ -19,10 +19,35 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const bookId = searchParams.get('bookId');
     const includeStats = searchParams.get('stats') === '1';
+    const adminList = searchParams.get('admin') === '1';
     const session = await getAuthenticatedUser(request);
+
+    if (adminList) {
+      const admin = await verifyAdminRequest(request);
+      if (!admin) return unauthorizedResponse('Admin only.');
+    }
 
     client = await getDbClient();
     await ensureReviewSchema(client);
+
+    if (adminList) {
+      const res = await client.query(
+        `SELECT r.*, b.title AS book_title, u.name AS user_name, u.email AS user_email
+         FROM reviews r
+         LEFT JOIN books b ON b.id = r.book_id
+         LEFT JOIN users u ON u.id = r.user_id
+         ORDER BY r.created_at DESC
+         LIMIT 200`
+      );
+      return NextResponse.json(
+        res.rows.map((r: any) => ({
+          ...mapPublicReview(r),
+          bookTitle: r.book_title || 'Unknown book',
+          userName: r.user_name || 'Customer',
+          userEmail: r.user_email || '',
+        }))
+      );
+    }
 
     if (bookId && includeStats) {
       const stats = await getBookReviewStats(client, bookId);

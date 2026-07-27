@@ -28,10 +28,7 @@ export const ProductCard = ({ product }: { product: Product }) => {
 
   return (
     <motion.div
-      whileHover={{ y: -6 }}
-      onHoverStart={() => setIsHovered(true)}
-      onHoverEnd={() => setIsHovered(false)}
-      className="bg-white/90 backdrop-blur-md border border-slate-200/90 rounded-2xl p-3 sm:p-4 flex flex-col relative group transition-all duration-300 hover:shadow-xl hover:border-blue-300 hover:bg-white"
+      className="bg-white/90 backdrop-blur-md border border-slate-200/90 rounded-2xl p-3 sm:p-4 flex flex-col relative group transition-all duration-300 md:hover:shadow-xl md:hover:border-blue-300 md:hover:-translate-y-1.5 md:hover:bg-white h-full"
     >
       <div className="absolute top-3 left-3 z-10 flex flex-col gap-1">
         {product.inStock === false ? (
@@ -45,6 +42,10 @@ export const ProductCard = ({ product }: { product: Product }) => {
             }`}
           >
             {product.badge}
+          </span>
+        ) : (product.stock ?? 99) <= 5 && (product.stock ?? 0) > 0 ? (
+          <span className="text-[9px] font-black text-white px-2.5 py-0.5 rounded-full shadow-md uppercase tracking-wider bg-amber-500">
+            ONLY {product.stock} LEFT
           </span>
         ) : null}
       </div>
@@ -67,7 +68,9 @@ export const ProductCard = ({ product }: { product: Product }) => {
 
       <Link
         href={`/products/${product.slug}`}
-        className="relative h-44 sm:h-52 bg-gradient-to-b from-slate-50 to-blue-50/30 rounded-xl flex items-center justify-center mb-3 overflow-hidden cursor-pointer p-3 mt-4 border border-slate-100/80"
+        className="relative h-40 sm:h-52 bg-gradient-to-b from-slate-50 to-blue-50/30 rounded-xl flex items-center justify-center mb-3 overflow-hidden cursor-pointer p-3 mt-4 border border-slate-100/80"
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
       >
         <Image
           src={imgSrc || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80'}

@@ -548,18 +548,22 @@ export const ModalsBundle = () => {
         {quickViewProduct && (
           <div
             onClick={() => setQuickViewProduct(null)}
-            className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4"
+            className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
           >
             <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
+              initial={{ y: 40, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 40, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
-              className="bg-white rounded-2xl p-6 max-w-lg w-full relative shadow-2xl overflow-hidden"
+              className="bg-white rounded-t-2xl sm:rounded-2xl p-5 sm:p-6 max-w-lg w-full relative shadow-2xl overflow-hidden max-h-[92vh] overflow-y-auto"
+              style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
             >
+              <div className="sm:hidden w-10 h-1 rounded-full bg-slate-200 mx-auto mb-3" />
               <button
+                type="button"
                 onClick={() => setQuickViewProduct(null)}
-                className="absolute top-3 right-3 w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200"
+                className="absolute top-3 right-3 w-11 h-11 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200 touch-target"
+                aria-label="Close"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -642,7 +646,7 @@ export const ModalsBundle = () => {
 
               <div className="flex items-center gap-2 mb-1">
                 <Lock className="w-5 h-5 text-amber-500" />
-                <h3 id="checkout-title" className="font-heading font-black text-xl text-[#001B3A]">
+                <h3 id="checkout-title" className="font-heading font-black text-lg sm:text-xl text-[#001B3A] leading-snug">
                   Select Delivery Address & Checkout
                 </h3>
               </div>
@@ -990,20 +994,24 @@ export const ModalsBundle = () => {
         {isAuthOpen && (
           <div
             onClick={() => setIsAuthOpen(false)}
-            className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 overflow-y-auto"
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto"
           >
             <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
+              initial={{ y: 48, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 48, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
-              className="bg-white rounded-3xl max-w-md w-full relative shadow-2xl max-h-[90vh] overflow-y-auto border border-slate-100 my-auto custom-scrollbar"
+              className="bg-white rounded-t-3xl sm:rounded-3xl max-w-md w-full relative shadow-2xl max-h-[94vh] overflow-y-auto border border-slate-100 sm:my-auto"
+              style={{ paddingBottom: 'max(0px, env(safe-area-inset-bottom))' }}
             >
+              <div className="sm:hidden w-12 h-1 rounded-full bg-slate-200 mx-auto mt-3" />
               {/* Header Hero Banner */}
-              <div className="bg-gradient-to-r from-[#001B3A] via-[#002B5B] to-[#0044AA] text-white p-6 relative">
+              <div className="bg-gradient-to-r from-[#001B3A] via-[#002B5B] to-[#0044AA] text-white p-5 sm:p-6 relative">
                 <button
+                  type="button"
                   onClick={() => setIsAuthOpen(false)}
-                  className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors"
+                  className="absolute top-3 right-3 w-11 h-11 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors touch-target"
+                  aria-label="Close"
                 >
                   <X className="w-4 h-4" />
                 </button>

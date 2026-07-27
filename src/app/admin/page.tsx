@@ -24,6 +24,16 @@ const AdminCouponsTab = dynamic(() => import('@/components/admin/AdminCouponsTab
   loading: () => <p className="text-center text-sm text-gray-500 py-12">Loading coupons…</p>,
 });
 
+const AdminUsersTab = dynamic(() => import('@/components/admin/AdminUsersTab'), {
+  ssr: false,
+  loading: () => <p className="text-center text-sm text-gray-500 py-12">Loading customers…</p>,
+});
+
+const AdminReviewsTab = dynamic(() => import('@/components/admin/AdminReviewsTab'), {
+  ssr: false,
+  loading: () => <p className="text-center text-sm text-gray-500 py-12">Loading reviews…</p>,
+});
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface OrderItem { title: string; qty: number; price?: number; subtotal?: number; }
 interface Order {
@@ -99,7 +109,7 @@ export default function AdminPage() {
   const router = useRouter();
   const { user, setIsAuthOpen, products, updateProductInDb, addNewProductToDb, deleteProductFromDb, showToast, logoutUser } = useStore();
 
-  type Tab = 'analytics' | 'orders' | 'catalog' | 'coupons' | 'content' | 'whatsapp';
+  type Tab = 'analytics' | 'orders' | 'catalog' | 'coupons' | 'users' | 'reviews' | 'content' | 'whatsapp';
   const [activeTab, setActiveTab] = useState<Tab>('analytics');
 
   // ── WhatsApp state
@@ -134,6 +144,8 @@ export default function AdminPage() {
   const [editBadge, setEditBadge] = useState('');
   const [editBadgeEnabled, setEditBadgeEnabled] = useState(true);
   const [editDiscountEnabled, setEditDiscountEnabled] = useState(true);
+  const [editStock, setEditStock] = useState(50);
+  const [lowStockAlerts, setLowStockAlerts] = useState<{ id: string; title: string; stock: number }[]>([]);
   const [showAddForm, setShowAddForm] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newCls, setNewCls] = useState('10th');
@@ -177,6 +189,19 @@ export default function AdminPage() {
     } finally { setOrdersLoading(false); }
   }, [user]);
 
+  const loadLowStock = useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      const r = await fetch('/api/admin/users?view=low_stock', { headers: authHeaders(user) });
+      if (r.ok) {
+        const d = await r.json();
+        if (Array.isArray(d.alerts)) setLowStockAlerts(d.alerts);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [user]);
+
   const loadAnalytics = useCallback(async () => {
     if (!user?.id) return;
     setAnalyticsLoading(true);
@@ -192,7 +217,7 @@ export default function AdminPage() {
 
   // ── Initial load + SSE stream
   useEffect(() => {
-    startTransition(() => { void loadLiveOrders(); void loadAnalytics(); });
+    startTransition(() => { void loadLiveOrders(); void loadAnalytics(); void loadLowStock(); });
     if (activeTab === 'content') startTransition(() => { void loadContent(); });
     let es: EventSource | null = null;
     try {
@@ -295,7 +320,15 @@ export default function AdminPage() {
   const uniqueStatuses = useMemo(() => ['all', ...Array.from(new Set(orders.map((o) => o.courierStatus).filter(Boolean)))], [orders]);
 
   // ── Catalog handlers
-  const startEditing = (p: { id: string | number; price: number; mrp: number; badge?: string }) => { setEditingId(p.id); setEditPrice(p.price); setEditMrp(p.mrp); setEditBadge(p.badge || ''); setEditBadgeEnabled(!!p.badge); setEditDiscountEnabled(p.price < p.mrp); };
+  const startEditing = (p: { id: string | number; price: number; mrp: number; badge?: string; stock?: number }) => {
+    setEditingId(p.id);
+    setEditPrice(p.price);
+    setEditMrp(p.mrp);
+    setEditBadge(p.badge || '');
+    setEditBadgeEnabled(!!p.badge);
+    setEditDiscountEnabled(p.price < p.mrp);
+    setEditStock(Number(p.stock ?? 50));
+  };
   const saveProductChanges = async (id: string | number) => {
     const mrp = Number(editMrp);
     const fp = editDiscountEnabled ? Number(editPrice) : mrp;
@@ -307,7 +340,9 @@ export default function AdminPage() {
       discount: hasDiscount ? Math.round(((mrp - fp) / mrp) * 100) : 0,
       badge: fb,
       hasDiscount,
+      stock: Math.max(0, Math.floor(Number(editStock) || 0)),
     });
+    void loadLowStock();
     setEditingId(null);
   };
   const handleCreateProduct = (e: React.FormEvent) => {
@@ -509,6 +544,8 @@ export default function AdminPage() {
     { id: 'orders'    as Tab, label: 'Orders',    icon: ShoppingCart, count: orders.length },
     { id: 'catalog'   as Tab, label: 'Products',  icon: Package, count: products.length },
     { id: 'coupons'   as Tab, label: 'Coupons',   icon: Gift },
+    { id: 'users'     as Tab, label: 'Customers', icon: Users },
+    { id: 'reviews'   as Tab, label: 'Reviews',   icon: Star },
     { id: 'content'   as Tab, label: 'Content',   icon: Tag },
     { id: 'whatsapp'  as Tab, label: 'WhatsApp',  icon: MessageSquare },
   ];
@@ -555,15 +592,17 @@ export default function AdminPage() {
           </div>
         </div>
 
-        {/* Mobile tab bar */}
-        <div className="md:hidden border-t border-gray-100 flex bg-white">
+        {/* Mobile tab bar — horizontal scroll */}
+        <div className="md:hidden border-t border-gray-100 bg-white overflow-x-auto scroll-chips">
+          <div className="flex min-w-max px-1">
           {tabs.map((t) => (
             <button key={t.id} onClick={() => setActiveTab(t.id)}
-              className={`flex-1 py-2.5 flex flex-col items-center gap-0.5 text-[10px] font-semibold transition-colors border-b-2 cursor-pointer ${activeTab === t.id ? 'border-[#2874f0] text-[#2874f0] bg-blue-50/40' : 'border-transparent text-gray-400'}`}>
+              className={`min-w-[72px] px-3 py-2.5 flex flex-col items-center gap-0.5 text-[10px] font-semibold transition-colors border-b-2 cursor-pointer touch-target ${activeTab === t.id ? 'border-[#2874f0] text-[#2874f0] bg-blue-50/40' : 'border-transparent text-gray-400'}`}>
               <t.icon className="w-4 h-4" />
               <span>{t.label}</span>
             </button>
           ))}
+          </div>
         </div>
       </header>
 
@@ -589,6 +628,24 @@ export default function AdminPage() {
             </div>
           ))}
         </div>
+
+        {lowStockAlerts.length > 0 && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-2">
+            <div className="flex items-center gap-2 text-amber-800">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span className="text-xs font-semibold">
+                Low stock: {lowStockAlerts.map((b) => `${b.title} (${b.stock})`).join(' · ')}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setActiveTab('catalog')}
+              className="text-[11px] font-semibold text-amber-900 underline cursor-pointer sm:ml-auto"
+            >
+              Update stock →
+            </button>
+          </div>
+        )}
 
         {/* ══════════════════════════════════════════════════════════
             ANALYTICS TAB
@@ -1048,7 +1105,29 @@ export default function AdminPage() {
                               ) : p.badge ? <span className="text-[10px] font-bold text-orange-700 bg-orange-50 border border-orange-200 px-1.5 py-0.5 rounded-md uppercase">{p.badge}</span> : <span className="text-gray-300">—</span>}
                             </td>
                             <td className="py-3 px-3">
-                              <button onClick={() => toggleStock(p.id, !!p.inStock)} className={`text-[10px] font-bold px-2 py-1 rounded-md transition-colors cursor-pointer ${p.inStock ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-600 border border-red-200'}`}>{p.inStock ? 'Active' : 'Off'}</button>
+                              {isEditing ? (
+                                <input
+                                  type="number"
+                                  min={0}
+                                  value={editStock}
+                                  onChange={(e) => setEditStock(Number(e.target.value))}
+                                  className="w-14 px-2 py-1 border border-[#2874f0] rounded text-xs font-semibold outline-none"
+                                />
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => toggleStock(p.id, !!p.inStock)}
+                                  className={`text-[10px] font-bold px-2 py-1 rounded-md transition-colors cursor-pointer ${
+                                    !p.inStock || (p.stock ?? 0) <= 0
+                                      ? 'bg-red-50 text-red-600 border border-red-200'
+                                      : (p.stock ?? 99) <= 5
+                                        ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                        : 'bg-green-50 text-green-700 border border-green-200'
+                                  }`}
+                                >
+                                  {p.inStock ? `${p.stock ?? '—'} left` : 'Off'}
+                                </button>
+                              )}
                             </td>
                             <td className="py-3 px-3 text-right">
                               <div className="flex items-center justify-end gap-1.5">
@@ -1076,6 +1155,14 @@ export default function AdminPage() {
         ══════════════════════════════════════════════════════════ */}
         {activeTab === 'coupons' && user && (
           <AdminCouponsTab user={user} showToast={showToast} />
+        )}
+
+        {activeTab === 'users' && user && (
+          <AdminUsersTab user={user} showToast={showToast} />
+        )}
+
+        {activeTab === 'reviews' && user && (
+          <AdminReviewsTab user={user} showToast={showToast} />
         )}
 
         {/* ══════════════════════════════════════════════════════════

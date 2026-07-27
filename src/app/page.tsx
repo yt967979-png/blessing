@@ -14,6 +14,7 @@ import { FAQSection } from '@/components/home/FAQSection';
 import { TrustBar } from '@/components/home/TrustBar';
 import { Footer } from '@/components/layout/Footer';
 import { ContactSection } from '@/components/home/ContactSection';
+import { PromoSection } from '@/components/home/PromoSection';
 
 export default function Home() {
   const router = useRouter();
@@ -26,13 +27,14 @@ export default function Home() {
   }, [user, router]);
 
   return (
-    <main className="min-h-screen bg-slate-50 flex flex-col pb-24 md:pb-0">
+    <main className="min-h-screen bg-slate-50 flex flex-col page-mobile-nav">
       <AnnouncementBar />
       <Header />
       <NavBar />
       <HeroSection />
       <ClassPicker />
       <ProductGrid />
+      <PromoSection />
       <WhyChoose />
       <ContactSection />
       <FAQSection />

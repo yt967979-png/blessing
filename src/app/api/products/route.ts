@@ -168,6 +168,7 @@ export async function GET(request: Request) {
             description: d.description || 'Complete guide book for exam success.',
             features: ['Solved Papers', 'Chapter Notes'],
             inStock: mapBookInStock(d),
+            stock: Number(d.stock ?? 0),
             isBestSeller: String(d.badge || '').toUpperCase().includes('BEST'),
           };
         });
@@ -250,7 +251,7 @@ export async function PATCH(request: Request) {
   let client: any = null;
   try {
     client = await getDbClient();
-    const { id, title, price, mrp, inStock, description, image, badge, hasDiscount } = await request.json();
+    const { id, title, price, mrp, inStock, stock, description, image, badge, hasDiscount } = await request.json();
     if (!id) return NextResponse.json({ error: 'Product id is required' }, { status: 400 });
 
     await client.query(`ALTER TABLE books ADD COLUMN IF NOT EXISTS badge VARCHAR(100) DEFAULT ''`);
@@ -278,8 +279,17 @@ export async function PATCH(request: Request) {
       const available = Boolean(inStock);
       fields.push(`status = $${idx++}`);
       values.push(available ? 'published' : 'out_of_stock');
+      if (stock === undefined) {
+        fields.push(`stock = $${idx++}`);
+        values.push(available ? 100 : 0);
+      }
+    }
+    if (stock !== undefined) {
+      const qty = Math.max(0, Math.floor(Number(stock) || 0));
       fields.push(`stock = $${idx++}`);
-      values.push(available ? 100 : 0);
+      values.push(qty);
+      fields.push(`status = $${idx++}`);
+      values.push(qty > 0 ? 'published' : 'out_of_stock');
     }
 
     if (fields.length > 0) {

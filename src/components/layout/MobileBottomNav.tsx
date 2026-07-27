@@ -12,7 +12,6 @@ export const MobileBottomNav = () => {
   const { cartCount, user, setIsAuthOpen, isCheckoutOpen, isAuthOpen } = useStore();
 
   if (pathname.startsWith('/admin')) return null;
-  // Keep bar visible on cart page; only hide under full-screen auth/checkout
   if (isCheckoutOpen || isAuthOpen) return null;
 
   const isHome = pathname === '/';
@@ -31,84 +30,85 @@ export const MobileBottomNav = () => {
     }
   };
 
-  const itemClass = (active: boolean) =>
-    [
-      'flex flex-1 flex-col items-center justify-center gap-0.5',
-      'min-h-[52px] max-w-[88px] mx-auto px-1 py-1 rounded-xl',
-      'transition-colors duration-150 touch-manipulation select-none',
-      'active:scale-95',
-      active
-        ? 'bg-blue-50 text-blue-700 font-extrabold'
-        : 'bg-transparent text-slate-500 font-semibold',
-    ].join(' ');
+  const items = [
+    { key: 'home', label: 'Home', href: '/', active: isHome, icon: Home, onClick: undefined as (() => void) | undefined },
+    { key: 'guides', label: 'Guides', href: '/search', active: isGuides, icon: BookOpen, onClick: undefined },
+    { key: 'cart', label: 'Cart', href: '/cart', active: isCart, icon: ShoppingBag, onClick: undefined, badge: cartCount },
+    { key: 'account', label: user ? 'Profile' : 'Login', href: undefined, active: isAccount, icon: User, onClick: handleAccountClick },
+  ];
 
-  const iconClass = (active: boolean) =>
-    `w-[22px] h-[22px] ${active ? 'stroke-[2.5px] text-blue-600' : 'stroke-2 text-slate-500'}`;
+  if (user?.role === 'admin') {
+    items.push({
+      key: 'admin',
+      label: 'Admin',
+      href: '/admin',
+      active: false,
+      icon: ShieldCheck,
+      onClick: undefined,
+    });
+  }
 
   return (
     <nav
-      className="md:hidden fixed bottom-0 inset-x-0 z-[55] border-t border-slate-200 bg-white shadow-[0_-4px_20px_rgba(0,0,0,0.08)]"
-      style={{ paddingBottom: 'max(6px, env(safe-area-inset-bottom))' }}
+      className="md:hidden fixed bottom-0 inset-x-0 z-[55] border-t border-slate-200/90 bg-white/95 backdrop-blur-lg shadow-[0_-8px_32px_rgba(0,27,58,0.12)]"
+      style={{ paddingBottom: 'max(8px, env(safe-area-inset-bottom))' }}
       aria-label="Mobile navigation"
     >
-      <div className="flex items-stretch justify-between gap-0.5 px-1 pt-1 w-full max-w-lg mx-auto">
-        <Link href="/" className={itemClass(isHome)} aria-current={isHome ? 'page' : undefined}>
-          <Home className={iconClass(isHome)} />
-          <span className={`text-[10px] leading-none ${isHome ? 'text-blue-700' : 'text-slate-500'}`}>
-            Home
-          </span>
-        </Link>
-
-        <Link
-          href="/search"
-          className={itemClass(isGuides)}
-          aria-current={isGuides ? 'page' : undefined}
-        >
-          <BookOpen className={iconClass(isGuides)} />
-          <span className={`text-[10px] leading-none ${isGuides ? 'text-blue-700' : 'text-slate-500'}`}>
-            Guides
-          </span>
-        </Link>
-
-        <Link href="/cart" className={itemClass(isCart)} aria-current={isCart ? 'page' : undefined}>
-          <span className="relative inline-flex">
-            <ShoppingBag className={iconClass(isCart)} />
-            {cartCount > 0 && (
-              <span className="absolute -top-1.5 -right-2.5 bg-blue-600 text-white font-black text-[9px] min-w-[16px] h-4 rounded-full flex items-center justify-center px-1">
-                {cartCount > 99 ? '99+' : cartCount}
+      <div className="flex items-stretch justify-around gap-0.5 px-2 pt-1.5 w-full max-w-lg mx-auto">
+        {items.map((item) => {
+          const Icon = item.icon;
+          const inner = (
+            <>
+              <span
+                className={`relative flex items-center justify-center w-10 h-10 rounded-2xl transition-all duration-200 ${
+                  item.active ? 'bg-[#2874f0] text-white shadow-md shadow-blue-500/25' : 'text-slate-500'
+                }`}
+              >
+                <Icon className={`w-[22px] h-[22px] ${item.active ? 'stroke-[2.5px]' : 'stroke-2'}`} />
+                {'badge' in item && item.badge != null && item.badge > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white font-black text-[9px] min-w-[17px] h-[17px] rounded-full flex items-center justify-center px-1 border-2 border-white">
+                    {item.badge > 99 ? '99+' : item.badge}
+                  </span>
+                )}
               </span>
-            )}
-          </span>
-          <span className={`text-[10px] leading-none ${isCart ? 'text-blue-700' : 'text-slate-500'}`}>
-            Cart
-          </span>
-        </Link>
+              <span
+                className={`text-[10px] leading-none mt-0.5 font-bold ${
+                  item.active ? 'text-[#2874f0]' : 'text-slate-500'
+                }`}
+              >
+                {item.label}
+              </span>
+            </>
+          );
 
-        <button
-          type="button"
-          onClick={handleAccountClick}
-          className={itemClass(isAccount)}
-          aria-current={isAccount ? 'page' : undefined}
-        >
-          <User className={iconClass(isAccount)} />
-          <span className={`text-[10px] leading-none ${isAccount ? 'text-blue-700' : 'text-slate-500'}`}>
-            {user ? 'Profile' : 'Login'}
-          </span>
-        </button>
+          const className =
+            'flex flex-1 flex-col items-center justify-center gap-0.5 min-h-[56px] max-w-[80px] py-1 rounded-xl touch-manipulation select-none active:scale-95 transition-transform';
 
-        {user?.role === 'admin' && (
-          <Link
-            href="/admin"
-            className={[
-              'flex flex-1 flex-col items-center justify-center gap-0.5',
-              'min-h-[52px] max-w-[88px] mx-auto px-1 py-1 rounded-xl',
-              'bg-amber-50 text-amber-700 font-extrabold touch-manipulation',
-            ].join(' ')}
-          >
-            <ShieldCheck className="w-[22px] h-[22px] text-amber-600 stroke-[2.5px]" />
-            <span className="text-[10px] leading-none text-amber-700">Admin</span>
-          </Link>
-        )}
+          if (item.onClick) {
+            return (
+              <button
+                key={item.key}
+                type="button"
+                onClick={item.onClick}
+                className={className}
+                aria-current={item.active ? 'page' : undefined}
+              >
+                {inner}
+              </button>
+            );
+          }
+
+          return (
+            <Link
+              key={item.key}
+              href={item.href!}
+              className={className}
+              aria-current={item.active ? 'page' : undefined}
+            >
+              {inner}
+            </Link>
+          );
+        })}
       </div>
     </nav>
   );

@@ -176,7 +176,7 @@ export const Header = () => {
 
           <Link
             href="/cart"
-            className="relative p-2.5 rounded-xl text-slate-700 hover:bg-slate-100 transition-colors flex flex-col items-center gap-0.5 cursor-pointer min-h-11 min-w-11 justify-center"
+            className="relative hidden sm:flex p-2.5 rounded-xl text-slate-700 hover:bg-slate-100 transition-colors flex-col items-center gap-0.5 cursor-pointer min-h-11 min-w-11 justify-center"
             aria-label="Cart"
           >
             <ShoppingBag className="w-5 h-5 text-slate-700" />
@@ -195,15 +195,21 @@ export const Header = () => {
           <div className="flex border border-slate-300 rounded-xl overflow-hidden focus-within:border-blue-600 bg-slate-50">
             <input
               type="text"
-              placeholder="Search 6th-12th guides, question banks..."
+              placeholder="Search guides, 10th, 12th…"
               value={searchQuery}
               onChange={(e) => {
                 setSearchQuery(e.target.value);
                 setShowSearchDropdown(true);
               }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && searchQuery.trim()) {
+                  router.push(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
+                  setShowSearchDropdown(false);
+                }
+              }}
               onFocus={() => setShowSearchDropdown(true)}
               onBlur={() => setTimeout(() => setShowSearchDropdown(false), 200)}
-              className="w-full px-3 py-2 text-xs outline-none bg-transparent"
+              className="w-full px-3 py-2.5 text-base sm:text-xs outline-none bg-transparent min-h-[44px]"
             />
             <button className="bg-blue-600 text-white px-3 flex items-center justify-center">
               <Search className="w-3.5 h-3.5" />
