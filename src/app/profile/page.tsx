@@ -195,7 +195,7 @@ export default function ProfilePage() {
   // If user is not logged in, prompt sign in box
   if (!user) {
     return (
-      <main className="min-h-screen bg-slate-50 flex flex-col">
+      <main className="min-h-screen bg-slate-50 flex flex-col pb-24 md:pb-0">
         <AnnouncementBar />
         <Header />
         <NavBar />
@@ -221,7 +221,7 @@ export default function ProfilePage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-50 flex flex-col">
+    <main className="min-h-screen bg-slate-50 flex flex-col pb-24 md:pb-0">
       <AnnouncementBar />
       <Header />
       <NavBar />

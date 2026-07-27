@@ -37,15 +37,56 @@ export async function GET(request: Request) {
     } else {
       res = await client.query('SELECT id, name, email, phone, role FROM users WHERE LOWER(email) = $1', [String(email).toLowerCase().trim()]);
     }
-    await client.end();
 
     if (res.rows.length === 0) {
+      await client.end();
       return NextResponse.json({ exists: false, error: 'USER_NOT_FOUND' }, { status: 404 });
     }
 
     const user = res.rows[0];
+
+    const cartRes = await client.query(
+      `SELECT ci.book_id as id, ci.quantity as qty, ci.price,
+              b.title, b.cover_image as image, b.price as mrp,
+              b.subject, b.slug, b.discount_price, b.status, b.stock
+       FROM cart c
+       JOIN cart_items ci ON c.id = ci.cart_id
+       LEFT JOIN books b ON ci.book_id = b.id
+       WHERE c.user_id = $1`,
+      [user.id]
+    );
+    const cartItems = cartRes.rows.map((row: any) => ({
+      id: row.id,
+      title: row.title || `Book #${row.id}`,
+      price: Number(row.discount_price || row.price),
+      mrp: Number(row.mrp || row.price),
+      qty: Number(row.qty),
+      image: row.image || '',
+      subject: row.subject || 'Guide',
+      slug: row.slug || row.id,
+      cls: '10th',
+      category: 'guide' as const,
+      discount: 20,
+      rating: 5.0,
+      reviews: 0,
+      badge: 'BESTSELLER',
+      badgeColor: 'bg-blue-600',
+      description: 'Official guide book.',
+      features: ['Solved Papers'],
+      inStock: row.status !== 'out_of_stock' && Number(row.stock || 1) > 0,
+    }));
+
+    const wishRes = await client.query('SELECT book_id FROM wishlist WHERE user_id = $1', [user.id]);
+    const wishlistIds = wishRes.rows.map((row: any) => row.book_id);
+    await client.end();
+
     const token = createSessionToken(user.id, user.role || 'customer');
-    const response = NextResponse.json({ exists: true, user: buildUserResponse(user, token) });
+    const response = NextResponse.json({
+      exists: true,
+      user: buildUserResponse(user, token),
+      cart: cartItems,
+      wishlist: wishlistIds,
+    });
     return setSessionCookie(response, token);
   } catch {
     if (client) { try { await client.end(); } catch (_) {} }

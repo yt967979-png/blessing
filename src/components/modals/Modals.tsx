@@ -50,8 +50,6 @@ export const Modals = () => {
     cart,
     cartTotal,
     checkoutTotal,
-    appliedCouponCode,
-    setAppliedCouponCode,
     clearCart,
     addToCart,
     user,
@@ -191,7 +189,6 @@ export const Modals = () => {
             city: selectedAddress.city || 'Chennai',
             pincode: selectedAddress.pincode || '600012',
             items: cart.map((i) => ({ id: i.id, title: i.title, qty: i.qty, price: i.price })),
-            couponCode: appliedCouponCode || null,
             paymentMethod: paymentMethod === 'razorpay' ? 'Razorpay UPI / Cards' : 'Cash on Delivery (COD)',
             paymentStatus: paymentMethod === 'razorpay' ? 'Payment Confirmed' : 'Pending COD',
             razorpayPaymentId: payId || null,
@@ -221,7 +218,6 @@ export const Modals = () => {
 
       setIsCheckoutOpen(false);
       clearCart();
-      setAppliedCouponCode(null);
       setOrderSuccessData({
         orderId: confirmedOrderId,
         totalAmount: finalAmount,
@@ -513,18 +509,20 @@ export const Modals = () => {
         {isCheckoutOpen && (
           <div
             onClick={() => setIsCheckoutOpen(false)}
-            className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4"
+            className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
           >
             <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
+              initial={{ y: 40, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 40, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
-              className="bg-white rounded-2xl p-6 max-w-lg w-full relative shadow-2xl max-h-[90vh] overflow-y-auto"
+              className="bg-white rounded-t-2xl sm:rounded-2xl p-5 sm:p-6 max-w-lg w-full relative shadow-2xl max-h-[92vh] overflow-y-auto"
+              style={{ paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom))' }}
             >
+              <div className="sm:hidden w-10 h-1 rounded-full bg-slate-200 mx-auto mb-3" />
               <button
                 onClick={() => setIsCheckoutOpen(false)}
-                className="absolute top-3 right-3 w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200"
+                className="absolute top-3 right-3 w-11 h-11 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200"
               >
                 <X className="w-4 h-4" />
               </button>

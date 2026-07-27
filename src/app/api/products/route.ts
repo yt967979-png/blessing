@@ -14,10 +14,11 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const cls = searchParams.get('cls');
   const search = searchParams.get('search');
+  const slug = searchParams.get('slug');
 
   // Serve from zero-latency memory cache if no specific search query
   const now = Date.now();
-  if (!cls && !search && productsCache && (now - productsCache.timestamp < CACHE_TTL_MS)) {
+  if (!cls && !search && !slug && productsCache && (now - productsCache.timestamp < CACHE_TTL_MS)) {
     return NextResponse.json(productsCache.data, {
       headers: {
         'Cache-Control': 'public, max-age=60, s-maxage=300, stale-while-revalidate=600',
@@ -39,6 +40,12 @@ export async function GET(request: Request) {
       `;
       const params: any[] = [];
       let count = 1;
+
+      if (slug) {
+        sql += ` AND (b.slug = $${count} OR b.id = $${count})`;
+        params.push(slug);
+        count++;
+      }
 
       if (cls && cls !== 'all' && cls !== 'ALL') {
         sql += ` AND b.title ILIKE $${count++}`;
@@ -87,7 +94,7 @@ export async function GET(request: Request) {
             inStock: d.status !== 'out_of_stock' && (d.stock === undefined || d.stock === null || Number(d.stock) > 0),
           };
         });
-        if (!cls && !search) {
+        if (!cls && !search && !slug) {
           productsCache = { data: mapped, timestamp: Date.now() };
         }
         return NextResponse.json(mapped, {

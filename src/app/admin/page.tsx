@@ -133,12 +133,8 @@ export default function AdminPage() {
   const [newDiscountEnabled, setNewDiscountEnabled] = useState(true);
   const [newImg, setNewImg] = useState('https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80');
 
-  // ── Content (coupons + FAQs)
-  const [coupons, setCoupons] = useState<any[]>([]);
+  // ── Content (FAQs)
   const [faqs, setFaqs] = useState<any[]>([]);
-  const [newCouponCode, setNewCouponCode] = useState('');
-  const [newCouponPercent, setNewCouponPercent] = useState(10);
-  const [newCouponMin, setNewCouponMin] = useState(0);
   const [newFaqQ, setNewFaqQ] = useState('');
   const [newFaqA, setNewFaqA] = useState('');
 
@@ -147,14 +143,7 @@ export default function AdminPage() {
   const loadContent = useCallback(async () => {
     if (!user) return;
     try {
-      const [cRes, fRes] = await Promise.all([
-        fetch('/api/coupons?admin=1', { headers: authHeaders(user) }),
-        fetch('/api/content?type=faq&admin=1', { headers: authHeaders(user) }),
-      ]);
-      if (cRes.ok) {
-        const d = await cRes.json();
-        if (Array.isArray(d)) setCoupons(d);
-      }
+      const fRes = await fetch('/api/content?type=faq&admin=1', { headers: authHeaders(user) });
       if (fRes.ok) {
         const d = await fRes.json();
         if (Array.isArray(d)) setFaqs(d);
@@ -203,7 +192,7 @@ export default function AdminPage() {
         } catch { /* ignore parse errors */ }
       };
     } catch { /* SSE not supported */ }
-    const interval = setInterval(() => { void loadLiveOrders(); }, 15000);
+    const interval = setInterval(() => { void loadLiveOrders(); }, 45000);
     fetch('/api/db-status').then((r) => r.json()).then((d: { tableRowCounts?: { users?: number; books?: number } }) => {
       if (d.tableRowCounts) {
         const u = d.tableRowCounts.users || 0;
@@ -221,8 +210,9 @@ export default function AdminPage() {
     if (activeTab === 'content') startTransition(() => { void loadContent(); });
   }, [activeTab, loadContent]);
 
-  // WhatsApp polling
+  // WhatsApp polling — only while WhatsApp tab is open
   useEffect(() => {
+    if (activeTab !== 'whatsapp') return;
     const fetchWa = async () => {
       try {
         const r = await fetch('/api/whatsapp/qr');
@@ -235,9 +225,9 @@ export default function AdminPage() {
       }
     };
     fetchWa();
-    const iv = setInterval(fetchWa, 5000);
+    const iv = setInterval(fetchWa, 10000);
     return () => clearInterval(iv);
-  }, []);
+  }, [activeTab]);
 
   // ── Filtered orders
   const filteredOrders = useMemo(() => {
@@ -1013,78 +1003,10 @@ export default function AdminPage() {
         )}
 
         {/* ══════════════════════════════════════════════════════════
-            CONTENT TAB — Coupons + FAQs
+            CONTENT TAB — FAQs
         ══════════════════════════════════════════════════════════ */}
         {activeTab === 'content' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
-              <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2"><Tag className="w-4 h-4 text-[#2874f0]" /> Coupons</h3>
-              <form
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  const r = await fetch('/api/coupons', {
-                    method: 'POST',
-                    headers: authHeaders(user),
-                    body: JSON.stringify({
-                      code: newCouponCode,
-                      discount_type: 'percentage',
-                      discount_value: newCouponPercent,
-                      minimum_amount: newCouponMin,
-                    }),
-                  });
-                  if (r.ok) {
-                    showToast('✅ Coupon saved');
-                    setNewCouponCode('');
-                    loadContent();
-                  } else {
-                    const d = await r.json();
-                    showToast(`❌ ${d.error || 'Failed'}`);
-                  }
-                }}
-                className="grid grid-cols-3 gap-2"
-              >
-                <input value={newCouponCode} onChange={(e) => setNewCouponCode(e.target.value.toUpperCase())} placeholder="CODE" required className="px-2 py-2 text-xs border border-gray-200 rounded-lg outline-none focus:border-[#2874f0]" />
-                <input type="number" value={newCouponPercent} onChange={(e) => setNewCouponPercent(Number(e.target.value))} placeholder="% OFF" className="px-2 py-2 text-xs border border-gray-200 rounded-lg outline-none focus:border-[#2874f0]" />
-                <button type="submit" className="px-2 py-2 text-xs font-semibold text-white bg-[#2874f0] rounded-lg hover:bg-[#1a5dc8] cursor-pointer">Add</button>
-              </form>
-              <input type="number" value={newCouponMin} onChange={(e) => setNewCouponMin(Number(e.target.value))} placeholder="Min order ₹" className="w-full px-2 py-2 text-xs border border-gray-200 rounded-lg outline-none focus:border-[#2874f0]" />
-              <div className="space-y-2 max-h-72 overflow-y-auto">
-                {coupons.length === 0 ? <p className="text-xs text-gray-400">No coupons yet</p> : coupons.map((c) => (
-                  <div key={c.id || c.code} className="flex items-center justify-between gap-2 border border-gray-100 rounded-lg px-3 py-2">
-                    <div>
-                      <p className="text-xs font-bold text-gray-800">{c.code}</p>
-                      <p className="text-[10px] text-gray-400">{c.discount_type === 'flat' ? `₹${c.discount_value} off` : `${c.discount_value}% off`} · min ₹{c.minimum_amount || 0} · {c.status}</p>
-                    </div>
-                    <div className="flex gap-1">
-                      <button
-                        onClick={async () => {
-                          await fetch('/api/coupons', {
-                            method: 'PATCH',
-                            headers: authHeaders(user),
-                            body: JSON.stringify({ id: c.id, status: c.status === 'active' ? 'inactive' : 'active' }),
-                          });
-                          loadContent();
-                        }}
-                        className="text-[10px] font-semibold px-2 py-1 rounded border border-gray-200 hover:bg-gray-50 cursor-pointer"
-                      >
-                        {c.status === 'active' ? 'Disable' : 'Enable'}
-                      </button>
-                      <button
-                        onClick={async () => {
-                          if (!confirm('Delete coupon?')) return;
-                          await fetch(`/api/coupons?id=${encodeURIComponent(c.id)}`, { method: 'DELETE', headers: authHeaders(user) });
-                          loadContent();
-                        }}
-                        className="text-[10px] font-semibold text-red-600 px-2 py-1 rounded border border-red-100 hover:bg-red-50 cursor-pointer"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
+          <div className="max-w-xl mx-auto">
             <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
               <h3 className="text-sm font-bold text-gray-900">FAQs</h3>
               <form

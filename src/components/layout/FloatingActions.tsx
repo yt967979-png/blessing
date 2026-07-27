@@ -5,7 +5,7 @@ import { MessageSquare, Phone } from 'lucide-react';
 
 export const FloatingActions = () => {
   return (
-    <div className="fixed bottom-20 md:bottom-6 right-4 md:right-6 z-40 flex flex-col gap-3">
+    <div className="fixed bottom-24 md:bottom-6 right-4 md:right-6 z-40 flex flex-col gap-3" style={{ marginBottom: 'env(safe-area-inset-bottom, 0px)' }}>
       <a
         href="https://wa.me/919840418228"
         target="_blank"

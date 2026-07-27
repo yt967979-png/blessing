@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 
 export interface Product {
   id: string | number;
@@ -83,8 +83,6 @@ interface StoreContextType {
   cartCount: number;
   checkoutTotal: number;
   setCheckoutTotal: (amount: number) => void;
-  appliedCouponCode: string | null;
-  setAppliedCouponCode: (code: string | null) => void;
   orderSuccessData: any | null;
   setOrderSuccessData: (data: any | null) => void;
   showToast: (msg: string) => void;
@@ -92,12 +90,37 @@ interface StoreContextType {
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
 
+function readLocalCart(): CartItem[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem('bpg_cart_next');
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function readLocalWishlist(): (string | number)[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem('bpg_wishlist_next');
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [products, setProducts] = useState<Product[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [wishlist, setWishlist] = useState<(string | number)[]>([]);
   const [user, setUser] = useState<UserData | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [hydrated, setHydrated] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedClass, setSelectedClass] = useState('all');
@@ -110,6 +133,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [orderSuccessData, setOrderSuccessData] = useState<any | null>(null);
+
+  const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -125,51 +150,62 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       .catch(() => setProducts([]));
   };
 
-  // Load products from DB only
+  // Hydrate cart/wishlist/user BEFORE any sync (prevents empty-cart wipe)
   useEffect(() => {
     refreshProducts();
+
+    const localCart = readLocalCart();
+    const localWish = readLocalWishlist();
+    if (localCart.length) setCart(localCart);
+    if (localWish.length) setWishlist(localWish);
+
     const savedUser = localStorage.getItem('bpg_user_next');
     if (savedUser) {
       try {
         const u = JSON.parse(savedUser);
-        if (u && u.id) {
+        if (u?.id) {
           setUser(u);
-          // Verify with Railway PostgreSQL DB if account still exists
           fetch(`/api/auth?userId=${u.id}`)
-            .then((res) => {
-              if (res.ok) {
-                return res.json();
-              }
-              return null;
-            })
+            .then((res) => (res.ok ? res.json() : null))
             .then((dbUser) => {
-              if (dbUser && dbUser.user) {
-                setUser(dbUser.user);
-                localStorage.setItem('bpg_user_next', JSON.stringify(dbUser.user));
+              if (dbUser?.user) {
+                const nextUser = { ...dbUser.user, token: dbUser.user.token || u.token };
+                setUser(nextUser);
+                localStorage.setItem('bpg_user_next', JSON.stringify(nextUser));
+                // Prefer local cart; if empty, restore from DB (fixes refresh wipe)
+                if (!localCart.length && Array.isArray(dbUser.cart) && dbUser.cart.length > 0) {
+                  setCart(dbUser.cart);
+                  localStorage.setItem('bpg_cart_next', JSON.stringify(dbUser.cart));
+                }
+                if (!localWish.length && Array.isArray(dbUser.wishlist) && dbUser.wishlist.length > 0) {
+                  setWishlist(dbUser.wishlist);
+                  localStorage.setItem('bpg_wishlist_next', JSON.stringify(dbUser.wishlist));
+                }
               } else {
-                // Account missing in DB -> Auto logout!
                 setUser(null);
                 setCart([]);
                 setWishlist([]);
                 localStorage.removeItem('bpg_user_next');
                 localStorage.removeItem('bpg_cart_next');
+                localStorage.removeItem('bpg_wishlist_next');
                 localStorage.removeItem('bpg_user_addresses');
               }
             })
-            .catch(() => {
-              const savedCart = localStorage.getItem('bpg_cart_next');
-              if (savedCart) {
-                try { setCart(JSON.parse(savedCart)); } catch (e) {}
-              }
-            });
+            .catch(() => {})
+            .finally(() => setHydrated(true));
+          return;
         }
-      } catch (e) {}
+      } catch (_) {}
     }
+    setHydrated(true);
   }, []);
 
-  // Cross-Device Sync Trigger to Railway PostgreSQL (only when logged in)
+  // Debounced cart/wishlist sync — only after hydrate
   useEffect(() => {
-    if (user && user.id) {
+    if (!hydrated || !user?.id) return;
+
+    if (syncTimer.current) clearTimeout(syncTimer.current);
+    syncTimer.current = setTimeout(() => {
       fetch('/api/user/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -181,25 +217,30 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       })
         .then((res) => {
           if (res.status === 404) {
-            // User deleted/missing in Railway DB -> Auto Logout
             setUser(null);
             setCart([]);
             setWishlist([]);
             localStorage.removeItem('bpg_user_next');
             localStorage.removeItem('bpg_cart_next');
+            localStorage.removeItem('bpg_wishlist_next');
             localStorage.removeItem('bpg_user_addresses');
           }
         })
         .catch(() => {});
-    }
-  }, [cart, wishlist, user]);
+    }, 600);
 
-  // Save cart to localStorage when logged in
+    return () => {
+      if (syncTimer.current) clearTimeout(syncTimer.current);
+    };
+  }, [cart, wishlist, user, hydrated]);
+
   useEffect(() => {
+    if (!hydrated) return;
     if (user) {
       localStorage.setItem('bpg_cart_next', JSON.stringify(cart));
+      localStorage.setItem('bpg_wishlist_next', JSON.stringify(wishlist));
     }
-  }, [cart, user]);
+  }, [cart, wishlist, user, hydrated]);
 
   const getAdminHeaders = (): Record<string, string> => {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -273,10 +314,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (prev.includes(id)) {
         showToast('Item removed from wishlist');
         return prev.filter((item) => item !== id);
-      } else {
-        showToast('❤️ Added to wishlist');
-        return [...prev, id];
       }
+      showToast('❤️ Added to wishlist');
+      return [...prev, id];
     });
   };
 
@@ -289,17 +329,23 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setUser(userData);
     localStorage.setItem('bpg_user_next', JSON.stringify(userData));
 
-    if (Array.isArray(restoredCart)) {
+    if (Array.isArray(restoredCart) && restoredCart.length > 0) {
       setCart(restoredCart);
       localStorage.setItem('bpg_cart_next', JSON.stringify(restoredCart));
+    } else {
+      const local = readLocalCart();
+      if (local.length) setCart(local);
     }
 
-    if (Array.isArray(restoredWishlist)) {
+    if (Array.isArray(restoredWishlist) && restoredWishlist.length > 0) {
       setWishlist(restoredWishlist);
+      localStorage.setItem('bpg_wishlist_next', JSON.stringify(restoredWishlist));
+    } else {
+      const local = readLocalWishlist();
+      if (local.length) setWishlist(local);
     }
 
     if (Array.isArray(restoredAddresses)) {
-      // Addresses live in DB — clear any legacy localStorage copy
       localStorage.removeItem('bpg_user_addresses');
     }
 
@@ -312,6 +358,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setWishlist([]);
     localStorage.removeItem('bpg_user_next');
     localStorage.removeItem('bpg_cart_next');
+    localStorage.removeItem('bpg_wishlist_next');
     localStorage.removeItem('bpg_user_addresses');
     fetch('/api/auth', { method: 'DELETE' }).catch(() => {});
     showToast('Logged out successfully');
@@ -319,7 +366,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const updateProductInDb = async (id: string | number, updatedData: Partial<Product>) => {
     setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, ...updatedData } : p)));
-
     try {
       const res = await fetch('/api/products', {
         method: 'PATCH',
@@ -377,9 +423,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const cartTotal = cart.reduce((acc, item) => acc + item.price * item.qty, 0);
   const cartCount = cart.reduce((acc, item) => acc + item.qty, 0);
   const [checkoutTotal, setCheckoutTotal] = useState(0);
-  const [appliedCouponCode, setAppliedCouponCode] = useState<string | null>(null);
 
-  // Keep checkoutTotal in sync with cartTotal unless manually overridden (e.g. coupon applied)
   useEffect(() => {
     setCheckoutTotal(cartTotal);
   }, [cartTotal]);
@@ -424,8 +468,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         cartCount,
         checkoutTotal,
         setCheckoutTotal,
-        appliedCouponCode,
-        setAppliedCouponCode,
         orderSuccessData,
         setOrderSuccessData,
         showToast,

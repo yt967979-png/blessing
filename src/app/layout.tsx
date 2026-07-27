@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Script from 'next/script';
 import './globals.css';
 import { StoreProvider } from '@/context/StoreContext';
+import { ClientChrome } from '@/components/layout/ClientChrome';
 
 export const metadata: Metadata = {
   title: 'Blessing Power Guide — Premium Educational Books & Study Guides',
@@ -17,7 +18,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="antialiased">
-        <StoreProvider>{children}</StoreProvider>
+        <StoreProvider>
+          <ClientChrome>{children}</ClientChrome>
+        </StoreProvider>
         <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
       </body>
     </html>

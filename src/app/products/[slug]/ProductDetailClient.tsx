@@ -29,12 +29,13 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
   useEffect(() => {
     async function fetchProduct() {
       try {
-        const res = await fetch(`/api/products`);
+        const res = await fetch(`/api/products?slug=${encodeURIComponent(slug)}`);
         if (res.ok) {
           const list = await res.json();
-          if (Array.isArray(list)) {
-            const found = list.find((p: any) => p.slug === slug || p.id === slug);
-            setDbProduct(found || null);
+          if (Array.isArray(list) && list.length > 0) {
+            setDbProduct(list[0]);
+          } else {
+            setDbProduct(null);
           }
         }
       } catch (err) {}
@@ -76,7 +77,7 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
 
   if (!product) {
     return (
-      <main className="min-h-screen bg-slate-50 flex flex-col">
+      <main className="min-h-screen bg-slate-50 flex flex-col pb-36 md:pb-0">
         <AnnouncementBar />
         <Header />
         <NavBar />
@@ -105,7 +106,7 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
   };
 
   return (
-    <main className="min-h-screen bg-slate-50 flex flex-col">
+    <main className="min-h-screen bg-slate-50 flex flex-col pb-36 md:pb-0">
       {/* Schema.org Rich Snippet JSON-LD for Google Search Indexing */}
       <script
         type="application/ld+json"
@@ -473,11 +474,14 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
         )}
       </div>
 
-      {/* Sticky Mobile Touch Action Bar (< 640px) */}
-      <div className="fixed bottom-0 inset-x-0 bg-white/95 backdrop-blur-md border-t border-slate-200 p-3 z-40 sm:hidden flex items-center gap-2 shadow-2xl">
+      {/* Sticky Mobile CTA — sits above bottom nav + safe area */}
+      <div
+        className="fixed inset-x-0 bg-white/95 backdrop-blur-md border-t border-slate-200 p-3 z-40 sm:hidden flex items-center gap-2 shadow-2xl"
+        style={{ bottom: 'calc(3.75rem + env(safe-area-inset-bottom, 0px))' }}
+      >
         <button
           onClick={() => toggleWishlist(product.id)}
-          className="p-3 rounded-xl border border-slate-300 text-slate-700 bg-slate-50 flex-shrink-0"
+          className="p-3.5 rounded-xl border border-slate-300 text-slate-700 bg-slate-50 flex-shrink-0 min-h-12 min-w-12"
         >
           <Heart className={`w-5 h-5 ${isWishlisted ? 'text-red-500 fill-red-500' : 'text-slate-400'}`} />
         </button>
@@ -489,7 +493,7 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
             addToCart(product);
           }}
           disabled={product.inStock === false}
-          className="flex-1 bg-[#0044AA] hover:bg-[#001B3A] disabled:bg-slate-300 disabled:text-slate-500 text-white font-extrabold text-xs py-3.5 rounded-xl flex items-center justify-center gap-1.5 shadow-md uppercase tracking-wider cursor-pointer disabled:cursor-not-allowed"
+          className="flex-1 bg-[#0044AA] hover:bg-[#001B3A] disabled:bg-slate-300 disabled:text-slate-500 text-white font-extrabold text-xs py-3.5 rounded-xl flex items-center justify-center gap-1.5 shadow-md uppercase tracking-wider cursor-pointer disabled:cursor-not-allowed min-h-12"
         >
           <ShoppingBag className="w-4 h-4 text-amber-400" />
           <span>{product.inStock === false ? 'OUT OF STOCK' : 'ADD TO CART'}</span>
