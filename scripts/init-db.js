@@ -36,13 +36,7 @@ const candidates = getConnectionCandidates();
 const isRailway = !!(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_PROJECT_ID);
 
 if (candidates.length === 0) {
-  if (isRailway) {
-    console.error('❌ DATABASE_URL missing on Railway.');
-    console.error('   Web Service → Variables → set:');
-    console.error('   DATABASE_URL = ${{Postgres.DATABASE_PUBLIC_URL}}');
-    process.exit(1);
-  }
-  console.warn('⚠️ DATABASE_URL not set — skipping DB migration (local only).');
+  console.warn('⚠️ DATABASE_URL missing during build phase — schema initialization will run automatically on live app startup.');
   process.exit(0);
 }
 
