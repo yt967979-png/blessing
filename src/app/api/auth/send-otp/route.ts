@@ -96,7 +96,7 @@ function normalizePhoneDigits(phone: string): string {
 
 export async function POST(request: Request) {
   const ip = clientIp(request);
-  const { allowed } = await applyRateLimitAsync(`otp-${ip}`, 8, 60000);
+  const { allowed } = await applyRateLimitAsync(`otp-${ip}`, 50, 60000);
   if (!allowed) {
     return NextResponse.json({ error: 'Too many OTP requests. Please wait a minute.' }, { status: 429 });
   }
