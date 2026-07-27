@@ -28,12 +28,11 @@ function getConnectionCandidates(): string[] {
   const additional: string[] = [];
   for (const urlStr of raw) {
     if (urlStr.includes('postgres.railway.internal')) {
-      // Direct rewrite for exact user string in screenshot
-      const publicHost = process.env.RAILWAY_TCP_PROXY_DOMAIN || 'shinkansen.proxy.rlwy.net';
-      const publicPort = process.env.RAILWAY_TCP_PROXY_PORT || '43644';
+      const publicHost = process.env.RAILWAY_TCP_PROXY_DOMAIN || 'sakura.proxy.rlwy.net';
+      const publicPort = process.env.RAILWAY_TCP_PROXY_PORT || '32874';
       const transformed = urlStr
         .replace('postgres.railway.internal:5432', `${publicHost}:${publicPort}`)
-        .replace('postgres.railway.internal', publicHost);
+        .replace('postgres.railway.internal', `${publicHost}:${publicPort}`);
       if (transformed !== urlStr) additional.push(transformed);
     }
   }
