@@ -1,4 +1,5 @@
 import { Pool } from 'pg';
+import { hashPassword } from '@/lib/auth';
 
 let isSchemaInitialized = false;
 let schemaInitPromise: Promise<void> | null = null;
@@ -402,4 +403,64 @@ async function runSchemaInit(client: any) {
     } catch (e) {
       /* schema already exists or partial — safe to continue */
     }
+
+    // Ensure default admin exists (empty DB after pointing DATABASE_URL at a new Postgres)
+    await ensureAdminUser(client);
+}
+
+async function ensureAdminUser(client: any) {
+  try {
+    const phone = String(process.env.ADMIN_PHONE || '9840418228').replace(/\D/g, '').slice(-10);
+    const email = String(process.env.ADMIN_EMAIL || 'admin@blessingpowerguide.com').toLowerCase().trim();
+    const name = process.env.ADMIN_NAME || 'Admin';
+    const password = process.env.ADMIN_PASSWORD || 'ChangeMe@BPG2026';
+    const passwordHash = hashPassword(password);
+    const userId = 'admin-bpg-001';
+
+    const existing = await client.query(
+      `SELECT id FROM users
+       WHERE LOWER(email) = $1
+          OR phone = $2
+          OR REPLACE(phone, '+', '') = $2
+          OR RIGHT(REGEXP_REPLACE(COALESCE(phone,''), '\\D', '', 'g'), 10) = $2
+       LIMIT 1`,
+      [email, phone]
+    );
+
+    if (existing.rows.length === 0) {
+      await client.query(
+        `INSERT INTO users (id, name, email, phone, password_hash, role, status)
+         VALUES ($1, $2, $3, $4, $5, 'admin', 'active')`,
+        [userId, name, email, phone, passwordHash]
+      );
+      await client.query(
+        `INSERT INTO cart (id, user_id) VALUES ($1, $2) ON CONFLICT (user_id) DO NOTHING`,
+        [`cart-${userId}`, userId]
+      );
+      console.log(`[db] admin created: phone ${phone}`);
+    } else {
+      const id = existing.rows[0].id;
+      // Promote / refresh credentials only when env explicitly sets ADMIN_PASSWORD,
+      // or when role is not admin yet (so empty-DB first boot still gets a working admin).
+      const forcePassword = Boolean(process.env.ADMIN_PASSWORD);
+      if (forcePassword) {
+        await client.query(
+          `UPDATE users
+           SET name = $1, email = $2, phone = $3, password_hash = $4,
+               role = 'admin', status = 'active', updated_at = NOW()
+           WHERE id = $5`,
+          [name, email, phone, passwordHash, id]
+        );
+      } else {
+        await client.query(
+          `UPDATE users
+           SET role = 'admin', status = 'active', updated_at = NOW()
+           WHERE id = $1 AND (role IS DISTINCT FROM 'admin' OR status IS DISTINCT FROM 'active')`,
+          [id]
+        );
+      }
+    }
+  } catch (e: any) {
+    console.warn('[db] ensureAdminUser skipped:', e?.message || e);
+  }
 }
