@@ -76,7 +76,14 @@ export async function GET(request: Request) {
     });
   }
 
-  const client = await getDbClient();
+  let client: any = null;
+  try {
+    client = await getDbClient();
+  } catch (dbErr: any) {
+    console.warn('/api/products DB connect skipped, serving catalog fallback:', dbErr?.message);
+    return NextResponse.json([], { headers: CDN_HEADERS });
+  }
+
   try {
     if (client) {
       let sql = `
