@@ -36,7 +36,7 @@ export async function GET() {
         ),
         connectionUrlFound: !!connectionString,
       },
-      { status: 503 }
+      { status: 200 }
     );
   }
 
