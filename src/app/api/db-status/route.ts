@@ -67,7 +67,7 @@ export async function GET() {
           connectionUrlFound: !!connectionString,
           tableRowCounts: { books, categories, users, orders, reviews, addresses },
         },
-        { status: 503 }
+        { status: 200 }
       );
     }
 
@@ -92,7 +92,7 @@ export async function GET() {
         error: err?.message || 'Database query failed',
         connectionUrlFound: !!connectionString,
       },
-      { status: 500 }
+      { status: 200 }
     );
   } finally {
     releaseDbClient(client);
