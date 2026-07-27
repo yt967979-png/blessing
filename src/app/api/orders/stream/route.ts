@@ -1,9 +1,11 @@
 import { NextRequest } from 'next/server';
-import { getDbPool, getDbClient } from '@/lib/db';
+import { Client } from 'pg';
+import { getDbClient, getDbConnectionConfig } from '@/lib/db';
 import { getAuthenticatedUser } from '@/lib/serverSecurity';
 
 const clients = new Set<ReadableStreamDefaultController>();
 let listenReady: Promise<void> | null = null;
+let listenClient: Client | null = null;
 
 export function broadcastOrderChange(data: any) {
   const message = `data: ${JSON.stringify(data)}\n\n`;
@@ -24,6 +26,7 @@ export async function notifyOrderChanged(data: any) {
   let client: any = null;
   try {
     client = await getDbClient();
+    if (!client) return;
     await client.query(`SELECT pg_notify('order_changed', $1)`, [JSON.stringify(data)]);
   } catch (err) {
     console.error('NOTIFY order_changed failed:', err);
@@ -40,10 +43,12 @@ function ensureListen() {
   if (listenReady) return listenReady;
   listenReady = (async () => {
     try {
-      const pool = getDbPool();
-      const client = await pool.connect();
-      await client.query('LISTEN order_changed');
-      client.on('notification', (msg: { channel: string; payload?: string }) => {
+      // Dedicated Client — must NOT use the pool (LISTEN holds the connection forever)
+      const cfg = getDbConnectionConfig();
+      listenClient = new Client(cfg);
+      await listenClient.connect();
+      await listenClient.query('LISTEN order_changed');
+      listenClient.on('notification', (msg: { channel: string; payload?: string }) => {
         if (msg.channel !== 'order_changed' || !msg.payload) return;
         try {
           broadcastOrderChange(JSON.parse(msg.payload));
@@ -51,15 +56,17 @@ function ensureListen() {
           broadcastOrderChange({ type: 'ORDER_UPDATED', timestamp: Date.now() });
         }
       });
-      client.on('error', () => {
+      listenClient.on('error', () => {
         listenReady = null;
         try {
-          client.release();
+          void listenClient?.end();
         } catch (_) {}
+        listenClient = null;
       });
     } catch (err) {
       console.error('LISTEN order_changed failed:', err);
       listenReady = null;
+      listenClient = null;
     }
   })();
   return listenReady;

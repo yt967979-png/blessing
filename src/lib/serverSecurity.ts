@@ -1,19 +1,8 @@
 import { NextResponse } from 'next/server';
-import { getDbClient } from '@/lib/db';
 import { getTokenFromRequest, verifySessionToken } from '@/lib/auth';
 
 /** In-memory fallback when DB rate_limits is unavailable */
 const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
-
-async function ensureRateLimitTable(client: any) {
-  await client.query(`
-    CREATE TABLE IF NOT EXISTS rate_limits (
-      key TEXT PRIMARY KEY,
-      count INTEGER NOT NULL DEFAULT 0,
-      reset_at TIMESTAMPTZ NOT NULL
-    )
-  `);
-}
 
 /** Durable rate limit via Postgres (falls back to memory) */
 export async function applyRateLimitAsync(
@@ -22,14 +11,20 @@ export async function applyRateLimitAsync(
   windowMs: number = 60000
 ): Promise<{ allowed: boolean; remaining: number }> {
   const now = Date.now();
-  let client: any = null;
   try {
-    client = await getDbClient();
-    await ensureRateLimitTable(client);
-    const res = await client.query(`SELECT count, reset_at FROM rate_limits WHERE key = $1`, [key]);
+    const { getDbPool } = await import('@/lib/db');
+    const pool = getDbPool();
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS rate_limits (
+        key TEXT PRIMARY KEY,
+        count INTEGER NOT NULL DEFAULT 0,
+        reset_at TIMESTAMPTZ NOT NULL
+      )
+    `);
+    const res = await pool.query(`SELECT count, reset_at FROM rate_limits WHERE key = $1`, [key]);
     if (res.rows.length === 0 || new Date(res.rows[0].reset_at).getTime() <= now) {
       const resetAt = new Date(now + windowMs);
-      await client.query(
+      await pool.query(
         `INSERT INTO rate_limits (key, count, reset_at) VALUES ($1, 1, $2)
          ON CONFLICT (key) DO UPDATE SET count = 1, reset_at = EXCLUDED.reset_at`,
         [key, resetAt.toISOString()]
@@ -40,16 +35,10 @@ export async function applyRateLimitAsync(
     if (count >= limit) {
       return { allowed: false, remaining: 0 };
     }
-    await client.query(`UPDATE rate_limits SET count = count + 1 WHERE key = $1`, [key]);
+    await pool.query(`UPDATE rate_limits SET count = count + 1 WHERE key = $1`, [key]);
     return { allowed: true, remaining: limit - count - 1 };
   } catch {
     return applyRateLimit(key, limit, windowMs);
-  } finally {
-    if (client) {
-      try {
-        await client.end();
-      } catch (_) {}
-    }
   }
 }
 

@@ -1,81 +1,127 @@
 import { Pool } from 'pg';
 
 let isSchemaInitialized = false;
+let schemaInitPromise: Promise<void> | null = null;
 
 // Global singleton PostgreSQL connection pool optimized for high-concurrency scaling
 let pool: Pool | null = null;
 
-export function getDbPool(): Pool {
-  if (pool) return pool;
+function resolveConnectionString(): string {
+  const candidates = [
+    process.env.DATABASE_URL,
+    process.env.POSTGRES_URL,
+    process.env.DATABASE_PRIVATE_URL,
+    process.env.DATABASE_PUBLIC_URL,
+  ].filter(Boolean) as string[];
 
-  let connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.DATABASE_PUBLIC_URL;
+  if (candidates.length > 0) return candidates[0];
 
-  if (!connectionString && process.env.PGHOST && process.env.PGUSER && process.env.PGPASSWORD) {
+  if (process.env.PGHOST && process.env.PGUSER && process.env.PGPASSWORD) {
     const host = process.env.PGHOST;
     const user = process.env.PGUSER;
     const pass = process.env.PGPASSWORD;
     const db = process.env.PGDATABASE || 'railway';
     const port = process.env.PGPORT || 5432;
-    connectionString = `postgresql://${user}:${pass}@${host}:${port}/${db}`;
+    return `postgresql://${user}:${pass}@${host}:${port}/${db}`;
   }
 
-  if (!connectionString) {
-    throw new Error('DATABASE_URL is not configured. Add it to your Railway environment variables.');
-  }
+  throw new Error('DATABASE_URL is not configured. Add it to your Railway environment variables.');
+}
+
+function sslFor(connectionString: string) {
+  return process.env.DATABASE_SSL === 'true' ||
+    connectionString.includes('railway') ||
+    connectionString.includes('render') ||
+    connectionString.includes('rlwy.net') ||
+    connectionString.includes('proxy.rlwy.net')
+    ? { rejectUnauthorized: false as const }
+    : false;
+}
+
+export function getDbPool(): Pool {
+  if (pool) return pool;
+
+  const connectionString = resolveConnectionString();
 
   pool = new Pool({
     connectionString,
-    // Railway Postgres is private-network; keep pool small on single instance
-    max: Number(process.env.DB_POOL_MAX || 10),
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 10000,
-    ssl:
-      process.env.DATABASE_SSL === 'true' ||
-      connectionString.includes('railway') ||
-      connectionString.includes('render') ||
-      connectionString.includes('rlwy.net') ||
-      connectionString.includes('proxy.rlwy.net')
-        ? { rejectUnauthorized: false }
-        : false,
+    // Small pool — Railway Hobby has limited connections; LISTEN uses a dedicated Client
+    max: Number(process.env.DB_POOL_MAX || 5),
+    idleTimeoutMillis: 10000,
+    connectionTimeoutMillis: Number(process.env.DB_CONNECT_TIMEOUT_MS || 20000),
+    allowExitOnIdle: true,
+    ssl: sslFor(connectionString),
+  });
+
+  pool.on('error', (err) => {
+    console.error('[db] idle client error:', err.message);
   });
 
   return pool;
 }
 
+/** Config for long-lived dedicated pg Clients (LISTEN / NOTIFY helpers). */
+export function getDbConnectionConfig() {
+  const connectionString = resolveConnectionString();
+  return { connectionString, ssl: sslFor(connectionString) };
+}
+
+function wrapPoolClient(client: any) {
+  if (client._hasEndAlias) return client;
+  client._hasEndAlias = true;
+  client._released = false;
+  const safeRelease = () => {
+    if (client._released) return;
+    client._released = true;
+    try {
+      client.release();
+    } catch (_) {
+      /* already returned to pool */
+    }
+  };
+  client.end = safeRelease;
+  const originalRelease = client.release.bind(client);
+  client.release = (err?: Error | boolean) => {
+    if (client._released) return;
+    client._released = true;
+    try {
+      originalRelease(err);
+    } catch (_) {
+      /* ignore */
+    }
+  };
+  return client;
+}
+
 export async function getDbClient() {
-  const activePool = getDbPool();
-  const client: any = await activePool.connect();
+  try {
+    const activePool = getDbPool();
+    const client: any = await activePool.connect();
+    wrapPoolClient(client);
 
-  // Pool clients must use release(), not end(). Make it idempotent so
-  // try/finally double-calls never throw "already been released".
-  if (!client._hasEndAlias) {
-    client._hasEndAlias = true;
-    client._released = false;
-    const safeRelease = () => {
-      if (client._released) return;
-      client._released = true;
-      try {
-        client.release();
-      } catch (_) {
-        /* already returned to pool */
+    if (!isSchemaInitialized) {
+      if (!schemaInitPromise) {
+        schemaInitPromise = (async () => {
+          try {
+            await runSchemaInit(client);
+            isSchemaInitialized = true;
+          } catch (e: any) {
+            console.error('[db] schema init failed:', e?.message || e);
+            schemaInitPromise = null;
+          }
+        })();
       }
-    };
-    client.end = safeRelease;
-    const originalRelease = client.release.bind(client);
-    client.release = (err?: Error | boolean) => {
-      if (client._released) return;
-      client._released = true;
-      try {
-        originalRelease(err);
-      } catch (_) {
-        /* ignore */
-      }
-    };
+      await schemaInitPromise;
+    }
+
+    return client;
+  } catch (err: any) {
+    console.error('[db] connect timeout/failed:', err?.message || err);
+    return null;
   }
+}
 
-  if (!isSchemaInitialized) {
-    isSchemaInitialized = true;
-
+async function runSchemaInit(client: any) {
     try {
       await client.query(`CREATE EXTENSION IF NOT EXISTS pg_stat_statements;`);
     } catch (e) {}
@@ -326,9 +372,9 @@ export async function getDbClient() {
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_address TEXT;
         ALTER TABLE reviews ADD COLUMN IF NOT EXISTS user_name VARCHAR(255);
         ALTER TABLE books ADD COLUMN IF NOT EXISTS badge VARCHAR(100) DEFAULT '';
+        ALTER TABLE books ADD COLUMN IF NOT EXISTS stock INT DEFAULT 50;
       `);
-    } catch (e) {}
-  }
-
-  return client;
+    } catch (e) {
+      /* schema already exists or partial — safe to continue */
+    }
 }
