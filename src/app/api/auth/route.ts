@@ -141,8 +141,8 @@ export async function POST(request: Request) {
       const passHash = hashPassword(password);
 
       await client.query(
-        `INSERT INTO users (id, name, email, phone, password_hash, role, email_verified, status)
-         VALUES ($1, $2, $3, $4, $5, 'customer', TRUE, 'active')`,
+        `INSERT INTO users (id, name, email, phone, password_hash, role, status)
+         VALUES ($1, $2, $3, $4, $5, 'customer', 'active')`,
         [userId, userName, cleanEmail, cleanPhone, passHash]
       );
 

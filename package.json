@@ -12,6 +12,7 @@
     "whatsapp": "node scripts/whatsapp-service.js",
     "check:otp": "node scripts/check-whatsapp-otp.js",
     "db:init": "node scripts/init-db.js",
+    "db:seed-admin": "node scripts/init-db.js",
     "lint": "eslint"
   },
   "dependencies": {

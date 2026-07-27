@@ -160,7 +160,6 @@ async function runSchemaInit(client: any) {
           phone VARCHAR(255) NOT NULL,
           password_hash VARCHAR(255) NOT NULL,
           google_id VARCHAR(255),
-          email_verified BOOLEAN DEFAULT FALSE,
           profile_image TEXT,
           role VARCHAR(50) DEFAULT 'customer',
           status VARCHAR(50) DEFAULT 'active',
@@ -398,6 +397,7 @@ async function runSchemaInit(client: any) {
         ALTER TABLE reviews ADD COLUMN IF NOT EXISTS user_name VARCHAR(255);
         ALTER TABLE books ADD COLUMN IF NOT EXISTS badge VARCHAR(100) DEFAULT '';
         ALTER TABLE books ADD COLUMN IF NOT EXISTS stock INT DEFAULT 50;
+        ALTER TABLE users DROP COLUMN IF EXISTS email_verified;
       `);
     } catch (e) {
       /* schema already exists or partial — safe to continue */

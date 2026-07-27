@@ -51,7 +51,6 @@ async function migrateDatabase(connStr, dbName) {
         phone VARCHAR(255) NOT NULL,
         password_hash VARCHAR(255) NOT NULL,
         google_id VARCHAR(255),
-        email_verified BOOLEAN DEFAULT FALSE,
         profile_image TEXT,
         role VARCHAR(50) DEFAULT 'customer',
         status VARCHAR(50) DEFAULT 'active',
@@ -283,6 +282,9 @@ async function migrateDatabase(connStr, dbName) {
       ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipped_at TIMESTAMP;
       ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMP;
       ALTER TABLE reviews ADD COLUMN IF NOT EXISTS user_name VARCHAR(255);
+      ALTER TABLE books ADD COLUMN IF NOT EXISTS badge VARCHAR(100) DEFAULT '';
+      ALTER TABLE books ADD COLUMN IF NOT EXISTS stock INT DEFAULT 50;
+      ALTER TABLE users DROP COLUMN IF EXISTS email_verified;
 
       CREATE TABLE IF NOT EXISTS faqs (
         id VARCHAR(255) PRIMARY KEY,
@@ -370,28 +372,59 @@ async function seedAdmin(connStr, dbName) {
   try {
     await client.connect();
 
-    for (const admin of ADMIN_USERS) {
-      const existing = await client.query(
-        'SELECT id FROM users WHERE LOWER(email) = $1',
-        [admin.email.toLowerCase()]
-      );
+    // Drop unused column if present
+    try {
+      await client.query(`ALTER TABLE users DROP COLUMN IF EXISTS email_verified`);
+    } catch (_) {}
 
+    for (const admin of ADMIN_USERS) {
+      const phone = String(admin.phone).replace(/\D/g, '').slice(-10);
+      const email = String(admin.email).toLowerCase().trim();
       const passwordHash = hashPassword(admin.password);
 
+      const existing = await client.query(
+        `SELECT id FROM users
+         WHERE LOWER(email) = $1
+            OR phone = $2
+            OR REPLACE(phone, '+', '') = $2
+            OR RIGHT(REGEXP_REPLACE(phone, '\\D', '', 'g'), 10) = $2
+         LIMIT 1`,
+        [email, phone]
+      );
+
+      let userId = admin.id;
       if (existing.rows.length === 0) {
         await client.query(
-          `INSERT INTO users (id, name, email, phone, password_hash, role, email_verified, status)
-           VALUES ($1, $2, $3, $4, $5, $6, TRUE, 'active')`,
-          [admin.id, admin.name, admin.email, admin.phone, passwordHash, admin.role]
+          `INSERT INTO users (id, name, email, phone, password_hash, role, status)
+           VALUES ($1, $2, $3, $4, $5, 'admin', 'active')`,
+          [userId, admin.name, email, phone, passwordHash]
         );
-        console.log(`✅ [ADMIN SEEDED] ${admin.email} → role: ${admin.role}`);
+        console.log(`✅ [ADMIN CREATED] ${email} / phone ${phone}`);
       } else {
+        userId = existing.rows[0].id;
         await client.query(
-          `UPDATE users SET role = 'admin', password_hash = $1 WHERE LOWER(email) = $2`,
-          [passwordHash, admin.email.toLowerCase()]
+          `UPDATE users
+           SET name = $1,
+               email = $2,
+               phone = $3,
+               password_hash = $4,
+               role = 'admin',
+               status = 'active',
+               updated_at = NOW()
+           WHERE id = $5`,
+          [admin.name, email, phone, passwordHash, userId]
         );
-        console.log(`✅ [ADMIN ROLE UPDATED] ${admin.email} set to role: admin`);
+        console.log(`✅ [ADMIN UPDATED] ${email} / phone ${phone} → role: admin`);
       }
+
+      await client.query(
+        `INSERT INTO cart (id, user_id) VALUES ($1, $2) ON CONFLICT (user_id) DO NOTHING`,
+        [`cart-${userId}`, userId]
+      );
+
+      console.log(`   Login (mobile): ${phone}`);
+      console.log(`   Password: ${admin.password}`);
+      console.log(`   (Set ADMIN_PHONE / ADMIN_PASSWORD / ADMIN_EMAIL on Railway to customize)`);
     }
 
     await client.end();

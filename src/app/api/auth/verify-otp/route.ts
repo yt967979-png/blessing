@@ -37,7 +37,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       verified: true,
-      message: '✓ Email address verified successfully! You may now complete registration.',
+      message: '✓ WhatsApp OTP verified. You may now complete registration.',
     });
   } catch (err: any) {
     if (client) { try { await client.end(); } catch (_) {} }
