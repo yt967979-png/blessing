@@ -16,7 +16,6 @@ export const Header = () => {
     setSearchQuery,
     selectedClass,
     setSelectedClass,
-    setIsCartOpen,
     setIsAuthOpen,
     user,
     setQuickViewProduct,
@@ -37,27 +36,19 @@ export const Header = () => {
         .slice(0, 5)
     : [];
 
-  const handleAccountClick = () => {
-    if (user) {
-      router.push('/profile');
-    } else {
-      setIsAuthOpen(true);
-    }
-  };
-
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-xs">
       <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-3 md:gap-8">
         {/* Logo */}
-        <Link href="/" className="flex items-center gap-2 flex-shrink-0 group">
-          <div className="w-9 h-9 sm:w-11 sm:h-11 bg-gradient-to-br from-[#001B3A] to-[#003B73] border-2 border-[#D4A843] rounded-xl flex items-center justify-center font-bold text-xl sm:text-2xl text-[#F0C14B] shadow-md group-hover:scale-105 transition-transform">
+        <Link href="/" className="flex items-center gap-2 flex-shrink-0 group min-w-0 max-w-[55%] sm:max-w-none">
+          <div className="w-9 h-9 sm:w-11 sm:h-11 bg-gradient-to-br from-[#001B3A] to-[#003B73] border-2 border-[#D4A843] rounded-xl flex items-center justify-center font-bold text-xl sm:text-2xl text-[#F0C14B] shadow-md group-hover:scale-105 transition-transform flex-shrink-0">
             B
           </div>
-          <div>
-            <h1 className="font-bold text-sm sm:text-lg text-[#001B3A] tracking-tight leading-tight">
+          <div className="min-w-0">
+            <h1 className="font-bold text-xs sm:text-lg text-[#001B3A] tracking-tight leading-tight truncate">
               BLESSING POWER GUIDE
             </h1>
-            <p className="text-[9px] sm:text-[10px] text-blue-600 font-semibold tracking-wider uppercase">
+            <p className="text-[9px] sm:text-[10px] text-blue-600 font-semibold tracking-wider uppercase hidden xs:block sm:block truncate">
               Your Success, Our Mission
             </p>
           </div>
@@ -136,43 +127,40 @@ export const Header = () => {
         </div>
 
         {/* Header Actions */}
-        <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
-          {/* Admin Panel Quick Access Button */}
+        <div className="flex items-center gap-0.5 sm:gap-2 flex-shrink-0">
           {user && user.role === 'admin' && (
             <Link
               href="/admin"
-              className="bg-[#001B3A] hover:bg-blue-600 text-amber-400 font-extrabold text-[10px] sm:text-[11px] px-2.5 sm:px-3 py-1.5 rounded-xl transition-all shadow-xs flex items-center gap-1 border border-amber-400/30"
+              className="hidden sm:flex bg-[#001B3A] hover:bg-blue-600 text-amber-400 font-extrabold text-[10px] sm:text-[11px] px-2.5 sm:px-3 py-1.5 rounded-xl transition-all shadow-xs items-center gap-1 border border-amber-400/30"
             >
               <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
               <span>ADMIN</span>
             </Link>
           )}
 
-          {/* User Account Button */}
           {user ? (
             <Link
               href="/profile"
-              className="p-1.5 sm:p-2 rounded-xl text-slate-700 hover:bg-slate-100 transition-colors flex flex-col items-center gap-0.5"
+              className="p-2.5 rounded-xl text-slate-700 hover:bg-slate-100 transition-colors flex flex-col items-center gap-0.5 min-h-11 min-w-11 justify-center"
+              aria-label="Profile"
             >
               <User className="w-5 h-5 text-blue-600" />
-              <span className="text-[10px] font-semibold hidden md:block">
-                {user.name.split(' ')[0]}
-              </span>
             </Link>
           ) : (
             <button
+              type="button"
               onClick={() => setIsAuthOpen(true)}
-              className="p-1.5 sm:p-2 rounded-xl text-slate-700 hover:bg-slate-100 transition-colors flex flex-col items-center gap-0.5 cursor-pointer"
+              className="p-2.5 rounded-xl text-slate-700 hover:bg-slate-100 transition-colors flex flex-col items-center gap-0.5 cursor-pointer min-h-11 min-w-11 justify-center"
+              aria-label="Login"
             >
               <User className="w-5 h-5 text-slate-700" />
-              <span className="text-[10px] font-semibold hidden md:block">Account</span>
             </button>
           )}
 
-          {/* Wishlist Button */}
           <Link
             href="/profile"
-            className="relative p-1.5 sm:p-2 rounded-xl text-slate-700 hover:bg-slate-100 transition-colors flex flex-col items-center gap-0.5"
+            className="relative p-2.5 rounded-xl text-slate-700 hover:bg-slate-100 transition-colors flex flex-col items-center gap-0.5 min-h-11 min-w-11 justify-center"
+            aria-label="Wishlist"
           >
             <Heart
               className={`w-5 h-5 ${
@@ -180,26 +168,24 @@ export const Header = () => {
               }`}
             />
             {wishlist.length > 0 && (
-              <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[10px] font-extrabold rounded-full flex items-center justify-center">
+              <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 text-white text-[10px] font-extrabold rounded-full flex items-center justify-center">
                 {wishlist.length}
               </span>
             )}
-            <span className="text-[10px] font-semibold hidden md:block">Wishlist</span>
           </Link>
 
-          {/* Cart Button */}
-          <button
-            onClick={() => setIsCartOpen(true)}
-            className="relative p-1.5 sm:p-2 rounded-xl text-slate-700 hover:bg-slate-100 transition-colors flex flex-col items-center gap-0.5 cursor-pointer"
+          <Link
+            href="/cart"
+            className="relative p-2.5 rounded-xl text-slate-700 hover:bg-slate-100 transition-colors flex flex-col items-center gap-0.5 cursor-pointer min-h-11 min-w-11 justify-center"
+            aria-label="Cart"
           >
             <ShoppingBag className="w-5 h-5 text-slate-700" />
             {cartCount > 0 && (
-              <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[10px] font-extrabold rounded-full flex items-center justify-center animate-bounce">
+              <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 text-white text-[10px] font-extrabold rounded-full flex items-center justify-center">
                 {cartCount}
               </span>
             )}
-            <span className="text-[10px] font-semibold hidden md:block">Cart</span>
-          </button>
+          </Link>
         </div>
       </div>
 

@@ -110,13 +110,16 @@ export async function GET(request: Request) {
             discount: calculatedDiscount,
             rating: Number(d.avg_rating || 5.0),
             reviews: Number(d.review_count || 0),
-            badge: isCombo ? 'SUPER COMBO' : 'BESTSELLER',
-            badgeColor: 'bg-blue-600',
+            badge: (d.badge && String(d.badge).trim()) || '',
+            badgeColor: (d.badge && String(d.badge).trim())
+              ? (String(d.badge).toUpperCase().includes('COMBO') ? 'bg-purple-600' : 'bg-blue-600')
+              : 'bg-blue-600',
             image: d.cover_image || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80',
             hoverImage: d.cover_image || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80',
             description: d.description || 'Complete guide book for exam success.',
             features: ['Solved Papers', 'Chapter Notes'],
             inStock: d.status !== 'out_of_stock' && (d.stock === undefined || d.stock === null || Number(d.stock) > 0),
+            isBestSeller: String(d.badge || '').toUpperCase().includes('BEST'),
           };
         });
         writeCache(key, mapped);
@@ -154,14 +157,26 @@ export async function POST(request: Request) {
     const categoryId = category === 'combo' ? 'cat-combos' : `cat-${cls || '10th'}`;
     const finalImg = image || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80';
     const finalDesc = description || `Complete ${cls || '10th'} Standard ${title} guide.`;
+    const finalBadge = String(badge || '').trim().slice(0, 100);
 
     if (client) {
+      await client.query(`ALTER TABLE books ADD COLUMN IF NOT EXISTS badge VARCHAR(100) DEFAULT ''`);
       const sql = `
-        INSERT INTO books (id, title, slug, category_id, price, discount_price, cover_image, description, status, featured)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'published', TRUE)
+        INSERT INTO books (id, title, slug, category_id, price, discount_price, cover_image, description, status, featured, badge)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'published', TRUE, $9)
         RETURNING *
       `;
-      const res = await client.query(sql, [id, title, slug, categoryId, finalPrice, finalDiscountPrice, finalImg, finalDesc]);
+      const res = await client.query(sql, [
+        id,
+        title,
+        slug,
+        categoryId,
+        finalPrice,
+        finalDiscountPrice,
+        finalImg,
+        finalDesc,
+        finalBadge,
+      ]);
       invalidateProductsCache();
       return NextResponse.json(res.rows[0], { status: 201 });
     }
@@ -180,10 +195,11 @@ export async function PATCH(request: Request) {
 
   const client = await getDbClient();
   try {
-    const { id, title, price, mrp, inStock, description, image } = await request.json();
+    const { id, title, price, mrp, inStock, description, image, badge } = await request.json();
     if (!id) return NextResponse.json({ error: 'Product id is required' }, { status: 400 });
 
     if (client) {
+      await client.query(`ALTER TABLE books ADD COLUMN IF NOT EXISTS badge VARCHAR(100) DEFAULT ''`);
       const fields: string[] = [];
       const values: any[] = [];
       let idx = 1;
@@ -193,6 +209,7 @@ export async function PATCH(request: Request) {
       if (mrp !== undefined) { fields.push(`price = $${idx++}`); values.push(Number(mrp)); }
       if (description !== undefined) { fields.push(`description = $${idx++}`); values.push(description); }
       if (image !== undefined) { fields.push(`cover_image = $${idx++}`); values.push(image); }
+      if (badge !== undefined) { fields.push(`badge = $${idx++}`); values.push(String(badge || '').trim().slice(0, 100)); }
       if (inStock !== undefined) {
         fields.push(`status = $${idx++}`);
         values.push(inStock ? 'published' : 'out_of_stock');

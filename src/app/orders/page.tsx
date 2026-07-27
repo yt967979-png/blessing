@@ -805,7 +805,7 @@ export default function OrdersPage() {
   return (
     <main className="min-h-screen bg-[#F4F6F9] text-slate-900 font-sans">
       <Header />
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-16">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-28 md:pb-16">
         <Suspense fallback={<div className="py-20 text-center">Loading...</div>}>
           <OrdersContent />
         </Suspense>

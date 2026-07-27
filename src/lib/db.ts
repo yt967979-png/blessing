@@ -304,6 +304,7 @@ export async function getDbClient() {
 
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_address TEXT;
         ALTER TABLE reviews ADD COLUMN IF NOT EXISTS user_name VARCHAR(255);
+        ALTER TABLE books ADD COLUMN IF NOT EXISTS badge VARCHAR(100) DEFAULT '';
       `);
     } catch (e) {}
   }

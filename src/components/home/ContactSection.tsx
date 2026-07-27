@@ -85,14 +85,26 @@ export const ContactSection = () => {
                       No.12, Ganesh Apartment, Trust Square Street, Medavakkam, Agaramthen, Chennai — 600012
                     </p>
                     <a
-                      href="https://maps.google.com/?q=Medavakkam+Agaramthen+Chennai+600012"
+                      href="https://www.google.com/maps/search/?api=1&query=Medavakkam+Agaramthen+Chennai+600012"
                       target="_blank"
                       rel="noreferrer"
                       className="inline-block mt-2 text-[11px] font-bold text-blue-400 hover:text-amber-400 underline transition-colors"
                     >
-                      📍 Open Google Maps Location
+                      Open in Google Maps
                     </a>
                   </div>
+                </div>
+
+                {/* Embedded map */}
+                <div className="rounded-2xl overflow-hidden border border-slate-700 shadow-lg aspect-[16/10] bg-slate-900">
+                  <iframe
+                    title="Blessing Power Guide — Medavakkam, Chennai"
+                    src="https://maps.google.com/maps?q=Medavakkam%20Agaramthen%20Chennai%20600012&t=&z=15&ie=UTF8&iwloc=&output=embed"
+                    className="w-full h-full border-0"
+                    loading="lazy"
+                    referrerPolicy="no-referrer-when-downgrade"
+                    allowFullScreen
+                  />
                 </div>
 
                 <div className="flex items-start gap-4">

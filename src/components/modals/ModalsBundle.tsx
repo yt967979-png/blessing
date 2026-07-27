@@ -502,11 +502,13 @@ export const ModalsBundle = () => {
                   />
                 </div>
                 <div>
-                  <span
-                    className={`text-[10px] font-extrabold text-white px-2 py-0.5 rounded ${quickViewProduct.badgeColor} inline-block mb-2`}
-                  >
-                    {quickViewProduct.badge}
-                  </span>
+                  {quickViewProduct.badge ? (
+                      <span
+                        className={`text-[10px] font-extrabold text-white px-2 py-0.5 rounded ${quickViewProduct.badgeColor || 'bg-blue-600'} inline-block mb-2`}
+                      >
+                        {quickViewProduct.badge}
+                      </span>
+                    ) : null}
                   <h3 className="font-heading font-extrabold text-base text-[#001B3A] mb-1">
                     {quickViewProduct.title}
                   </h3>

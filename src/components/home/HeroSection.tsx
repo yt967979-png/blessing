@@ -24,11 +24,11 @@ export const HeroSection = () => {
   const heroProducts = products.length > 0 ? products.slice(0, 3) : [];
 
   const slides = heroProducts.length > 0 ? heroProducts.map((p) => ({
-    tag: `${p.cls} STANDARD • ${p.badge}`,
+    tag: `${p.cls} STANDARD${p.badge ? ` • ${p.badge}` : ''}`,
     titleLine1: 'SCORE HIGH MARKS WITH',
     titleLine2: p.title.toUpperCase(),
     subtitle: p.description,
-    badge: p.badge,
+    badge: p.badge || 'EXAM ORIENTED',
     image: p.image,
     price: p.price,
     mrp: p.mrp,

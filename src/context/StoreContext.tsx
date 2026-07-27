@@ -369,12 +369,26 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const updateProductInDb = async (id: string | number, updatedData: Partial<Product>) => {
-    setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, ...updatedData } : p)));
+    const badge = updatedData.badge !== undefined ? String(updatedData.badge || '').trim() : undefined;
+    const withDerived =
+      badge !== undefined
+        ? {
+            ...updatedData,
+            badge,
+            badgeColor: badge
+              ? badge.toUpperCase().includes('COMBO')
+                ? 'bg-purple-600'
+                : 'bg-blue-600'
+              : '',
+            isBestSeller: badge.toUpperCase().includes('BEST'),
+          }
+        : updatedData;
+    setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, ...withDerived } : p)));
     try {
       const res = await fetch('/api/products', {
         method: 'PATCH',
         headers: getAdminHeaders(),
-        body: JSON.stringify({ id, ...updatedData }),
+        body: JSON.stringify({ id, ...withDerived }),
       });
       if (!res.ok) throw new Error('Update failed');
       refreshProducts();
@@ -398,6 +412,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           mrp: newProdData.mrp,
           image: newProdData.image,
           description: newProdData.description,
+          badge: newProdData.badge || '',
         }),
       });
       if (!res.ok) throw new Error('Create failed');

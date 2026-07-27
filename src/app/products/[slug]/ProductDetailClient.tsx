@@ -157,9 +157,11 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
                 alt={product.title}
                 className="max-h-full max-w-full object-contain transition-transform duration-300 hover:scale-105"
               />
-              <span className={`absolute top-3 left-3 text-[10px] font-extrabold text-white px-2.5 py-1 rounded shadow-xs uppercase tracking-wider ${product.badgeColor}`}>
-                {product.badge}
-              </span>
+              {product.badge ? (
+                <span className={`absolute top-3 left-3 text-[10px] font-extrabold text-white px-2.5 py-1 rounded shadow-xs uppercase tracking-wider ${product.badgeColor || 'bg-blue-600'}`}>
+                  {product.badge}
+                </span>
+              ) : null}
             </div>
 
             <div className="flex gap-3">

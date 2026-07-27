@@ -38,7 +38,7 @@ export const ProductCard = ({ product }: { product: Product }) => {
           <span className="text-[9px] font-black text-white px-2.5 py-0.5 rounded-full shadow-md uppercase tracking-wider bg-slate-700">
             OUT OF STOCK
           </span>
-        ) : (
+        ) : product.badge ? (
           <span
             className={`text-[9px] font-black text-white px-2.5 py-0.5 rounded-full shadow-md uppercase tracking-wider ${
               product.badgeColor || 'bg-blue-600'
@@ -46,7 +46,7 @@ export const ProductCard = ({ product }: { product: Product }) => {
           >
             {product.badge}
           </span>
-        )}
+        ) : null}
       </div>
 
       <button
