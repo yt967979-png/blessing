@@ -32,6 +32,22 @@ export function isValidEmailFormat(email: string): boolean {
   return emailRegex.test(email);
 }
 
+/** Indian mobile: 10 digits, optional +91 / 91 / 0 prefix */
+export function isValidMobileNumber(phone: string): boolean {
+  const digits = String(phone || '').replace(/\D/g, '');
+  if (digits.length === 10) return /^[6-9]\d{9}$/.test(digits);
+  if (digits.length === 11 && digits.startsWith('0')) return /^[6-9]\d{9}$/.test(digits.slice(1));
+  if (digits.length === 12 && digits.startsWith('91')) return /^[6-9]\d{9}$/.test(digits.slice(2));
+  return false;
+}
+
+export function normalizeMobileDigits(phone: string): string {
+  const digits = String(phone || '').replace(/\D/g, '');
+  if (digits.length === 12 && digits.startsWith('91')) return digits.slice(2);
+  if (digits.length === 11 && digits.startsWith('0')) return digits.slice(1);
+  return digits.slice(-10);
+}
+
 export interface PasswordCriteria {
   minLength: boolean;
   hasUpper: boolean;

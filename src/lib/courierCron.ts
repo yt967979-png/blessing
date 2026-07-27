@@ -23,8 +23,8 @@ export function startCourierSyncCron() {
     }
   };
 
-  // First run after short delay so DB pool is ready
-  setTimeout(run, 20000);
+  // First run after delay so Postgres private network is ready
+  setTimeout(run, Number(process.env.COURIER_CRON_START_DELAY_MS || 60000));
   setInterval(run, intervalMs);
   console.log(`[courier-cron] enabled — every ${Math.round(intervalMs / 60000)} min`);
 }

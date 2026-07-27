@@ -28,6 +28,8 @@ import { useStore } from '@/context/StoreContext';
 import {
   isDisposableEmail,
   isValidEmailFormat,
+  isValidMobileNumber,
+  normalizeMobileDigits,
   checkPasswordCriteria,
   isStrongPassword,
 } from '@/lib/authValidation';
@@ -351,6 +353,42 @@ export const ModalsBundle = () => {
     const emailClean = authForm.email.trim();
     const passwordClean = authForm.password;
 
+    // Login is mobile + password (UI label is Mobile Number)
+    if (authMode === 'login') {
+      if (!isValidMobileNumber(emailClean)) {
+        setAuthError('Please enter a valid 10-digit mobile number.');
+        return;
+      }
+      const phoneClean = normalizeMobileDigits(emailClean);
+      setIsSubmitting(true);
+      try {
+        const res = await fetch('/api/auth', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'login',
+            phone: phoneClean,
+            email: phoneClean,
+            password: passwordClean,
+          }),
+        });
+        const data = await res.json();
+        if (data.error) {
+          setAuthError(data.error);
+          return;
+        }
+        loginUser(data.user, data.cart || [], data.wishlist || [], data.addresses || []);
+        setIsAuthOpen(false);
+        showToast(`✓ Welcome back, ${data.user.name}`);
+        if (data.user?.role === 'admin') router.push('/admin');
+      } catch {
+        setAuthError('Connection error. Please check your internet and try again.');
+      } finally {
+        setIsSubmitting(false);
+      }
+      return;
+    }
+
     if (!isValidEmailFormat(emailClean)) {
       setAuthError('Please enter a valid email address.');
       return;
@@ -450,25 +488,7 @@ export const ModalsBundle = () => {
       return;
     }
 
-    // Login
-    setIsSubmitting(true);
-    try {
-      const res = await fetch('/api/auth', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'login', email: emailClean, password: passwordClean }),
-      });
-      const data = await res.json();
-      if (data.error) { setAuthError(data.error); return; }
-      loginUser(data.user, data.cart || [], data.wishlist || [], data.addresses || []);
-      setIsAuthOpen(false);
-      showToast(`✓ Welcome back, ${data.user.name}`);
-      if (data.user?.role === 'admin') router.push('/admin');
-    } catch {
-      setAuthError('Connection error. Please check your internet and try again.');
-    } finally {
-      setIsSubmitting(false);
-    }
+    setAuthError('Unknown auth mode.');
   };
 
   return (

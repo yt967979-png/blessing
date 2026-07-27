@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getDbClient } from '@/lib/db';
+import { getDbClient, releaseDbClient } from '@/lib/db';
 import { applyRateLimitAsync, clientIp } from '@/lib/serverSecurity';
 import { isOfficialAwb, syncOrderByAwb } from '@/lib/stCourier';
 
@@ -67,6 +67,12 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string) {
   }
 
   const client = await getDbClient();
+  if (!client) {
+    return NextResponse.json(
+      { error: 'Service temporarily busy. Please try again in a few seconds.' },
+      { status: 503 }
+    );
+  }
   try {
     const res = await client.query(
       `SELECT o.id, o.order_number, o.order_status, o.awb_number, o.shipment_id, o.tracking_url,
@@ -89,7 +95,7 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string) {
     );
 
     if (res.rows.length === 0) {
-      await client.end();
+      releaseDbClient(client);
       return NextResponse.json({ error: 'Order not found. Check the Order ID from WhatsApp / invoice.' }, { status: 404 });
     }
 
@@ -100,7 +106,7 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string) {
     } catch (_) {}
 
     if (!phonesMatch(phone, addr.phone || '')) {
-      await client.end();
+      releaseDbClient(client);
       return NextResponse.json(
         { error: 'Phone number does not match this order. Use the mobile number from checkout.' },
         { status: 403 }
@@ -139,7 +145,7 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string) {
       }));
     } catch (_) {}
 
-    await client.end();
+    releaseDbClient(client);
 
     // Live refresh from ST Courier when official AWB exists
     let live: any = null;
@@ -194,9 +200,7 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string) {
       },
     });
   } catch (err: any) {
-    try {
-      await client.end();
-    } catch (_) {}
+    releaseDbClient(client);
     return NextResponse.json({ error: err.message || 'Tracking failed' }, { status: 500 });
   }
 }

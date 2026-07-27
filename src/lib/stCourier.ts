@@ -278,6 +278,9 @@ export async function syncOrderByAwb(
   }
 
   const client = await getDbClient();
+  if (!client) {
+    return { verified: true, updated: false, error: 'Database unavailable', trackingUrl: tracked.trackingUrl };
+  }
   try {
     const orderRes = await client.query(
       `SELECT id, order_number, order_status, awb_number, shipping_address
@@ -389,7 +392,9 @@ export async function syncOrderByAwb(
       events: tracked.events,
     };
   } finally {
-    await client.end();
+    try {
+      if (client) await client.end();
+    } catch (_) {}
   }
 }
 
@@ -398,6 +403,7 @@ export async function syncAllActiveAwbOrders(): Promise<{ checked: number; updat
   const client = await getDbClient();
   let rows: any[] = [];
   try {
+    if (!client) return { checked: 0, updated: 0 };
     const res = await client.query(
       `SELECT DISTINCT awb_number FROM orders
        WHERE awb_number IS NOT NULL
@@ -407,7 +413,9 @@ export async function syncAllActiveAwbOrders(): Promise<{ checked: number; updat
     );
     rows = res.rows;
   } finally {
-    await client.end();
+    try {
+      if (client) await client.end();
+    } catch (_) {}
   }
 
   let updated = 0;

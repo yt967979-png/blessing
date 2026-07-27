@@ -32,20 +32,22 @@ export async function GET(request: Request) {
 
   // If orderId provided, ensure AWB is saved then sync (admin just assigned)
   if (orderId) {
-    const { getDbClient } = await import('@/lib/db');
+    const { getDbClient, releaseDbClient } = await import('@/lib/db');
     const client = await getDbClient();
     try {
-      await client.query(
-        `UPDATE orders
-         SET awb_number = $1,
-             tracking_url = $2,
-             courier_name = 'ST Courier Express',
-             updated_at = NOW()
-         WHERE id = $3 OR order_number = $3`,
-        [docket, `https://stcourier.com/track/shipment?docket=${encodeURIComponent(docket)}`, orderId]
-      );
+      if (client) {
+        await client.query(
+          `UPDATE orders
+           SET awb_number = $1,
+               tracking_url = $2,
+               courier_name = 'ST Courier Express',
+               updated_at = NOW()
+           WHERE id = $3 OR order_number = $3`,
+          [docket, `https://stcourier.com/track/shipment?docket=${encodeURIComponent(docket)}`, orderId]
+        );
+      }
     } finally {
-      await client.end();
+      releaseDbClient(client);
     }
   }
 

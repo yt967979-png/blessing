@@ -117,7 +117,32 @@ export async function getDbClient() {
     return client;
   } catch (err: any) {
     console.error('[db] connect timeout/failed:', err?.message || err);
+    const pub = process.env.DATABASE_PUBLIC_URL;
+    const current = process.env.DATABASE_URL || '';
+    if (pub && pub !== current && !(globalThis as any).__bpgTriedPublicDb) {
+      (globalThis as any).__bpgTriedPublicDb = true;
+      console.warn('[db] retrying with DATABASE_PUBLIC_URL…');
+      try {
+        await pool?.end();
+      } catch (_) {}
+      pool = null;
+      isSchemaInitialized = false;
+      schemaInitPromise = null;
+      process.env.DATABASE_URL = pub;
+      return getDbClient();
+    }
     return null;
+  }
+}
+
+/** Never throws if client is null (after connect timeout). */
+export function releaseDbClient(client: any) {
+  if (!client) return;
+  try {
+    if (typeof client.end === 'function') client.end();
+    else if (typeof client.release === 'function') client.release();
+  } catch (_) {
+    /* ignore */
   }
 }
 
