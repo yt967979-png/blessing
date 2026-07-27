@@ -348,11 +348,7 @@ async function ensureSchemaReady(activePool: Pool) {
     schemaInitPromise = (async () => {
       const initClient = await activePool.connect();
       try {
-        const exists = await initClient.query(`SELECT to_regclass('public.users') AS t`);
-        if (exists.rows[0]?.t) {
-          isSchemaInitialized = true;
-          return;
-        }
+        // Always run — idempotent migrations + category seed (existing DBs skip full CREATE).
         await runSchemaInit(initClient);
         isSchemaInitialized = true;
       } catch (e: any) {
@@ -704,6 +700,18 @@ async function runSchemaInit(client: any) {
           status VARCHAR(50) DEFAULT 'SENT',
           sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
+
+        CREATE TABLE IF NOT EXISTS whatsapp_outbox (
+          id VARCHAR(255) PRIMARY KEY,
+          phone VARCHAR(32) NOT NULL,
+          message TEXT NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          sent_at TIMESTAMP,
+          last_error TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_whatsapp_outbox_pending
+          ON whatsapp_outbox (created_at)
+          WHERE sent_at IS NULL;
 
         CREATE TABLE IF NOT EXISTS coupons (
           id VARCHAR(255) PRIMARY KEY,

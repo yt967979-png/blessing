@@ -16,11 +16,23 @@ export async function register() {
     // Warm DB before background jobs — keeps workflows aligned at boot
     await warmDbConnection();
 
-    const { startOrderListenBroker } = await import('@/app/api/orders/stream/route');
-    startOrderListenBroker();
+    const { tryAcquireBackgroundLeader } = await import('@/lib/backgroundLeader');
+    const isLeader = await tryAcquireBackgroundLeader();
 
-    const { startCourierSyncCron } = await import('@/lib/courierCron');
-    startCourierSyncCron();
+    if (isLeader) {
+      const { startOrderListenBroker } = await import('@/app/api/orders/stream/route');
+      startOrderListenBroker();
+
+      const { startCourierSyncCron } = await import('@/lib/courierCron');
+      startCourierSyncCron();
+
+      const { startWhatsAppOutboxWorker, initWhatsAppInProcess } = await import('@/lib/whatsapp');
+      startWhatsAppOutboxWorker();
+      // Restore linked session on the leader only (never on secondary replicas).
+      void initWhatsAppInProcess();
+    } else {
+      console.log('[leader] skipping LISTEN, courier cron, and WhatsApp on this replica');
+    }
 
     process.on('unhandledRejection', (reason) => {
       console.error('[process] unhandledRejection:', reason);

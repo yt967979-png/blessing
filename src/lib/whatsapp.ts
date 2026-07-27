@@ -2,7 +2,8 @@ import makeWASocket, { useMultiFileAuthState, DisconnectReason } from '@whiskeys
 import QRCode from 'qrcode';
 import path from 'path';
 import fs from 'fs';
-import { getDbClient } from '@/lib/db';
+import { getDbClient, releaseDbClient } from '@/lib/db';
+import { isBackgroundLeader } from '@/lib/backgroundLeader';
 
 const SESSION_DIR = path.join(process.cwd(), 'whatsapp_session');
 const PUBLIC_DIR = path.join(process.cwd(), 'public');
@@ -82,7 +83,11 @@ async function restoreSessionFromDb() {
   } catch (_) {}
 }
 
-export async function initWhatsAppInProcess() {
+export async function initWhatsAppInProcess(opts?: { requireLeader?: boolean }) {
+  const requireLeader = opts?.requireLeader !== false;
+  if (requireLeader && !isBackgroundLeader()) {
+    return null;
+  }
   if (sock && isConnected) return sock;
   if (isInitializing) return null;
   isInitializing = true;
@@ -130,8 +135,8 @@ export async function initWhatsAppInProcess() {
           message: isLoggedOut ? 'WhatsApp logged out permanently.' : 'Reconnecting to WhatsApp...',
         });
 
-        if (!isLoggedOut) {
-          setTimeout(initWhatsAppInProcess, 5000);
+        if (!isLoggedOut && isBackgroundLeader()) {
+          setTimeout(() => initWhatsAppInProcess(), 5000);
         }
       } else if (connection === 'open') {
         isConnected = true;
@@ -169,29 +174,103 @@ export async function initWhatsAppInProcess() {
 }
 
 let sendQueue: Promise<any> = Promise.resolve();
+let outboxWorkerStarted = false;
+
+function newOutboxId() {
+  return `wa-out-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+async function enqueueWhatsAppOutbox(to: string, message: string) {
+  const client = await getDbClient();
+  try {
+    await client.query(
+      `INSERT INTO whatsapp_outbox (id, phone, message) VALUES ($1, $2, $3)`,
+      [newOutboxId(), to.replace(/\D/g, ''), message]
+    );
+  } finally {
+    releaseDbClient(client);
+  }
+}
+
+async function sendWhatsAppDirect(to: string, message: string) {
+  const activeSock = await initWhatsAppInProcess();
+  if (!activeSock || !isConnected) {
+    throw new Error('WhatsApp not linked. Open Admin → WhatsApp and scan QR with the admin phone.');
+  }
+
+  const cleanPhone = to.replace(/\D/g, '');
+  if (cleanPhone.length < 10) {
+    throw new Error('Customer phone number is missing or invalid');
+  }
+  const phoneWithCountry = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+  const jid = `${phoneWithCountry}@s.whatsapp.net`;
+
+  await activeSock.sendMessage(jid, { text: message });
+  console.log(`✅ [IN-PROCESS BAILEYS SENT] Message sent to +${phoneWithCountry}`);
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  return { success: true, recipient: phoneWithCountry };
+}
+
+async function drainWhatsAppOutboxOnce() {
+  if (!isBackgroundLeader() || !isConnected) return;
+  const client = await getDbClient();
+  let rows: { id: string; phone: string; message: string }[] = [];
+  try {
+    const res = await client.query(
+      `SELECT id, phone, message FROM whatsapp_outbox
+       WHERE sent_at IS NULL
+       ORDER BY created_at ASC
+       LIMIT 5
+       FOR UPDATE SKIP LOCKED`
+    );
+    rows = res.rows;
+  } finally {
+    releaseDbClient(client);
+  }
+
+  for (const row of rows) {
+    try {
+      await sendWhatsAppDirect(row.phone, row.message);
+      const c = await getDbClient();
+      try {
+        await c.query(`UPDATE whatsapp_outbox SET sent_at = NOW(), last_error = NULL WHERE id = $1`, [row.id]);
+      } finally {
+        releaseDbClient(c);
+      }
+    } catch (err: any) {
+      const c = await getDbClient();
+      try {
+        await c.query(`UPDATE whatsapp_outbox SET last_error = $2 WHERE id = $1`, [
+          row.id,
+          String(err?.message || err).slice(0, 500),
+        ]);
+      } finally {
+        releaseDbClient(c);
+      }
+    }
+  }
+}
+
+/** Leader replica only — drains cross-replica WhatsApp queue. */
+export function startWhatsAppOutboxWorker() {
+  if (outboxWorkerStarted || !isBackgroundLeader()) return;
+  outboxWorkerStarted = true;
+  const intervalMs = Number(process.env.WHATSAPP_OUTBOX_INTERVAL_MS || 3000);
+  setInterval(() => {
+    void drainWhatsAppOutboxOnce();
+  }, intervalMs);
+  console.log(`[whatsapp] outbox worker enabled — every ${Math.round(intervalMs / 1000)}s`);
+}
 
 export async function sendWhatsAppMessageInProcess(to: string, message: string) {
-  // Chain through sequential queue with humanized 500ms pacing delay to guarantee 0% WhatsApp ban risk
+  if (!isBackgroundLeader()) {
+    await enqueueWhatsAppOutbox(to, message);
+    return { success: true, queued: true, recipient: to.replace(/\D/g, '') };
+  }
+
   const task = sendQueue.then(async () => {
     try {
-      const activeSock = await initWhatsAppInProcess();
-      if (!activeSock || !isConnected) {
-        throw new Error('WhatsApp not linked. Open Admin → WhatsApp and scan QR with the admin phone.');
-      }
-
-      const cleanPhone = to.replace(/\D/g, '');
-      if (cleanPhone.length < 10) {
-        throw new Error('Customer phone number is missing or invalid');
-      }
-      const phoneWithCountry = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
-      const jid = `${phoneWithCountry}@s.whatsapp.net`;
-
-      await activeSock.sendMessage(jid, { text: message });
-      console.log(`✅ [IN-PROCESS BAILEYS SENT] Message sent to +${phoneWithCountry}`);
-
-      // 500ms human delay between outgoing messages
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      return { success: true, recipient: phoneWithCountry };
+      return await sendWhatsAppDirect(to, message);
     } catch (err: any) {
       console.error('Failed to send WhatsApp message in-process:', err.message);
       throw err;

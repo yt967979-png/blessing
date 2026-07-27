@@ -2,17 +2,20 @@ import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 import { initWhatsAppInProcess } from '@/lib/whatsapp';
+import { isBackgroundLeader } from '@/lib/backgroundLeader';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const phone = searchParams.get('phone');
 
-  // Asynchronously trigger in-process Baileys initialization
+  // Asynchronously trigger in-process Baileys initialization (leader replica only)
   let activeSock: any = null;
-  try {
-    activeSock = await initWhatsAppInProcess();
-  } catch (err) {
-    console.error('Failed in-process init in QR route:', err);
+  if (isBackgroundLeader()) {
+    try {
+      activeSock = await initWhatsAppInProcess();
+    } catch (err) {
+      console.error('Failed in-process init in QR route:', err);
+    }
   }
 
   // If phone parameter is provided, request 8-digit Pairing Code from active in-process socket
