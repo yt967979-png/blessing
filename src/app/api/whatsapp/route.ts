@@ -31,7 +31,7 @@ export async function POST(request: Request) {
     const trackingNo = trackingNumber || 'Pending AWB Assignment';
     const bookTitle = items?.[0]?.title || 'Blessing Power Guide Study Book';
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://blessing-production.up.railway.app';
-    const websiteTrackingUrl = `${siteUrl}/orders?orderId=${encodeURIComponent(orderId || '')}`;
+    const websiteTrackingUrl = `${siteUrl}/track?orderId=${encodeURIComponent(orderId || '')}`;
 
     // Environment API Credentials
     const ultramsgInstanceId = process.env.ULTRAMSG_INSTANCE_ID;

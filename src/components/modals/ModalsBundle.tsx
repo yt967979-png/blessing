@@ -127,7 +127,7 @@ export const ModalsBundle = () => {
   const [paymentMethod, setPaymentMethod] = useState<'razorpay' | 'cod'>('razorpay');
 
   // Track state
-  const [trackId, setTrackId] = useState('BPG-1082');
+  const [trackId, setTrackId] = useState('');
   const [trackResult, setTrackResult] = useState<any>(null);
 
   // Auth form state
@@ -797,24 +797,40 @@ export const ModalsBundle = () => {
                 </h3>
               </div>
               <p className="text-xs text-slate-500 mb-4">
-                Enter your Order ID to track delivery status.
+                Enter Order ID — we&apos;ll open public tracking (no login needed).
               </p>
 
-              <div className="flex gap-2 mb-4">
+              <div className="flex gap-2 mb-2">
                 <input
                   type="text"
                   placeholder="e.g. BPG-1082"
                   value={trackId}
                   onChange={(e) => setTrackId(e.target.value)}
-                  className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-600 uppercase"
+                  className="flex-1 px-3 py-2.5 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-600 uppercase min-h-11"
                 />
                 <button
-                  onClick={() => router.push('/orders')}
-                  className="bg-[#001B3A] text-white font-bold text-xs px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors"
+                  type="button"
+                  onClick={() => {
+                    const id = trackId.trim();
+                    setIsTrackOpen(false);
+                    if (id) router.push(`/track?orderId=${encodeURIComponent(id)}`);
+                    else router.push('/track');
+                  }}
+                  className="bg-[#001B3A] text-white font-bold text-xs px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors min-h-11"
                 >
                   TRACK
                 </button>
               </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsTrackOpen(false);
+                  router.push('/track');
+                }}
+                className="text-[11px] font-bold text-blue-600 hover:underline"
+              >
+                Open full track page →
+              </button>
             </motion.div>
           </div>
         )}
@@ -1461,7 +1477,7 @@ export const ModalsBundle = () => {
                   onClick={() => {
                     const oid = orderSuccessData.orderId;
                     setOrderSuccessData(null);
-                    router.push(`/orders?orderId=${oid}`);
+                    router.push(`/track?orderId=${encodeURIComponent(oid)}`);
                   }}
                   className="w-full bg-gradient-to-r from-[#001B3A] via-[#002B5B] to-[#0044AA] hover:from-blue-700 hover:to-blue-600 text-white font-black text-xs py-4 rounded-2xl shadow-xl uppercase tracking-wider flex items-center justify-center gap-2.5 transition-all transform hover:-translate-y-0.5 cursor-pointer"
                 >

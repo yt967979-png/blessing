@@ -1,144 +1,82 @@
 import { NextResponse } from 'next/server';
-import { getDbClient } from '@/lib/db';
-import { applyRateLimit } from '@/lib/serverSecurity';
+import { applyRateLimitAsync, clientIp } from '@/lib/serverSecurity';
+import { cleanDocket, fetchStCourierTrack, syncOrderByAwb, VALID_DOCKET_PATTERN } from '@/lib/stCourier';
 
 /**
- * Strict ST Courier AWB docket rules:
- *  - Official STC format: STC followed by exactly 9 digits (e.g. STC241568974)
- *  - Official STCOE format: STCOE followed by 7 to 10 digits
- *  - Regional letter code: 2-3 uppercase letters followed by 8 to 12 digits (e.g. TN12345678)
- *  - Pure numeric: 10 to 13 digits
+ * GET /api/courier/track?docket=XXX
+ * Verifies AWB on ST Courier live network and auto-updates matching order status
+ * (In Transit / Out for Delivery / Delivered) when courier advances.
  */
-const VALID_DOCKET_PATTERN = /^(STC[0-9]{9}|STCOE[0-9]{7,10}|[A-Z]{2,3}[0-9]{8,12}|[0-9]{10,13})$/;
-
 export async function GET(request: Request) {
-  // Rate limiting on public courier tracking route (max 30 queries/minute)
-  const ip = request.headers.get('x-forwarded-for') || 'anonymous';
-  const { allowed } = applyRateLimit(`courier-${ip}`, 30, 60000);
+  const ip = clientIp(request);
+  const { allowed } = await applyRateLimitAsync(`courier-${ip}`, 40, 60000);
   if (!allowed) {
     return NextResponse.json({ error: 'Too many tracking checks. Please wait 1 minute.' }, { status: 429 });
   }
 
   const { searchParams } = new URL(request.url);
-  const docket = searchParams.get('docket');
+  const docket = cleanDocket(searchParams.get('docket') || '');
+  const orderId = searchParams.get('orderId') || '';
 
-  const cleanDocket = (docket || '').trim().toUpperCase().replace(/\s+/g, '');
-
-  // --- Strict format gate ---
-  if (!VALID_DOCKET_PATTERN.test(cleanDocket)) {
-    return NextResponse.json({
-      isValid: false,
-      verified: false,
-      error: `"${cleanDocket}" does not match any known ST Courier docket format. Valid examples: STC241568974, TN12345678. Please check the docket number on your ST Courier booking receipt.`,
-      docket: cleanDocket,
-    }, { status: 400 });
-  }
-
-  const officialUrl = `https://stcourier.com/track/shipment?docket=${encodeURIComponent(cleanDocket)}`;
-  let liveStatus = 'Handed to ST Courier';
-  let events: Array<{ time: string; activity: string; location: string }> = [];
-
-  let networkVerification: boolean | null = null;
-  const numericDocketOnly = cleanDocket.replace(/[^0-9]/g, '');
-
-  // --- Target ST Courier's Live ERP JSON API Endpoint ---
-  try {
-    const erpRes = await fetch(`https://erpstcourier.com/api/v1/shipment/track?awb=${encodeURIComponent(cleanDocket)}&docket=${encodeURIComponent(numericDocketOnly)}`, {
-      method: 'GET',
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'application/json, text/plain, */*',
-        'Referer': 'https://stcourier.com/',
+  if (!VALID_DOCKET_PATTERN.test(docket)) {
+    return NextResponse.json(
+      {
+        isValid: false,
+        verified: false,
+        error: `"${docket}" does not match ST Courier docket format. Examples: STC241568974, TN12345678.`,
+        docket,
       },
-      cache: 'no-store',
-    });
-
-    if (erpRes.ok) {
-      const erpData = await erpRes.json();
-      if (erpData && (erpData.status === 'success' || erpData.data || erpData.shipmentStatus)) {
-        networkVerification = true;
-        liveStatus = erpData.shipmentStatus || erpData.data?.status || 'Handed to ST Courier';
-      } else {
-        networkVerification = false;
-      }
-    } else if (erpRes.status === 404 || erpRes.status === 400) {
-      networkVerification = false;
-    }
-  } catch (e: any) {
-    console.warn('ST Courier ERP JSON API check:', e.message);
+      { status: 400 }
+    );
   }
 
-  // --- Strict Live Verification Lock ---
-  if (networkVerification !== true) {
-    return NextResponse.json({
-      isValid: false,
-      verified: false,
-      error: `ST Courier live system returned: "Docket '${cleanDocket}' not found / not booked yet in ST Courier network". Please enter an official active docket number from your physical booking receipt.`,
-      docket: cleanDocket,
-      trackingUrl: officialUrl,
-    }, { status: 404 });
-  }
-
-  // networkVerification === true from here on — docket is confirmed in ST Courier network
-
-  // Auto-sync confirmed status into Railway PostgreSQL
-  try {
+  // If orderId provided, ensure AWB is saved then sync (admin just assigned)
+  if (orderId) {
+    const { getDbClient } = await import('@/lib/db');
     const client = await getDbClient();
-    if (client) {
+    try {
       await client.query(
-        `UPDATE orders 
-         SET order_status = $1, tracking_url = $2, updated_at = NOW() 
-         WHERE awb_number = $3 AND order_status != 'Delivered'`,
-        [liveStatus, officialUrl, cleanDocket]
+        `UPDATE orders
+         SET awb_number = $1,
+             tracking_url = $2,
+             courier_name = 'ST Courier Express',
+             updated_at = NOW()
+         WHERE id = $3 OR order_number = $3`,
+        [docket, `https://stcourier.com/track/shipment?docket=${encodeURIComponent(docket)}`, orderId]
       );
+    } finally {
       await client.end();
     }
-  } catch (dbErr: any) {
-    console.error('DB update error in courier API:', dbErr.message);
   }
 
-  // Generate Hub Transit Activity Log
-  const cityNames = ['Chennai Central Hub', 'Coimbatore Sorting Hub', 'Salem Regional Hub', 'Madurai Express Center'];
-  const assignedCity = cityNames[Math.abs(cleanDocket.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)) % cityNames.length];
+  const synced = await syncOrderByAwb(docket, { sendWhatsApp: true });
 
-  const createdDate = new Date();
-  createdDate.setHours(createdDate.getHours() - 12);
-  const transitDate = new Date();
-  transitDate.setHours(transitDate.getHours() - 4);
-
-  events = [
-    {
-      time: createdDate.toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }),
-      activity: 'Parcel Received & Manifest Generated',
-      location: 'Blessing Fulfillment Center (Chennai)',
-    },
-    {
-      time: createdDate.toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }),
-      activity: 'Handed to ST Courier Express Executive',
-      location: 'Chennai Sorting Hub',
-    },
-    {
-      time: transitDate.toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }),
-      activity:
-        liveStatus === 'Delivered'
-          ? 'Delivered to Student'
-          : liveStatus === 'Out for Delivery'
-          ? 'Out for Delivery with Courier Executive'
-          : 'Dispatched En Route to Destination Hub',
-      location: assignedCity,
-    },
-  ];
+  if (!synced.verified) {
+    return NextResponse.json(
+      {
+        isValid: false,
+        verified: false,
+        error: synced.error || 'ST Courier docket not found / not booked yet.',
+        docket,
+        trackingUrl: synced.trackingUrl,
+      },
+      { status: 404 }
+    );
+  }
 
   return NextResponse.json({
     success: true,
     isValid: true,
     verified: true,
-    docket: cleanDocket,
+    docket,
     courierName: 'ST Courier Express',
-    status: liveStatus,
-    events,
-    assignedHub: assignedCity,
-    trackingUrl: officialUrl,
+    status: synced.status,
+    previousStatus: synced.previousStatus,
+    updated: synced.updated,
+    orderId: synced.orderId,
+    events: synced.events || [],
+    trackingUrl: synced.trackingUrl,
+    autoSynced: synced.updated,
     timestamp: new Date().toISOString(),
   });
 }

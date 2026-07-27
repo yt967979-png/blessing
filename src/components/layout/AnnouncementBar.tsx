@@ -6,7 +6,7 @@ import { HelpCircle, MapPin, User, UserCheck } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 
 export const AnnouncementBar = () => {
-  const { user, setIsTrackOpen, setIsAuthOpen } = useStore();
+  const { user, setIsAuthOpen } = useStore();
 
   return (
     <div className="bg-[#001226] text-slate-300 text-[10px] sm:text-xs py-1.5 sm:py-2 border-b border-slate-800">
@@ -25,13 +25,13 @@ export const AnnouncementBar = () => {
             <span>Help</span>
           </a>
           <span className="text-slate-700">|</span>
-          <button
-            onClick={() => setIsTrackOpen(true)}
-            className="flex items-center gap-1 hover:text-amber-400 transition-colors cursor-pointer"
+          <Link
+            href="/track"
+            className="flex items-center gap-1 hover:text-amber-400 transition-colors"
           >
             <MapPin className="w-3 h-3 text-amber-400" />
             <span>Track Order</span>
-          </button>
+          </Link>
           <span className="text-slate-700">|</span>
           {user ? (
             <Link

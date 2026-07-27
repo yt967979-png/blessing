@@ -199,6 +199,25 @@ export default function AdminPage() {
       };
     } catch { /* SSE not supported */ }
     const interval = setInterval(() => { void loadLiveOrders(); }, 45000);
+    // Auto-pull ST Courier live status for all open AWB orders (Out for Delivery → auto update)
+    const runCourierSync = () => {
+      if (!user?.token) return;
+      fetch('/api/courier/sync', {
+        method: 'POST',
+        headers: authHeaders(user),
+        body: JSON.stringify({}),
+      })
+        .then((r) => r.json())
+        .then((d) => {
+          if (d?.updated > 0) {
+            showToast(`🚚 ST Courier auto-updated ${d.updated} order(s)`);
+            void loadLiveOrders();
+          }
+        })
+        .catch(() => {});
+    };
+    runCourierSync();
+    const courierSync = setInterval(runCourierSync, 45000);
     fetch('/api/db-status').then((r) => r.json()).then((d: { tableRowCounts?: { users?: number; books?: number } }) => {
       if (d.tableRowCounts) {
         const u = d.tableRowCounts.users || 0;
@@ -206,8 +225,8 @@ export default function AdminPage() {
         setTimeout(() => setDbStats({ users: u, books: b }), 0);
       }
     }).catch(() => {});
-    return () => { clearInterval(interval); if (es) es.close(); };
-  }, [loadLiveOrders, loadAnalytics]);
+    return () => { clearInterval(interval); clearInterval(courierSync); if (es) es.close(); };
+  }, [loadLiveOrders, loadAnalytics, user]);
 
   // Reload analytics when range changes
   useEffect(() => { if (activeTab === 'analytics') startTransition(() => { void loadAnalytics(); }); }, [analyticsRange, activeTab, loadAnalytics]);
@@ -301,20 +320,38 @@ export default function AdminPage() {
     const reader = new FileReader(); reader.onloadend = () => { if (typeof reader.result === 'string') { setNewImg(reader.result); showToast('✅ Image ready'); } }; reader.readAsDataURL(file);
   };
 
-  // ── Dispatch
+  // ── Dispatch + auto ST Courier sync
   const handleDispatch = async (orderId: string) => {
     const awb = (shiprocketAwbInput[orderId] ?? '').trim();
     if (!awb) { alert('Enter ST Courier docket number first.'); return; }
     setDispatchingOrderIds((p) => ({ ...p, [orderId]: true }));
-    showToast('Verifying docket...');
+    showToast('Verifying docket on ST Courier…');
     try {
-      const vr = await fetch(`/api/courier/track?docket=${encodeURIComponent(awb)}`);
+      const vr = await fetch(`/api/courier/track?docket=${encodeURIComponent(awb)}&orderId=${encodeURIComponent(orderId)}`);
       const vd = await vr.json();
-      if (!vr.ok || !vd.isValid || !vd.verified) { showToast(`❌ ${vd.error || 'Invalid docket'}`); alert(`Docket verification failed:\n${vd.error || 'Not found in ST Courier network.'}`); return; }
-      await fetch('/api/orders/timeline', { method: 'POST', headers: authHeaders(user), body: JSON.stringify({ orderId, status: 'HANDED_TO_ST_COURIER', awbNumber: awb }) });
-      showToast(`✅ Dispatched #${orderId}`); loadLiveOrders();
-    } catch (_) { showToast('❌ Dispatch error'); }
-    finally { setDispatchingOrderIds((p) => ({ ...p, [orderId]: false })); }
+      if (!vr.ok || !vd.isValid || !vd.verified) {
+        showToast(`❌ ${vd.error || 'Invalid docket'}`);
+        alert(`Docket verification failed:\n${vd.error || 'Not found in ST Courier network.'}`);
+        return;
+      }
+      await fetch('/api/orders/timeline', {
+        method: 'POST',
+        headers: authHeaders(user),
+        body: JSON.stringify({ orderId, status: 'HANDED_TO_ST_COURIER', awbNumber: awb }),
+      });
+      // Pull live status immediately (may already be In Transit / OFD)
+      await fetch('/api/courier/sync', {
+        method: 'POST',
+        headers: authHeaders(user),
+        body: JSON.stringify({ docket: awb }),
+      });
+      showToast(`✅ Dispatched #${orderId} — auto-sync ON for this AWB`);
+      loadLiveOrders();
+    } catch (_) {
+      showToast('❌ Dispatch error');
+    } finally {
+      setDispatchingOrderIds((p) => ({ ...p, [orderId]: false }));
+    }
   };
 
   // ── Export CSV

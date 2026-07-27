@@ -100,7 +100,7 @@ export async function POST(request: Request) {
         const awb = awbNumber || order.awb_number || 'Pending Assignment';
         const meta = STAGE_META[status];
         const hubInfo = hubCity ? `\n📍 *Current Hub:* ${hubCity}` : '';
-        const trackUrl = `${process.env.NEXT_PUBLIC_SITE_URL || 'https://blessing-production.up.railway.app'}/profile`;
+        const trackUrl = `${process.env.NEXT_PUBLIC_SITE_URL || 'https://blessing-production.up.railway.app'}/track?orderId=${encodeURIComponent(order.order_number)}`;
 
         if (phone && meta) {
           const message = `*BLESSING POWER GUIDE*\n*${meta.whatsappTitle}*\n\nDear *${name}*,\n${meta.whatsappDesc}\n\n📦 *Order ID:* ${order.order_number}\n🚚 *Partner:* ST Courier Express\n📍 *Docket AWB:* ${awb}${hubInfo}\n\n👉 *Track Live:* ${trackUrl}`;

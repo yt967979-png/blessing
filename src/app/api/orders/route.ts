@@ -202,7 +202,7 @@ export async function POST(request: Request) {
     await client.query(
       `INSERT INTO orders (id, order_number, user_id, subtotal, discount, total_amount, payment_method, payment_status, order_status,
         courier_name, shipment_id, awb_number, shipping_address, razorpay_order_id, razorpay_payment_id, razorpay_signature)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'ST Courier Express', $10, $10, $11, $12, $13, $14)`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'ST Courier Express', $10, NULL, $11, $12, $13, $14)`,
       [
         id,
         orderNumber,
@@ -279,7 +279,7 @@ export async function POST(request: Request) {
           customerName,
           orderId: orderNumber,
           totalAmount,
-          trackingNumber: internalShipmentId,
+          trackingNumber: null,
           items: verifiedItems,
         }),
       }).catch(() => {});
@@ -380,7 +380,7 @@ export async function PATCH(request: NextRequest) {
             try {
               const { sendWhatsAppMessageInProcess } = await import('@/lib/whatsapp');
               const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://blessing-production.up.railway.app';
-              const message = `*BLESSING POWER GUIDE*\n*${newStatus.toUpperCase()}*\n\nDear *${customerName}*,\nYour order status has been updated to: *${newStatus}*.\n\n📦 *Order ID:* ${orderRow.order_number || orderId}\n🚚 *Partner:* ST Courier Express\n📍 *Docket AWB:* ${awbNumber || orderRow.awb_number || 'Pending'}\n\n👉 *Track Live:* ${siteUrl}/profile`;
+              const message = `*BLESSING POWER GUIDE*\n*${newStatus.toUpperCase()}*\n\nDear *${customerName}*,\nYour order status has been updated to: *${newStatus}*.\n\n📦 *Order ID:* ${orderRow.order_number || orderId}\n🚚 *Partner:* ST Courier Express\n📍 *Docket AWB:* ${awbNumber || orderRow.awb_number || 'Pending'}\n\n👉 *Track Live:* ${siteUrl}/track?orderId=${encodeURIComponent(orderRow.order_number || orderId)}`;
               await sendWhatsAppMessageInProcess(phone, message);
             } catch (waErr: any) {
               console.error('In-process WhatsApp dispatch error in PATCH /api/orders:', waErr.message);
