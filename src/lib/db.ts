@@ -147,8 +147,8 @@ function createPool(connectionString: string): Pool {
   });
 
   p.on('error', (err) => {
-    console.warn('[db] idle pool socket error:', err.message);
-    void invalidatePool('pool socket error');
+    // Intercept 57P01 (postmaster exit) / socket termination without crashing process
+    console.warn('[db] idle pool socket closed by database server:', err?.message || err);
   });
 
   return p;
