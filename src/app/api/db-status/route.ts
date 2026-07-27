@@ -2,13 +2,15 @@ import { NextResponse } from 'next/server';
 import { getDbClient } from '@/lib/db';
 
 export async function GET() {
-  const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.DATABASE_PUBLIC_URL;
-  const client = await getDbClient();
-
-  if (!client) {
+  const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.DATABASE_PUBLIC_URL || process.env.DATABASE_PRIVATE_URL;
+  let client: any = null;
+  
+  try {
+    client = await getDbClient();
+  } catch (err: any) {
     return NextResponse.json({
       status: 'DISCONNECTED',
-      message: 'DATABASE_URL is missing in Railway environment variables.',
+      message: err.message || 'DATABASE_URL is missing in Railway environment variables.',
       instruction: 'In Railway Dashboard -> Web Service -> Variables, add DATABASE_URL = ${{Postgres.DATABASE_URL}}',
       envKeysPresent: Object.keys(process.env).filter((k) => k.includes('DB') || k.includes('POSTGRES') || k.includes('PG')),
     });
