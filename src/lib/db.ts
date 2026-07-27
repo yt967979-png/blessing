@@ -128,7 +128,9 @@ function createPool(connectionString: string): Pool {
 }
 
 export function getDbPool(): Pool {
-  if (pool && activeConnectionString) return pool;
+  if (pool && activeConnectionString && !(pool as any).ending && !(pool as any).ended) {
+    return pool;
+  }
   const candidates = getConnectionCandidates();
   activeConnectionString = candidates[0];
   pool = createPool(activeConnectionString);
