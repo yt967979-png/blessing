@@ -372,7 +372,6 @@ async function seedAdmin(connStr, dbName) {
   try {
     await client.connect();
 
-    // Drop unused column if present
     try {
       await client.query(`ALTER TABLE users DROP COLUMN IF EXISTS email_verified`);
     } catch (_) {}
@@ -382,18 +381,26 @@ async function seedAdmin(connStr, dbName) {
       const email = String(admin.email).toLowerCase().trim();
       const passwordHash = hashPassword(admin.password);
 
-      const existing = await client.query(
-        `SELECT id FROM users
-         WHERE LOWER(email) = $1
-            OR phone = $2
-            OR REPLACE(phone, '+', '') = $2
-            OR RIGHT(REGEXP_REPLACE(phone, '\\D', '', 'g'), 10) = $2
+      // Priority: match by email → fixed admin id → phone (never overwrite email if taken)
+      const byEmail = await client.query(
+        `SELECT id, email FROM users WHERE LOWER(email) = $1 LIMIT 1`,
+        [email]
+      );
+      const byId = await client.query(
+        `SELECT id, email FROM users WHERE id = $1 LIMIT 1`,
+        [admin.id]
+      );
+      const byPhone = await client.query(
+        `SELECT id, email FROM users
+         WHERE RIGHT(REGEXP_REPLACE(COALESCE(phone, ''), '\\D', '', 'g'), 10) = $1
          LIMIT 1`,
-        [email, phone]
+        [phone]
       );
 
       let userId = admin.id;
-      if (existing.rows.length === 0) {
+      let targetRow = byEmail.rows[0] || byId.rows[0] || byPhone.rows[0] || null;
+
+      if (!targetRow) {
         await client.query(
           `INSERT INTO users (id, name, email, phone, password_hash, role, status)
            VALUES ($1, $2, $3, $4, $5, 'admin', 'active')`,
@@ -401,20 +408,29 @@ async function seedAdmin(connStr, dbName) {
         );
         console.log(`✅ [ADMIN CREATED] ${email} / phone ${phone}`);
       } else {
-        userId = existing.rows[0].id;
-        await client.query(
-          `UPDATE users
-           SET name = $1,
-               email = $2,
-               phone = $3,
-               password_hash = $4,
-               role = 'admin',
-               status = 'active',
-               updated_at = NOW()
-           WHERE id = $5`,
-          [admin.name, email, phone, passwordHash, userId]
-        );
-        console.log(`✅ [ADMIN UPDATED] ${email} / phone ${phone} → role: admin`);
+        userId = targetRow.id;
+        const canSetEmail = !targetRow.email || String(targetRow.email).toLowerCase() === email;
+
+        if (canSetEmail) {
+          await client.query(
+            `UPDATE users
+             SET name = $1, email = $2, phone = $3, password_hash = $4,
+                 role = 'admin', status = 'active', updated_at = NOW()
+             WHERE id = $5`,
+            [admin.name, email, phone, passwordHash, userId]
+          );
+        } else {
+          // Email belongs to another account — only promote role + password, keep existing email
+          await client.query(
+            `UPDATE users
+             SET name = $1, phone = $2, password_hash = $3,
+                 role = 'admin', status = 'active', updated_at = NOW()
+             WHERE id = $4`,
+            [admin.name, phone, passwordHash, userId]
+          );
+          console.log(`⚠️  [ADMIN] Kept existing email "${targetRow.email}" (admin@ email already taken elsewhere)`);
+        }
+        console.log(`✅ [ADMIN UPDATED] id=${userId} → role: admin`);
       }
 
       await client.query(
@@ -422,9 +438,9 @@ async function seedAdmin(connStr, dbName) {
         [`cart-${userId}`, userId]
       );
 
-      console.log(`   Login (mobile): ${phone}`);
+      console.log(`   Login phone: ${phone}`);
+      console.log(`   Login email: ${email}`);
       console.log(`   Password: ${admin.password}`);
-      console.log(`   (Set ADMIN_PHONE / ADMIN_PASSWORD / ADMIN_EMAIL on Railway to customize)`);
     }
 
     await client.end();
