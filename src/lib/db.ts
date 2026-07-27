@@ -45,12 +45,14 @@ function getConnectionCandidates(): string[] {
     ].filter(Boolean) as string[])
   );
 
-  // Prefer public TCP proxy first (works across services); private internal as fallback
+  // On Railway: private mesh first (stable 24/7). Public proxy as fallback for local/dev.
+  const onRailway = Boolean(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_SERVICE_ID);
   const sorted = [...new Set(raw.map(normalizeConnectionString))].sort((a, b) => {
     const score = (u: string) => {
-      if (u.includes('rlwy.net') || u.includes('proxy.rlwy.net')) return 0;
-      if (u.includes('railway.internal')) return 1;
-      return 2;
+      if (onRailway && u.includes('railway.internal')) return 0;
+      if (u.includes('rlwy.net') || u.includes('proxy.rlwy.net')) return onRailway ? 1 : 0;
+      if (u.includes('railway.internal')) return 2;
+      return 3;
     };
     return score(a) - score(b);
   });
@@ -168,7 +170,7 @@ function createPool(connectionString: string): Pool {
   const p = new Pool({
     connectionString: normalized,
     max: Number(process.env.DB_POOL_MAX || 3),
-    idleTimeoutMillis: 30000,
+    idleTimeoutMillis: Number(process.env.DB_IDLE_TIMEOUT_MS || 120000),
     connectionTimeoutMillis: Number(process.env.DB_CONNECT_TIMEOUT_MS || 60000),
     keepAlive: true,
     keepAliveInitialDelayMillis: 10000,

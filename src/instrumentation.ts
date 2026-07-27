@@ -6,6 +6,13 @@ export async function register() {
     const { logDbConnectionConfig, warmDbConnection, shutdownDb } = await import('@/lib/db');
     logDbConnectionConfig();
 
+    if (process.env.RAILWAY_REPLICA_ID) {
+      console.log(`[railway] replica: ${process.env.RAILWAY_REPLICA_ID}`);
+    }
+    if (process.env.RAILWAY_ENVIRONMENT) {
+      console.log(`[railway] environment: ${process.env.RAILWAY_ENVIRONMENT}`);
+    }
+
     // Warm DB before background jobs — keeps workflows aligned at boot
     await warmDbConnection();
 

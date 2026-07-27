@@ -124,6 +124,10 @@ function ensureListen() {
 
 /** Start NOTIFY listener at boot — keeps admin order stream aligned 24/7. */
 export function startOrderListenBroker() {
+  if (process.env.DISABLE_ORDER_LISTEN === 'true') {
+    console.log('[order-listen] disabled (DISABLE_ORDER_LISTEN=true)');
+    return;
+  }
   void ensureListen();
 }
 
