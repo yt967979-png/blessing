@@ -132,7 +132,7 @@ export async function getDbClient() {
       process.env.DATABASE_URL = pub;
       return getDbClient();
     }
-    return null;
+    throw err;
   }
 }
 
@@ -417,17 +417,17 @@ async function ensureAdminUser(client: any) {
     const passwordHash = hashPassword(password);
     const userId = 'admin-bpg-001';
 
-    const existing = await client.query(
-      `SELECT id FROM users
-       WHERE LOWER(email) = $1
-          OR phone = $2
-          OR REPLACE(phone, '+', '') = $2
-          OR RIGHT(REGEXP_REPLACE(COALESCE(phone,''), '\\D', '', 'g'), 10) = $2
-       LIMIT 1`,
-      [email, phone]
+    const byEmail = await client.query(`SELECT id, email FROM users WHERE LOWER(email) = $1 LIMIT 1`, [email]);
+    const byId = await client.query(`SELECT id, email FROM users WHERE id = $1 LIMIT 1`, [userId]);
+    const byPhone = await client.query(
+      `SELECT id, email FROM users
+       WHERE RIGHT(REGEXP_REPLACE(COALESCE(phone, ''), '\\D', '', 'g'), 10) = $1 LIMIT 1`,
+      [phone]
     );
 
-    if (existing.rows.length === 0) {
+    const targetRow = byEmail.rows[0] || byId.rows[0] || byPhone.rows[0] || null;
+
+    if (!targetRow) {
       await client.query(
         `INSERT INTO users (id, name, email, phone, password_hash, role, status)
          VALUES ($1, $2, $3, $4, $5, 'admin', 'active')
@@ -440,25 +440,30 @@ async function ensureAdminUser(client: any) {
         [`cart-${userId}`, userId]
       );
       console.log(`[db] admin created: phone ${phone}`);
+      return;
+    }
+
+    const id = targetRow.id;
+    const canSetEmail = !targetRow.email || String(targetRow.email).toLowerCase() === email;
+    const forcePassword = Boolean(process.env.ADMIN_PASSWORD);
+
+    if (canSetEmail && forcePassword) {
+      await client.query(
+        `UPDATE users SET name = $1, email = $2, phone = $3, password_hash = $4,
+         role = 'admin', status = 'active', updated_at = NOW() WHERE id = $5`,
+        [name, email, phone, passwordHash, id]
+      );
+    } else if (forcePassword) {
+      await client.query(
+        `UPDATE users SET name = $1, phone = $2, password_hash = $3,
+         role = 'admin', status = 'active', updated_at = NOW() WHERE id = $4`,
+        [name, phone, passwordHash, id]
+      );
     } else {
-      const id = existing.rows[0].id;
-      const forcePassword = Boolean(process.env.ADMIN_PASSWORD);
-      if (forcePassword) {
-        await client.query(
-          `UPDATE users
-           SET name = $1, phone = $2, password_hash = $3,
-               role = 'admin', status = 'active', updated_at = NOW()
-           WHERE id = $4`,
-          [name, phone, passwordHash, id]
-        );
-      } else {
-        await client.query(
-          `UPDATE users
-           SET role = 'admin', status = 'active', updated_at = NOW()
-           WHERE id = $1 AND (role IS DISTINCT FROM 'admin' OR status IS DISTINCT FROM 'active')`,
-          [id]
-        );
-      }
+      await client.query(
+        `UPDATE users SET role = 'admin', status = 'active', updated_at = NOW() WHERE id = $1`,
+        [id]
+      );
     }
   } catch (e: any) {
     console.warn('[db] ensureAdminUser skipped:', e?.message || e);

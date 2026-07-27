@@ -1,46 +1,97 @@
 import { NextResponse } from 'next/server';
-import { getDbClient } from '@/lib/db';
+import { getDbClient, releaseDbClient } from '@/lib/db';
+
+async function countTable(client: any, table: string): Promise<number | null> {
+  try {
+    const res = await client.query(`SELECT COUNT(*)::int AS count FROM ${table}`);
+    return Number(res.rows[0]?.count ?? 0);
+  } catch {
+    return null;
+  }
+}
 
 export async function GET() {
-  const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.DATABASE_PUBLIC_URL || process.env.DATABASE_PRIVATE_URL;
+  const connectionString =
+    process.env.DATABASE_URL ||
+    process.env.POSTGRES_URL ||
+    process.env.DATABASE_PUBLIC_URL ||
+    process.env.DATABASE_PRIVATE_URL;
+
   let client: any = null;
-  
+
   try {
     client = await getDbClient();
   } catch (err: any) {
-    return NextResponse.json({
-      status: 'DISCONNECTED',
-      message: err.message || 'DATABASE_URL is missing in Railway environment variables.',
-      instruction: 'In Railway Dashboard -> Web Service -> Variables, add DATABASE_URL = ${{Postgres.DATABASE_URL}}',
-      envKeysPresent: Object.keys(process.env).filter((k) => k.includes('DB') || k.includes('POSTGRES') || k.includes('PG')),
-    });
+    return NextResponse.json(
+      {
+        status: 'DISCONNECTED',
+        message: err?.message || 'Could not connect to PostgreSQL.',
+        instruction:
+          'Railway → Web Service → Variables → DATABASE_URL = ${{Postgres.DATABASE_URL}} then redeploy.',
+        envKeysPresent: Object.keys(process.env).filter(
+          (k) => k.includes('DB') || k.includes('POSTGRES') || k.includes('PG')
+        ),
+        connectionUrlFound: !!connectionString,
+      },
+      { status: 503 }
+    );
   }
 
   try {
-    const catRes = await client.query('SELECT COUNT(*) FROM categories');
-    const bookRes = await client.query('SELECT COUNT(*) FROM books');
-    const userRes = await client.query('SELECT COUNT(*) FROM users');
-    const orderRes = await client.query('SELECT COUNT(*) FROM orders');
-    const revRes = await client.query('SELECT COUNT(*) FROM reviews');
-    const addrRes = await client.query('SELECT COUNT(*) FROM addresses');
+    await client.query('SELECT 1');
+
+    const [books, categories, users, orders, reviews, addresses] = await Promise.all([
+      countTable(client, 'books'),
+      countTable(client, 'categories'),
+      countTable(client, 'users'),
+      countTable(client, 'orders'),
+      countTable(client, 'reviews'),
+      countTable(client, 'addresses'),
+    ]);
+
+    const missingTables = [
+      ['books', books],
+      ['categories', categories],
+      ['users', users],
+      ['orders', orders],
+    ].filter(([, n]) => n === null);
+
+    if (missingTables.length > 0) {
+      return NextResponse.json(
+        {
+          status: 'SCHEMA_INCOMPLETE',
+          message: `Missing or inaccessible tables: ${missingTables.map(([t]) => t).join(', ')}. Redeploy to run migrations.`,
+          connectionUrlFound: !!connectionString,
+          tableRowCounts: { books, categories, users, orders, reviews, addresses },
+        },
+        { status: 503 }
+      );
+    }
 
     return NextResponse.json({
       status: 'CONNECTED',
-      database: 'Railway PostgreSQL',
+      database: 'PostgreSQL',
       connectionUrlFound: !!connectionString,
       tableRowCounts: {
-        books: Number(bookRes.rows[0].count),
-        categories: Number(catRes.rows[0].count),
-        users: Number(userRes.rows[0].count),
-        orders: Number(orderRes.rows[0].count),
-        reviews: Number(revRes.rows[0].count),
-        addresses: Number(addrRes.rows[0].count),
+        books: books ?? 0,
+        categories: categories ?? 0,
+        users: users ?? 0,
+        orders: orders ?? 0,
+        reviews: reviews ?? 0,
+        addresses: addresses ?? 0,
       },
-      message: '✅ Railway PostgreSQL is connected and 17 tables are active!',
+      message: 'PostgreSQL connected.',
     });
   } catch (err: any) {
-    return NextResponse.json({ status: 'ERROR', error: err.message }, { status: 500 });
+    return NextResponse.json(
+      {
+        status: 'ERROR',
+        error: err?.message || 'Database query failed',
+        connectionUrlFound: !!connectionString,
+      },
+      { status: 500 }
+    );
   } finally {
-    if (client) await client.end();
+    releaseDbClient(client);
   }
 }

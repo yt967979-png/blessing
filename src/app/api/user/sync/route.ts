@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getDbClient } from '@/lib/db';
+import { getDbClient, releaseDbClient } from '@/lib/db';
 import { getAuthenticatedUser, unauthorizedResponse } from '@/lib/serverSecurity';
 
 export async function POST(request: Request) {
@@ -13,12 +13,16 @@ export async function POST(request: Request) {
     const { cart, wishlist, addresses } = body;
     const userId = session.userId;
 
-    const client = await getDbClient();
+    let client: any = null;
+    try {
+      client = await getDbClient();
+    } catch (err: any) {
+      return NextResponse.json({ error: err?.message || 'Database unavailable' }, { status: 503 });
+    }
 
     try {
       const userCheck = await client.query('SELECT id FROM users WHERE id = $1', [String(userId)]);
       if (userCheck.rows.length === 0) {
-        await client.end();
         return NextResponse.json(
           { error: 'USER_NOT_FOUND', message: 'User account not found in database.' },
           { status: 404 }
@@ -34,10 +38,14 @@ export async function POST(request: Request) {
         await client.query(`DELETE FROM cart_items WHERE cart_id = $1`, [cartId]);
         for (const item of cart) {
           const itemId = `ci-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-          await client.query(
-            `INSERT INTO cart_items (id, cart_id, book_id, quantity, price) VALUES ($1, $2, $3, $4, $5)`,
-            [itemId, cartId, String(item.id), Number(item.qty || 1), Number(item.price)]
-          );
+          try {
+            await client.query(
+              `INSERT INTO cart_items (id, cart_id, book_id, quantity, price) VALUES ($1, $2, $3, $4, $5)`,
+              [itemId, cartId, String(item.id), Number(item.qty || 1), Number(item.price)]
+            );
+          } catch {
+            /* skip items referencing deleted books */
+          }
         }
       }
 
@@ -49,7 +57,7 @@ export async function POST(request: Request) {
             wishId,
             userId,
             String(bookId),
-          ]);
+          ]).catch(() => {});
         }
       }
 
@@ -79,13 +87,13 @@ export async function POST(request: Request) {
         }
       }
 
-      await client.end();
       return NextResponse.json({ success: true, message: 'Synced.' });
     } catch (err: any) {
-      if (client) await client.end();
-      return NextResponse.json({ error: err.message }, { status: 500 });
+      return NextResponse.json({ error: err?.message || 'Sync failed' }, { status: 500 });
+    } finally {
+      releaseDbClient(client);
     }
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ error: err?.message || 'Request failed' }, { status: 500 });
   }
 }

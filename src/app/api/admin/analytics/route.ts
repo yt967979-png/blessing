@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getDbClient } from '@/lib/db';
+import { getDbClient, releaseDbClient } from '@/lib/db';
 import { verifyAdminRequest, forbiddenResponse } from '@/lib/serverSecurity';
 
 export async function GET(request: Request) {
@@ -9,7 +9,13 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const range = searchParams.get('range') || '30';
 
-  const client = await getDbClient();
+  let client: any = null;
+  try {
+    client = await getDbClient();
+  } catch (err: any) {
+    return NextResponse.json({ error: err?.message || 'Database connection failed' }, { status: 503 });
+  }
+
   try {
     const days = Math.min(Math.max(Number(range) || 30, 1), 365);
 
@@ -166,6 +172,6 @@ export async function GET(request: Request) {
     console.error('Analytics error:', message);
     return NextResponse.json({ error: message }, { status: 500 });
   } finally {
-    if (client) await client.end();
+    releaseDbClient(client);
   }
 }
