@@ -1,4 +1,4 @@
-import { Pool } from 'pg';
+import { Pool, Client } from 'pg';
 import { hashPassword } from '@/lib/auth';
 
 let isSchemaInitialized = false;
@@ -7,29 +7,49 @@ let pool: Pool | null = null;
 let activeConnectionString: string | null = null;
 
 /** Collect unique DB URLs — public URL fallback when private `.railway.internal` fails */
-function getConnectionCandidates(): string[] {
-  const raw = [
-    process.env.DATABASE_URL,
-    process.env.DATABASE_PUBLIC_URL,
-    process.env.DATABASE_PRIVATE_URL,
-    process.env.POSTGRES_URL,
-  ].filter(Boolean) as string[];
-
-  if (raw.length === 0 && process.env.PGHOST && process.env.PGUSER && process.env.PGPASSWORD) {
-    const host = process.env.PGHOST;
-    const user = process.env.PGUSER;
-    const pass = process.env.PGPASSWORD;
-    const db = process.env.PGDATABASE || 'railway';
-    const port = process.env.PGPORT || 5432;
-    raw.push(`postgresql://${user}:${pass}@${host}:${port}/${db}`);
+function normalizeConnectionString(url: string): string {
+  let u = url.trim();
+  if (
+    (u.includes('rlwy.net') || u.includes('proxy.rlwy.net') || u.includes('railway.internal')) &&
+    !u.includes('sslmode=')
+  ) {
+    u += `${u.includes('?') ? '&' : '?'}sslmode=require`;
   }
+  return u;
+}
 
-  // Prefer public/proxy URLs over *.railway.internal
-  const sorted = [...new Set(raw)].sort((a, b) => {
+function buildUrlFromPgEnv(): string | null {
+  if (!process.env.PGHOST || !process.env.PGUSER || !process.env.PGPASSWORD) return null;
+  const user = encodeURIComponent(process.env.PGUSER);
+  const pass = encodeURIComponent(process.env.PGPASSWORD);
+  const host = process.env.PGHOST;
+  const port = process.env.PGPORT || 5432;
+  const db = process.env.PGDATABASE || 'railway';
+  return `postgresql://${user}:${pass}@${host}:${port}/${db}`;
+}
+
+function getConnectionCandidates(): string[] {
+  const raw: string[] = [];
+
+  const fromPgEnv = buildUrlFromPgEnv();
+  if (fromPgEnv) raw.push(fromPgEnv);
+
+  raw.push(
+    ...( [
+      process.env.DATABASE_URL,
+      process.env.DATABASE_PUBLIC_URL,
+      process.env.DATABASE_PRIVATE_URL,
+      process.env.POSTGRES_URL,
+    ].filter(Boolean) as string[])
+  );
+
+  // Prefer private network on Railway (same project), then public proxy
+  const onRailway = Boolean(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_PROJECT_ID);
+  const sorted = [...new Set(raw.map(normalizeConnectionString))].sort((a, b) => {
     const score = (u: string) => {
-      if (u.includes('railway.internal')) return 2;
-      if (u.includes('rlwy.net') || u.includes('proxy.rlwy.net')) return 0;
-      return 1;
+      if (u.includes('railway.internal')) return onRailway ? 0 : 2;
+      if (u.includes('rlwy.net') || u.includes('proxy.rlwy.net')) return onRailway ? 1 : 0;
+      return 2;
     };
     return score(a) - score(b);
   });
@@ -100,14 +120,15 @@ async function destroyPool() {
 let poolReadyPromise: Promise<Pool> | null = null;
 
 function createPool(connectionString: string): Pool {
+  const normalized = normalizeConnectionString(connectionString);
   const p = new Pool({
-    connectionString,
+    connectionString: normalized,
     max: Number(process.env.DB_POOL_MAX || 5),
     idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: Number(process.env.DB_CONNECT_TIMEOUT_MS || 30000),
+    connectionTimeoutMillis: Number(process.env.DB_CONNECT_TIMEOUT_MS || 60000),
     keepAlive: true,
     keepAliveInitialDelayMillis: 10000,
-    ssl: sslFor(connectionString),
+    ssl: sslFor(normalized),
   });
 
   p.on('error', (err) => {
@@ -142,9 +163,40 @@ export function getDbPool(): Pool {
     return pool;
   }
   const candidates = getConnectionCandidates();
-  activeConnectionString = candidates[0];
+  activeConnectionString = normalizeConnectionString(candidates[0]);
   pool = createPool(activeConnectionString);
   return pool;
+}
+
+async function probeConnection(connStr: string): Promise<void> {
+  const normalized = normalizeConnectionString(connStr);
+  const attempts = Number(process.env.DB_CONNECT_RETRIES || 3);
+  let lastErr: Error | null = null;
+
+  for (let i = 0; i < attempts; i++) {
+    const client = new Client({
+      connectionString: normalized,
+      ssl: sslFor(normalized),
+      connectionTimeoutMillis: Number(process.env.DB_CONNECT_TIMEOUT_MS || 60000),
+    });
+    try {
+      await client.connect();
+      await client.query('SELECT 1');
+      await client.end();
+      return;
+    } catch (err: any) {
+      lastErr = err;
+      try {
+        await client.end();
+      } catch (_) {}
+      if (i < attempts - 1) {
+        const delay = (i + 1) * 4000;
+        console.warn(`[db] probe ${i + 1}/${attempts} failed (${err.message}), retry in ${delay}ms…`);
+        await new Promise((r) => setTimeout(r, delay));
+      }
+    }
+  }
+  throw lastErr || new Error('Could not connect to PostgreSQL');
 }
 
 /** Config for long-lived dedicated pg Clients (LISTEN / NOTIFY helpers). */
@@ -190,10 +242,19 @@ function wrapPoolClient(client: any) {
 
 async function ensureSchemaReady(activePool: Pool) {
   if (isSchemaInitialized) return;
+  if (process.env.SKIP_RUNTIME_SCHEMA_INIT === 'true') {
+    isSchemaInitialized = true;
+    return;
+  }
   if (!schemaInitPromise) {
     schemaInitPromise = (async () => {
       const initClient = await activePool.connect();
       try {
+        const exists = await initClient.query(`SELECT to_regclass('public.users') AS t`);
+        if (exists.rows[0]?.t) {
+          isSchemaInitialized = true;
+          return;
+        }
         await runSchemaInit(initClient);
         isSchemaInitialized = true;
       } catch (e: any) {
@@ -221,11 +282,21 @@ async function ensurePoolReady(): Promise<Pool> {
 
     for (const connStr of candidates) {
       try {
-        if (!pool || activeConnectionString !== connStr) {
+        const normalized = normalizeConnectionString(connStr);
+        await probeConnection(normalized);
+
+        if (!pool || activeConnectionString !== normalized) {
           await destroyPool();
-          activeConnectionString = connStr;
-          pool = createPool(connStr);
-          console.log(`[db] connecting via ${connStr.replace(/:[^:@/]+@/, ':***@').slice(0, 80)}…`);
+          activeConnectionString = normalized;
+          pool = createPool(normalized);
+          const host = (() => {
+            try {
+              return new URL(normalized.replace(/^postgres(ql)?:\/\//, 'http://')).hostname;
+            } catch {
+              return '(unknown)';
+            }
+          })();
+          console.log(`[db] connected via ${host}`);
         }
 
         await ensureSchemaReady(pool);
