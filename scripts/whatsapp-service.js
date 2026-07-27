@@ -73,7 +73,7 @@ async function restoreSessionFromDb() {
         fs.mkdirSync(SESSION_DIR, { recursive: true });
       }
       for (const [filename, content] of Object.entries(sessionMap)) {
-        fs.writeFileSync(path.join(SESSION_DIR, filename), content as string);
+        fs.writeFileSync(path.join(SESSION_DIR, filename), String(content));
       }
       console.log('✅ WhatsApp Auth Credentials successfully restored from Railway PostgreSQL database!');
     }

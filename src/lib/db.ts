@@ -46,10 +46,31 @@ export async function getDbClient() {
   const activePool = getDbPool();
   const client: any = await activePool.connect();
 
-  // Attach release alias to end for backwards compatibility with pool clients
+  // Pool clients must use release(), not end(). Make it idempotent so
+  // try/finally double-calls never throw "already been released".
   if (!client._hasEndAlias) {
     client._hasEndAlias = true;
-    client.end = () => client.release();
+    client._released = false;
+    const safeRelease = () => {
+      if (client._released) return;
+      client._released = true;
+      try {
+        client.release();
+      } catch (_) {
+        /* already returned to pool */
+      }
+    };
+    client.end = safeRelease;
+    const originalRelease = client.release.bind(client);
+    client.release = (err?: Error | boolean) => {
+      if (client._released) return;
+      client._released = true;
+      try {
+        originalRelease(err);
+      } catch (_) {
+        /* ignore */
+      }
+    };
   }
 
   if (!isSchemaInitialized) {
