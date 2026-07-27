@@ -1,5 +1,6 @@
 import { Pool, Client } from 'pg';
 import { hashPassword } from '@/lib/auth';
+import { resolveTunedNumber } from '@/lib/runtimeProfile';
 
 let isSchemaInitialized = false;
 let schemaInitPromise: Promise<void> | null = null;
@@ -165,13 +166,26 @@ function isRecoverablePgError(err: any): boolean {
   );
 }
 
+function defaultPoolMax(): number {
+  if (process.env.DB_POOL_MAX) return Number(process.env.DB_POOL_MAX);
+  return resolveTunedNumber('DB_POOL_MAX', 'dbPoolMax');
+}
+
+function defaultConnectTimeoutMs(): number {
+  return resolveTunedNumber('DB_CONNECT_TIMEOUT_MS', 'dbConnectTimeoutMs');
+}
+
+function defaultHeartbeatMs(): number {
+  return resolveTunedNumber('DB_HEARTBEAT_MS', 'dbHeartbeatMs');
+}
+
 function createPool(connectionString: string): Pool {
   const normalized = normalizeConnectionString(connectionString);
   const p = new Pool({
     connectionString: normalized,
-    max: Number(process.env.DB_POOL_MAX || 3),
+    max: defaultPoolMax(),
     idleTimeoutMillis: Number(process.env.DB_IDLE_TIMEOUT_MS || 120000),
-    connectionTimeoutMillis: Number(process.env.DB_CONNECT_TIMEOUT_MS || 60000),
+    connectionTimeoutMillis: defaultConnectTimeoutMs(),
     keepAlive: true,
     keepAliveInitialDelayMillis: 10000,
     ssl: sslFor(normalized),
@@ -218,7 +232,7 @@ function startPoolHeartbeat(activePool: Pool) {
         void invalidatePool('heartbeat failed');
       }
     }
-  }, Number(process.env.DB_HEARTBEAT_MS || 60000));
+  }, defaultHeartbeatMs());
 }
 
 export async function getDbPool(): Promise<Pool> {
@@ -268,7 +282,7 @@ async function probeConnection(connStr: string): Promise<void> {
     const client = new Client({
       connectionString: normalized,
       ssl: sslFor(normalized),
-      connectionTimeoutMillis: Number(process.env.DB_CONNECT_TIMEOUT_MS || 60000),
+      connectionTimeoutMillis: defaultConnectTimeoutMs(),
     });
     try {
       await client.connect();
@@ -299,7 +313,7 @@ export function getDbConnectionConfig() {
     connectionString,
     ssl: sslFor(connectionString),
     keepAlive: true,
-    connectionTimeoutMillis: Number(process.env.DB_CONNECT_TIMEOUT_MS || 60000),
+    connectionTimeoutMillis: defaultConnectTimeoutMs(),
   };
 }
 

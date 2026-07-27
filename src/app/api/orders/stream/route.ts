@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { Client } from 'pg';
 import { getDbClient, releaseDbClient, resolveDbConnectionConfig } from '@/lib/db';
 import { getAuthenticatedUser } from '@/lib/serverSecurity';
+import { resolveTunedNumber, shouldRunBackgroundTask } from '@/lib/runtimeProfile';
 
 const clients = new Set<ReadableStreamDefaultController>();
 let listenReady: Promise<void> | null = null;
@@ -105,7 +106,7 @@ function ensureListen() {
         } catch (err: any) {
           scheduleListenReconnect(err?.message || 'ping failed');
         }
-      }, 45000);
+      }, resolveTunedNumber('ORDER_LISTEN_PING_MS', 'orderListenPingMs'));
 
       console.log('[order-listen] LISTEN order_changed active');
     } catch (err: any) {
@@ -126,6 +127,10 @@ function ensureListen() {
 export function startOrderListenBroker() {
   if (process.env.DISABLE_ORDER_LISTEN === 'true') {
     console.log('[order-listen] disabled (DISABLE_ORDER_LISTEN=true)');
+    return;
+  }
+  if (!shouldRunBackgroundTask('listen')) {
+    console.log('[order-listen] skipped — runtime load/profile');
     return;
   }
   void ensureListen();

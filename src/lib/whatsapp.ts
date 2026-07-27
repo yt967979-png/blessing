@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import { getDbClient, releaseDbClient } from '@/lib/db';
 import { isBackgroundLeader } from '@/lib/backgroundLeader';
+import { resolveTunedNumber, shouldRunBackgroundTask } from '@/lib/runtimeProfile';
 
 const SESSION_DIR = path.join(process.cwd(), 'whatsapp_session');
 const PUBLIC_DIR = path.join(process.cwd(), 'public');
@@ -175,6 +176,7 @@ export async function initWhatsAppInProcess(opts?: { requireLeader?: boolean }) 
 
 let sendQueue: Promise<any> = Promise.resolve();
 let outboxWorkerStarted = false;
+let outboxInterval: ReturnType<typeof setInterval> | null = null;
 
 function newOutboxId() {
   return `wa-out-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -212,6 +214,7 @@ async function sendWhatsAppDirect(to: string, message: string) {
 }
 
 async function drainWhatsAppOutboxOnce() {
+  if (!shouldRunBackgroundTask('outbox')) return;
   if (!isBackgroundLeader() || !isConnected) return;
   const client = await getDbClient();
   let rows: { id: string; phone: string; message: string }[] = [];
@@ -255,11 +258,30 @@ async function drainWhatsAppOutboxOnce() {
 export function startWhatsAppOutboxWorker() {
   if (outboxWorkerStarted || !isBackgroundLeader()) return;
   outboxWorkerStarted = true;
-  const intervalMs = Number(process.env.WHATSAPP_OUTBOX_INTERVAL_MS || 3000);
-  setInterval(() => {
+  const intervalMs = resolveTunedNumber('WHATSAPP_OUTBOX_INTERVAL_MS', 'whatsappOutboxIntervalMs');
+  outboxInterval = setInterval(() => {
     void drainWhatsAppOutboxOnce();
   }, intervalMs);
   console.log(`[whatsapp] outbox worker enabled — every ${Math.round(intervalMs / 1000)}s`);
+}
+
+export function stopWhatsAppOutboxWorker() {
+  if (outboxInterval) clearInterval(outboxInterval);
+  outboxInterval = null;
+  outboxWorkerStarted = false;
+}
+
+export async function shutdownWhatsAppInProcess() {
+  isConnected = false;
+  isInitializing = false;
+  if (sock) {
+    try {
+      sock.end(undefined);
+    } catch (_) {
+      /* ignore */
+    }
+    sock = null;
+  }
 }
 
 export async function sendWhatsAppMessageInProcess(to: string, message: string) {

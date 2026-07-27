@@ -3,6 +3,10 @@ export async function register() {
     const dns = await import('node:dns');
     dns.setDefaultResultOrder('ipv4first');
 
+    const { initRuntimeProfile, startAdaptiveRuntimeMonitor } = await import('@/lib/runtimeProfile');
+    initRuntimeProfile();
+    startAdaptiveRuntimeMonitor();
+
     const { logDbConnectionConfig, warmDbConnection, shutdownDb } = await import('@/lib/db');
     logDbConnectionConfig();
 
@@ -13,26 +17,23 @@ export async function register() {
       console.log(`[railway] environment: ${process.env.RAILWAY_ENVIRONMENT}`);
     }
 
-    // Warm DB before background jobs — keeps workflows aligned at boot
     await warmDbConnection();
 
-    const { tryAcquireBackgroundLeader } = await import('@/lib/backgroundLeader');
-    const isLeader = await tryAcquireBackgroundLeader();
+    const {
+      startSharedBackgroundServices,
+      startLeaderBackgroundServices,
+      stopLeaderBackgroundServices,
+    } = await import('@/lib/backgroundServices');
+    const { startAutomaticLeaderElection } = await import('@/lib/backgroundLeader');
 
-    if (isLeader) {
-      const { startOrderListenBroker } = await import('@/app/api/orders/stream/route');
-      startOrderListenBroker();
+    // Admin order stream works on any replica (load balancer safe).
+    await startSharedBackgroundServices();
 
-      const { startCourierSyncCron } = await import('@/lib/courierCron');
-      startCourierSyncCron();
-
-      const { startWhatsAppOutboxWorker, initWhatsAppInProcess } = await import('@/lib/whatsapp');
-      startWhatsAppOutboxWorker();
-      // Restore linked session on the leader only (never on secondary replicas).
-      void initWhatsAppInProcess();
-    } else {
-      console.log('[leader] skipping LISTEN, courier cron, and WhatsApp on this replica');
-    }
+    // WhatsApp + cron: exactly one replica, auto-elected; failover ~30s.
+    startAutomaticLeaderElection(
+      () => startLeaderBackgroundServices(),
+      () => stopLeaderBackgroundServices()
+    );
 
     process.on('unhandledRejection', (reason) => {
       console.error('[process] unhandledRejection:', reason);

@@ -1,18 +1,24 @@
 /**
- * Starts background ST Courier sync every 5 minutes on the Node server (Railway).
- * Keeps Out for Delivery / Delivered auto-updates even when admin panel is closed.
+ * Starts background ST Courier sync on the Node server (Railway).
+ * Interval adapts to Free / Hobby / CPU load via runtimeProfile.
  */
+import { shouldRunBackgroundTask, resolveTunedNumber } from '@/lib/runtimeProfile';
+
 let started = false;
 let running = false;
+let cronInterval: ReturnType<typeof setInterval> | null = null;
+let cronStartTimeout: ReturnType<typeof setTimeout> | null = null;
 
 export function startCourierSyncCron() {
   if (started) return;
   if (process.env.DISABLE_COURIER_CRON === 'true') return;
   started = true;
 
-  const intervalMs = Number(process.env.COURIER_SYNC_INTERVAL_MS || 5 * 60 * 1000);
+  const intervalMs = resolveTunedNumber('COURIER_SYNC_INTERVAL_MS', 'courierCronIntervalMs');
+  const startDelay = resolveTunedNumber('COURIER_CRON_START_DELAY_MS', 'courierCronStartDelayMs');
 
   const run = async () => {
+    if (!shouldRunBackgroundTask('courier')) return;
     if (running) {
       console.warn('[courier-cron] skipped — previous sync still running');
       return;
@@ -35,8 +41,16 @@ export function startCourierSyncCron() {
     }
   };
 
-  const startDelay = Number(process.env.COURIER_CRON_START_DELAY_MS || 30000);
-  setTimeout(run, startDelay);
-  setInterval(run, intervalMs);
+  cronStartTimeout = setTimeout(run, startDelay);
+  cronInterval = setInterval(run, intervalMs);
   console.log(`[courier-cron] enabled — every ${Math.round(intervalMs / 60000)} min (first run in ${Math.round(startDelay / 1000)}s)`);
+}
+
+export function stopCourierSyncCron() {
+  if (cronInterval) clearInterval(cronInterval);
+  if (cronStartTimeout) clearTimeout(cronStartTimeout);
+  cronInterval = null;
+  cronStartTimeout = null;
+  started = false;
+  running = false;
 }
