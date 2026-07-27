@@ -777,6 +777,25 @@ async function runSchemaInit(client: any) {
         ALTER TABLE books ADD COLUMN IF NOT EXISTS badge VARCHAR(100) DEFAULT '';
         ALTER TABLE books ADD COLUMN IF NOT EXISTS stock INT DEFAULT 50;
         ALTER TABLE users DROP COLUMN IF EXISTS email_verified;
+
+        ALTER TABLE coupons ADD COLUMN IF NOT EXISTS title VARCHAR(255);
+        ALTER TABLE coupons ADD COLUMN IF NOT EXISTS description TEXT;
+        ALTER TABLE coupons ADD COLUMN IF NOT EXISTS minimum_quantity INT DEFAULT 0;
+        ALTER TABLE coupons ADD COLUMN IF NOT EXISTS offer_type VARCHAR(30) DEFAULT 'discount';
+        ALTER TABLE coupons ADD COLUMN IF NOT EXISTS condition_mode VARCHAR(20) DEFAULT 'any';
+        ALTER TABLE coupons ADD COLUMN IF NOT EXISTS used_count INT DEFAULT 0;
+        ALTER TABLE coupons ADD COLUMN IF NOT EXISTS show_in_hero BOOLEAN DEFAULT true;
+        ALTER TABLE coupons ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+        ALTER TABLE orders ADD COLUMN IF NOT EXISTS coupon_code VARCHAR(50);
+        ALTER TABLE orders ADD COLUMN IF NOT EXISTS coupon_id VARCHAR(255);
+
+        CREATE TABLE IF NOT EXISTS coupon_redemptions (
+          id VARCHAR(255) PRIMARY KEY,
+          coupon_id VARCHAR(255) REFERENCES coupons(id) ON DELETE SET NULL,
+          user_id VARCHAR(255),
+          order_id VARCHAR(255),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
       `);
     } catch (e) {
       /* schema already exists or partial — safe to continue */

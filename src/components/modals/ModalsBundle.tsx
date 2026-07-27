@@ -52,7 +52,13 @@ export const ModalsBundle = () => {
     setIsProfileOpen,
     cart,
     cartTotal,
+    cartGrandTotal,
     checkoutTotal,
+    appliedCoupon,
+    applyCouponCode,
+    clearAppliedCoupon,
+    pendingCouponCode,
+    products,
     clearCart,
     addToCart,
     user,
@@ -127,7 +133,14 @@ export const ModalsBundle = () => {
     return () => { cancelled = true; };
   }, [isCheckoutOpen, user]);
 
-  const [paymentMethod, setPaymentMethod] = useState<'razorpay' | 'cod'>('razorpay');
+  const [paymentMethod, setPaymentMethod] = useState<'razorpay' | 'cod'>('cod');
+  const [couponInput, setCouponInput] = useState('');
+  const [couponBusy, setCouponBusy] = useState(false);
+  const [freeBookPickId, setFreeBookPickId] = useState('');
+
+  useEffect(() => {
+    if (pendingCouponCode) setCouponInput(pendingCouponCode);
+  }, [pendingCouponCode]);
 
   // Track state
   const [trackId, setTrackId] = useState('');
@@ -203,7 +216,7 @@ export const ModalsBundle = () => {
       if (!saved) return;
     }
 
-    const finalAmount = checkoutTotal > 0 ? checkoutTotal : (cartTotal > 0 ? cartTotal : 360);
+    const finalAmount = checkoutTotal > 0 ? checkoutTotal : cartGrandTotal > 0 ? cartGrandTotal : cartTotal;
 
     const processOrderCompletion = async (payId?: string, rzpOrderId?: string, rzpSignature?: string) => {
       let serverOrderId = '';
@@ -221,11 +234,13 @@ export const ModalsBundle = () => {
             address: selectedAddress.address,
             city: selectedAddress.city || 'Chennai',
             pincode: selectedAddress.pincode || '600012',
-            items: cart.map((i) => ({ id: i.id, title: i.title, qty: i.qty, price: i.price })),
+            items: cart.map((i) => ({ id: i.id, qty: i.qty, price: i.price })),
             paymentMethod: paymentMethod === 'razorpay' ? 'Razorpay UPI / Cards' : 'Cash on Delivery (COD)',
             razorpayPaymentId: payId || null,
             razorpayOrderId: rzpOrderId || null,
             razorpaySignature: rzpSignature || null,
+            couponCode: appliedCoupon?.code || null,
+            freeBookId: appliedCoupon?.freeBookId || null,
           }),
         });
         const orderData = await orderRes.json();
@@ -250,6 +265,7 @@ export const ModalsBundle = () => {
 
       setIsCheckoutOpen(false);
       clearCart();
+      clearAppliedCoupon();
       setOrderSuccessData({
         orderId: confirmedOrderId,
         totalAmount: finalAmount,
@@ -730,6 +746,84 @@ export const ModalsBundle = () => {
                   </div>
                 )}
 
+                {/* Coupon */}
+                <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-3 space-y-2">
+                  <label className="block font-black text-slate-800 uppercase tracking-wider text-[10px] flex items-center gap-1">
+                    <Tag className="w-3.5 h-3.5 text-amber-600" />
+                    Coupon / Offer Code
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      value={couponInput}
+                      onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                      placeholder="Enter code from homepage"
+                      className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-xs font-bold uppercase bg-white"
+                    />
+                    <button
+                      type="button"
+                      disabled={couponBusy}
+                      onClick={async () => {
+                        setCouponBusy(true);
+                        await applyCouponCode(couponInput, freeBookPickId || undefined);
+                        setCouponBusy(false);
+                      }}
+                      className="px-4 py-2 bg-[#001B3A] text-white text-xs font-bold rounded-lg disabled:opacity-60"
+                    >
+                      Apply
+                    </button>
+                  </div>
+                  {appliedCoupon && (
+                    <p className="text-[11px] font-bold text-emerald-700">
+                      ✓ {appliedCoupon.code}: {appliedCoupon.label}
+                      {appliedCoupon.freeBookTitle ? ` — ${appliedCoupon.freeBookTitle}` : ''}
+                      {appliedCoupon.offerType === 'discount' && appliedCoupon.discountAmount > 0
+                        ? ` (−₹${appliedCoupon.discountAmount})`
+                        : ''}
+                      <button type="button" onClick={clearAppliedCoupon} className="ml-2 text-red-600">
+                        Remove
+                      </button>
+                    </p>
+                  )}
+                  {(pendingCouponCode && !appliedCoupon) ||
+                  (appliedCoupon?.offerType === 'free_book' && !appliedCoupon?.freeBookId) ? (
+                    <div className="pt-2 border-t border-amber-200/80">
+                      <p className="text-[10px] font-black uppercase text-amber-900 mb-2">
+                        Pick your FREE book
+                      </p>
+                      <select
+                        value={freeBookPickId}
+                        onChange={(e) => setFreeBookPickId(e.target.value)}
+                        className="w-full px-3 py-2 border rounded-lg text-xs bg-white"
+                      >
+                        <option value="">Select a book…</option>
+                        {products
+                          .filter((p) => p.inStock)
+                          .map((p) => (
+                            <option key={p.id} value={String(p.id)}>
+                              {p.title} — ₹{p.price}
+                            </option>
+                          ))}
+                      </select>
+                      <button
+                        type="button"
+                        disabled={!freeBookPickId || couponBusy}
+                        onClick={async () => {
+                          setCouponBusy(true);
+                          await applyCouponCode(couponInput || pendingCouponCode, freeBookPickId);
+                          setCouponBusy(false);
+                        }}
+                        className="mt-2 w-full py-2 bg-emerald-600 text-white text-xs font-bold rounded-lg disabled:opacity-60"
+                      >
+                        Confirm Free Book
+                      </button>
+                    </div>
+                  ) : null}
+                  <div className="flex justify-between text-xs font-bold pt-1">
+                    <span>Order total</span>
+                    <span>₹{cartGrandTotal}</span>
+                  </div>
+                </div>
+
                 {/* Quality & Payment Method */}
                 <div className="pt-2">
                   <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-center justify-between text-xs mb-3">
@@ -784,7 +878,7 @@ export const ModalsBundle = () => {
                   type="submit"
                   className="w-full bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-[#001B3A] font-extrabold text-sm py-3.5 rounded-xl shadow-md uppercase tracking-wider mt-4"
                 >
-                  CONFIRM & PLACE ORDER (₹{cartTotal})
+                  CONFIRM & PLACE ORDER (₹{cartGrandTotal})
                 </button>
               </form>
             </motion.div>

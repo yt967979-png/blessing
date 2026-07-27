@@ -13,7 +13,7 @@ interface DBReview {
 }
 
 export const PromoSection = () => {
-  const { setSelectedCategory, showToast } = useStore();
+  const { setSelectedCategory, showToast, publicCoupons, setPendingCouponCode } = useStore();
   const [activeReviewSlide, setActiveReviewSlide] = useState(0);
   const [reviews, setReviews] = useState<DBReview[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(true);
@@ -81,16 +81,46 @@ export const PromoSection = () => {
                 </h3>
               </div>
 
-              <div className="grid grid-cols-3 gap-2 mb-6">
-                {[
-                  { label: 'BUY 2 GUIDES', value: '10% OFF' },
-                  { label: 'BUY 5 GUIDES', value: '20% OFF' },
-                  { label: 'COMBO PACKS', value: 'BEST VALUE' },
-                ].map((item) => (
-                  <div key={item.label} className="bg-emerald-700 text-white rounded-xl p-2 text-center">
+              <div className="grid grid-cols-1 gap-2 mb-6">
+                {(publicCoupons.length > 0
+                  ? publicCoupons.slice(0, 3).map((c) => ({
+                      label: c.title,
+                      value: c.label,
+                      code: c.code,
+                      expiry: c.expiryDate,
+                    }))
+                  : [
+                      { label: 'BUY 2 GUIDES', value: '10% OFF', code: '', expiry: null },
+                      { label: 'BUY 5 GUIDES', value: '20% OFF', code: '', expiry: null },
+                      { label: 'COMBO PACKS', value: 'BEST VALUE', code: '', expiry: null },
+                    ]
+                ).map((item) => (
+                  <button
+                    key={item.label + item.value}
+                    type="button"
+                    onClick={() => {
+                      if (item.code) {
+                        setPendingCouponCode(item.code);
+                        showToast(`Coupon ${item.code} ready — apply at checkout`);
+                      } else handleShopOffers();
+                    }}
+                    className="bg-emerald-700 text-white rounded-xl p-2.5 text-center hover:bg-emerald-800 transition-colors"
+                  >
                     <div className="text-[10px] font-black uppercase">{item.label}</div>
                     <div className="text-sm font-black text-amber-300 mt-0.5">{item.value}</div>
-                  </div>
+                    {item.code && (
+                      <div className="text-[9px] font-bold text-emerald-200 mt-1">Code: {item.code}</div>
+                    )}
+                    {item.expiry && (
+                      <div className="text-[9px] text-emerald-200/80 mt-0.5">
+                        Till{' '}
+                        {new Date(item.expiry).toLocaleDateString('en-IN', {
+                          day: 'numeric',
+                          month: 'short',
+                        })}
+                      </div>
+                    )}
+                  </button>
                 ))}
               </div>
             </div>

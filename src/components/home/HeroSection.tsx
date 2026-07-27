@@ -13,11 +13,21 @@ import {
   ChevronRight,
   Award,
   Book,
+  Tag,
+  Copy,
+  Clock,
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 
 export const HeroSection = () => {
-  const { products, setSelectedClass, setSelectedCategory } = useStore();
+  const {
+    products,
+    setSelectedClass,
+    setSelectedCategory,
+    publicCoupons,
+    setPendingCouponCode,
+    showToast,
+  } = useStore();
   const [activeSlide, setActiveSlide] = useState(0);
 
   // Dynamically generate slides based on Database Products if available
@@ -55,6 +65,23 @@ export const HeroSection = () => {
   const scrollToProducts = () => {
     const elem = document.getElementById('products');
     if (elem) elem.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const copyCoupon = (code: string) => {
+    setPendingCouponCode(code);
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      void navigator.clipboard.writeText(code);
+    }
+    showToast(`Coupon ${code} copied — apply at checkout!`);
+  };
+
+  const fmtExpiry = (iso: string | null) => {
+    if (!iso) return null;
+    return new Date(iso).toLocaleDateString('en-IN', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    });
   };
 
   return (
@@ -116,6 +143,38 @@ export const HeroSection = () => {
                     </div>
                   ))}
                 </div>
+
+                {/* Live coupons from admin */}
+                {publicCoupons.length > 0 && (
+                  <div className="mb-6 space-y-2">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-amber-300/90 flex items-center gap-1.5">
+                      <Tag className="w-3.5 h-3.5" />
+                      Active Offers
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {publicCoupons.slice(0, 4).map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => copyCoupon(c.code)}
+                          className="text-left max-w-[220px] px-3 py-2.5 rounded-xl bg-white/10 border border-amber-400/35 hover:bg-white/15 backdrop-blur-md transition-all group"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-black text-amber-300 text-sm tracking-wider">{c.code}</span>
+                            <Copy className="w-3 h-3 text-amber-400/70 group-hover:text-amber-300" />
+                          </div>
+                          <p className="text-[11px] font-bold text-white mt-0.5 line-clamp-1">{c.label}</p>
+                          {c.expiryDate && (
+                            <p className="text-[10px] text-slate-400 mt-1 flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              Valid till {fmtExpiry(c.expiryDate)}
+                            </p>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* CTA Buttons */}
                 <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-3.5">

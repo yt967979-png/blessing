@@ -40,6 +40,31 @@ export interface UserData {
   role?: string;
 }
 
+export interface PublicCoupon {
+  id: string;
+  code: string;
+  title: string;
+  description: string;
+  offerType: 'discount' | 'free_book';
+  discountType: 'percentage' | 'fixed';
+  discountValue: number;
+  minimumAmount: number;
+  minimumQuantity: number;
+  conditionMode: string;
+  expiryDate: string | null;
+  label: string;
+}
+
+export interface AppliedCoupon {
+  code: string;
+  label: string;
+  offerType: 'discount' | 'free_book';
+  discountAmount: number;
+  total: number;
+  freeBookId?: string;
+  freeBookTitle?: string;
+}
+
 interface StoreContextType {
   products: Product[];
   cart: CartItem[];
@@ -83,6 +108,14 @@ interface StoreContextType {
   cartCount: number;
   checkoutTotal: number;
   setCheckoutTotal: (amount: number) => void;
+  publicCoupons: PublicCoupon[];
+  appliedCoupon: AppliedCoupon | null;
+  couponDiscount: number;
+  cartGrandTotal: number;
+  applyCouponCode: (code: string, freeBookId?: string) => Promise<boolean>;
+  clearAppliedCoupon: () => void;
+  setPendingCouponCode: (code: string) => void;
+  pendingCouponCode: string;
   productsLoading: boolean;
   orderSuccessData: any | null;
   setOrderSuccessData: (data: any | null) => void;
@@ -480,10 +513,91 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const cartTotal = cart.reduce((acc, item) => acc + item.price * item.qty, 0);
   const cartCount = cart.reduce((acc, item) => acc + item.qty, 0);
   const [checkoutTotal, setCheckoutTotal] = useState(0);
+  const [publicCoupons, setPublicCoupons] = useState<PublicCoupon[]>([]);
+  const [appliedCoupon, setAppliedCoupon] = useState<AppliedCoupon | null>(null);
+  const [pendingCouponCode, setPendingCouponCode] = useState('');
+
+  const couponDiscount = appliedCoupon?.discountAmount ?? 0;
+  const cartGrandTotal =
+    appliedCoupon?.offerType === 'discount' && appliedCoupon.total > 0
+      ? appliedCoupon.total
+      : cartTotal;
+
+  const refreshPublicCoupons = () => {
+    fetch('/api/coupons')
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data)) setPublicCoupons(data);
+      })
+      .catch(() => setPublicCoupons([]));
+  };
 
   useEffect(() => {
-    setCheckoutTotal(cartTotal);
-  }, [cartTotal]);
+    refreshPublicCoupons();
+  }, []);
+
+  const applyCouponCode = async (code: string, freeBookId?: string): Promise<boolean> => {
+    const trimmed = String(code || '').trim();
+    if (!trimmed) {
+      showToast('Enter a coupon code');
+      return false;
+    }
+    if (cart.length === 0) {
+      showToast('Add books to cart before applying a coupon');
+      return false;
+    }
+    try {
+      const res = await fetch('/api/coupons/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: trimmed,
+          items: cart.map((i) => ({ id: i.id, qty: i.qty })),
+          freeBookId: freeBookId || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!data.valid) {
+        showToast(`❌ ${data.error || 'Invalid coupon'}`);
+        setAppliedCoupon(null);
+        return false;
+      }
+      if (data.needsFreeBook) {
+        showToast('Select your free book below');
+        setPendingCouponCode(trimmed);
+        setAppliedCoupon(null);
+        return false;
+      }
+      setAppliedCoupon({
+        code: data.coupon.code,
+        label: data.coupon.label,
+        offerType: data.coupon.offerType,
+        discountAmount: data.discountAmount || 0,
+        total: data.total ?? cartTotal,
+        freeBookId: data.freeBook?.id,
+        freeBookTitle: data.freeBook?.title,
+      });
+      setPendingCouponCode('');
+      showToast(`✅ Coupon ${data.coupon.code} applied`);
+      return true;
+    } catch {
+      showToast('❌ Could not validate coupon');
+      return false;
+    }
+  };
+
+  const clearAppliedCoupon = () => {
+    setAppliedCoupon(null);
+    setPendingCouponCode('');
+  };
+
+  useEffect(() => {
+    setCheckoutTotal(cartGrandTotal);
+  }, [cartGrandTotal]);
+
+  useEffect(() => {
+    if (cart.length === 0) clearAppliedCoupon();
+  }, [cart.length]);
 
   return (
     <StoreContext.Provider
@@ -526,6 +640,14 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         cartCount,
         checkoutTotal,
         setCheckoutTotal,
+        publicCoupons,
+        appliedCoupon,
+        couponDiscount,
+        cartGrandTotal,
+        applyCouponCode,
+        clearAppliedCoupon,
+        pendingCouponCode,
+        setPendingCouponCode,
         orderSuccessData,
         setOrderSuccessData,
         showToast,

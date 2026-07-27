@@ -20,6 +20,29 @@ async function sendEmailOtp(toEmail: string, otp: string): Promise<boolean> {
   const gmailPass = (process.env.GMAIL_APP_PASSWORD || process.env.SMTP_PASS || '').replace(/\s+/g, '');
   const resendApiKey = process.env.RESEND_API_KEY;
 
+  // 1. Try Gmail App Password SMTP (100% Free, sends to ANY recipient without domain restriction)
+  if (gmailUser && gmailPass) {
+    try {
+      const transporter = nodemailer.createTransport({
+        host: 'smtp.gmail.com',
+        port: 587,
+        secure: false,
+        auth: { user: gmailUser, pass: gmailPass },
+      });
+      await transporter.sendMail({
+        from: `"BLESSING POWER GUIDE" <${gmailUser}>`,
+        to: toEmail,
+        subject: `Your verification code: ${otp}`,
+        html: buildOtpHtml(otp),
+      });
+      console.log(`✅ [GMAIL SMTP SENT] OTP sent via Gmail to ${toEmail}`);
+      return true;
+    } catch (e: any) {
+      console.error('Gmail SMTP OTP error:', e.message);
+    }
+  }
+
+  // 2. Fallback to Resend API if configured
   if (resendApiKey) {
     try {
       const res = await fetch('https://api.resend.com/emails', {
@@ -35,32 +58,16 @@ async function sendEmailOtp(toEmail: string, otp: string): Promise<boolean> {
           html: buildOtpHtml(otp),
         }),
       });
-      if (res.ok) return true;
+      if (res.ok) {
+        console.log(`✅ [RESEND API SENT] OTP sent via Resend to ${toEmail}`);
+        return true;
+      }
     } catch (e: any) {
       console.error('Resend OTP error:', e.message);
     }
   }
 
-  if (!gmailUser || !gmailPass) return false;
-
-  try {
-    const transporter = nodemailer.createTransport({
-      host: 'smtp.gmail.com',
-      port: 587,
-      secure: false,
-      auth: { user: gmailUser, pass: gmailPass },
-    });
-    await transporter.sendMail({
-      from: `"BLESSING POWER GUIDE" <${gmailUser}>`,
-      to: toEmail,
-      subject: `Your verification code: ${otp}`,
-      html: buildOtpHtml(otp),
-    });
-    return true;
-  } catch (e: any) {
-    console.error('Gmail OTP error:', e.message);
-    return false;
-  }
+  return false;
 }
 
 async function sendWhatsAppOtp(phone: string, message: string): Promise<{ sent: boolean; provider?: string; error?: string }> {

@@ -4,7 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ShoppingBag, X, Truck, Plus, Minus, ArrowRight } from 'lucide-react';
+import { ShoppingBag, X, Truck, Plus, Minus, ArrowRight, Tag } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { getSTCourierDeliveryEstimate } from '@/lib/deliveryEstimator';
 
@@ -15,11 +15,25 @@ export const CartDrawer = () => {
     setIsCartOpen,
     updateQty,
     cartTotal,
+    cartGrandTotal,
+    couponDiscount,
+    appliedCoupon,
+    applyCouponCode,
+    clearAppliedCoupon,
+    pendingCouponCode,
+    setPendingCouponCode,
     setIsCheckoutOpen,
     user,
     setIsAuthOpen,
     showToast,
   } = useStore();
+
+  const [couponInput, setCouponInput] = React.useState('');
+  const [couponBusy, setCouponBusy] = React.useState(false);
+
+  React.useEffect(() => {
+    if (pendingCouponCode) setCouponInput(pendingCouponCode);
+  }, [pendingCouponCode]);
 
   const freeDeliveryThreshold = 499;
   const amountForFreeDelivery = Math.max(0, freeDeliveryThreshold - cartTotal);
@@ -146,6 +160,61 @@ export const CartDrawer = () => {
                     ST Courier Express: Arriving by{' '}
                     {getSTCourierDeliveryEstimate('Tamil Nadu').formattedDate} before 11 PM
                   </span>
+                </div>
+
+                <div className="bg-white border border-slate-200 rounded-xl p-3 space-y-2">
+                  <label className="text-[10px] font-black uppercase text-slate-600 flex items-center gap-1">
+                    <Tag className="w-3.5 h-3.5" /> Coupon Code
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      value={couponInput}
+                      onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                      placeholder="e.g. POWER20"
+                      className="flex-1 px-3 py-2 border rounded-lg text-xs font-bold uppercase"
+                    />
+                    <button
+                      type="button"
+                      disabled={couponBusy}
+                      onClick={async () => {
+                        setCouponBusy(true);
+                        await applyCouponCode(couponInput);
+                        setCouponBusy(false);
+                      }}
+                      className="px-3 py-2 bg-[#001B3A] text-white text-xs font-bold rounded-lg disabled:opacity-60"
+                    >
+                      Apply
+                    </button>
+                  </div>
+                  {appliedCoupon && (
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-emerald-700 font-bold">
+                        {appliedCoupon.code} — {appliedCoupon.label}
+                        {appliedCoupon.freeBookTitle && ` (${appliedCoupon.freeBookTitle})`}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={clearAppliedCoupon}
+                        className="text-red-600 font-bold"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-xs font-bold pt-1 border-t border-slate-100">
+                    <span>Subtotal</span>
+                    <span>₹{cartTotal}</span>
+                  </div>
+                  {couponDiscount > 0 && appliedCoupon?.offerType === 'discount' && (
+                    <div className="flex justify-between text-xs font-bold text-emerald-700">
+                      <span>Discount</span>
+                      <span>-₹{couponDiscount}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-sm font-black text-[#001B3A]">
+                    <span>Total</span>
+                    <span>₹{cartGrandTotal}</span>
+                  </div>
                 </div>
 
                 <button

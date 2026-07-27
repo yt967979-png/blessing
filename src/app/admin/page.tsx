@@ -8,7 +8,7 @@ import {
   Plus, Trash2, MessageSquare, Truck, Send, ShieldCheck,
   Download, X, Search, RefreshCw, TrendingUp, IndianRupee,
   Box, Clock, CheckCircle2, LogOut, BarChart2,
-  CreditCard, Banknote, Smartphone, Star, AlertCircle, Tag,
+  CreditCard, Banknote, Smartphone, Star, AlertCircle, Tag, Gift,
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { authHeaders } from '@/lib/clientAuth';
@@ -17,6 +17,11 @@ import { BrandLogo } from '@/components/ui/BrandLogo';
 const AdminWhatsAppTab = dynamic(() => import('@/components/admin/AdminWhatsAppTab'), {
   ssr: false,
   loading: () => <p className="text-center text-sm text-gray-500 py-12">Loading WhatsApp…</p>,
+});
+
+const AdminCouponsTab = dynamic(() => import('@/components/admin/AdminCouponsTab'), {
+  ssr: false,
+  loading: () => <p className="text-center text-sm text-gray-500 py-12">Loading coupons…</p>,
 });
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -94,7 +99,7 @@ export default function AdminPage() {
   const router = useRouter();
   const { user, setIsAuthOpen, products, updateProductInDb, addNewProductToDb, deleteProductFromDb, showToast, logoutUser } = useStore();
 
-  type Tab = 'analytics' | 'orders' | 'catalog' | 'content' | 'whatsapp';
+  type Tab = 'analytics' | 'orders' | 'catalog' | 'coupons' | 'content' | 'whatsapp';
   const [activeTab, setActiveTab] = useState<Tab>('analytics');
 
   // ── WhatsApp state
@@ -503,6 +508,7 @@ export default function AdminPage() {
     { id: 'analytics' as Tab, label: 'Analytics', icon: BarChart2 },
     { id: 'orders'    as Tab, label: 'Orders',    icon: ShoppingCart, count: orders.length },
     { id: 'catalog'   as Tab, label: 'Products',  icon: Package, count: products.length },
+    { id: 'coupons'   as Tab, label: 'Coupons',   icon: Gift },
     { id: 'content'   as Tab, label: 'Content',   icon: Tag },
     { id: 'whatsapp'  as Tab, label: 'WhatsApp',  icon: MessageSquare },
   ];
@@ -1063,6 +1069,13 @@ export default function AdminPage() {
               )}
             </div>
           </div>
+        )}
+
+        {/* ══════════════════════════════════════════════════════════
+            COUPONS TAB
+        ══════════════════════════════════════════════════════════ */}
+        {activeTab === 'coupons' && user && (
+          <AdminCouponsTab user={user} showToast={showToast} />
         )}
 
         {/* ══════════════════════════════════════════════════════════
