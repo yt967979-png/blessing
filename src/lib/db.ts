@@ -39,12 +39,14 @@ function getConnectionCandidates(): string[] {
   }
   raw.push(...additional);
 
-  // Public proxy URLs (*.rlwy.net) take 100% priority over private hostnames (*.railway.internal)
+  // Preserve process.env environment variable candidate order strictly
   const sorted = [...new Set(raw)].sort((a, b) => {
     const score = (u: string) => {
-      if (u.includes('rlwy.net') || u.includes('proxy.rlwy.net')) return 0;
-      if (u.includes('railway.internal')) return 2;
-      return 1;
+      // If environment variable explicitly sets DATABASE_URL / POSTGRES_URL, test raw env first
+      if (u === process.env.DATABASE_URL || u === process.env.POSTGRES_URL) return 0;
+      if (u.includes('rlwy.net') || u.includes('proxy.rlwy.net')) return 1;
+      if (u.includes('railway.internal')) return 3;
+      return 2;
     };
     return score(a) - score(b);
   });
