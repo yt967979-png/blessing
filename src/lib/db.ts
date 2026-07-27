@@ -47,9 +47,9 @@ export function getDbPool(): Pool {
   pool = new Pool({
     connectionString,
     // Small pool — Railway Hobby has limited connections; LISTEN uses a dedicated Client
-    max: Number(process.env.DB_POOL_MAX || 5),
+    max: Number(process.env.DB_POOL_MAX || 10),
     idleTimeoutMillis: 10000,
-    connectionTimeoutMillis: Number(process.env.DB_CONNECT_TIMEOUT_MS || 20000),
+    connectionTimeoutMillis: Number(process.env.DB_CONNECT_TIMEOUT_MS || 4000),
     allowExitOnIdle: true,
     ssl: sslFor(connectionString),
   });
