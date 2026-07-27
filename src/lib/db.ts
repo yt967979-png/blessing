@@ -113,14 +113,43 @@ async function destroyPool() {
 }
 
 function createPool(connectionString: string): Pool {
-  return new Pool({
+  const p = new Pool({
     connectionString,
-    max: Number(process.env.DB_POOL_MAX || 10),
-    idleTimeoutMillis: 30000,
+    max: Number(process.env.DB_POOL_MAX || 15),
+    idleTimeoutMillis: 10000,
     connectionTimeoutMillis: Number(process.env.DB_CONNECT_TIMEOUT_MS || 5000),
+    keepAlive: true,
+    keepAliveInitialDelayMillis: 10000,
     ssl: sslFor(connectionString),
   });
+
+  p.on('error', (err) => {
+    console.warn('[db] idle pool socket error, replacing socket:', err.message);
+  });
+
+  return p;
 }
+
+// Background heartbeat to keep pool active 24/7
+let heartbeatInterval: NodeJS.Timeout | null = null;
+function startPoolHeartbeat() {
+  if (heartbeatInterval) return;
+  heartbeatInterval = setInterval(async () => {
+    try {
+      if (pool && !(pool as any).ending && !(pool as any).ended) {
+        const client = await pool.connect();
+        try {
+          await client.query('SELECT 1');
+        } finally {
+          client.release();
+        }
+      }
+    } catch (_) {
+      /* ignore transient ping failure */
+    }
+  }, 25000);
+}
+startPoolHeartbeat();
 
 export function getDbPool(): Pool {
   if (pool && activeConnectionString && !(pool as any).ending && !(pool as any).ended) {
