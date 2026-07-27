@@ -5,6 +5,11 @@ let isSchemaInitialized = false;
 let schemaInitPromise: Promise<void> | null = null;
 let pool: Pool | null = null;
 let activeConnectionString: string | null = null;
+let poolReadyPromise: Promise<Pool> | null = null;
+let lastPoolPingAt = 0;
+let poolGeneration = 0;
+let heartbeatFailures = 0;
+let invalidateInFlight: Promise<void> | null = null;
 
 /** Strip sslmode from URL — pg v8 treats sslmode=require as verify-full and breaks Railway proxy. */
 function normalizeConnectionString(url: string): string {
@@ -110,35 +115,59 @@ function sslFor(connectionString: string) {
 
 async function destroyPool(keepSchema = false) {
   stopPoolHeartbeat();
-  if (pool) {
-    try {
-      await pool.end();
-    } catch (_) {}
-  }
+  poolReadyPromise = null;
+  const oldPool = pool;
   pool = null;
   activeConnectionString = null;
   lastPoolPingAt = 0;
+  heartbeatFailures = 0;
+  if (oldPool) {
+    try {
+      await oldPool.end();
+    } catch (_) {}
+  }
   if (!keepSchema) {
     isSchemaInitialized = false;
     schemaInitPromise = null;
   }
-  poolReadyPromise = null;
 }
 
 /** Drop broken pool sockets; keep schema flag when DB tables already exist. */
 async function invalidatePool(reason: string) {
-  console.warn('[db] pool invalidated:', reason);
-  await destroyPool(isSchemaInitialized);
+  if (invalidateInFlight) return invalidateInFlight;
+  invalidateInFlight = (async () => {
+    console.warn('[db] pool invalidated:', reason);
+    poolGeneration++;
+    await destroyPool(isSchemaInitialized);
+  })().finally(() => {
+    invalidateInFlight = null;
+  });
+  return invalidateInFlight;
 }
 
-let poolReadyPromise: Promise<Pool> | null = null;
-let lastPoolPingAt = 0;
+function isPoolUsable(p: Pool | null): p is Pool {
+  if (!p) return false;
+  if ((p as any).ending || (p as any).ended) return false;
+  return true;
+}
+
+function isRecoverablePgError(err: any): boolean {
+  const msg = String(err?.message || err || '');
+  const code = String(err?.code || '');
+  return (
+    code === '57P01' ||
+    msg.includes('postmaster') ||
+    msg.includes('Connection terminated') ||
+    msg.includes('calling end on the pool') ||
+    msg.includes('timeout exceeded')
+  );
+}
 
 function createPool(connectionString: string): Pool {
   const normalized = normalizeConnectionString(connectionString);
   const p = new Pool({
     connectionString: normalized,
-    max: Number(process.env.DB_POOL_MAX || 5),
+    max: Number(process.env.DB_POOL_MAX || 3),
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: Number(process.env.DB_CONNECT_TIMEOUT_MS || 60000),
     keepAlive: true,
@@ -147,8 +176,10 @@ function createPool(connectionString: string): Pool {
   });
 
   p.on('error', (err) => {
-    // Intercept 57P01 (postmaster exit) / socket termination without crashing process
-    console.warn('[db] idle pool socket closed by database server:', err?.message || err);
+    console.warn('[db] idle pool socket error:', err?.message || err);
+    if (isRecoverablePgError(err)) {
+      void invalidatePool('pool socket error');
+    }
   });
 
   return p;
@@ -165,24 +196,27 @@ function stopPoolHeartbeat() {
 
 function startPoolHeartbeat(activePool: Pool) {
   stopPoolHeartbeat();
+  const generation = poolGeneration;
   heartbeatInterval = setInterval(async () => {
+    if (generation !== poolGeneration || !isPoolUsable(pool)) return;
     try {
-      if (!pool || (pool as any).ending || (pool as any).ended) {
-        void invalidatePool('heartbeat found dead pool');
-        return;
-      }
       const client = await activePool.connect();
       try {
         await client.query('SELECT 1');
         lastPoolPingAt = Date.now();
+        heartbeatFailures = 0;
       } finally {
         client.release();
       }
     } catch (err: any) {
-      console.warn('[db] heartbeat failed:', err?.message || err);
-      void invalidatePool('heartbeat failed');
+      heartbeatFailures++;
+      console.warn(`[db] heartbeat failed (${heartbeatFailures}/3):`, err?.message || err);
+      if (heartbeatFailures >= 3) {
+        heartbeatFailures = 0;
+        void invalidatePool('heartbeat failed');
+      }
     }
-  }, Number(process.env.DB_HEARTBEAT_MS || 45000));
+  }, Number(process.env.DB_HEARTBEAT_MS || 60000));
 }
 
 export async function getDbPool(): Promise<Pool> {
@@ -219,15 +253,8 @@ export async function pingDb(): Promise<{ ok: boolean; host?: string; message?: 
 
 /** Graceful shutdown on SIGTERM (Railway deploy rollover). */
 export async function shutdownDb() {
-  stopPoolHeartbeat();
-  if (pool) {
-    try {
-      await pool.end();
-    } catch (_) {}
-  }
-  pool = null;
-  activeConnectionString = null;
-  poolReadyPromise = null;
+  poolGeneration++;
+  await destroyPool(false);
 }
 
 async function probeConnection(connStr: string): Promise<void> {
@@ -340,10 +367,9 @@ async function ensureSchemaReady(activePool: Pool) {
 
 /** Single-flight pool setup — prevents connection storms at cold start. */
 async function ensurePoolReady(): Promise<Pool> {
-  const staleMs = Number(process.env.DB_POOL_STALE_MS || 120000);
+  const staleMs = Number(process.env.DB_POOL_STALE_MS || 180000);
   if (
-    pool &&
-    activeConnectionString &&
+    isPoolUsable(pool) &&
     isSchemaInitialized &&
     lastPoolPingAt > 0 &&
     Date.now() - lastPoolPingAt < staleMs
@@ -352,6 +378,7 @@ async function ensurePoolReady(): Promise<Pool> {
   }
   if (poolReadyPromise) return poolReadyPromise;
 
+  const myGeneration = poolGeneration;
   poolReadyPromise = (async () => {
     const candidates = getConnectionCandidates();
     let lastErr: Error | null = null;
@@ -361,7 +388,11 @@ async function ensurePoolReady(): Promise<Pool> {
         const normalized = normalizeConnectionString(connStr);
         await probeConnection(normalized);
 
-        if (!pool || activeConnectionString !== normalized) {
+        if (myGeneration !== poolGeneration) {
+          throw new Error('pool setup superseded by invalidation');
+        }
+
+        if (!isPoolUsable(pool) || activeConnectionString !== normalized) {
           await destroyPool(isSchemaInitialized);
           activeConnectionString = normalized;
           pool = createPool(normalized);
@@ -375,13 +406,18 @@ async function ensurePoolReady(): Promise<Pool> {
           console.log(`[db] connected via ${host}`);
         }
 
-        await ensureSchemaReady(pool);
+        await ensureSchemaReady(pool!);
         lastPoolPingAt = Date.now();
-        startPoolHeartbeat(pool);
-        return pool;
+        heartbeatFailures = 0;
+        startPoolHeartbeat(pool!);
+        return pool!;
       } catch (err: any) {
         lastErr = err;
         const msg = String(err?.message || err);
+        if (msg.includes('superseded by invalidation')) {
+          poolReadyPromise = null;
+          return ensurePoolReady();
+        }
         console.error('[db] connect failed:', msg);
         await destroyPool(isSchemaInitialized);
 
@@ -407,19 +443,28 @@ async function ensurePoolReady(): Promise<Pool> {
 }
 
 export async function getDbClient() {
-  const retries = Number(process.env.DB_ACQUIRE_RETRIES || 2);
+  const retries = Number(process.env.DB_ACQUIRE_RETRIES || 3);
   let lastErr: Error | null = null;
 
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
       const activePool = await ensurePoolReady();
+      if (!isPoolUsable(activePool)) {
+        await invalidatePool('pool not usable after ensure');
+        continue;
+      }
       const client: any = await activePool.connect();
       wrapPoolClient(client);
       return client;
     } catch (err: any) {
       lastErr = err;
-      console.warn(`[db] acquire client attempt ${attempt + 1}/${retries} failed:`, err?.message || err);
-      await invalidatePool('client acquire failed');
+      console.warn(`[db] acquire attempt ${attempt + 1}/${retries}:`, err?.message || err);
+      if (isRecoverablePgError(err)) {
+        await invalidatePool('client acquire failed');
+        await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+        continue;
+      }
+      throw err;
     }
   }
 

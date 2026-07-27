@@ -19,8 +19,28 @@ export async function register() {
       console.error('[process] unhandledRejection:', reason);
     });
 
+    process.on('uncaughtException', (err: any) => {
+      if (isRecoverablePgProcessError(err)) {
+        console.warn('[process] recoverable pg error (continuing):', err?.message || err);
+        return;
+      }
+      console.error('[process] uncaughtException:', err);
+    });
+
     process.on('SIGTERM', () => {
       void shutdownDb().finally(() => process.exit(0));
     });
   }
+}
+
+function isRecoverablePgProcessError(err: any): boolean {
+  const msg = String(err?.message || err || '');
+  const code = String(err?.code || '');
+  return (
+    code === '57P01' ||
+    msg.includes('postmaster') ||
+    msg.includes('Connection terminated') ||
+    msg.includes('ECONNRESET') ||
+    msg.includes('timeout exceeded')
+  );
 }

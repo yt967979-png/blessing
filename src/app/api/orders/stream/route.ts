@@ -9,6 +9,7 @@ let listenClient: Client | null = null;
 let listenPingInterval: NodeJS.Timeout | null = null;
 let listenBackoffMs = 1000;
 const LISTEN_BACKOFF_MAX = 30000;
+let reconnectScheduled = false;
 
 export function broadcastOrderChange(data: any) {
   const message = `data: ${JSON.stringify(data)}\n\n`;
@@ -54,9 +55,12 @@ function stopListenClient() {
 }
 
 function scheduleListenReconnect(reason: string) {
+  if (reconnectScheduled) return;
+  reconnectScheduled = true;
   stopListenClient();
   console.warn(`[order-listen] reconnect scheduled (${reason}) in ${listenBackoffMs}ms`);
   setTimeout(() => {
+    reconnectScheduled = false;
     void ensureListen();
   }, listenBackoffMs);
   listenBackoffMs = Math.min(listenBackoffMs * 2, LISTEN_BACKOFF_MAX);
@@ -65,28 +69,32 @@ function scheduleListenReconnect(reason: string) {
 function ensureListen() {
   if (listenReady) return listenReady;
   listenReady = (async () => {
+    let client: Client | null = null;
     try {
       const cfg = await resolveDbConnectionConfig();
-      listenClient = new Client(cfg);
-      await listenClient.connect();
-      await listenClient.query('LISTEN order_changed');
+      client = new Client(cfg);
+
+      client.on('error', (err: Error) => {
+        console.warn('[order-listen] client error:', err.message);
+        scheduleListenReconnect(err.message || 'error');
+      });
+
+      client.on('end', () => {
+        scheduleListenReconnect('connection ended');
+      });
+
+      await client.connect();
+      await client.query('LISTEN order_changed');
+      listenClient = client;
       listenBackoffMs = 1000;
 
-      listenClient.on('notification', (msg: { channel: string; payload?: string }) => {
+      client.on('notification', (msg: { channel: string; payload?: string }) => {
         if (msg.channel !== 'order_changed' || !msg.payload) return;
         try {
           broadcastOrderChange(JSON.parse(msg.payload));
         } catch {
           broadcastOrderChange({ type: 'ORDER_UPDATED', timestamp: Date.now() });
         }
-      });
-
-      listenClient.on('error', (err: Error) => {
-        scheduleListenReconnect(err.message || 'error');
-      });
-
-      listenClient.on('end', () => {
-        scheduleListenReconnect('connection ended');
       });
 
       if (listenPingInterval) clearInterval(listenPingInterval);
@@ -97,11 +105,17 @@ function ensureListen() {
         } catch (err: any) {
           scheduleListenReconnect(err?.message || 'ping failed');
         }
-      }, 30000);
+      }, 45000);
 
       console.log('[order-listen] LISTEN order_changed active');
     } catch (err: any) {
       console.error('LISTEN order_changed failed:', err?.message || err);
+      if (client) {
+        try {
+          await client.end();
+        } catch (_) {}
+      }
+      listenClient = null;
       scheduleListenReconnect('initial connect failed');
     }
   })();
