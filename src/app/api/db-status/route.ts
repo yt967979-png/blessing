@@ -26,10 +26,13 @@ export async function GET() {
       {
         status: 'DISCONNECTED',
         message: err?.message || 'Could not connect to PostgreSQL.',
+        hint: err?.message?.includes('ENOTFOUND') || err?.message?.includes('railway.internal')
+          ? 'postgres.railway.internal not found — use the PUBLIC proxy URL, not the private hostname'
+          : undefined,
         instruction:
-          'Railway → Web Service → Variables → DATABASE_URL = ${{Postgres.DATABASE_URL}} then redeploy.',
+          'Railway → Web Service → Variables: set DATABASE_URL = ${{Postgres.DATABASE_PUBLIC_URL}} (host should be *.proxy.rlwy.net). Delete any extra Postgres service. Redeploy.',
         envKeysPresent: Object.keys(process.env).filter(
-          (k) => k.includes('DB') || k.includes('POSTGRES') || k.includes('PG')
+          (k) => k.includes('DATABASE') || k.includes('POSTGRES') || k.includes('PG')
         ),
         connectionUrlFound: !!connectionString,
       },

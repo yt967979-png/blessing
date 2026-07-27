@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { Client } from 'pg';
-import { getDbClient, getDbConnectionConfig } from '@/lib/db';
+import { getDbClient, releaseDbClient, resolveDbConnectionConfig } from '@/lib/db';
 import { getAuthenticatedUser } from '@/lib/serverSecurity';
 
 const clients = new Set<ReadableStreamDefaultController>();
@@ -31,11 +31,7 @@ export async function notifyOrderChanged(data: any) {
   } catch (err) {
     console.error('NOTIFY order_changed failed:', err);
   } finally {
-    if (client) {
-      try {
-        await client.end();
-      } catch (_) {}
-    }
+    releaseDbClient(client);
   }
 }
 
@@ -44,7 +40,7 @@ function ensureListen() {
   listenReady = (async () => {
     try {
       // Dedicated Client — must NOT use the pool (LISTEN holds the connection forever)
-      const cfg = getDbConnectionConfig();
+      const cfg = await resolveDbConnectionConfig();
       listenClient = new Client(cfg);
       await listenClient.connect();
       await listenClient.query('LISTEN order_changed');

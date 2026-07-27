@@ -4,35 +4,108 @@ try {
   require('dotenv').config();
 } catch (e) {}
 
-let connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.DATABASE_PUBLIC_URL;
+/** Prefer public *.rlwy.net over broken postgres.railway.internal (matches src/lib/db.ts). */
+function getConnectionCandidates() {
+  const raw = [
+    process.env.DATABASE_URL,
+    process.env.DATABASE_PUBLIC_URL,
+    process.env.DATABASE_PRIVATE_URL,
+    process.env.POSTGRES_URL,
+  ].filter(Boolean);
 
-if (!connectionString && process.env.PGHOST && process.env.PGUSER && process.env.PGPASSWORD) {
-  const host = process.env.PGHOST;
-  const user = process.env.PGUSER;
-  const pass = process.env.PGPASSWORD;
-  const db = process.env.PGDATABASE || 'railway';
-  const port = process.env.PGPORT || 5432;
-  connectionString = `postgresql://${user}:${pass}@${host}:${port}/${db}`;
+  if (raw.length === 0 && process.env.PGHOST && process.env.PGUSER && process.env.PGPASSWORD) {
+    const host = process.env.PGHOST;
+    const user = process.env.PGUSER;
+    const pass = process.env.PGPASSWORD;
+    const db = process.env.PGDATABASE || 'railway';
+    const port = process.env.PGPORT || 5432;
+    raw.push(`postgresql://${user}:${pass}@${host}:${port}/${db}`);
+  }
+
+  return [...new Set(raw)].sort((a, b) => {
+    const score = (u) => {
+      if (u.includes('railway.internal')) return 2;
+      if (u.includes('rlwy.net') || u.includes('proxy.rlwy.net')) return 0;
+      return 1;
+    };
+    return score(a) - score(b);
+  });
 }
 
-if (!connectionString) {
-  if (process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_PROJECT_ID) {
+const candidates = getConnectionCandidates();
+const isRailway = !!(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_PROJECT_ID);
+
+if (candidates.length === 0) {
+  if (isRailway) {
     console.error('❌ DATABASE_URL missing on Railway.');
-    console.error('   In Railway → your Web Service → Variables, add:');
-    console.error('   DATABASE_URL = ${{Postgres.DATABASE_URL}}');
+    console.error('   Web Service → Variables → set:');
+    console.error('   DATABASE_URL = ${{Postgres.DATABASE_PUBLIC_URL}}');
     process.exit(1);
   }
   console.warn('⚠️ DATABASE_URL not set — skipping DB migration (local only).');
   process.exit(0);
 }
 
-const isSsl = connectionString.includes('railway') || connectionString.includes('render') || connectionString.includes('rlwy.net');
+const dbUrlOnlyInternal =
+  (process.env.DATABASE_URL || '').includes('railway.internal') &&
+  !candidates.some((u) => u.includes('rlwy.net') || u.includes('proxy.rlwy.net'));
+
+if (dbUrlOnlyInternal) {
+  console.error('❌ DATABASE_URL uses postgres.railway.internal but that hostname is not resolving.');
+  console.error('   Web Service → Variables → replace with:');
+  console.error('   DATABASE_URL = ${{Postgres.DATABASE_PUBLIC_URL}}');
+  if (isRailway) process.exit(1);
+}
+
+function sslFor(connectionString) {
+  return connectionString.includes('railway') ||
+    connectionString.includes('render') ||
+    connectionString.includes('rlwy.net') ||
+    connectionString.includes('proxy.rlwy.net') ||
+    connectionString.includes('railway.internal')
+    ? { rejectUnauthorized: false }
+    : false;
+}
+
+async function connectWithFallback(label) {
+  let lastErr = null;
+  for (const connStr of candidates) {
+    const host = (() => {
+      try {
+        return new URL(connStr.replace(/^postgres(ql)?:\/\//, 'http://')).hostname;
+      } catch {
+        return '(unknown)';
+      }
+    })();
+    console.log(`⚡ Connecting to PostgreSQL [${label}] via ${host}…`);
+    const client = new Client({
+      connectionString: connStr,
+      ssl: sslFor(connStr),
+      connectionTimeoutMillis: Number(process.env.DB_CONNECT_TIMEOUT_MS || 15000),
+    });
+    try {
+      await client.connect();
+      return { client, connStr };
+    } catch (err) {
+      lastErr = err;
+      console.error(`❌ [${host}] ${err.message}`);
+      try {
+        await client.end();
+      } catch (_) {}
+      if (err.message?.includes('ENOTFOUND') && connStr.includes('railway.internal')) {
+        console.warn('   → private hostname failed, trying next URL…');
+        continue;
+      }
+    }
+  }
+  throw lastErr || new Error('Could not connect to PostgreSQL');
+}
 
 async function migrateDatabase(connStr, dbName) {
-  console.log(`⚡ Connecting to Railway PostgreSQL [Database: ${dbName}]...`);
   const client = new Client({
     connectionString: connStr,
-    ssl: isSsl ? { rejectUnauthorized: false } : false,
+    ssl: sslFor(connStr),
+    connectionTimeoutMillis: Number(process.env.DB_CONNECT_TIMEOUT_MS || 15000),
   });
 
   try {
@@ -366,7 +439,7 @@ const DEFAULT_FAQS = [
 async function seedAdmin(connStr, dbName) {
   const client = new Client({
     connectionString: connStr,
-    ssl: isSsl ? { rejectUnauthorized: false } : false,
+    ssl: sslFor(connStr),
   });
 
   try {
@@ -453,7 +526,7 @@ async function seedAdmin(connStr, dbName) {
 async function seedCouponsAndFaqs(connStr, dbName) {
   const client = new Client({
     connectionString: connStr,
-    ssl: isSsl ? { rejectUnauthorized: false } : false,
+    ssl: sslFor(connStr),
   });
 
   try {
@@ -487,6 +560,17 @@ async function seedCouponsAndFaqs(connStr, dbName) {
 }
 
 async function main() {
+  let connectionString;
+  try {
+    const connected = await connectWithFallback('migration');
+    connectionString = connected.connStr;
+    await connected.client.end();
+  } catch (err) {
+    console.error('❌ Could not connect to PostgreSQL:', err.message);
+    if (isRailway) process.exit(1);
+    process.exit(0);
+  }
+
   const targetDbName = connectionString.split('/').pop().split('?')[0] || 'target_db';
   await migrateDatabase(connectionString, targetDbName);
 
@@ -500,4 +584,8 @@ async function main() {
   console.log('✅ Database initialization complete.');
 }
 
-main();
+main().catch((err) => {
+  console.error('❌ Database initialization failed:', err.message);
+  if (isRailway) process.exit(1);
+  process.exit(0);
+});

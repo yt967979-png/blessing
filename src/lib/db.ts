@@ -3,30 +3,75 @@ import { hashPassword } from '@/lib/auth';
 
 let isSchemaInitialized = false;
 let schemaInitPromise: Promise<void> | null = null;
-
-// Global singleton PostgreSQL connection pool optimized for high-concurrency scaling
 let pool: Pool | null = null;
+let activeConnectionString: string | null = null;
 
-function resolveConnectionString(): string {
-  const candidates = [
+/** Collect unique DB URLs — public URL fallback when private `.railway.internal` fails */
+function getConnectionCandidates(): string[] {
+  const raw = [
     process.env.DATABASE_URL,
-    process.env.POSTGRES_URL,
-    process.env.DATABASE_PRIVATE_URL,
     process.env.DATABASE_PUBLIC_URL,
+    process.env.DATABASE_PRIVATE_URL,
+    process.env.POSTGRES_URL,
   ].filter(Boolean) as string[];
 
-  if (candidates.length > 0) return candidates[0];
-
-  if (process.env.PGHOST && process.env.PGUSER && process.env.PGPASSWORD) {
+  if (raw.length === 0 && process.env.PGHOST && process.env.PGUSER && process.env.PGPASSWORD) {
     const host = process.env.PGHOST;
     const user = process.env.PGUSER;
     const pass = process.env.PGPASSWORD;
     const db = process.env.PGDATABASE || 'railway';
     const port = process.env.PGPORT || 5432;
-    return `postgresql://${user}:${pass}@${host}:${port}/${db}`;
+    raw.push(`postgresql://${user}:${pass}@${host}:${port}/${db}`);
   }
 
-  throw new Error('DATABASE_URL is not configured. Add it to your Railway environment variables.');
+  // Prefer public/proxy URLs over *.railway.internal (broken when Postgres service renamed/deleted)
+  const sorted = [...new Set(raw)].sort((a, b) => {
+    const score = (u: string) => {
+      if (u.includes('railway.internal')) return 2;
+      if (u.includes('rlwy.net') || u.includes('proxy.rlwy.net')) return 0;
+      return 1;
+    };
+    return score(a) - score(b);
+  });
+
+  if (sorted.length === 0) {
+    throw new Error(
+      'DATABASE_URL is not configured. In Railway Web Service Variables set: DATABASE_URL = ${{Postgres.DATABASE_PUBLIC_URL}}'
+    );
+  }
+  return sorted;
+}
+
+/** Log once at startup so Railway deploy logs show the fix immediately. */
+let connectionConfigLogged = false;
+export function logDbConnectionConfig() {
+  if (connectionConfigLogged) return;
+  connectionConfigLogged = true;
+
+  const candidates = getConnectionCandidates();
+  const primary = candidates[0];
+  const masked = primary.replace(/:[^:@/]+@/, ':***@');
+  const host = (() => {
+    try {
+      return new URL(primary.replace(/^postgres(ql)?:\/\//, 'http://')).hostname;
+    } catch {
+      return '(unparseable)';
+    }
+  })();
+
+  console.log(`[db] primary host: ${host} (${masked.slice(0, 72)}…)`);
+
+  const dbUrl = process.env.DATABASE_URL || '';
+  const hasPublic = candidates.some(
+    (u) => u.includes('rlwy.net') || u.includes('proxy.rlwy.net')
+  );
+  if (dbUrl.includes('railway.internal') && !hasPublic) {
+    console.error(
+      '[db] FIX: DATABASE_URL points at postgres.railway.internal but that hostname is not resolving. ' +
+        'On Railway → Web Service → Variables, replace DATABASE_URL with: DATABASE_URL=${{Postgres.DATABASE_PUBLIC_URL}} ' +
+        '(or add DATABASE_PUBLIC_URL=${{Postgres.DATABASE_PUBLIC_URL}} and redeploy).'
+    );
+  }
 }
 
 function sslFor(connectionString: string) {
@@ -34,37 +79,59 @@ function sslFor(connectionString: string) {
     connectionString.includes('railway') ||
     connectionString.includes('render') ||
     connectionString.includes('rlwy.net') ||
-    connectionString.includes('proxy.rlwy.net')
+    connectionString.includes('proxy.rlwy.net') ||
+    connectionString.includes('railway.internal')
     ? { rejectUnauthorized: false as const }
     : false;
 }
 
-export function getDbPool(): Pool {
-  if (pool) return pool;
+async function destroyPool() {
+  if (pool) {
+    try {
+      await pool.end();
+    } catch (_) {}
+  }
+  pool = null;
+  activeConnectionString = null;
+  isSchemaInitialized = false;
+  schemaInitPromise = null;
+}
 
-  const connectionString = resolveConnectionString();
-
-  pool = new Pool({
+function createPool(connectionString: string): Pool {
+  const p = new Pool({
     connectionString,
-    // Small pool — Railway Hobby has limited connections; LISTEN uses a dedicated Client
-    max: Number(process.env.DB_POOL_MAX || 10),
-    idleTimeoutMillis: 10000,
-    connectionTimeoutMillis: Number(process.env.DB_CONNECT_TIMEOUT_MS || 4000),
+    max: Number(process.env.DB_POOL_MAX || 5),
+    idleTimeoutMillis: 20000,
+    connectionTimeoutMillis: Number(process.env.DB_CONNECT_TIMEOUT_MS || 15000),
     allowExitOnIdle: true,
     ssl: sslFor(connectionString),
   });
-
-  pool.on('error', (err) => {
+  p.on('error', (err) => {
     console.error('[db] idle client error:', err.message);
   });
+  return p;
+}
 
+export function getDbPool(): Pool {
+  if (pool && activeConnectionString) return pool;
+  const candidates = getConnectionCandidates();
+  activeConnectionString = candidates[0];
+  pool = createPool(activeConnectionString);
   return pool;
 }
 
 /** Config for long-lived dedicated pg Clients (LISTEN / NOTIFY helpers). */
 export function getDbConnectionConfig() {
-  const connectionString = resolveConnectionString();
+  const connectionString = activeConnectionString || getConnectionCandidates()[0];
   return { connectionString, ssl: sslFor(connectionString) };
+}
+
+/** Resolve a working connection string (warms pool if needed). Use before LISTEN. */
+export async function resolveDbConnectionConfig() {
+  logDbConnectionConfig();
+  const client = await getDbClient();
+  releaseDbClient(client);
+  return getDbConnectionConfig();
 }
 
 function wrapPoolClient(client: any) {
@@ -94,46 +161,60 @@ function wrapPoolClient(client: any) {
   return client;
 }
 
-export async function getDbClient() {
-  try {
-    const activePool = getDbPool();
-    const client: any = await activePool.connect();
-    wrapPoolClient(client);
-
-    if (!isSchemaInitialized) {
-      if (!schemaInitPromise) {
-        schemaInitPromise = (async () => {
-          try {
-            await runSchemaInit(client);
-            isSchemaInitialized = true;
-          } catch (e: any) {
-            console.error('[db] schema init failed:', e?.message || e);
-            schemaInitPromise = null;
-          }
-        })();
-      }
-      await schemaInitPromise;
-    }
-
-    return client;
-  } catch (err: any) {
-    console.error('[db] connect timeout/failed:', err?.message || err);
-    const pub = process.env.DATABASE_PUBLIC_URL;
-    const current = process.env.DATABASE_URL || '';
-    if (pub && pub !== current && !(globalThis as any).__bpgTriedPublicDb) {
-      (globalThis as any).__bpgTriedPublicDb = true;
-      console.warn('[db] retrying with DATABASE_PUBLIC_URL…');
+async function ensureSchemaReady(activePool: Pool) {
+  if (isSchemaInitialized) return;
+  if (!schemaInitPromise) {
+    schemaInitPromise = (async () => {
+      const initClient = await activePool.connect();
       try {
-        await pool?.end();
-      } catch (_) {}
-      pool = null;
-      isSchemaInitialized = false;
-      schemaInitPromise = null;
-      process.env.DATABASE_URL = pub;
-      return getDbClient();
-    }
-    throw err;
+        await runSchemaInit(initClient);
+        isSchemaInitialized = true;
+      } catch (e: any) {
+        console.error('[db] schema init failed:', e?.message || e);
+        schemaInitPromise = null;
+        throw e;
+      } finally {
+        initClient.release();
+      }
+    })();
   }
+  await schemaInitPromise;
+}
+
+export async function getDbClient() {
+  const candidates = getConnectionCandidates();
+  let lastErr: Error | null = null;
+
+  for (const connStr of candidates) {
+    try {
+      if (!pool || activeConnectionString !== connStr) {
+        await destroyPool();
+        activeConnectionString = connStr;
+        pool = createPool(connStr);
+        console.log(`[db] connecting via ${connStr.replace(/:[^:@/]+@/, ':***@').slice(0, 80)}…`);
+      }
+
+      await ensureSchemaReady(pool);
+      const client: any = await pool.connect();
+      wrapPoolClient(client);
+      return client;
+    } catch (err: any) {
+      lastErr = err;
+      const msg = String(err?.message || err);
+      console.error('[db] connect failed:', msg);
+      await destroyPool();
+
+      const isPrivateDnsFail =
+        msg.includes('ENOTFOUND') && connStr.includes('railway.internal');
+      if (isPrivateDnsFail) {
+        console.warn('[db] postgres.railway.internal not found — trying public URL next…');
+        continue;
+      }
+      if (candidates.indexOf(connStr) < candidates.length - 1) continue;
+    }
+  }
+
+  throw lastErr || new Error('Could not connect to PostgreSQL');
 }
 
 /** Never throws if client is null (after connect timeout). */
