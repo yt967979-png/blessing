@@ -52,9 +52,8 @@ function getConnectionCandidates(): string[] {
   });
 
   if (sorted.length === 0) {
-    throw new Error(
-      'DATABASE_URL is not configured. In Railway Web Service Variables set: DATABASE_URL = ${{Postgres.DATABASE_PUBLIC_URL}}'
-    );
+    console.warn('[db] DATABASE_URL is unpopulated. Add DATABASE_URL to Railway Variables.');
+    return ['postgresql://postgres:postgres@localhost:5432/railway'];
   }
   return sorted;
 }
