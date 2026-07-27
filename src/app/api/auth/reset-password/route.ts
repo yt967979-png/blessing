@@ -1,10 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getDbClient } from '@/lib/db';
-import crypto from 'crypto';
-
-function hashPassword(password: string): string {
-  return crypto.createHash('sha256').update(password + 'bpg_salt_2026').digest('hex');
-}
+import { hashPassword } from '@/lib/auth';
 
 export async function POST(request: Request) {
   let client: any = null;
@@ -15,8 +11,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Email, OTP code, and new password are required.' }, { status: 400 });
     }
 
-    if (String(newPassword).length < 6) {
-      return NextResponse.json({ error: 'Password must be at least 6 characters long.' }, { status: 400 });
+    if (String(newPassword).length < 8) {
+      return NextResponse.json({ error: 'Password must be at least 8 characters long.' }, { status: 400 });
     }
 
     const cleanEmail = String(email).toLowerCase().trim();
@@ -24,7 +20,6 @@ export async function POST(request: Request) {
 
     client = await getDbClient();
 
-    // 1. Verify OTP from Railway PostgreSQL DB (whatsapp_otps table)
     const otpRes = await client.query(
       `SELECT * FROM whatsapp_otps
        WHERE (LOWER(email) = $1 OR phone = $1) AND otp = $2 AND expires_at > NOW()
@@ -37,7 +32,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid or expired WhatsApp OTP code. Please check WhatsApp.' }, { status: 400 });
     }
 
-    // 2. Hash new password & update user in DB
     const passHash = hashPassword(newPassword);
     const updateRes = await client.query(
       `UPDATE users SET password_hash = $1, updated_at = NOW() WHERE LOWER(email) = $2 RETURNING id, name, email`,
@@ -49,15 +43,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Account not found.' }, { status: 404 });
     }
 
-    // 3. Clean up OTP
     await client.query(`DELETE FROM whatsapp_otps WHERE LOWER(email) = $1 OR phone = $1`, [cleanEmail]);
     await client.end();
 
     return NextResponse.json({
       success: true,
-      message: '✅ Password reset successfully! You can now log in with your new password.',
+      message: 'Password reset successfully! You can now log in with your new password.',
     });
-  } catch (err: any) {
+  } catch {
     if (client) { try { await client.end(); } catch (_) {} }
     return NextResponse.json({ error: 'Failed to reset password. Database error.' }, { status: 500 });
   }

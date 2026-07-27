@@ -12,7 +12,7 @@ import { CartDrawer } from '@/components/cart/CartDrawer';
 import { Modals } from '@/components/modals/Modals';
 
 export default function CartPage() {
-  const { cart, updateQty, removeFromCart, cartTotal, setIsCheckoutOpen, user, setIsAuthOpen, setCheckoutTotal } = useStore();
+  const { cart, updateQty, removeFromCart, cartTotal, setIsCheckoutOpen, user, setIsAuthOpen, setCheckoutTotal, setAppliedCouponCode } = useStore();
   const [pincode, setPincode] = useState('600012');
   const [pincodeChecked, setPincodeChecked] = useState(true);
 
@@ -27,16 +27,26 @@ export default function CartPage() {
   const couponDiscountAmount = appliedCoupon ? Math.round((cartTotal * appliedCoupon.percent) / 100) : 0;
   const grandTotal = Math.max(0, cartTotal - couponDiscountAmount);
 
-  const handleApplyCoupon = (e: React.FormEvent) => {
+  const handleApplyCoupon = async (e: React.FormEvent) => {
     e.preventDefault();
     setCouponError(null);
     const codeClean = couponCode.trim().toUpperCase();
-    if (codeClean === 'FIRST10' || codeClean === 'BLESSING10') {
-      setAppliedCoupon({ code: codeClean, percent: 10 });
-    } else if (codeClean === 'POWER20' || codeClean === 'STUDENT20') {
-      setAppliedCoupon({ code: codeClean, percent: 20 });
-    } else {
-      setCouponError('Invalid coupon code. Try FIRST10 or POWER20!');
+    if (!codeClean) return;
+
+    try {
+      const res = await fetch(`/api/coupons?code=${encodeURIComponent(codeClean)}&subtotal=${cartTotal}`);
+      const data = await res.json();
+      if (res.ok && data.valid) {
+        setAppliedCoupon({ code: data.code, percent: data.percent });
+        setAppliedCouponCode(data.code);
+        setCheckoutTotal(Math.max(0, cartTotal - data.discountAmount));
+      } else {
+        setCouponError(data.error || 'Invalid coupon code.');
+        setAppliedCoupon(null);
+        setAppliedCouponCode(null);
+      }
+    } catch {
+      setCouponError('Could not validate coupon. Try again.');
     }
   };
 
@@ -182,7 +192,7 @@ export default function CartPage() {
                     <form onSubmit={handleApplyCoupon} className="flex gap-2">
                       <input
                         type="text"
-                        placeholder="Try FIRST10 or POWER20"
+                        placeholder="Enter coupon code"
                         value={couponCode}
                         onChange={(e) => setCouponCode(e.target.value)}
                         className="px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-600 flex-1 uppercase font-bold text-slate-800"

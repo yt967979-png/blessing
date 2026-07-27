@@ -5,10 +5,10 @@ try {
 } catch (e) {}
 
 let connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.DATABASE_PUBLIC_URL;
-const RAILWAY_DB_FALLBACK = "postgresql://postgres:USdOHOzspyXMPFmDnfsjkxoSIGedYwgk@sakura.proxy.rlwy.net:32874/railway";
 
 if (!connectionString) {
-  connectionString = RAILWAY_DB_FALLBACK;
+  console.error('❌ DATABASE_URL is required.');
+  process.exit(1);
 }
 
 const isSsl = connectionString.includes('railway') || connectionString.includes('render') || connectionString.includes('rlwy.net');

@@ -10,12 +10,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No image file provided' }, { status: 400 });
     }
 
-    const cloudName = process.env.CLOUDINARY_CLOUD_NAME || 'wpkjkqoh';
+    const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
     const uploadPreset = process.env.CLOUDINARY_UPLOAD_PRESET;
-    const apiKey = process.env.CLOUDINARY_API_KEY || '995353775734644';
+    const apiKey = process.env.CLOUDINARY_API_KEY;
 
-    // If Cloudinary credentials exist in environment variables, upload to Cloudinary
-    if (cloudName && (uploadPreset || apiKey)) {
+    if (cloudName && uploadPreset && apiKey) {
       const arrayBuffer = await file.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);
       const base64Data = `data:${file.type};base64,${buffer.toString('base64')}`;

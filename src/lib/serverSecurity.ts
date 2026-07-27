@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getDbClient } from '@/lib/db';
+import { getTokenFromRequest, verifySessionToken } from '@/lib/auth';
 
-// --- 1. In-Memory Rate Limiter ---
 interface RateLimitEntry {
   count: number;
   resetTime: number;
@@ -26,7 +26,6 @@ export function applyRateLimit(ip: string, limit: number = 30, windowMs: number 
   return { allowed: true, remaining: limit - entry.count };
 }
 
-// Clean up expired rate limit entries every 5 minutes
 if (typeof setInterval !== 'undefined') {
   setInterval(() => {
     const now = Date.now();
@@ -38,42 +37,50 @@ if (typeof setInterval !== 'undefined') {
   }, 300000);
 }
 
-// --- 2. Server-Side Admin Authorization Verifier ---
-export async function verifyAdminRequest(request: Request): Promise<{ isAdmin: boolean; error?: string; user?: any }> {
-  try {
-    const authHeader = request.headers.get('Authorization') || '';
-    const userIdHeader = request.headers.get('x-admin-user-id') || '';
-    const url = new URL(request.url);
-    const userIdQuery = url.searchParams.get('adminUserId');
+export async function getAuthenticatedUser(request: Request): Promise<{ userId: string; role: string } | null> {
+  const token = getTokenFromRequest(request);
+  if (!token) return null;
+  return verifySessionToken(token);
+}
 
-    const targetUserId = userIdHeader || userIdQuery || (authHeader.startsWith('Bearer ') ? authHeader.substring(7) : '');
+export async function verifyAdminRequest(request: Request): Promise<{ isAdmin: boolean; error?: string; user?: { userId: string; role: string } }> {
+  try {
+    const session = await getAuthenticatedUser(request);
+    if (session?.role === 'admin') {
+      return { isAdmin: true, user: session };
+    }
+
+    const url = new URL(request.url);
+    const userIdHeader = request.headers.get('x-admin-user-id') || '';
+    const userIdQuery = url.searchParams.get('adminUserId') || '';
+    const targetUserId = session?.userId || userIdHeader || userIdQuery;
 
     if (!targetUserId) {
-      return { isAdmin: false, error: 'Unauthorized: Missing Admin Identification Token' };
+      return { isAdmin: false, error: 'Unauthorized: Missing session or admin identification' };
     }
 
     const client = await getDbClient();
-    if (!client) {
-      // Development fallback mode if DB is disconnected
-      return { isAdmin: true };
-    }
-
     try {
       const res = await client.query('SELECT id, email, role FROM users WHERE id = $1', [targetUserId]);
-      await client.end();
-
-      if (res.rows && res.rows.length > 0) {
+      if (res.rows.length > 0) {
         const user = res.rows[0];
-        if (user.role === 'admin' || user.email === 'admin@blessingpowerguide.com') {
-          return { isAdmin: true, user };
+        if (user.role === 'admin') {
+          return { isAdmin: true, user: { userId: user.id, role: 'admin' } };
         }
       }
       return { isAdmin: false, error: 'Forbidden: Admin privilege required' };
-    } catch (e: any) {
+    } finally {
       await client.end();
-      return { isAdmin: false, error: 'Database verification failed' };
     }
-  } catch (e: any) {
+  } catch {
     return { isAdmin: false, error: 'Server authentication check error' };
   }
+}
+
+export function unauthorizedResponse(message = 'Unauthorized') {
+  return NextResponse.json({ error: message }, { status: 401 });
+}
+
+export function forbiddenResponse(message = 'Forbidden') {
+  return NextResponse.json({ error: message }, { status: 403 });
 }

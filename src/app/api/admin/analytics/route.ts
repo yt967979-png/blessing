@@ -1,25 +1,16 @@
 import { NextResponse } from 'next/server';
 import { getDbClient } from '@/lib/db';
+import { verifyAdminRequest, forbiddenResponse } from '@/lib/serverSecurity';
 
 export async function GET(request: Request) {
+  const auth = await verifyAdminRequest(request);
+  if (!auth.isAdmin) return forbiddenResponse(auth.error);
+
   const { searchParams } = new URL(request.url);
-  const adminUserId = searchParams.get('adminUserId');
-  const range = searchParams.get('range') || '30'; // days
+  const range = searchParams.get('range') || '30';
 
   const client = await getDbClient();
   try {
-    // Verify admin
-    if (!adminUserId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
-    }
-    const adminCheck = await client.query(
-      `SELECT id FROM users WHERE id = $1 AND role = 'admin' LIMIT 1`,
-      [adminUserId]
-    );
-    if (adminCheck.rows.length === 0) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
-    }
-
     const days = Math.min(Math.max(Number(range) || 30, 1), 365);
 
     // 1. Overall summary

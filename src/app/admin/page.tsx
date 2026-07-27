@@ -10,6 +10,7 @@ import {
   CreditCard, Banknote, Smartphone, Star, AlertCircle,
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
+import { authHeaders } from '@/lib/clientAuth';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface OrderItem { title: string; qty: number; price?: number; subtotal?: number; }
@@ -131,14 +132,16 @@ export default function AdminPage() {
   const [newDiscountEnabled, setNewDiscountEnabled] = useState(true);
   const [newImg, setNewImg] = useState('https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80');
 
-  const isAdmin = !!user && (user.role === 'admin' || (user.email && user.email.toLowerCase().includes('admin')));
+  const isAdmin = !!user && user.role === 'admin';
 
   // ── Data loaders
   const loadLiveOrders = useCallback(async () => {
     if (!user?.id) return;
     setOrdersLoading(true);
     try {
-      const res = await fetch(`/api/orders?adminUserId=${encodeURIComponent(String(user.id))}`);
+      const res = await fetch(`/api/orders?adminUserId=${encodeURIComponent(String(user.id))}`, {
+        headers: authHeaders(user),
+      });
       if (res.ok) { const data = await res.json(); if (Array.isArray(data)) setOrders(data); }
     } catch {
       // network error — silently ignore
@@ -149,7 +152,9 @@ export default function AdminPage() {
     if (!user?.id) return;
     setAnalyticsLoading(true);
     try {
-      const res = await fetch(`/api/admin/analytics?adminUserId=${encodeURIComponent(String(user.id))}&range=${analyticsRange}`);
+      const res = await fetch(`/api/admin/analytics?adminUserId=${encodeURIComponent(String(user.id))}&range=${analyticsRange}`, {
+        headers: authHeaders(user),
+      });
       if (res.ok) { const data = await res.json(); setAnalytics(data); }
     } catch {
       // network error — silently ignore
@@ -240,24 +245,21 @@ export default function AdminPage() {
   const saveProductChanges = async (id: string | number) => {
     const fp = editDiscountEnabled ? editPrice : editMrp;
     const fb = editBadgeEnabled ? (editBadge.trim() || 'BESTSELLER') : '';
-    try { await fetch('/api/products', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, price: fp, mrp: editMrp, badge: fb }) }); } catch (_) {}
-    updateProductInDb(id, { price: Number(fp), mrp: Number(editMrp), discount: Math.round(((editMrp - fp) / editMrp) * 100), badge: fb });
-    setEditingId(null); showToast(`✅ Product updated`);
+    await updateProductInDb(id, { price: Number(fp), mrp: Number(editMrp), discount: Math.round(((editMrp - fp) / editMrp) * 100), badge: fb });
+    setEditingId(null);
   };
   const handleCreateProduct = (e: React.FormEvent) => {
     e.preventDefault();
     const fp = newDiscountEnabled ? Number(newPrice) : Number(newMrp);
     addNewProductToDb({ title: newTitle, cls: newCls, category: newCat, price: fp, mrp: Number(newMrp), discount: Math.round(((newMrp - fp) / newMrp) * 100), badge: newBadgeEnabled ? newBadge : '', image: newImg });
-    setShowAddForm(false); setNewTitle(''); showToast('🎉 Product created!');
+    setShowAddForm(false); setNewTitle('');
   };
   const toggleStock = async (id: string | number, cur: boolean) => {
-    try { await fetch('/api/products', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, inStock: !cur }) }); } catch (_) {}
-    updateProductInDb(id, { inStock: !cur }); showToast('✅ Stock updated');
+    await updateProductInDb(id, { inStock: !cur });
   };
   const handleDeleteProduct = async (id: string | number) => {
     if (!confirm('Delete this book permanently?')) return;
-    try { await fetch(`/api/products?id=${id}`, { method: 'DELETE' }); } catch (_) {}
-    deleteProductFromDb(id); showToast('🗑️ Book deleted');
+    await deleteProductFromDb(id);
   };
   const handleImageFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]; if (!file) return;
@@ -280,7 +282,8 @@ export default function AdminPage() {
       const vr = await fetch(`/api/courier/track?docket=${encodeURIComponent(awb)}`);
       const vd = await vr.json();
       if (!vr.ok || !vd.isValid || !vd.verified) { showToast(`❌ ${vd.error || 'Invalid docket'}`); alert(`Docket verification failed:\n${vd.error || 'Not found in ST Courier network.'}`); return; }
-      await fetch('/api/orders/timeline', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orderId, status: 'HANDED_TO_ST_COURIER', awbNumber: awb }) });
+      await fetch('/api/orders/timeline', { method: 'POST', headers: authHeaders(user), body: JSON.stringify({ orderId, status: 'HANDED_TO_ST_COURIER', awbNumber: awb }) });
+      await fetch('/api/orders', { method: 'PATCH', headers: authHeaders(user), body: JSON.stringify({ orderId, status: 'Handed to ST Courier', awbNumber: awb }) });
       showToast(`✅ Dispatched #${orderId}`); loadLiveOrders();
     } catch (_) { showToast('❌ Dispatch error'); }
     finally { setDispatchingOrderIds((p) => ({ ...p, [orderId]: false })); }

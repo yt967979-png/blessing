@@ -25,12 +25,18 @@ export function getDbPool(): Pool {
 
   pool = new Pool({
     connectionString,
-    max: 20, // Reuse max 20 connections in pool
+    // Railway Postgres is private-network; keep pool small on single instance
+    max: Number(process.env.DB_POOL_MAX || 10),
     idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 5000,
-    ssl: connectionString.includes('railway') || connectionString.includes('render') || connectionString.includes('rlwy.net')
-      ? { rejectUnauthorized: false }
-      : false,
+    connectionTimeoutMillis: 10000,
+    ssl:
+      process.env.DATABASE_SSL === 'true' ||
+      connectionString.includes('railway') ||
+      connectionString.includes('render') ||
+      connectionString.includes('rlwy.net') ||
+      connectionString.includes('proxy.rlwy.net')
+        ? { rejectUnauthorized: false }
+        : false,
   });
 
   return pool;
@@ -186,6 +192,18 @@ export async function getDbClient() {
           subtotal NUMERIC NOT NULL
         );
 
+        CREATE TABLE IF NOT EXISTS payments (
+          id VARCHAR(255) PRIMARY KEY,
+          order_id VARCHAR(255) REFERENCES orders(id) ON DELETE CASCADE,
+          payment_gateway VARCHAR(50) DEFAULT 'Razorpay',
+          payment_id VARCHAR(255),
+          transaction_id VARCHAR(255),
+          amount NUMERIC NOT NULL,
+          currency VARCHAR(10) DEFAULT 'INR',
+          status VARCHAR(50) DEFAULT 'SUCCESS',
+          paid_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
         CREATE TABLE IF NOT EXISTS reviews (
           id VARCHAR(255) PRIMARY KEY,
           user_name VARCHAR(255),
@@ -246,6 +264,36 @@ export async function getDbClient() {
           provider VARCHAR(100) DEFAULT 'BAILEYS_FREE_UNLIMITED',
           status VARCHAR(50) DEFAULT 'SENT',
           sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS coupons (
+          id VARCHAR(255) PRIMARY KEY,
+          code VARCHAR(50) UNIQUE NOT NULL,
+          discount_type VARCHAR(20) DEFAULT 'percentage',
+          discount_value NUMERIC NOT NULL,
+          minimum_amount NUMERIC DEFAULT 0,
+          expiry_date TIMESTAMP,
+          usage_limit INT DEFAULT 100,
+          status VARCHAR(50) DEFAULT 'active'
+        );
+
+        CREATE TABLE IF NOT EXISTS faqs (
+          id VARCHAR(255) PRIMARY KEY,
+          question TEXT NOT NULL,
+          answer TEXT NOT NULL,
+          display_order INT DEFAULT 0,
+          status VARCHAR(50) DEFAULT 'active',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS settings (
+          id VARCHAR(50) PRIMARY KEY DEFAULT 'main',
+          site_name VARCHAR(255) DEFAULT 'BLESSING POWER GUIDE',
+          support_email VARCHAR(255) DEFAULT 'blessingpowerguide@gmail.com',
+          support_phone VARCHAR(255) DEFAULT '+91 98404 18228',
+          razorpay_key VARCHAR(255),
+          shipping_charge NUMERIC DEFAULT 0,
+          tax_percentage NUMERIC DEFAULT 0
         );
 
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_address TEXT;

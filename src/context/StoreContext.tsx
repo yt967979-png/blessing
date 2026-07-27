@@ -83,6 +83,8 @@ interface StoreContextType {
   cartCount: number;
   checkoutTotal: number;
   setCheckoutTotal: (amount: number) => void;
+  appliedCouponCode: string | null;
+  setAppliedCouponCode: (code: string | null) => void;
   orderSuccessData: any | null;
   setOrderSuccessData: (data: any | null) => void;
   showToast: (msg: string) => void;
@@ -90,19 +92,8 @@ interface StoreContextType {
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
 
-const LOCAL_PRODUCTS_KEY = 'bpg_products_db_persistent_v3';
-
 export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Initial state for products with instant localStorage cache fallback
-  const [products, setProducts] = useState<Product[]>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const cached = localStorage.getItem(LOCAL_PRODUCTS_KEY);
-        if (cached) return JSON.parse(cached);
-      } catch (e) {}
-    }
-    return [];
-  });
+  const [products, setProducts] = useState<Product[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [wishlist, setWishlist] = useState<(string | number)[]>([]);
   const [user, setUser] = useState<UserData | null>(null);
@@ -125,21 +116,18 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setTimeout(() => setToast(null), 3000);
   };
 
-  // Initial Load from Backend Database
-  useEffect(() => {
-    // Fetch Live Products from Railway PostgreSQL
+  const refreshProducts = () => {
     fetch('/api/products')
       .then((res) => res.json())
       .then((data) => {
-        if (Array.isArray(data)) {
-          setProducts(data);
-        }
+        if (Array.isArray(data)) setProducts(data);
       })
-      .catch(() => {
-        setProducts([]);
-      });
+      .catch(() => setProducts([]));
+  };
 
-    // Restore user session from localStorage & verify with Railway PostgreSQL DB
+  // Load products from DB only
+  useEffect(() => {
+    refreshProducts();
     const savedUser = localStorage.getItem('bpg_user_next');
     if (savedUser) {
       try {
@@ -206,19 +194,19 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, [cart, wishlist, user]);
 
-  // Save Cart to LocalStorage only when user is logged in
+  // Save cart to localStorage when logged in
   useEffect(() => {
     if (user) {
       localStorage.setItem('bpg_cart_next', JSON.stringify(cart));
     }
   }, [cart, user]);
 
-  // Save Products to LocalStorage cache whenever updated
-  useEffect(() => {
-    if (products.length > 0) {
-      localStorage.setItem(LOCAL_PRODUCTS_KEY, JSON.stringify(products));
-    }
-  }, [products]);
+  const getAdminHeaders = (): Record<string, string> => {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (user?.token) headers.Authorization = `Bearer ${user.token}`;
+    if (user?.id) headers['x-admin-user-id'] = String(user.id);
+    return headers;
+  };
 
   const addToCart = (product: Product, qty: number = 1) => {
     setCart((prev) => {
@@ -301,105 +289,71 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     localStorage.removeItem('bpg_user_next');
     localStorage.removeItem('bpg_cart_next');
     localStorage.removeItem('bpg_user_addresses');
+    fetch('/api/auth', { method: 'DELETE' }).catch(() => {});
     showToast('Logged out successfully');
   };
 
-  // UPDATE PRODUCT IN DB & LOCALSTORAGE
-  const updateProductInDb = (id: string | number, updatedData: Partial<Product>) => {
-    setProducts((prev) => {
-      const nextProds = prev.map((p) => (p.id === id ? { ...p, ...updatedData } : p));
-      localStorage.setItem(LOCAL_PRODUCTS_KEY, JSON.stringify(nextProds));
-      return nextProds;
-    });
+  const updateProductInDb = async (id: string | number, updatedData: Partial<Product>) => {
+    setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, ...updatedData } : p)));
 
-    // Call API to persist in Railway PostgreSQL
-    fetch('/api/products', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        title: updatedData.title,
-        price: updatedData.price,
-        mrp: updatedData.mrp,
-        badge: updatedData.badge,
-      }),
-    }).catch(() => {});
-
-    showToast(`✓ Product #${id} saved permanently to Database!`);
+    try {
+      const res = await fetch('/api/products', {
+        method: 'PATCH',
+        headers: getAdminHeaders(),
+        body: JSON.stringify({ id, ...updatedData }),
+      });
+      if (!res.ok) throw new Error('Update failed');
+      refreshProducts();
+      showToast(`✓ Product saved to database`);
+    } catch {
+      showToast('❌ Failed to save product');
+      refreshProducts();
+    }
   };
 
-  // ADD NEW PRODUCT TO DB & LOCALSTORAGE PERMANENTLY
   const addNewProductToDb = async (newProdData: Partial<Product>) => {
-    const newId = `bpg-${Date.now()}`;
-    const createdProd: Product = {
-      id: newId,
-      slug: newProdData.title ? newProdData.title.toLowerCase().replace(/[^a-z0-9]+/g, '-') : `book-${newId}`,
-      title: newProdData.title || 'New Guide Book',
-      subtitle: `${newProdData.cls || '10th'} Standard Guide`,
-      cls: newProdData.cls || '10th',
-      category: newProdData.category || 'guide',
-      subject: newProdData.subject || 'State Board',
-      price: Number(newProdData.price) || 190,
-      mrp: Number(newProdData.mrp) || 240,
-      discount: Number(newProdData.discount) || 20,
-      rating: 5.0,
-      reviews: 1,
-      badge: newProdData.badge || 'NEW',
-      badgeColor: 'bg-emerald-600',
-      image: newProdData.image || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80',
-      hoverImage: newProdData.image || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80',
-      description: newProdData.description || 'Quality guide book for TN Board / CBSE exams.',
-      features: ['Model Question Papers', 'Previous Year Questions', 'Chapter-wise Notes'],
-      inStock: true,
-      isNew: true,
-      isBestSeller: true,
-      isTrending: true,
-    };
-
-    setProducts((prev) => {
-      const nextProds = [createdProd, ...prev];
-      localStorage.setItem(LOCAL_PRODUCTS_KEY, JSON.stringify(nextProds));
-      return nextProds;
-    });
-
-    // Send POST request to Railway PostgreSQL API
     try {
-      await fetch('/api/products', {
+      const res = await fetch('/api/products', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: getAdminHeaders(),
         body: JSON.stringify({
-          title: createdProd.title,
-          cls: createdProd.cls,
-          category: createdProd.category,
-          price: createdProd.price,
-          mrp: createdProd.mrp,
-          badge: createdProd.badge,
-          image: createdProd.image,
-          description: createdProd.description,
+          title: newProdData.title,
+          cls: newProdData.cls,
+          category: newProdData.category,
+          price: newProdData.price,
+          mrp: newProdData.mrp,
+          image: newProdData.image,
+          description: newProdData.description,
         }),
       });
-    } catch (err) {}
-
-    showToast(`🎉 Book "${createdProd.title}" saved permanently to Database!`);
+      if (!res.ok) throw new Error('Create failed');
+      refreshProducts();
+      showToast(`🎉 Book "${newProdData.title}" saved to database`);
+    } catch {
+      showToast('❌ Failed to add product');
+    }
   };
 
-  // DELETE PRODUCT FROM DB & LOCALSTORAGE
-  const deleteProductFromDb = (id: string | number) => {
-    setProducts((prev) => {
-      const nextProds = prev.filter((p) => p.id !== id);
-      localStorage.setItem(LOCAL_PRODUCTS_KEY, JSON.stringify(nextProds));
-      return nextProds;
-    });
-
-    showToast(`🗑️ Book #${id} removed from Database`);
+  const deleteProductFromDb = async (id: string | number) => {
+    setProducts((prev) => prev.filter((p) => p.id !== id));
+    try {
+      const res = await fetch(`/api/products?id=${encodeURIComponent(String(id))}`, {
+        method: 'DELETE',
+        headers: getAdminHeaders(),
+      });
+      if (!res.ok) throw new Error('Delete failed');
+      refreshProducts();
+      showToast(`🗑️ Book removed from database`);
+    } catch {
+      showToast('❌ Failed to delete product');
+      refreshProducts();
+    }
   };
 
   const cartTotal = cart.reduce((acc, item) => acc + item.price * item.qty, 0);
   const cartCount = cart.reduce((acc, item) => acc + item.qty, 0);
   const [checkoutTotal, setCheckoutTotal] = useState(0);
+  const [appliedCouponCode, setAppliedCouponCode] = useState<string | null>(null);
 
   // Keep checkoutTotal in sync with cartTotal unless manually overridden (e.g. coupon applied)
   useEffect(() => {
@@ -446,6 +400,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         cartCount,
         checkoutTotal,
         setCheckoutTotal,
+        appliedCouponCode,
+        setAppliedCouponCode,
         orderSuccessData,
         setOrderSuccessData,
         showToast,

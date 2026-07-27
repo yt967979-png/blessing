@@ -48,6 +48,9 @@ export const Modals = () => {
     setIsProfileOpen,
     cart,
     cartTotal,
+    checkoutTotal,
+    appliedCouponCode,
+    setAppliedCouponCode,
     clearCart,
     addToCart,
     user,
@@ -144,12 +147,12 @@ export const Modals = () => {
       if (!saved) return;
     }
 
-    const orderId = 'BPG-' + Math.floor(1000 + Math.random() * 9000);
-    const finalAmount = cartTotal > 0 ? cartTotal : 360;
+    const finalAmount = checkoutTotal > 0 ? checkoutTotal : (cartTotal > 0 ? cartTotal : 360);
 
     const processOrderCompletion = async (payId?: string, rzpOrderId?: string, rzpSignature?: string) => {
+      let serverOrderId = '';
       try {
-        await fetch('/api/orders', {
+        const orderRes = await fetch('/api/orders', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -160,6 +163,7 @@ export const Modals = () => {
             city: selectedAddress.city || 'Chennai',
             pincode: selectedAddress.pincode || '600012',
             items: cart.map((i) => ({ id: i.id, title: i.title, qty: i.qty, price: i.price })),
+            couponCode: appliedCouponCode || null,
             paymentMethod: paymentMethod === 'razorpay' ? 'Razorpay UPI / Cards' : 'Cash on Delivery (COD)',
             paymentStatus: paymentMethod === 'razorpay' ? 'Payment Confirmed' : 'Pending COD',
             razorpayPaymentId: payId || null,
@@ -167,12 +171,19 @@ export const Modals = () => {
             razorpaySignature: rzpSignature || null,
           }),
         });
-      } catch (e) {}
+        const orderData = await orderRes.json();
+        if (orderRes.ok && orderData.orderId) {
+          serverOrderId = orderData.orderId;
+        }
+      } catch (_) {}
+
+      const confirmedOrderId = serverOrderId || `BPG-${Math.floor(1000 + Math.random() * 9000)}`;
 
       setIsCheckoutOpen(false);
       clearCart();
+      setAppliedCouponCode(null);
       setOrderSuccessData({
-        orderId,
+        orderId: confirmedOrderId,
         totalAmount: finalAmount,
         customerName: selectedAddress.name || user?.name || 'Customer',
         address: selectedAddress.address,
@@ -181,15 +192,16 @@ export const Modals = () => {
         paymentMethod: paymentMethod === 'razorpay' ? 'Razorpay UPI' : 'Cash on Delivery (COD)',
         paymentStatus: paymentMethod === 'razorpay' ? 'Payment Confirmed' : 'Pending COD',
       });
-      showToast(`🎉 Order #${orderId} placed successfully! WhatsApp update sent.`);
+      showToast(`🎉 Order #${confirmedOrderId} placed successfully!`);
     };
 
     if (paymentMethod === 'razorpay') {
+      const receiptId = `rcpt-${Date.now()}`;
       try {
         const res = await fetch('/api/razorpay', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ amount: finalAmount, receipt: orderId }),
+          body: JSON.stringify({ amount: finalAmount, receipt: receiptId }),
         });
         const rzpData = await res.json();
 
@@ -204,7 +216,7 @@ export const Modals = () => {
             amount: rzpData.amount,
             currency: 'INR',
             name: 'BLESSING POWER GUIDE',
-            description: `Order #${orderId} - Educational Guide Books`,
+            description: 'Educational Guide Books Order',
             order_id: rzpData.id,
             prefill: {
               name: selectedAddress.name || user?.name || '',

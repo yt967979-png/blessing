@@ -1,12 +1,24 @@
 import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
 import { getDbClient } from '@/lib/db';
-import crypto from 'crypto';
+import { createSessionToken, hashPassword, verifyPassword } from '@/lib/auth';
 
-function hashPassword(password: string): string {
-  return crypto.createHash('sha256').update(password + 'bpg_salt_2026').digest('hex');
+function setSessionCookie(response: NextResponse, token: string) {
+  response.cookies.set('bpg_session', token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 7 * 24 * 60 * 60,
+    path: '/',
+  });
+  return response;
 }
 
-// GET /api/auth?userId=xxx — Verify if user account exists in Railway PostgreSQL DB
+function buildUserResponse(user: { id: string; name: string; email: string; phone: string; role: string }, token: string) {
+  return { id: user.id, name: user.name, email: user.email, phone: user.phone, role: user.role || 'customer', token };
+}
+
+// GET /api/auth?userId=xxx — Verify if user account exists
 export async function GET(request: Request) {
   let client: any = null;
   try {
@@ -31,14 +43,17 @@ export async function GET(request: Request) {
       return NextResponse.json({ exists: false, error: 'USER_NOT_FOUND' }, { status: 404 });
     }
 
-    return NextResponse.json({ exists: true, user: res.rows[0] });
-  } catch (err: any) {
+    const user = res.rows[0];
+    const token = createSessionToken(user.id, user.role || 'customer');
+    const response = NextResponse.json({ exists: true, user: buildUserResponse(user, token) });
+    return setSessionCookie(response, token);
+  } catch {
     if (client) { try { await client.end(); } catch (_) {} }
     return NextResponse.json({ error: 'Database connection failed' }, { status: 503 });
   }
 }
 
-// POST /api/auth — Register or Login via Railway PostgreSQL ONLY
+// POST /api/auth — Register or Login
 export async function POST(request: Request) {
   let client: any = null;
   try {
@@ -55,13 +70,9 @@ export async function POST(request: Request) {
 
     const cleanIdentifier = loginIdentifier.toLowerCase();
     const cleanPhoneDigits = loginIdentifier.replace(/\D/g, '');
-    const passHash = hashPassword(password);
 
     client = await getDbClient();
 
-    // ─────────────────────────────────────────────
-    // REGISTER
-    // ─────────────────────────────────────────────
     if (action === 'register') {
       const cleanEmail = String(email || '').toLowerCase().trim();
       const cleanPhone = String(phone || '').trim();
@@ -80,31 +91,32 @@ export async function POST(request: Request) {
 
       const userId = `usr-${Date.now()}`;
       const userName = String(name).trim();
+      const passHash = hashPassword(password);
 
       await client.query(
-        `INSERT INTO users (id, name, email, phone, password_hash, role, status)
-         VALUES ($1, $2, $3, $4, $5, 'customer', 'active')`,
+        `INSERT INTO users (id, name, email, phone, password_hash, role, email_verified, status)
+         VALUES ($1, $2, $3, $4, $5, 'customer', TRUE, 'active')`,
         [userId, userName, cleanEmail, cleanPhone, passHash]
       );
 
-      // Create empty cart row for this user
       await client.query(
         `INSERT INTO cart (id, user_id) VALUES ($1, $2) ON CONFLICT (user_id) DO NOTHING`,
         [`cart-${userId}`, userId]
       );
 
+      const user = { id: userId, name: userName, email: cleanEmail, phone: cleanPhone, role: 'customer' };
+      const token = createSessionToken(userId, 'customer');
       await client.end();
-      return NextResponse.json({
-        user: { id: userId, name: userName, email: cleanEmail, phone: cleanPhone, role: 'customer' },
+
+      const response = NextResponse.json({
+        user: buildUserResponse(user, token),
         cart: [],
         wishlist: [],
         addresses: [],
       });
+      return setSessionCookie(response, token);
     }
 
-    // ─────────────────────────────────────────────
-    // LOGIN (Supports Phone Number OR Email)
-    // ─────────────────────────────────────────────
     const userRes = await client.query(
       `SELECT * FROM users 
        WHERE LOWER(email) = $1 
@@ -124,20 +136,15 @@ export async function POST(request: Request) {
 
     const dbUser = userRes.rows[0];
 
-    // Verify password
-    if (dbUser.password_hash !== passHash) {
+    if (!verifyPassword(password, dbUser.password_hash)) {
       await client.end();
-      return NextResponse.json(
-        { error: 'Incorrect password. Please check and try again.' },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: 'Incorrect password. Please check and try again.' }, { status: 401 });
     }
 
-    // Fetch saved cart
     const cartRes = await client.query(
       `SELECT ci.book_id as id, ci.quantity as qty, ci.price,
               b.title, b.cover_image as image, b.price as mrp,
-              b.subject, b.slug, b.discount_price
+              b.subject, b.slug, b.discount_price, b.status, b.stock
        FROM cart c
        JOIN cart_items ci ON c.id = ci.cart_id
        LEFT JOIN books b ON ci.book_id = b.id
@@ -148,14 +155,14 @@ export async function POST(request: Request) {
     const cartItems = cartRes.rows.map((row: any) => ({
       id: row.id,
       title: row.title || `Book #${row.id}`,
-      price: Number(row.price),
-      mrp: Number(row.mrp || row.price + 40),
+      price: Number(row.discount_price || row.price),
+      mrp: Number(row.mrp || row.price),
       qty: Number(row.qty),
-      image: row.image || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80',
+      image: row.image || '',
       subject: row.subject || 'Guide',
       slug: row.slug || row.id,
       cls: '10th',
-      category: 'guide',
+      category: 'guide' as const,
       discount: 20,
       rating: 5.0,
       reviews: 0,
@@ -163,17 +170,12 @@ export async function POST(request: Request) {
       badgeColor: 'bg-blue-600',
       description: 'Official guide book.',
       features: ['Solved Papers'],
-      inStock: true,
+      inStock: row.status !== 'out_of_stock' && Number(row.stock || 1) > 0,
     }));
 
-    // Fetch wishlist
-    const wishRes = await client.query(
-      'SELECT book_id FROM wishlist WHERE user_id = $1',
-      [dbUser.id]
-    );
+    const wishRes = await client.query('SELECT book_id FROM wishlist WHERE user_id = $1', [dbUser.id]);
     const wishlistIds = wishRes.rows.map((row: any) => row.book_id);
 
-    // Fetch saved addresses
     const addrRes = await client.query(
       'SELECT * FROM addresses WHERE user_id = $1 ORDER BY created_at DESC',
       [dbUser.id]
@@ -188,27 +190,27 @@ export async function POST(request: Request) {
       pincode: row.pincode,
     }));
 
+    const role = dbUser.role || 'customer';
+    const token = createSessionToken(dbUser.id, role);
     await client.end();
 
-    return NextResponse.json({
-      user: {
-        id: dbUser.id,
-        name: dbUser.name,
-        email: dbUser.email,
-        phone: dbUser.phone,
-        role: dbUser.role || 'customer',
-      },
+    const response = NextResponse.json({
+      user: buildUserResponse(
+        { id: dbUser.id, name: dbUser.name, email: dbUser.email, phone: dbUser.phone, role },
+        token
+      ),
       cart: cartItems,
       wishlist: wishlistIds,
       addresses,
     });
-  } catch (err: any) {
+    return setSessionCookie(response, token);
+  } catch {
     if (client) { try { await client.end(); } catch (_) {} }
     return NextResponse.json({ error: 'Database connection failed. Please try again.' }, { status: 503 });
   }
 }
 
-// PATCH /api/auth — Update user profile (name, phone) in Railway PostgreSQL
+// PATCH /api/auth — Update user profile
 export async function PATCH(request: Request) {
   let client: any = null;
   try {
@@ -224,9 +226,16 @@ export async function PATCH(request: Request) {
     );
     await client.end();
 
-    return NextResponse.json({ success: true, message: 'Profile updated in Railway PostgreSQL DB' });
-  } catch (err: any) {
+    return NextResponse.json({ success: true, message: 'Profile updated' });
+  } catch {
     if (client) { try { await client.end(); } catch (_) {} }
     return NextResponse.json({ error: 'Failed to update profile' }, { status: 500 });
   }
+}
+
+// DELETE /api/auth — Logout (clear session cookie)
+export async function DELETE() {
+  const cookieStore = await cookies();
+  cookieStore.delete('bpg_session');
+  return NextResponse.json({ success: true });
 }

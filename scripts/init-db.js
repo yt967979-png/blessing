@@ -15,10 +15,15 @@ if (!connectionString && process.env.PGHOST && process.env.PGUSER && process.env
   connectionString = `postgresql://${user}:${pass}@${host}:${port}/${db}`;
 }
 
-const RAILWAY_DB_FALLBACK = "postgresql://postgres:USdOHOzspyXMPFmDnfsjkxoSIGedYwgk@sakura.proxy.rlwy.net:32874/railway";
-
 if (!connectionString) {
-  connectionString = RAILWAY_DB_FALLBACK;
+  if (process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_PROJECT_ID) {
+    console.error('❌ DATABASE_URL missing on Railway.');
+    console.error('   In Railway → your Web Service → Variables, add:');
+    console.error('   DATABASE_URL = ${{Postgres.DATABASE_URL}}');
+    process.exit(1);
+  }
+  console.warn('⚠️ DATABASE_URL not set — skipping DB migration (local only).');
+  process.exit(0);
 }
 
 const isSsl = connectionString.includes('railway') || connectionString.includes('render') || connectionString.includes('rlwy.net');
@@ -252,14 +257,44 @@ async function migrateDatabase(connStr, dbName) {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
 
+      CREATE TABLE IF NOT EXISTS whatsapp_otps (
+        id VARCHAR(255) PRIMARY KEY,
+        phone VARCHAR(255) NOT NULL,
+        email VARCHAR(255),
+        otp VARCHAR(10) NOT NULL,
+        expires_at TIMESTAMP NOT NULL,
+        verified BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS whatsapp_sessions (
+        id VARCHAR(255) PRIMARY KEY DEFAULT 'default',
+        status VARCHAR(100) NOT NULL DEFAULT 'INITIALIZING',
+        connected BOOLEAN DEFAULT FALSE,
+        qr_image TEXT,
+        pairing_code VARCHAR(50),
+        message TEXT,
+        session_data JSONB,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
       ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_address TEXT;
       ALTER TABLE orders ADD COLUMN IF NOT EXISTS packed_at TIMESTAMP;
       ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipped_at TIMESTAMP;
       ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMP;
       ALTER TABLE reviews ADD COLUMN IF NOT EXISTS user_name VARCHAR(255);
+
+      CREATE TABLE IF NOT EXISTS faqs (
+        id VARCHAR(255) PRIMARY KEY,
+        question TEXT NOT NULL,
+        answer TEXT NOT NULL,
+        display_order INT DEFAULT 0,
+        status VARCHAR(50) DEFAULT 'active',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
     `);
 
-    console.log(`✅ [${dbName}] 17 Tables Successfully Migrated!`);
+    console.log(`✅ [${dbName}] Schema migration complete!`);
     await client.end();
   } catch (err) {
     console.error(`❌ [${dbName}] Migration Warning:`, err.message);
@@ -270,21 +305,61 @@ async function migrateDatabase(connStr, dbName) {
 const crypto = require('crypto');
 
 function hashPassword(password) {
-  return crypto.createHash('sha256').update(`${password}bpg_salt_2026`).digest('hex');
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.scryptSync(password, salt, 64).toString('hex');
+  return `${salt}:${hash}`;
 }
 
-// ─── ADMIN CREDENTIALS ─────────────────────────────────────────────────────────
 const ADMIN_USERS = [
   {
     id: 'admin-bpg-001',
-    name: 'Yogesh Admin',
-    email: 'yogeshjio5770@gmail.com',
-    phone: '9840418228',
-    password: 'Admin@BPG2026',
+    name: process.env.ADMIN_NAME || 'Admin',
+    email: process.env.ADMIN_EMAIL || 'admin@blessingpowerguide.com',
+    phone: process.env.ADMIN_PHONE || '9840418228',
+    password: process.env.ADMIN_PASSWORD || 'ChangeMe@BPG2026',
     role: 'admin',
   },
 ];
-// ───────────────────────────────────────────────────────────────────────────────
+
+const DEFAULT_COUPONS = [
+  { id: 'cpn-first10', code: 'FIRST10', discount_type: 'percentage', discount_value: 10, minimum_amount: 0 },
+  { id: 'cpn-blessing10', code: 'BLESSING10', discount_type: 'percentage', discount_value: 10, minimum_amount: 0 },
+  { id: 'cpn-power20', code: 'POWER20', discount_type: 'percentage', discount_value: 20, minimum_amount: 500 },
+  { id: 'cpn-student20', code: 'STUDENT20', discount_type: 'percentage', discount_value: 20, minimum_amount: 0 },
+];
+
+const DEFAULT_FAQS = [
+  {
+    id: 'faq-1',
+    question: 'Which syllabus do Blessing Power Guides follow?',
+    answer: 'Our guides follow the latest Tamil Nadu State Board (Samacheer Kalvi) syllabus, CBSE board curriculum, and Matriculation standards updated for the 2026 academic year.',
+    display_order: 1,
+  },
+  {
+    id: 'faq-2',
+    question: 'How long does delivery take across Tamil Nadu and India?',
+    answer: 'Orders are dispatched within 24 hours. Delivery takes 2-3 working days within Tamil Nadu and 3-5 days for rest of India.',
+    display_order: 2,
+  },
+  {
+    id: 'faq-3',
+    question: 'Do you offer Cash on Delivery (COD)?',
+    answer: 'Yes! We support Cash on Delivery (COD) as well as secure online payments via Razorpay (UPI, Google Pay, PhonePe, Cards, Net Banking).',
+    display_order: 3,
+  },
+  {
+    id: 'faq-4',
+    question: 'What is included in the 5-Subject Combo Pack?',
+    answer: 'The 10th Standard Combo Pack includes 5 complete books: Mathematics, Science, Social Science, English, and Tamil with model question papers and step-by-step solutions.',
+    display_order: 4,
+  },
+  {
+    id: 'faq-5',
+    question: 'Can I preview sample chapters before buying?',
+    answer: 'Yes, you can click on the Free Sample PDF button to download free sample chapters of any standard and subject.',
+    display_order: 5,
+  },
+];
 
 async function seedAdmin(connStr, dbName) {
   const client = new Client({
@@ -326,29 +401,54 @@ async function seedAdmin(connStr, dbName) {
   }
 }
 
+async function seedCouponsAndFaqs(connStr, dbName) {
+  const client = new Client({
+    connectionString: connStr,
+    ssl: isSsl ? { rejectUnauthorized: false } : false,
+  });
+
+  try {
+    await client.connect();
+
+    for (const coupon of DEFAULT_COUPONS) {
+      await client.query(
+        `INSERT INTO coupons (id, code, discount_type, discount_value, minimum_amount, status)
+         VALUES ($1, $2, $3, $4, $5, 'active')
+         ON CONFLICT (code) DO NOTHING`,
+        [coupon.id, coupon.code, coupon.discount_type, coupon.discount_value, coupon.minimum_amount]
+      );
+    }
+    console.log(`✅ [${dbName}] Coupons seeded`);
+
+    for (const faq of DEFAULT_FAQS) {
+      await client.query(
+        `INSERT INTO faqs (id, question, answer, display_order, status)
+         VALUES ($1, $2, $3, $4, 'active')
+         ON CONFLICT (id) DO NOTHING`,
+        [faq.id, faq.question, faq.answer, faq.display_order]
+      );
+    }
+    console.log(`✅ [${dbName}] FAQs seeded`);
+
+    await client.end();
+  } catch (err) {
+    console.error(`❌ Seed error [${dbName}]:`, err.message);
+    if (client) await client.end();
+  }
+}
+
 async function main() {
-  // 1. Migrate target DATABASE_URL
   const targetDbName = connectionString.split('/').pop().split('?')[0] || 'target_db';
   await migrateDatabase(connectionString, targetDbName);
 
-  // 2. Also migrate default 'postgres' database if DATABASE_URL was pointing to 'railway'
   if (connectionString.endsWith('/railway') || connectionString.includes('/railway?')) {
     const postgresConnStr = connectionString.replace('/railway', '/postgres');
     await migrateDatabase(postgresConnStr, 'postgres');
   }
 
-  // 3. Seed admin user
   await seedAdmin(connectionString, targetDbName);
-  console.log('');
-  console.log('🔑 ═══════════════════════════════════════════════════');
-  console.log('🔑  ADMIN LOGIN CREDENTIALS (Save These!)');
-  console.log('🔑 ═══════════════════════════════════════════════════');
-  ADMIN_USERS.forEach(a => {
-    console.log(`🔑  Email   : ${a.email}`);
-    console.log(`🔑  Password: ${a.password}`);
-    console.log(`🔑  Role    : ${a.role}`);
-  });
-  console.log('🔑 ═══════════════════════════════════════════════════');
+  await seedCouponsAndFaqs(connectionString, targetDbName);
+  console.log('✅ Database initialization complete.');
 }
 
 main();

@@ -1,6 +1,7 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { getDbClient } from '@/lib/db';
 import { broadcastOrderChange } from '@/app/api/orders/stream/route';
+import { verifyAdminRequest, forbiddenResponse, getAuthenticatedUser } from '@/lib/serverSecurity';
 
 export async function GET(request: Request) {
   const client = await getDbClient();
@@ -13,7 +14,10 @@ export async function GET(request: Request) {
     if (client) {
       // Admin access: verify the requesting user has role='admin' in DB
       let isAdminRequest = false;
-      if (adminUserIdParam) {
+      const session = await getAuthenticatedUser(request);
+      if (session?.role === 'admin') {
+        isAdminRequest = true;
+      } else if (adminUserIdParam) {
         try {
           const adminCheck = await client.query(
             `SELECT id FROM users WHERE id = $1 AND role = 'admin' LIMIT 1`,
@@ -140,72 +144,90 @@ export async function POST(request: Request) {
   const client = await getDbClient();
   try {
     const body = await request.json();
-    const { customerName, customerPhone, address, city, items, paymentMethod, paymentStatus, userId } = body;
+    const {
+      customerName, customerPhone, address, city, pincode, items,
+      paymentMethod, paymentStatus, userId, couponCode,
+      razorpayPaymentId, razorpayOrderId, razorpaySignature,
+    } = body;
 
     const id = `ord-${Date.now()}`;
     const orderNumber = 'BPG-' + Math.floor(1000 + Math.random() * 9000);
-    const ymd = new Date().toISOString().slice(0,10).replace(/-/g,'');
+    const ymd = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     const internalShipmentId = `SHP-${ymd}-${Math.floor(100000 + Math.random() * 900000)}`;
 
     const parsedItems = Array.isArray(items) ? items : [];
-    let calculatedTotal = 0;
+    let calculatedSubtotal = 0;
     const verifiedItems = [];
 
     for (const item of parsedItems) {
       let unitPrice = Number(item.price || 0);
+      let title = item.title || 'Guide Book';
       if (client && item.id) {
         try {
-          const dbBook = await client.query(`SELECT price FROM books WHERE id = $1 LIMIT 1`, [item.id]);
-          if (dbBook.rows.length > 0 && dbBook.rows[0].price) {
-            unitPrice = Number(dbBook.rows[0].price);
+          const dbBook = await client.query(
+            `SELECT title, price, discount_price, stock, status FROM books WHERE id = $1 LIMIT 1`,
+            [item.id]
+          );
+          if (dbBook.rows.length > 0) {
+            const book = dbBook.rows[0];
+            if (book.status === 'out_of_stock' || Number(book.stock) <= 0) {
+              return NextResponse.json({ error: `"${book.title}" is out of stock.` }, { status: 400 });
+            }
+            unitPrice = Number(book.discount_price || book.price);
+            title = book.title;
           }
-        } catch (e) {}
+        } catch (_) {}
       }
       const itemQty = Math.max(1, Number(item.qty || 1));
       const subtotal = unitPrice * itemQty;
-      calculatedTotal += subtotal;
-
-      verifiedItems.push({
-        id: item.id || `bpg-${Date.now()}`,
-        title: item.title || 'Guide Book',
-        price: unitPrice,
-        qty: itemQty,
-        subtotal: subtotal,
-      });
+      calculatedSubtotal += subtotal;
+      verifiedItems.push({ id: item.id, title, price: unitPrice, qty: itemQty, subtotal });
     }
 
-    const totalAmount = calculatedTotal > 0 ? calculatedTotal : (Number(body.totalAmount) || 360);
+    let discountAmount = 0;
+    if (couponCode && client) {
+      const couponRes = await client.query(
+        `SELECT * FROM coupons WHERE UPPER(code) = $1 AND status = 'active'
+         AND (expiry_date IS NULL OR expiry_date > NOW()) LIMIT 1`,
+        [String(couponCode).trim().toUpperCase()]
+      );
+      if (couponRes.rows.length > 0) {
+        const c = couponRes.rows[0];
+        if (calculatedSubtotal >= Number(c.minimum_amount || 0)) {
+          discountAmount =
+            c.discount_type === 'percentage'
+              ? Math.round((calculatedSubtotal * Number(c.discount_value)) / 100)
+              : Math.min(Number(c.discount_value), calculatedSubtotal);
+        }
+      }
+    }
+
+    const totalAmount = Math.max(0, calculatedSubtotal - discountAmount);
 
     const shippingAddressObj = JSON.stringify({
       name: customerName,
       phone: customerPhone,
       address: address || '',
       city: city || 'Chennai',
-      pincode: '600012',
+      pincode: pincode || '600012',
     });
 
     if (client) {
-      // Insert Order into PostgreSQL orders table with initial internal shipment_id
-      const sqlOrder = `
-        INSERT INTO orders (id, order_number, user_id, subtotal, total_amount, payment_method, payment_status, order_status, courier_name, shipment_id, awb_number, shipping_address)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'ST Courier Express', $9, $9, $10)
-        RETURNING *
-      `;
       const payStat = paymentStatus || (paymentMethod?.toLowerCase().includes('razorpay') ? 'Payment Confirmed' : 'Pending COD');
       const initialStatus = 'Order Placed';
 
-      await client.query(sqlOrder, [
-        id,
-        orderNumber,
-        userId || customerName || 'Customer',
-        totalAmount,
-        totalAmount,
-        paymentMethod || 'Razorpay UPI',
-        payStat,
-        initialStatus,
-        internalShipmentId,
-        shippingAddressObj,
-      ]);
+      await client.query(
+        `INSERT INTO orders (id, order_number, user_id, subtotal, discount, total_amount, payment_method, payment_status, order_status,
+          courier_name, shipment_id, awb_number, shipping_address, razorpay_order_id, razorpay_payment_id, razorpay_signature)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'ST Courier Express', $10, $10, $11, $12, $13, $14)`,
+        [
+          id, orderNumber, userId || customerName || 'Customer',
+          calculatedSubtotal, discountAmount, totalAmount,
+          paymentMethod || 'Razorpay UPI', payStat, initialStatus,
+          internalShipmentId, shippingAddressObj,
+          razorpayOrderId || null, razorpayPaymentId || null, razorpaySignature || null,
+        ]
+      );
 
       for (const item of verifiedItems) {
         const itemId = `item-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
@@ -216,13 +238,20 @@ export async function POST(request: Request) {
         );
       }
 
+      if (razorpayPaymentId) {
+        await client.query(
+          `INSERT INTO payments (id, order_id, payment_id, transaction_id, amount, status)
+           VALUES ($1, $2, $3, $4, $5, 'SUCCESS')`,
+          [`pay-${Date.now()}`, id, razorpayPaymentId, razorpayOrderId || razorpayPaymentId, totalAmount]
+        );
+      }
+
       const timelineId = `tl-${Date.now()}`;
       await client.query(
-        `INSERT INTO order_timeline (id, order_id, status, remarks) VALUES ($1, $2, 'Order Placed', 'Order placed by customer in Railway PostgreSQL DB')`,
+        `INSERT INTO order_timeline (id, order_id, status, remarks) VALUES ($1, $2, 'Order Placed', 'Order placed by customer')`,
         [timelineId, id]
       );
 
-      // Auto-dispatch initial WhatsApp Order Placed notification
       try {
         const originUrl = new URL(request.url).origin;
         fetch(`${originUrl}/api/whatsapp`, {
@@ -244,13 +273,15 @@ export async function POST(request: Request) {
         orderId: orderNumber,
         shipmentId: internalShipmentId,
         totalAmount,
+        subtotal: calculatedSubtotal,
+        discount: discountAmount,
         status: initialStatus,
         paymentMethod,
         paymentStatus: payStat,
       }, { status: 201 });
     }
 
-    return NextResponse.json({ orderId: orderNumber, shipmentId: internalShipmentId, totalAmount, status: 'Order Placed' }, { status: 201 });
+    return NextResponse.json({ orderId: orderNumber, totalAmount }, { status: 201 });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   } finally {
@@ -260,6 +291,9 @@ export async function POST(request: Request) {
 
 // PATCH /api/orders — Update order status, timestamp & official ST Courier AWB docket number
 export async function PATCH(request: NextRequest) {
+  const auth = await verifyAdminRequest(request);
+  if (!auth.isAdmin) return forbiddenResponse(auth.error);
+
   let client: any = null;
   try {
     const { orderId, status, awbNumber } = await request.json();

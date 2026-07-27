@@ -38,8 +38,8 @@ export default function ProductDetailPage({
         if (res.ok) {
           const list = await res.json();
           if (Array.isArray(list)) {
-            const found = list.find((p: any) => p.slug === resolvedParams.slug) || list[0];
-            setDbProduct(found);
+            const found = list.find((p: any) => p.slug === resolvedParams.slug || p.id === resolvedParams.slug);
+            setDbProduct(found || null);
           }
         }
       } catch (err) {}
@@ -47,8 +47,8 @@ export default function ProductDetailPage({
     fetchProduct();
   }, [resolvedParams.slug]);
 
-  const product = dbProduct || products.find((p: any) => p.slug === resolvedParams.slug) || products[0];
-  const [activeImg, setActiveImg] = useState(product?.image || '');
+  const product = dbProduct || products.find((p: any) => p.slug === resolvedParams.slug || p.id === resolvedParams.slug) || null;
+  const [activeImg, setActiveImg] = useState('');
 
   useEffect(() => {
     if (product?.image) {
@@ -58,6 +58,7 @@ export default function ProductDetailPage({
 
   useEffect(() => {
     async function loadReviews() {
+      if (!product?.id) return;
       try {
         const res = await fetch(`/api/reviews?bookId=${product.id}`);
         if (res.ok) {
@@ -69,7 +70,7 @@ export default function ProductDetailPage({
       } catch (err) {}
     }
     loadReviews();
-  }, [product.id]);
+  }, [product?.id]);
   const [pincode, setPincode] = useState('600012');
   const [pincodeMsg, setPincodeMsg] = useState('✓ Delivery available in 2-3 business days (Express Post)');
   const [showReviewForm, setShowReviewForm] = useState(false);
@@ -78,7 +79,21 @@ export default function ProductDetailPage({
   const [reviewName, setReviewName] = useState('');
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
 
-  if (!product) return null;
+  if (!product) {
+    return (
+      <main className="min-h-screen bg-slate-50 flex flex-col">
+        <AnnouncementBar />
+        <Header />
+        <NavBar />
+        <div className="flex-1 flex flex-col items-center justify-center gap-4 p-8">
+          <h1 className="text-xl font-bold text-slate-800">Product not found</h1>
+          <p className="text-sm text-slate-500">This book is not in the catalog.</p>
+          <Link href="/search" className="text-sm font-semibold text-blue-600 hover:underline">Browse all books →</Link>
+        </div>
+        <Footer />
+      </main>
+    );
+  }
 
   const isWishlisted = wishlist.includes(product.id);
   const relatedProducts = products.filter((p: any) => p.id !== product.id).slice(0, 4);

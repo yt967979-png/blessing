@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getDbClient } from '@/lib/db';
+import { verifyAdminRequest, forbiddenResponse } from '@/lib/serverSecurity';
 
 // High-concurrency in-memory RAM cache (60-second TTL)
 let productsCache: { data: any[]; timestamp: number } | null = null;
@@ -107,6 +108,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const auth = await verifyAdminRequest(request);
+  if (!auth.isAdmin) return forbiddenResponse(auth.error);
+
   const client = await getDbClient();
   try {
     const body = await request.json();
@@ -131,6 +135,7 @@ export async function POST(request: Request) {
         RETURNING *
       `;
       const res = await client.query(sql, [id, title, slug, categoryId, finalPrice, finalDiscountPrice, finalImg, finalDesc]);
+      invalidateProductsCache();
       return NextResponse.json(res.rows[0], { status: 201 });
     }
 
@@ -142,11 +147,13 @@ export async function POST(request: Request) {
   }
 }
 
-// PATCH /api/products — Update price, mrp, badge, or stock status in Railway PostgreSQL
 export async function PATCH(request: Request) {
+  const auth = await verifyAdminRequest(request);
+  if (!auth.isAdmin) return forbiddenResponse(auth.error);
+
   const client = await getDbClient();
   try {
-    const { id, price, mrp, badge, inStock } = await request.json();
+    const { id, title, price, mrp, inStock, description, image } = await request.json();
     if (!id) return NextResponse.json({ error: 'Product id is required' }, { status: 400 });
 
     if (client) {
@@ -154,9 +161,11 @@ export async function PATCH(request: Request) {
       const values: any[] = [];
       let idx = 1;
 
+      if (title !== undefined) { fields.push(`title = $${idx++}`); values.push(title); }
       if (price !== undefined) { fields.push(`discount_price = $${idx++}`); values.push(Number(price)); }
-      if (mrp !== undefined)   { fields.push(`price = $${idx++}`); values.push(Number(mrp)); }
-      if (badge !== undefined) { fields.push(`badge = $${idx++}`); values.push(badge); }
+      if (mrp !== undefined) { fields.push(`price = $${idx++}`); values.push(Number(mrp)); }
+      if (description !== undefined) { fields.push(`description = $${idx++}`); values.push(description); }
+      if (image !== undefined) { fields.push(`cover_image = $${idx++}`); values.push(image); }
       if (inStock !== undefined) {
         fields.push(`status = $${idx++}`);
         values.push(inStock ? 'published' : 'out_of_stock');
@@ -165,6 +174,7 @@ export async function PATCH(request: Request) {
       }
 
       if (fields.length > 0) {
+        fields.push(`updated_at = NOW()`);
         values.push(id);
         await client.query(`UPDATE books SET ${fields.join(', ')} WHERE id = $${idx}`, values);
         invalidateProductsCache();
@@ -181,8 +191,10 @@ export async function PATCH(request: Request) {
   }
 }
 
-// DELETE /api/products — Remove a book from Railway PostgreSQL
 export async function DELETE(request: Request) {
+  const auth = await verifyAdminRequest(request);
+  if (!auth.isAdmin) return forbiddenResponse(auth.error);
+
   const client = await getDbClient();
   try {
     const { searchParams } = new URL(request.url);
@@ -191,6 +203,7 @@ export async function DELETE(request: Request) {
 
     if (client) {
       await client.query(`DELETE FROM books WHERE id = $1`, [id]);
+      invalidateProductsCache();
       return NextResponse.json({ success: true, deletedId: id });
     }
 
