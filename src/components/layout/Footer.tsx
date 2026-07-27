@@ -104,10 +104,10 @@ export const Footer = () => {
             </p>
             <p className="text-slate-400">BLESSING TUITION & TUTORIAL CENTRE</p>
             <p className="text-slate-400 leading-relaxed">
-              No.12, Ganesh Apartment, Trust Square Street, Medavakkam, Agaramthen, Chennai — 600012
+              No.12, Ganesh Apartment, Trust Square St, Nammalwarpet, Ayanavaram, Chennai, Tamil Nadu — 600012
             </p>
             <a
-              href="https://maps.google.com/?q=Medavakkam+Agaramthen+Chennai+600012"
+              href="https://maps.google.com/?q=No.12+Ganesh+Apartment+Trust+Square+St+Nammalwarpet+Ayanavaram+Chennai+600012"
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center gap-1 text-[11px] text-blue-400 hover:text-amber-400 font-bold underline transition-colors pt-1"

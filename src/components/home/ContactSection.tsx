@@ -82,10 +82,10 @@ export const ContactSection = () => {
                     <h4 className="font-bold text-white mb-1">Publication & Dispatch Address</h4>
                     <p className="text-slate-400 leading-relaxed text-xs">
                       BLESSING PATHWAY EDUCATION (OPC) PRIVATE LIMITED<br />
-                      No.12, Ganesh Apartment, Trust Square Street, Medavakkam, Agaramthen, Chennai — 600012
+                      No.12, Ganesh Apartment, Trust Square St, Nammalwarpet, Ayanavaram, Chennai, Tamil Nadu — 600012
                     </p>
                     <a
-                      href="https://www.google.com/maps/search/?api=1&query=Medavakkam+Agaramthen+Chennai+600012"
+                      href="https://www.google.com/maps/search/?api=1&query=No.12+Ganesh+Apartment+Trust+Square+St+Nammalwarpet+Ayanavaram+Chennai+600012"
                       target="_blank"
                       rel="noreferrer"
                       className="inline-block mt-2 text-[11px] font-bold text-blue-400 hover:text-amber-400 underline transition-colors"
@@ -98,8 +98,8 @@ export const ContactSection = () => {
                 {/* Embedded map */}
                 <div className="rounded-2xl overflow-hidden border border-slate-700 shadow-lg aspect-[16/10] bg-slate-900">
                   <iframe
-                    title="Blessing Power Guide — Medavakkam, Chennai"
-                    src="https://maps.google.com/maps?q=Medavakkam%20Agaramthen%20Chennai%20600012&t=&z=15&ie=UTF8&iwloc=&output=embed"
+                    title="Blessing Power Guide — Ayanavaram, Chennai"
+                    src="https://maps.google.com/maps?q=No.12%20Ganesh%20Apartment%20Trust%20Square%20St%20Nammalwarpet%20Ayanavaram%20Chennai%20600012&t=&z=16&ie=UTF8&iwloc=&output=embed"
                     className="w-full h-full border-0"
                     loading="lazy"
                     referrerPolicy="no-referrer-when-downgrade"

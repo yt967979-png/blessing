@@ -140,7 +140,7 @@ export const ModalsBundle = () => {
   const [regStep, setRegStep] = useState<'details' | 'otp'>('details');
   const [forgotOtp, setForgotOtp] = useState('');
   const [forgotNewPassword, setForgotNewPassword] = useState('');
-  const [forgotStep, setForgotStep] = useState<'email' | 'otp'>('email');
+  const [forgotStep, setForgotStep] = useState<'phone' | 'otp'>('phone');
   const [forgotOtpSent, setForgotOtpSent] = useState(false);
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -1033,7 +1033,9 @@ export const ModalsBundle = () => {
                             onClick={() => {
                               setAuthMode('forgot');
                               setAuthError(null);
-                              setForgotStep('email');
+                              setForgotStep('phone');
+                              setForgotOtp('');
+                              setForgotNewPassword('');
                             }}
                             className="text-[11px] font-bold text-blue-600 hover:text-blue-700 transition-colors cursor-pointer"
                           >
@@ -1123,50 +1125,64 @@ export const ModalsBundle = () => {
                         <div className="text-center pb-1">
                           <h4 className="font-bold text-slate-900 text-sm">Reset Your Password</h4>
                           <p className="text-[11px] text-slate-500 mt-0.5">
-                            {forgotStep === 'email'
-                              ? 'Enter your registered email to receive a 6-digit OTP code.'
-                              : `Enter the 6-digit code sent to ${authForm.email} and set your new password.`}
+                            {forgotStep === 'phone'
+                              ? 'Enter your registered WhatsApp mobile number. We will send a 6-digit OTP.'
+                              : `Enter the 6-digit WhatsApp code sent to ${authForm.phone || authForm.email} and set a new password.`}
                           </p>
                         </div>
 
-                        {forgotStep === 'email' ? (
+                        {forgotStep === 'phone' ? (
                           <>
                             <div>
-                              <label className="block font-bold text-slate-700 mb-1">Registered Email Address *</label>
+                              <label className="block font-bold text-slate-700 mb-1">Registered Mobile (WhatsApp) *</label>
                               <div className="relative">
                                 <input
-                                  type="email"
+                                  type="tel"
                                   required
-                                  placeholder="e.g. student@example.com"
-                                  value={authForm.email}
-                                  onChange={(e) => setAuthForm({ ...authForm, email: e.target.value })}
+                                  placeholder="e.g. 9840418228"
+                                  value={authForm.phone || authForm.email}
+                                  onChange={(e) =>
+                                    setAuthForm({ ...authForm, phone: e.target.value, email: e.target.value })
+                                  }
                                   className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-blue-600 focus:bg-white transition-all font-medium"
                                 />
-                                <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                                <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                               </div>
                             </div>
 
                             <button
                               type="button"
-                              disabled={isSubmitting || !authForm.email}
+                              disabled={isSubmitting || !(authForm.phone || authForm.email)}
                               onClick={async () => {
                                 setIsSubmitting(true);
                                 setAuthError(null);
+                                const mobile = (authForm.phone || authForm.email).trim();
+                                if (!isValidMobileNumber(mobile)) {
+                                  setAuthError('Please enter a valid 10-digit mobile number.');
+                                  setIsSubmitting(false);
+                                  return;
+                                }
+                                const phoneClean = normalizeMobileDigits(mobile);
                                 try {
                                   const res = await fetch('/api/auth/send-otp', {
                                     method: 'POST',
                                     headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ email: authForm.email, mode: 'reset' }),
+                                    body: JSON.stringify({ phone: phoneClean, mode: 'reset' }),
                                   });
                                   const data = await res.json();
                                   if (res.ok && data.success) {
+                                    setAuthForm({ ...authForm, phone: phoneClean, email: phoneClean });
                                     setForgotStep('otp');
                                     setForgotOtpSent(true);
-                                    showToast('✉️ 6-digit password reset OTP sent to your email!');
+                                    showToast(
+                                      data.waSent
+                                        ? `📲 Password reset OTP sent to WhatsApp (******${phoneClean.slice(-4)})!`
+                                        : data.message || 'OTP sent!'
+                                    );
                                   } else {
-                                    setAuthError(data.error || 'Failed to send reset code.');
+                                    setAuthError(data.error || 'Failed to send WhatsApp OTP.');
                                   }
-                                } catch (e) {
+                                } catch {
                                   setAuthError('Network error sending OTP.');
                                 } finally {
                                   setIsSubmitting(false);
@@ -1174,13 +1190,13 @@ export const ModalsBundle = () => {
                               }}
                               className="w-full bg-[#001B3A] hover:bg-blue-600 text-white font-extrabold text-xs py-3 rounded-xl shadow-md uppercase tracking-wider transition-colors cursor-pointer disabled:opacity-50"
                             >
-                              {isSubmitting ? 'SENDING OTP...' : 'SEND RESET OTP CODE'}
+                              {isSubmitting ? 'SENDING OTP...' : 'SEND WHATSAPP OTP'}
                             </button>
                           </>
                         ) : (
                           <>
                             <div>
-                              <label className="block font-bold text-slate-700 mb-1">6-Digit Verification Code (OTP) *</label>
+                              <label className="block font-bold text-slate-700 mb-1">6-Digit WhatsApp OTP *</label>
                               <input
                                 type="text"
                                 maxLength={6}
@@ -1190,6 +1206,9 @@ export const ModalsBundle = () => {
                                 onChange={(e) => setForgotOtp(e.target.value)}
                                 className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold text-center tracking-widest outline-none focus:border-blue-600 uppercase"
                               />
+                              <p className="text-[10px] text-blue-600 font-medium mt-1">
+                                📲 Code sent to WhatsApp <strong>{authForm.phone}</strong>
+                              </p>
                             </div>
 
                             <div>
@@ -1198,7 +1217,7 @@ export const ModalsBundle = () => {
                                 <input
                                   type={showPassword ? 'text' : 'password'}
                                   required
-                                  placeholder="Minimum 6 characters"
+                                  placeholder="8+ chars, upper, lower, number, symbol"
                                   value={forgotNewPassword}
                                   onChange={(e) => setForgotNewPassword(e.target.value)}
                                   className="w-full pl-9 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-blue-600 transition-all font-medium"
@@ -1213,33 +1232,58 @@ export const ModalsBundle = () => {
                               onClick={async () => {
                                 setIsSubmitting(true);
                                 setAuthError(null);
+                                if (!isStrongPassword(forgotNewPassword)) {
+                                  setAuthError(
+                                    'Password must be at least 8 characters with 1 uppercase, 1 lowercase, 1 number, and 1 special character.'
+                                  );
+                                  setIsSubmitting(false);
+                                  return;
+                                }
                                 try {
+                                  const phoneClean = normalizeMobileDigits(authForm.phone || authForm.email);
                                   const res = await fetch('/api/auth/reset-password', {
                                     method: 'POST',
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({
-                                      email: authForm.email,
+                                      phone: phoneClean,
                                       otp: forgotOtp,
                                       newPassword: forgotNewPassword,
                                     }),
                                   });
                                   const data = await res.json();
                                   if (res.ok && data.success) {
-                                    showToast('✅ Password reset! Please sign in with your new password.');
+                                    showToast('✅ Password updated! Sign in with your mobile number.');
                                     setAuthMode('login');
+                                    setForgotStep('phone');
+                                    setForgotOtp('');
+                                    setForgotNewPassword('');
+                                    setForgotOtpSent(false);
+                                    setAuthForm({ ...authForm, email: phoneClean, phone: phoneClean, password: '' });
                                     setAuthError(null);
                                   } else {
-                                    setAuthError(data.error || 'Password reset failed.');
+                                    setAuthError(data.error || 'Failed to reset password.');
                                   }
-                                } catch (e) {
-                                  setAuthError('Error resetting password.');
+                                } catch {
+                                  setAuthError('Network error. Please try again.');
                                 } finally {
                                   setIsSubmitting(false);
                                 }
                               }}
                               className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs py-3 rounded-xl shadow-md uppercase tracking-wider transition-colors cursor-pointer disabled:opacity-50"
                             >
-                              {isSubmitting ? 'RESETTING...' : 'CONFIRM NEW PASSWORD'}
+                              {isSubmitting ? 'UPDATING...' : 'UPDATE PASSWORD'}
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setForgotStep('phone');
+                                setForgotOtp('');
+                                setAuthError(null);
+                              }}
+                              className="w-full text-[11px] font-bold text-slate-500 hover:text-blue-600"
+                            >
+                              ← Change mobile number
                             </button>
                           </>
                         )}
@@ -1249,6 +1293,9 @@ export const ModalsBundle = () => {
                             type="button"
                             onClick={() => {
                               setAuthMode('login');
+                              setForgotStep('phone');
+                              setForgotOtp('');
+                              setForgotNewPassword('');
                               setAuthError(null);
                             }}
                             className="text-xs font-bold text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
