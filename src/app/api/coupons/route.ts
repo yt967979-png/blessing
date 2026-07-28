@@ -142,18 +142,11 @@ export async function POST(request: NextRequest) {
 
     const created = await client.query(`SELECT * FROM coupons WHERE id = $1`, [id]);
     const row = created.rows[0] as CouponRow;
-    const notifyWhatsApp = body.notifyWhatsApp !== false;
-    const willBroadcast =
-      notifyWhatsApp && String(row.status || '').toLowerCase() === 'active';
-
-    if (willBroadcast) {
-      scheduleCouponWhatsAppBroadcast(row);
-    }
 
     return NextResponse.json(
       {
         ...mapAdminCoupon(row),
-        whatsappBroadcast: willBroadcast ? 'scheduled' : 'skipped',
+        whatsappBroadcast: 'disabled',
       },
       { status: 201 }
     );
