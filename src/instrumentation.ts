@@ -7,6 +7,9 @@ export async function register() {
     initRuntimeProfile();
     startAdaptiveRuntimeMonitor();
 
+    const { assertSessionSecretConfigured } = await import('@/lib/auth');
+    assertSessionSecretConfigured();
+
     const { logDbConnectionConfig, warmDbConnection, shutdownDb } = await import('@/lib/db');
     logDbConnectionConfig();
 

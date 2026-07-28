@@ -1,15 +1,34 @@
 import crypto from 'crypto';
 
-function resolveSessionSecret(): string {
-  const secret = process.env.SESSION_SECRET || process.env.RAZORPAY_KEY_SECRET;
-  if (secret) return secret;
-  if (process.env.NODE_ENV === 'production') {
-    throw new Error('SESSION_SECRET must be set in production');
-  }
-  return 'bpg-dev-session-secret-change-in-production';
+const DEV_SESSION_SECRET = 'bpg-dev-session-secret-change-in-production';
+
+function isProductionRuntime(): boolean {
+  if (process.env.NODE_ENV !== 'production') return false;
+  // `next build` also sets NODE_ENV=production — only enforce when serving traffic.
+  const phase = process.env.NEXT_PHASE || '';
+  if (phase === 'phase-production-build') return false;
+  return true;
 }
 
-const SESSION_SECRET = resolveSessionSecret();
+let sessionSecret: string | null = null;
+
+function getSessionSecret(): string {
+  if (sessionSecret) return sessionSecret;
+  const secret = process.env.SESSION_SECRET || process.env.RAZORPAY_KEY_SECRET;
+  if (secret) {
+    sessionSecret = secret;
+    return sessionSecret;
+  }
+  if (!isProductionRuntime()) {
+    sessionSecret = DEV_SESSION_SECRET;
+    return sessionSecret;
+  }
+  throw new Error('SESSION_SECRET must be set in production');
+}
+
+export function assertSessionSecretConfigured(): void {
+  getSessionSecret();
+}
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 function timingSafeHexEqual(a: string, b: string): boolean {
@@ -42,7 +61,7 @@ export function verifyPassword(password: string, stored: string): boolean {
 export function createSessionToken(userId: string, role: string): string {
   const payload = { userId, role, exp: Date.now() + SESSION_TTL_MS };
   const payloadStr = JSON.stringify(payload);
-  const sig = crypto.createHmac('sha256', SESSION_SECRET).update(payloadStr).digest('hex');
+  const sig = crypto.createHmac('sha256', getSessionSecret()).update(payloadStr).digest('hex');
   return Buffer.from(JSON.stringify({ p: payloadStr, s: sig })).toString('base64url');
 }
 
@@ -51,7 +70,7 @@ export function verifySessionToken(token: string): { userId: string; role: strin
     const decoded = JSON.parse(Buffer.from(token, 'base64url').toString('utf8'));
     const payloadStr = decoded.p as string;
     const sig = decoded.s as string;
-    const expected = crypto.createHmac('sha256', SESSION_SECRET).update(payloadStr).digest('hex');
+    const expected = crypto.createHmac('sha256', getSessionSecret()).update(payloadStr).digest('hex');
     if (!timingSafeHexEqual(sig, expected)) return null;
     const payload = JSON.parse(payloadStr);
     if (payload.exp < Date.now()) return null;
