@@ -183,10 +183,10 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setTimeout(() => setToast(null), 3000);
   };
 
-  const refreshProducts = () => {
+  const refreshProducts = (forceFresh = false) => {
     setProductsLoading(true);
-    // Cache-bust so admin price/badge saves are not overwritten by a stale GET
-    fetch(`/api/products?_=${Date.now()}`, { cache: 'no-store' })
+    const url = forceFresh ? '/api/products?fresh=1' : '/api/products';
+    fetch(url, forceFresh ? { cache: 'no-store' } : undefined)
       .then((res) => res.json())
       .then((data) => {
         if (Array.isArray(data)) setProducts(data);
@@ -477,7 +477,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       });
       if (!res.ok) throw new Error('Update failed');
       // Keep optimistic stock/badge; then sync full catalog fresh
-      refreshProducts();
+      refreshProducts(true);
       showToast(
         rest.stock !== undefined
           ? `✓ Stock updated — ${Math.max(0, Math.floor(Number(rest.stock) || 0))} units`
@@ -489,7 +489,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       );
     } catch {
       showToast('❌ Failed to save product');
-      refreshProducts();
+      refreshProducts(true);
     }
   };
 
@@ -517,7 +517,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (!res.ok) {
         throw new Error(data.error || `Create failed (${res.status})`);
       }
-      refreshProducts();
+      refreshProducts(true);
       showToast(`🎉 Book "${newProdData.title}" saved to database`);
     } catch (err: any) {
       const msg = err?.message || 'Unknown error';
@@ -535,11 +535,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         headers: getAdminHeaders(),
       });
       if (!res.ok) throw new Error('Delete failed');
-      refreshProducts();
+      refreshProducts(true);
       showToast(`🗑️ Book removed from database`);
     } catch {
       showToast('❌ Failed to delete product');
-      refreshProducts();
+      refreshProducts(true);
     }
   };
 

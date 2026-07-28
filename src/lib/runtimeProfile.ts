@@ -1,4 +1,5 @@
 import os from 'node:os';
+import { logLaunchScaleConfig, resolveDbPoolMaxPerReplica } from '@/lib/launchScale';
 
 export type RuntimeTier = 'local' | 'free' | 'hobby' | 'pro';
 export type LoadLevel = 'low' | 'normal' | 'high' | 'critical';
@@ -144,8 +145,9 @@ export function initRuntimeProfile(): RuntimeTuning {
   const tuning = getRuntimeTuning();
   const replica = process.env.RAILWAY_REPLICA_ID ? ` replica ${process.env.RAILWAY_REPLICA_ID.slice(0, 8)}` : '';
   console.log(
-    `[runtime] tier=${tuning.tier} load=${tuning.load} cpus=${os.cpus().length} mem=${(os.totalmem() / 1024 ** 3).toFixed(2)}GB pool=${tuning.dbPoolMax}${replica}`
+    `[runtime] tier=${tuning.tier} load=${tuning.load} cpus=${os.cpus().length} mem=${(os.totalmem() / 1024 ** 3).toFixed(2)}GB pool=${resolveDbPoolMaxPerReplica(tuning.dbPoolMax)}${replica}`
   );
+  logLaunchScaleConfig();
   return tuning;
 }
 

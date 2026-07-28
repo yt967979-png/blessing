@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
 import { getDbClient, releaseDbClient, ensureDefaultCategories } from '@/lib/db';
 import { verifyAdminRequest, forbiddenResponse } from '@/lib/serverSecurity';
+import { getCatalogCacheTtlMs, getCatalogCdnHeaders } from '@/lib/launchScale';
 
 // Shared catalog cache: same search/class/slug reused without hitting DB again
 const queryCache = new Map<string, { data: any[]; timestamp: number }>();
-const CACHE_TTL_MS = 120000; // 2 minutes RAM
 const MAX_CACHE_KEYS = 80;
 
 export function invalidateProductsCache() {
@@ -15,12 +15,15 @@ function cacheKey(cls: string | null, search: string | null, slug: string | null
   return `c=${cls || ''}|s=${(search || '').trim().toLowerCase()}|g=${slug || ''}`;
 }
 
-function readCache(key: string) {
+function readCache(key: string, allowStale = false) {
   const hit = queryCache.get(key);
   if (!hit) return null;
-  if (Date.now() - hit.timestamp > CACHE_TTL_MS) {
-    queryCache.delete(key);
-    return null;
+  const age = Date.now() - hit.timestamp;
+  if (age > getCatalogCacheTtlMs()) {
+    if (!allowStale) {
+      queryCache.delete(key);
+      return null;
+    }
   }
   return hit.data;
 }
@@ -33,11 +36,9 @@ function writeCache(key: string, data: any[]) {
   queryCache.set(key, { data, timestamp: Date.now() });
 }
 
-// Short browser cache only — admin price/badge edits must show up quickly
-const CDN_HEADERS = {
-  'Cache-Control': 'public, max-age=0, s-maxage=30, stale-while-revalidate=60',
-  Vary: 'Accept-Encoding',
-};
+function catalogHeaders(extra: Record<string, string> = {}) {
+  return { ...getCatalogCdnHeaders(), ...extra };
+}
 
 /** Selling price: use discount_price only when it is a real sale (< MRP). */
 function mapBookPrices(d: { price?: unknown; discount_price?: unknown }) {
@@ -89,10 +90,10 @@ export async function GET(request: Request) {
 
   const cached = readCache(key);
   // Bypass memory cache when client asks for a fresh catalog (admin edits / stock toggle)
-  const forceFresh = searchParams.has('_') || searchParams.get('fresh') === '1';
+  const forceFresh = searchParams.get('fresh') === '1';
   if (cached && !forceFresh) {
     return NextResponse.json(cached, {
-      headers: { ...CDN_HEADERS, 'X-Cache-Status': 'HIT_MEMORY' },
+      headers: catalogHeaders({ 'X-Cache-Status': 'HIT_MEMORY' }),
     });
   }
 
@@ -101,7 +102,13 @@ export async function GET(request: Request) {
     client = await getDbClient();
   } catch (dbErr: any) {
     console.warn('/api/products DB connect skipped, serving catalog fallback:', dbErr?.message);
-    return NextResponse.json([], { headers: CDN_HEADERS });
+    const stale = readCache(key, true);
+    if (stale) {
+      return NextResponse.json(stale, {
+        headers: catalogHeaders({ 'X-Cache-Status': 'STALE_MEMORY' }),
+      });
+    }
+    return NextResponse.json([], { headers: catalogHeaders() });
   }
 
   try {
@@ -174,17 +181,23 @@ export async function GET(request: Request) {
         });
         writeCache(key, mapped);
         return NextResponse.json(mapped, {
-          headers: { ...CDN_HEADERS, 'X-Cache-Status': 'MISS_DB' },
+          headers: catalogHeaders({ 'X-Cache-Status': 'MISS_DB' }),
         });
       }
     }
   } catch (err: any) {
     console.error('Error fetching products from DB:', err.message);
+    const stale = readCache(key, true);
+    if (stale) {
+      return NextResponse.json(stale, {
+        headers: catalogHeaders({ 'X-Cache-Status': 'STALE_MEMORY' }),
+      });
+    }
   } finally {
     releaseDbClient(client);
   }
 
-  return NextResponse.json([]);
+  return NextResponse.json([], { headers: catalogHeaders() });
 }
 
 export async function POST(request: Request) {

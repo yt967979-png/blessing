@@ -1,6 +1,7 @@
 import { Pool, Client } from 'pg';
 import { hashPassword } from '@/lib/auth';
-import { resolveTunedNumber } from '@/lib/runtimeProfile';
+import { resolveTunedNumber, getRuntimeTuning } from '@/lib/runtimeProfile';
+import { resolveDbPoolMaxPerReplica } from '@/lib/launchScale';
 
 let isSchemaInitialized = false;
 let schemaInitPromise: Promise<void> | null = null;
@@ -168,7 +169,7 @@ function isRecoverablePgError(err: any): boolean {
 
 function defaultPoolMax(): number {
   if (process.env.DB_POOL_MAX) return Number(process.env.DB_POOL_MAX);
-  return resolveTunedNumber('DB_POOL_MAX', 'dbPoolMax');
+  return resolveDbPoolMaxPerReplica(getRuntimeTuning().dbPoolMax);
 }
 
 function defaultConnectTimeoutMs(): number {
