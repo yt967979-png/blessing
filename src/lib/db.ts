@@ -837,12 +837,13 @@ async function runSchemaInit(client: any) {
       /* schema already exists or partial — safe to continue */
     }
 
-    // Ensure default admin exists (empty DB after pointing DATABASE_URL at a new Postgres)
+    // Ensure default admin + catalog categories (empty DB or missing seeds)
     await ensureDefaultCategories(client);
     await ensureAdminUser(client);
 }
 
-async function ensureDefaultCategories(client: any) {
+/** Idempotent seed for 6th–12th + combo categories — safe to call before any book insert. */
+export async function ensureDefaultCategories(client: any) {
   const categories = [
     { id: 'cat-combos', name: 'Combo Packs', slug: 'combos' },
     { id: 'cat-6th', name: '6th Standard Guides', slug: '6th' },

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getDbClient, releaseDbClient } from '@/lib/db';
+import { getDbClient, releaseDbClient, ensureDefaultCategories } from '@/lib/db';
 import { verifyAdminRequest, forbiddenResponse } from '@/lib/serverSecurity';
 
 // Shared catalog cache: same search/class/slug reused without hitting DB again
@@ -66,7 +66,7 @@ async function ensureCategory(client: any, categoryId: string, cls: string, cate
   await client.query(
     `INSERT INTO categories (id, name, slug, status)
      VALUES ($1, $2, $3, 'active')
-     ON CONFLICT (id) DO NOTHING`,
+     ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, status = 'active'`,
     [categoryId, name, slug]
   );
 }
@@ -214,6 +214,7 @@ export async function POST(request: Request) {
 
     await client.query(`ALTER TABLE books ADD COLUMN IF NOT EXISTS badge VARCHAR(100) DEFAULT ''`);
     await client.query(`ALTER TABLE books ADD COLUMN IF NOT EXISTS stock INT DEFAULT 50`);
+    await ensureDefaultCategories(client);
     await ensureCategory(client, categoryId, cls || '10th', category || 'guide');
 
     const sql = `
@@ -237,6 +238,12 @@ export async function POST(request: Request) {
   } catch (err: any) {
     console.error('POST /api/products failed:', err?.message || err);
     const msg = err?.message || 'Failed to add product';
+    if (msg.includes('books_category_id_fkey')) {
+      return NextResponse.json(
+        { error: 'Catalog category missing in database. Redeploy latest app or run category seed in Railway Postgres.' },
+        { status: 500 }
+      );
+    }
     const status = msg.includes('connect') || msg.includes('timeout') ? 503 : 500;
     return NextResponse.json({ error: msg }, { status });
   } finally {
