@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
 
     if (isAdmin) {
       const admin = await verifyAdminRequest(request);
-      if (!admin) return forbiddenResponse();
+      if (!admin.isAdmin) return forbiddenResponse(admin.error);
 
       const res = await client.query(`SELECT * FROM coupons ORDER BY created_at DESC NULLS LAST, code ASC`);
       return NextResponse.json(res.rows.map(mapAdminCoupon));
@@ -80,7 +80,7 @@ export async function GET(request: NextRequest) {
 /** Admin: create coupon */
 export async function POST(request: NextRequest) {
   const admin = await verifyAdminRequest(request);
-  if (!admin) return forbiddenResponse();
+  if (!admin.isAdmin) return forbiddenResponse(admin.error);
 
   let client: any = null;
   try {
@@ -171,7 +171,7 @@ export async function POST(request: NextRequest) {
 /** Admin: update coupon */
 export async function PATCH(request: NextRequest) {
   const admin = await verifyAdminRequest(request);
-  if (!admin) return forbiddenResponse();
+  if (!admin.isAdmin) return forbiddenResponse(admin.error);
 
   let client: any = null;
   try {
@@ -253,7 +253,7 @@ export async function PATCH(request: NextRequest) {
 /** Admin: delete coupon */
 export async function DELETE(request: NextRequest) {
   const admin = await verifyAdminRequest(request);
-  if (!admin) return forbiddenResponse();
+  if (!admin.isAdmin) return forbiddenResponse(admin.error);
 
   const { searchParams } = new URL(request.url);
   const id = searchParams.get('id');

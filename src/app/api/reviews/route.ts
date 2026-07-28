@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
 
     if (adminList) {
       const admin = await verifyAdminRequest(request);
-      if (!admin) return unauthorizedResponse('Admin only.');
+      if (!admin.isAdmin) return unauthorizedResponse('Admin only.');
     }
 
     client = await getDbClient();
@@ -228,7 +228,7 @@ export async function PATCH(request: NextRequest) {
     }
     if (row.user_id !== session.userId) {
       const admin = await verifyAdminRequest(request);
-      if (!admin) {
+      if (!admin.isAdmin) {
         return NextResponse.json({ error: 'You can only edit your own review.' }, { status: 403 });
       }
     }
@@ -275,7 +275,7 @@ export async function PATCH(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   const admin = await verifyAdminRequest(request);
-  if (!admin) return unauthorizedResponse('Admin only.');
+  if (!admin.isAdmin) return unauthorizedResponse('Admin only.');
 
   const { searchParams } = new URL(request.url);
   const id = searchParams.get('id');

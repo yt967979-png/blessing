@@ -21,7 +21,7 @@ export async function POST(request: Request) {
     const isReviewUpload = folder === 'reviews' || folder.startsWith('reviews/');
     if (isReviewUpload) {
       if (!session) return unauthorizedResponse('Login required to upload review photos.');
-    } else if (!admin) {
+    } else if (!session || !admin?.isAdmin) {
       return unauthorizedResponse('Admin login required to upload catalog images.');
     }
 

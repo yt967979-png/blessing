@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { userNeedsProfile } from '@/lib/userProfile';
 
 export interface Product {
@@ -178,10 +178,10 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const showToast = (msg: string) => {
+  const showToast = useCallback((msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(null), 3000);
-  };
+  }, []);
 
   const refreshProducts = (forceFresh = false) => {
     setProductsLoading(true);
@@ -475,7 +475,10 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         headers: getAdminHeaders(),
         body: JSON.stringify({ id, ...withDerived, hasDiscount }),
       });
-      if (!res.ok) throw new Error('Update failed');
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Update failed');
+      }
       // Keep optimistic stock/badge; then sync full catalog fresh
       refreshProducts(true);
       showToast(
@@ -487,8 +490,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               ? '✓ Back in stock — visible on shop'
               : '✓ Product saved to database'
       );
-    } catch {
-      showToast('❌ Failed to save product');
+    } catch (e: any) {
+      showToast(`❌ ${e?.message || 'Failed to save product'}`);
       refreshProducts(true);
     }
   };

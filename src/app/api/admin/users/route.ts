@@ -5,7 +5,7 @@ import { forbiddenResponse, verifyAdminRequest } from '@/lib/serverSecurity';
 /** Admin: list customers + low-stock books */
 export async function GET(request: NextRequest) {
   const admin = await verifyAdminRequest(request);
-  if (!admin) return forbiddenResponse();
+  if (!admin.isAdmin) return forbiddenResponse(admin.error);
 
   const { searchParams } = new URL(request.url);
   const view = searchParams.get('view') || 'users';
@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   const admin = await verifyAdminRequest(request);
-  if (!admin) return forbiddenResponse();
+  if (!admin.isAdmin) return forbiddenResponse(admin.error);
 
   let client: any = null;
   try {

@@ -38,26 +38,43 @@ export default function AdminUsersTab({
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    if (!user?.token) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
-      const [usersRes, stockRes] = await Promise.all([
-        fetch('/api/admin/users', { headers: authHeaders(user) }),
-        fetch('/api/admin/users?view=low_stock', { headers: authHeaders(user) }),
-      ]);
+      const headers = authHeaders(user);
+      const usersRes = await fetch('/api/admin/users', {
+        headers,
+        signal: AbortSignal.timeout(20000),
+      });
       if (usersRes.ok) {
         const data = await usersRes.json();
         if (Array.isArray(data)) setCustomers(data);
+      } else {
+        const err = await usersRes.json().catch(() => ({}));
+        showToast(`❌ ${err.error || 'Could not load customers'}`);
+        setCustomers([]);
       }
-      if (stockRes.ok) {
-        const data = await stockRes.json();
-        if (Array.isArray(data.alerts)) setLowStock(data.alerts);
-      }
+
+      // Low-stock alerts — non-blocking so customer list loads first
+      void fetch('/api/admin/users?view=low_stock', {
+        headers,
+        signal: AbortSignal.timeout(15000),
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (data && Array.isArray(data.alerts)) setLowStock(data.alerts);
+        })
+        .catch(() => {});
     } catch {
       showToast('❌ Could not load customers');
+      setCustomers([]);
     } finally {
       setLoading(false);
     }
-  }, [user, showToast]);
+  }, [user?.token, user?.id, showToast]);
 
   useEffect(() => {
     void load();

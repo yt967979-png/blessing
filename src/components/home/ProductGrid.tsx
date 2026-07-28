@@ -123,7 +123,7 @@ export const ProductGrid = () => {
               Catalog is Ready for Books
             </h3>
             <p className="text-xs text-slate-600 max-w-md mx-auto mb-6 leading-relaxed">
-              No books match the selected filter or the database is currently empty. Store owners can log in and manage books live.
+              No books match the selected filter right now. Check back soon or browse all classes.
             </p>
             <div className="flex flex-wrap justify-center gap-3">
               <button

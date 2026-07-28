@@ -447,7 +447,7 @@ export default function AdminPage() {
       if (r.ok && d.provider === 'BAILEYS_IN_PROCESS') {
         showToast(`✅ WhatsApp sent to +91 ${o.customerPhone}`);
       } else if (d.whatsappLink) {
-        showToast('⚠️ Bot not linked — open WhatsApp tab and scan QR first');
+        showToast('⚠️ WhatsApp not linked — open WhatsApp tab and scan QR first');
         window.open(d.whatsappLink, '_blank');
       } else {
         showToast(`❌ ${d.error || 'Failed to send WhatsApp'}`);

@@ -57,7 +57,7 @@ export default function PrivacyPolicyPage() {
               <ShieldCheck className="w-4 h-4 text-[#2874f0]" /> 3. Data Protection & Security
             </h2>
             <p>
-              We enforce HTTPS/TLS encryption across all API endpoints and database connections. Your data is stored on secure Railway PostgreSQL instances with isolated access control and zero third-party data selling.
+              We enforce HTTPS/TLS encryption across all API endpoints and database connections. Your data is stored on secure encrypted servers with isolated access control and zero third-party data selling.
             </p>
           </section>
 

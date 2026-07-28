@@ -181,7 +181,7 @@ export const ModalsBundle = () => {
         isDefault: savedAddresses.length === 0,
       });
       if (!created) {
-        showToast('❌ Failed to save address to database');
+        showToast('❌ Failed to save address. Please try again.');
         return false;
       }
       const next = [created, ...savedAddresses];
@@ -290,7 +290,7 @@ export const ModalsBundle = () => {
 
         if (!res.ok || !rzpData.id) {
           if (rzpData.needsConfig) {
-            showToast('⚠️ Razorpay not configured — use COD or add API keys in Railway.');
+            showToast('⚠️ Online payment is not available yet — please use Cash on Delivery.');
             window.location.href = '/payment/failed?reason=no_config';
             return;
           }
@@ -965,7 +965,7 @@ export const ModalsBundle = () => {
                 </h2>
 
                 <p className="text-xs text-slate-500 max-w-xs mx-auto">
-                  Your order is booked &amp; logged into Railway PostgreSQL. ST Courier fulfillment is now underway!
+                  Your order is confirmed and saved. ST Courier fulfillment is now underway!
                 </p>
               </div>
 

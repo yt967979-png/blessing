@@ -20,7 +20,7 @@ export default function PaymentFailedPage() {
       : reason === 'verify_failed'
         ? 'Payment was received but verification failed. Do not pay again — contact support with your UPI reference.'
         : reason === 'no_config'
-          ? 'Online payment is not configured yet. Use Cash on Delivery or ask admin to add Razorpay keys after domain approval.'
+          ? 'Online payment is not available yet. Please use Cash on Delivery or try again later.'
           : 'Your online payment did not complete. No money was charged if you cancelled.';
 
   return (

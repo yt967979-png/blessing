@@ -131,7 +131,7 @@ export default function ProfilePage() {
       }
       loginUser({ ...user, name: data.name || name, phone: data.phone || phone }, cart, wishlist, addresses);
       setIsEditing(false);
-      showToast('✓ Profile saved to Database successfully!');
+      showToast('✓ Profile saved successfully!');
     } catch {
       loginUser({ ...user, name, phone }, cart, wishlist, addresses);
       setIsEditing(false);
@@ -164,7 +164,7 @@ export default function ProfilePage() {
       isDefault: addresses.length === 0,
     });
     if (!created) {
-      showToast('❌ Failed to save address to database');
+      showToast('❌ Failed to save address. Please try again.');
       return;
     }
     setAddresses((prev) => [created, ...prev]);
@@ -172,7 +172,7 @@ export default function ProfilePage() {
     setNewAddrText('');
     setNewAddrPincode('');
     setNewAddrCity('');
-    showToast('✓ Address saved to database');
+    showToast('✓ Address saved to your account');
   };
 
   const handleDeleteAddress = async (id: string | number) => {
@@ -183,7 +183,7 @@ export default function ProfilePage() {
       return;
     }
     setAddresses((prev) => prev.filter((a) => a.id !== id));
-    showToast('🗑️ Address deleted from database');
+    showToast('🗑️ Address removed');
   };
 
   const wishlistedProducts = products.filter((p) => wishlist.includes(p.id));
@@ -602,7 +602,7 @@ export default function ProfilePage() {
                     </p>
                   </div>
                   {addressesLoading && (
-                    <p className="text-xs text-slate-400 px-1">Loading addresses from database...</p>
+                    <p className="text-xs text-slate-400 px-1">Loading your saved addresses…</p>
                   )}
                   <button
                     onClick={() => setShowAddAddrForm(!showAddAddrForm)}

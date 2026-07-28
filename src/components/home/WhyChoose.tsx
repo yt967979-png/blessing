@@ -25,7 +25,7 @@ export const WhyChoose = () => {
               THE BLESSING POWER ADVANTAGE
             </span>
             <h2 className="font-heading font-black text-2xl sm:text-3xl md:text-4xl text-white tracking-tight uppercase">
-              WHY 100,000+ STUDENTS TRUST OUR GUIDES
+              WHY STUDENTS CHOOSE OUR GUIDES
             </h2>
             <p className="text-slate-300 text-xs sm:text-sm font-medium mt-2">
               Crafted by veteran State Board & CBSE educators to maximize exam scores with minimum memorization effort.
@@ -40,7 +40,7 @@ export const WhyChoose = () => {
               { icon: Hourglass, title: '10-Year Solved Papers', desc: 'Past year trend breakdown' },
               { icon: Target, title: '100% Exam Focused', desc: 'Zero clutter, max scoring' },
               { icon: GraduationCap, title: 'Simple Language', desc: 'Easy to learn & memorize' },
-              { icon: Award, title: '95%+ Score Guarantee', desc: 'Proven academic track record' },
+              { icon: Award, title: 'Exam-Focused Content', desc: 'Built for board exam success' },
             ].map((item, idx) => (
               <div
                 key={idx}

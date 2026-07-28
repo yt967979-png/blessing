@@ -30,19 +30,30 @@ export default function AdminReviewsTab({
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    if (!user?.token) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
-      const r = await fetch('/api/reviews?admin=1', { headers: authHeaders(user) });
+      const r = await fetch('/api/reviews?admin=1', {
+        headers: authHeaders(user),
+        signal: AbortSignal.timeout(20000),
+      });
       if (r.ok) {
         const data = await r.json();
         if (Array.isArray(data)) setReviews(data);
+      } else {
+        showToast('❌ Could not load reviews');
+        setReviews([]);
       }
     } catch {
       showToast('❌ Could not load reviews');
+      setReviews([]);
     } finally {
       setLoading(false);
     }
-  }, [user, showToast]);
+  }, [user?.token, user?.id, showToast]);
 
   useEffect(() => {
     void load();

@@ -75,8 +75,12 @@ export default function AdminCouponsTab({
   };
 
   const loadRedemptions = useCallback(async () => {
+    if (!user?.token) return;
     try {
-      const res = await fetch('/api/coupons/redemptions?limit=50', { headers: authHeaders(user) });
+      const res = await fetch('/api/coupons/redemptions?limit=50', {
+        headers: authHeaders(user),
+        signal: AbortSignal.timeout(15000),
+      });
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data)) setRedemptions(data);
@@ -84,22 +88,33 @@ export default function AdminCouponsTab({
     } catch {
       /* ignore */
     }
-  }, [user]);
+  }, [user?.token, user?.id]);
 
   const loadCoupons = useCallback(async () => {
+    if (!user?.token) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
-      const res = await fetch('/api/coupons?admin=1', { headers: authHeaders(user) });
+      const res = await fetch('/api/coupons?admin=1', {
+        headers: authHeaders(user),
+        signal: AbortSignal.timeout(20000),
+      });
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data)) setCoupons(data);
+      } else {
+        showToast('Could not load coupons');
+        setCoupons([]);
       }
     } catch {
       showToast('Could not load coupons');
+      setCoupons([]);
     } finally {
       setLoading(false);
     }
-  }, [user, showToast]);
+  }, [user?.token, user?.id, showToast]);
 
   useEffect(() => {
     void loadCoupons();

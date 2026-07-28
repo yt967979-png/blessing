@@ -10,7 +10,7 @@ interface LiveStats {
   orders: number;
 }
 
-// Format large numbers: 10000 → "10,000+"
+// Format counts for display (e.g. 1000 → "1,000+")
 function fmtCount(n: number, suffix = '+'): string {
   if (n <= 0) return '—';
   return n.toLocaleString('en-IN') + suffix;
@@ -43,35 +43,37 @@ export const StatsSection = () => {
   const items = [
     {
       icon: Users,
-      // Show real user count; floor to nearest 100 and add "+" so it looks credible
       value: stats
-        ? stats.students >= 100
-          ? fmtCount(Math.floor(stats.students / 100) * 100)
-          : stats.students > 0
-          ? fmtCount(stats.students)
-          : '10,000+'          // brand baseline while DB is empty
-        : '10,000+',
-      label: 'Happy Students',
+        ? stats.students > 0
+          ? stats.students >= 100
+            ? fmtCount(Math.floor(stats.students / 100) * 100)
+            : fmtCount(stats.students, '')
+          : '—'
+        : '…',
+      label: 'Registered Customers',
     },
     {
       icon: School,
-      // Partner schools — keep as brand constant (not in DB)
-      value: '500+',
-      label: 'Partner Schools',
+      value: '6th–12th',
+      label: 'Classes Covered',
     },
     {
       icon: BookMarked,
       value: stats
         ? stats.books > 0
           ? fmtCount(stats.books)
-          : '50+'
-        : '50+',
+          : '—'
+        : '…',
       label: 'Guide Titles',
     },
     {
       icon: Star,
-      value: stats ? `${stats.avgRating} / 5.0` : '4.9 / 5.0',
-      label: 'Student Rating',
+      value: stats
+        ? stats.avgRating > 0
+          ? `${stats.avgRating} / 5.0`
+          : '—'
+        : '…',
+      label: 'Average Rating',
     },
   ];
 

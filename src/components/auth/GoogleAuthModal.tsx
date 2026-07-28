@@ -206,7 +206,7 @@ export function GoogleAuthModal({
           </h3>
           <p className="text-xs text-slate-300 mt-1">
             {step === 'google'
-              ? 'Use your Google account — fast & secure for lakhs of students'
+              ? 'Use your Google account — quick and secure sign-in'
               : 'We need your mobile number for orders & WhatsApp delivery updates'}
           </p>
         </div>
@@ -223,8 +223,7 @@ export function GoogleAuthModal({
             <>
               {!clientId ? (
                 <div className="text-center text-sm text-slate-600 bg-amber-50 border border-amber-200 rounded-xl p-4">
-                  Google Sign-In is not configured yet. Add{' '}
-                  <code className="text-xs bg-white px-1 rounded">NEXT_PUBLIC_GOOGLE_CLIENT_ID</code> in Railway.
+                  Google Sign-In is not available right now. Please try again later or contact support.
                 </div>
               ) : (
                 <div className="flex flex-col items-center gap-3 py-2">
@@ -237,7 +236,7 @@ export function GoogleAuthModal({
               <ul className="text-[11px] text-slate-500 space-y-1.5 bg-slate-50 rounded-xl p-3 border border-slate-100">
                 <li>• One tap sign-in — no password to remember</li>
                 <li>• Then add phone for COD orders & WhatsApp tracking</li>
-                <li>• Scales to 2 lakh+ users on Hobby plan</li>
+                <li>• Your cart and orders stay saved on this account</li>
               </ul>
             </>
           ) : (

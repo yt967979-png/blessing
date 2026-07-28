@@ -6,7 +6,7 @@ import { ensureCouponSchema } from '@/lib/coupons';
 /** Admin: who used which coupon */
 export async function GET(request: NextRequest) {
   const admin = await verifyAdminRequest(request);
-  if (!admin) return forbiddenResponse();
+  if (!admin.isAdmin) return forbiddenResponse(admin.error);
 
   let client: any = null;
   try {
