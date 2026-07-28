@@ -49,7 +49,6 @@ export async function GET(request: Request) {
     }
 
     client = await getDbClient();
-    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_completed BOOLEAN DEFAULT FALSE`);
     let res;
     if (userId) {
       res = await client.query(

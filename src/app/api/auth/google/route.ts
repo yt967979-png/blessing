@@ -117,8 +117,6 @@ export async function POST(request: Request) {
     }
 
     client = await getDbClient();
-    await ensureGoogleUserColumns(client);
-
     let dbUser: any = null;
 
     const byGoogle = await client.query(`SELECT * FROM users WHERE google_id = $1 LIMIT 1`, [googleUser.sub]);
