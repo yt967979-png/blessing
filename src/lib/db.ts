@@ -805,6 +805,9 @@ async function runSchemaInit(client: any) {
         ALTER TABLE books ADD COLUMN IF NOT EXISTS badge VARCHAR(100) DEFAULT '';
         ALTER TABLE books ADD COLUMN IF NOT EXISTS stock INT DEFAULT 50;
         ALTER TABLE users DROP COLUMN IF EXISTS email_verified;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS security_question VARCHAR(100);
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS security_answer_hash VARCHAR(255);
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_completed BOOLEAN DEFAULT FALSE;
 
         ALTER TABLE coupons ADD COLUMN IF NOT EXISTS title VARCHAR(255);
         ALTER TABLE coupons ADD COLUMN IF NOT EXISTS description TEXT;

@@ -39,9 +39,9 @@ export default function AdminWhatsAppTab({
           <strong>your number</strong> to each <strong>customer&apos;s number</strong>:
         </p>
         <ul className="text-left text-xs text-gray-600 mt-3 space-y-1.5 max-w-xs mx-auto">
-          <li>• Registration / reset OTP → customer phone</li>
           <li>• Order Placed → customer phone</li>
           <li>• Packed / Shipped / Delivered → customer phone</li>
+          <li>• Coupon & offer broadcasts</li>
         </ul>
       </div>
 
@@ -52,14 +52,14 @@ export default function AdminWhatsAppTab({
           </div>
           <div>
             <h3 className="text-sm font-bold text-green-700">Admin WhatsApp Linked</h3>
-            <p className="text-xs text-gray-500 mt-1">{waStatus.message || 'Ready to send OTP & order updates.'}</p>
+            <p className="text-xs text-gray-500 mt-1">{waStatus.message || 'Ready to send order updates & offers.'}</p>
           </div>
           <div className="bg-gray-50 rounded-lg p-3 text-xs space-y-1.5">
             {[
               ['Linked as', waStatus.pairingCode ? `+${waStatus.pairingCode}` : 'Admin device'],
               ['Sends to', 'Customer phone numbers'],
-              ['OTP', 'Registration & password reset'],
               ['Orders', 'Placed → Packed → Delivered'],
+              ['Offers', 'Coupon broadcasts'],
               ['Cost', 'Free (your WhatsApp)'],
             ].map(([k, v]) => (
               <div key={k} className="flex justify-between gap-3">

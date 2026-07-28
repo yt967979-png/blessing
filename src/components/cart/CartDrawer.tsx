@@ -223,7 +223,7 @@ export const CartDrawer = () => {
                     setIsCartOpen(false);
                     if (!user) {
                       setIsAuthOpen(true);
-                      showToast('Please login or register to place an order');
+                      showToast('Please sign in with Google to place an order');
                       return;
                     }
                     setIsCheckoutOpen(true);

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import { userNeedsProfile } from '@/lib/userProfile';
 
 export interface Product {
   id: string | number;
@@ -39,6 +40,7 @@ export interface UserData {
   phone?: string;
   token?: string;
   role?: string;
+  needsProfile?: boolean;
 }
 
 export interface PublicCoupon {
@@ -212,9 +214,18 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             .then((res) => (res.ok ? res.json() : null))
             .then((dbUser) => {
               if (dbUser?.user) {
-                const nextUser = { ...dbUser.user, token: dbUser.user.token || u.token };
+                const nextUser = {
+                  ...dbUser.user,
+                  token: dbUser.user.token || u.token,
+                  needsProfile:
+                    dbUser.user.needsProfile ??
+                    userNeedsProfile(dbUser.user.phone),
+                };
                 setUser(nextUser);
                 localStorage.setItem('bpg_user_next', JSON.stringify(nextUser));
+                if (nextUser.needsProfile) {
+                  setIsAuthOpen(true);
+                }
                 // Prefer local cart; if empty, restore from DB (fixes refresh wipe)
                 if (!localCart.length && Array.isArray(dbUser.cart) && dbUser.cart.length > 0) {
                   setCart(dbUser.cart);
@@ -295,7 +306,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const addToCart = (product: Product, qty: number = 1) => {
     if (!user) {
       setIsAuthOpen(true);
-      showToast('Please login or register to add items to cart');
+      showToast('Please sign in with Google to add items to cart');
+      return;
+    }
+    if (user.needsProfile || userNeedsProfile(user.phone)) {
+      setIsAuthOpen(true);
+      showToast('Please complete your profile (mobile number) to shop');
       return;
     }
     if (product.inStock === false) {
@@ -321,7 +337,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const requestCheckout = (open: boolean) => {
     if (open && !user) {
       setIsAuthOpen(true);
-      showToast('Please login or register to place an order');
+      showToast('Please sign in with Google to place an order');
+      return;
+    }
+    if (open && user && (user.needsProfile || userNeedsProfile(user.phone))) {
+      setIsAuthOpen(true);
+      showToast('Please complete your profile (mobile number) before checkout');
       return;
     }
     setIsCheckoutOpen(open);
@@ -350,7 +371,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const toggleWishlist = (id: string | number) => {
     if (!user) {
       setIsAuthOpen(true);
-      showToast('Please login or register to use wishlist');
+      showToast('Please sign in with Google to use wishlist');
       return;
     }
     setWishlist((prev) => {

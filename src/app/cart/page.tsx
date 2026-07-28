@@ -203,7 +203,7 @@ export default function CartPage() {
                 </button>
                 {!user && (
                   <p className="text-[10px] text-center text-slate-500 font-medium">
-                    Login or register required to place an order
+                    Sign in with Google to place an order
                   </p>
                 )}
 

@@ -1,8 +1,13 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { getDbClient } from '@/lib/db';
-import { createSessionToken, hashPassword, verifyPassword } from '@/lib/auth';
-import { applyRateLimitAsync, clientIp } from '@/lib/serverSecurity';
+import { createSessionToken } from '@/lib/auth';
+import { applyRateLimitAsync, clientIp, getAuthenticatedUser, unauthorizedResponse } from '@/lib/serverSecurity';
+import { isValidMobileNumber, normalizeMobileDigits } from '@/lib/authValidation';
+import { userNeedsProfile } from '@/lib/userProfile';
+
+const LEGACY_AUTH_DISABLED =
+  'Email/password login is disabled. Please sign in with Google.';
 
 function setSessionCookie(response: NextResponse, token: string) {
   response.cookies.set('bpg_session', token, {
@@ -15,11 +20,23 @@ function setSessionCookie(response: NextResponse, token: string) {
   return response;
 }
 
-function buildUserResponse(user: { id: string; name: string; email: string; phone: string; role: string }, token: string) {
-  return { id: user.id, name: user.name, email: user.email, phone: user.phone, role: user.role || 'customer', token };
+function buildUserResponse(
+  user: { id: string; name: string; email: string; phone: string; role: string; profile_completed?: boolean | null },
+  token: string
+) {
+  const needsProfile = userNeedsProfile(user.phone) || user.profile_completed === false;
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    phone: user.phone,
+    role: user.role || 'customer',
+    token,
+    needsProfile,
+  };
 }
 
-// GET /api/auth?userId=xxx — Verify if user account exists
+// GET /api/auth?userId=xxx — Restore session + cart/wishlist
 export async function GET(request: Request) {
   let client: any = null;
   try {
@@ -32,11 +49,18 @@ export async function GET(request: Request) {
     }
 
     client = await getDbClient();
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_completed BOOLEAN DEFAULT FALSE`);
     let res;
     if (userId) {
-      res = await client.query('SELECT id, name, email, phone, role FROM users WHERE id = $1', [String(userId)]);
+      res = await client.query(
+        'SELECT id, name, email, phone, role, profile_completed FROM users WHERE id = $1',
+        [String(userId)]
+      );
     } else {
-      res = await client.query('SELECT id, name, email, phone, role FROM users WHERE LOWER(email) = $1', [String(email).toLowerCase().trim()]);
+      res = await client.query(
+        'SELECT id, name, email, phone, role, profile_completed FROM users WHERE LOWER(email) = $1',
+        [String(email).toLowerCase().trim()]
+      );
     }
 
     if (res.rows.length === 0) {
@@ -90,196 +114,75 @@ export async function GET(request: Request) {
     });
     return setSessionCookie(response, token);
   } catch {
-    if (client) { try { await client.end(); } catch (_) {} }
+    if (client) {
+      try {
+        await client.end();
+      } catch (_) {}
+    }
     return NextResponse.json({ error: 'Database connection failed' }, { status: 503 });
   }
 }
 
-// POST /api/auth — Register or Login
+// POST — legacy email/password login disabled (Google Sign-In only)
 export async function POST(request: Request) {
-  let client: any = null;
-  try {
-    const rl = await applyRateLimitAsync(`auth:${clientIp(request)}`, 20, 60000);
-    if (!rl.allowed) {
-      return NextResponse.json({ error: 'Too many login attempts. Please wait a minute.' }, { status: 429 });
-    }
-
-    const body = await request.json();
-    const { action, email, phone, password, name } = body;
-    const loginIdentifier = String(phone || email || '').trim();
-
-    if (!loginIdentifier || !password) {
-      return NextResponse.json({ error: 'Phone number/email and password are required.' }, { status: 400 });
-    }
-    if (!action || (action !== 'register' && action !== 'login')) {
-      return NextResponse.json({ error: 'action must be register or login.' }, { status: 400 });
-    }
-
-    const cleanIdentifier = loginIdentifier.toLowerCase();
-    const cleanPhoneDigits = loginIdentifier.replace(/\D/g, '');
-
-    client = await getDbClient();
-
-    if (action === 'register') {
-      const cleanEmail = String(email || '').toLowerCase().trim();
-      const cleanPhone = String(phone || '').trim();
-
-      const existing = await client.query(
-        'SELECT id FROM users WHERE LOWER(email) = $1 OR phone = $2',
-        [cleanEmail, cleanPhone]
-      );
-      if (existing.rows.length > 0) {
-        await client.end();
-        return NextResponse.json(
-          { error: 'An account with this email or phone number already exists. Please sign in instead.' },
-          { status: 409 }
-        );
-      }
-
-      const userId = `usr-${Date.now()}`;
-      const userName = String(name).trim();
-      const passHash = hashPassword(password);
-
-      await client.query(
-        `INSERT INTO users (id, name, email, phone, password_hash, role, status)
-         VALUES ($1, $2, $3, $4, $5, 'customer', 'active')`,
-        [userId, userName, cleanEmail, cleanPhone, passHash]
-      );
-
-      await client.query(
-        `INSERT INTO cart (id, user_id) VALUES ($1, $2) ON CONFLICT (user_id) DO NOTHING`,
-        [`cart-${userId}`, userId]
-      );
-
-      const user = { id: userId, name: userName, email: cleanEmail, phone: cleanPhone, role: 'customer' };
-      const token = createSessionToken(userId, 'customer');
-      await client.end();
-
-      const response = NextResponse.json({
-        user: buildUserResponse(user, token),
-        cart: [],
-        wishlist: [],
-        addresses: [],
-      });
-      return setSessionCookie(response, token);
-    }
-
-    const userRes = await client.query(
-      `SELECT * FROM users 
-       WHERE LOWER(email) = $1 
-          OR phone = $1 
-          OR phone = $2 
-          OR REPLACE(phone, '+', '') = $2`,
-      [cleanIdentifier, cleanPhoneDigits || cleanIdentifier]
-    );
-
-    if (userRes.rows.length === 0) {
-      await client.end();
-      return NextResponse.json(
-        { error: 'No account found with this mobile number. Please register first.' },
-        { status: 404 }
-      );
-    }
-
-    const dbUser = userRes.rows[0];
-
-    if (!verifyPassword(password, dbUser.password_hash)) {
-      await client.end();
-      return NextResponse.json({ error: 'Incorrect password. Please check and try again.' }, { status: 401 });
-    }
-
-    const cartRes = await client.query(
-      `SELECT ci.book_id as id, ci.quantity as qty, ci.price,
-              b.title, b.cover_image as image, b.price as mrp,
-              b.subject, b.slug, b.discount_price, b.status, b.stock
-       FROM cart c
-       JOIN cart_items ci ON c.id = ci.cart_id
-       LEFT JOIN books b ON ci.book_id = b.id
-       WHERE c.user_id = $1`,
-      [dbUser.id]
-    );
-
-    const cartItems = cartRes.rows.map((row: any) => ({
-      id: row.id,
-      title: row.title || `Book #${row.id}`,
-      price: Number(row.discount_price || row.price),
-      mrp: Number(row.mrp || row.price),
-      qty: Number(row.qty),
-      image: row.image || '',
-      subject: row.subject || 'Guide',
-      slug: row.slug || row.id,
-      cls: '10th',
-      category: 'guide' as const,
-      discount: 20,
-      rating: 5.0,
-      reviews: 0,
-      badge: 'BESTSELLER',
-      badgeColor: 'bg-blue-600',
-      description: 'Official guide book.',
-      features: ['Solved Papers'],
-      inStock: row.status !== 'out_of_stock' && Number(row.stock || 1) > 0,
-    }));
-
-    const wishRes = await client.query('SELECT book_id FROM wishlist WHERE user_id = $1', [dbUser.id]);
-    const wishlistIds = wishRes.rows.map((row: any) => row.book_id);
-
-    const addrRes = await client.query(
-      'SELECT * FROM addresses WHERE user_id = $1 ORDER BY created_at DESC',
-      [dbUser.id]
-    );
-    const addresses = addrRes.rows.map((row: any) => ({
-      id: row.id,
-      type: row.landmark || 'HOME',
-      name: row.full_name,
-      phone: row.phone,
-      address: row.address_line1,
-      city: row.city,
-      pincode: row.pincode,
-    }));
-
-    const role = dbUser.role || 'customer';
-    const token = createSessionToken(dbUser.id, role);
-    await client.end();
-
-    const response = NextResponse.json({
-      user: buildUserResponse(
-        { id: dbUser.id, name: dbUser.name, email: dbUser.email, phone: dbUser.phone, role },
-        token
-      ),
-      cart: cartItems,
-      wishlist: wishlistIds,
-      addresses,
-    });
-    return setSessionCookie(response, token);
-  } catch (err: any) {
-    console.error('Auth error detail:', err?.message || err);
-    if (client) { try { await client.end(); } catch (_) {} }
-    return NextResponse.json(
-      { error: `Database connection failed (${err?.message || 'Check Railway DATABASE_URL'}).` },
-      { status: 503 }
-    );
-  }
+  await applyRateLimitAsync(`auth-legacy:${clientIp(request)}`, 10, 60000);
+  return NextResponse.json({ error: LEGACY_AUTH_DISABLED }, { status: 410 });
 }
 
-// PATCH /api/auth — Update user profile
+// PATCH /api/auth — Update own profile (authenticated)
 export async function PATCH(request: Request) {
+  const session = await getAuthenticatedUser(request);
+  if (!session) return unauthorizedResponse('Please sign in with Google first.');
+
   let client: any = null;
   try {
-    const { userId, name, phone } = await request.json();
-    if (!userId) {
-      return NextResponse.json({ error: 'userId is required' }, { status: 400 });
+    const { name, phone } = await request.json();
+    const cleanName = String(name || '').trim();
+    const cleanPhone = normalizeMobileDigits(String(phone || ''));
+
+    if (!cleanName || cleanName.length < 2) {
+      return NextResponse.json({ error: 'Please enter your full name.' }, { status: 400 });
+    }
+    if (!isValidMobileNumber(cleanPhone)) {
+      return NextResponse.json({ error: 'Please enter a valid 10-digit mobile number.' }, { status: 400 });
     }
 
     client = await getDbClient();
-    await client.query(
-      'UPDATE users SET name = $1, phone = $2, updated_at = NOW() WHERE id = $3',
-      [String(name).trim(), String(phone).trim(), String(userId)]
+
+    const dup = await client.query(`SELECT id FROM users WHERE phone = $1 AND id <> $2 LIMIT 1`, [
+      cleanPhone,
+      session.userId,
+    ]);
+    if (dup.rows.length > 0) {
+      await client.end();
+      return NextResponse.json({ error: 'This mobile number is already used on another account.' }, { status: 409 });
+    }
+
+    const updated = await client.query(
+      `UPDATE users SET name = $1, phone = $2, profile_completed = TRUE, updated_at = NOW()
+       WHERE id = $3
+       RETURNING id, name, email, phone, role`,
+      [cleanName, cleanPhone, session.userId]
     );
     await client.end();
 
-    return NextResponse.json({ success: true, message: 'Profile updated' });
+    if (updated.rows.length === 0) {
+      return NextResponse.json({ error: 'User not found.' }, { status: 404 });
+    }
+
+    const user = updated.rows[0];
+    return NextResponse.json({
+      success: true,
+      name: user.name,
+      phone: user.phone,
+      message: 'Profile updated',
+    });
   } catch {
-    if (client) { try { await client.end(); } catch (_) {} }
+    if (client) {
+      try {
+        await client.end();
+      } catch (_) {}
+    }
     return NextResponse.json({ error: 'Failed to update profile' }, { status: 500 });
   }
 }

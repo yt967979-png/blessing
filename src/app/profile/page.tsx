@@ -121,8 +121,8 @@ export default function ProfilePage() {
     try {
       const res = await fetch('/api/auth', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id, name, phone }),
+        headers: authHeaders(user),
+        body: JSON.stringify({ name, phone }),
       });
       const data = await res.json();
       if (data.error) {

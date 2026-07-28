@@ -149,7 +149,7 @@ export async function initWhatsAppInProcess(opts?: { requireLeader?: boolean }) 
           connected: true,
           qrImage: null,
           message: linkedPhone
-            ? `Admin WhatsApp linked (+${linkedPhone}). OTPs & order updates will send from this number.`
+            ? `Admin WhatsApp linked (+${linkedPhone}). Order updates & coupon alerts will send from this number.`
             : 'WhatsApp Bot Connected and Active!',
         });
         try {
