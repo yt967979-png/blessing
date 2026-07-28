@@ -100,6 +100,7 @@ interface StoreContextType {
   updateQty: (id: string | number, delta: number) => void;
   removeFromCart: (id: string | number) => void;
   clearCart: () => void;
+  clearCartAfterOrder: () => void;
   toggleWishlist: (id: string | number) => void;
   loginUser: (
     u: UserData,
@@ -366,7 +367,34 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setCart((prev) => prev.filter((item) => item.id !== id));
   };
 
-  const clearCart = () => setCart([]);
+  const clearCart = useCallback(() => {
+    setCart([]);
+    try {
+      localStorage.setItem('bpg_cart_next', '[]');
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  /** Clear cart locally + on server immediately after a successful order. */
+  const clearCartAfterOrder = useCallback(() => {
+    setCart([]);
+    try {
+      localStorage.setItem('bpg_cart_next', '[]');
+    } catch {
+      /* ignore */
+    }
+    if (user?.id && user?.token) {
+      fetch('/api/user/sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${user.token}`,
+        },
+        body: JSON.stringify({ cart: [], wishlist }),
+      }).catch(() => {});
+    }
+  }, [user?.id, user?.token, wishlist]);
 
   const toggleWishlist = (id: string | number) => {
     if (!user) {
@@ -684,6 +712,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         updateQty,
         removeFromCart,
         clearCart,
+        clearCartAfterOrder,
         toggleWishlist,
         loginUser,
         logoutUser,

@@ -154,6 +154,7 @@ export async function POST(request: Request) {
       razorpaySignature,
       couponCode,
       freeBookId,
+      idempotencyKey,
     } = body;
 
     const userId = session.userId;
@@ -184,6 +185,59 @@ export async function POST(request: Request) {
       appliedCouponCode,
       coupon,
     } = checkout;
+
+    await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS idempotency_key VARCHAR(80)`);
+
+    const idemKey = String(idempotencyKey || '').trim().slice(0, 80) || null;
+
+    if (idemKey) {
+      const byKey = await client.query(
+        `SELECT order_number, total_amount FROM orders WHERE idempotency_key = $1 LIMIT 1`,
+        [idemKey]
+      );
+      if (byKey.rows.length) {
+        await client.query('ROLLBACK');
+        const existing = byKey.rows[0];
+        return NextResponse.json({
+          orderId: existing.order_number,
+          duplicate: true,
+          totalAmount: Number(existing.total_amount || totalAmount),
+          message: 'Order already placed.',
+        });
+      }
+    }
+
+    if (!isRazorpay) {
+      const cartFingerprint = verifiedItems
+        .map((i: { id: string; qty: number }) => `${i.id}:${i.qty}`)
+        .sort()
+        .join('|');
+      const dupCod = await client.query(
+        `SELECT o.order_number, o.total_amount
+         FROM orders o
+         WHERE o.user_id = $1
+           AND o.created_at > NOW() - INTERVAL '5 minutes'
+           AND ABS(o.total_amount - $2) < 0.01
+           AND (o.payment_method ILIKE '%cod%' OR o.payment_method ILIKE '%cash%')
+           AND (
+             SELECT COALESCE(string_agg(oi.book_id || ':' || oi.quantity::text, '|' ORDER BY oi.book_id), '')
+             FROM order_items oi WHERE oi.order_id = o.id
+           ) = $3
+         ORDER BY o.created_at DESC
+         LIMIT 1`,
+        [userId, totalAmount, cartFingerprint]
+      );
+      if (dupCod.rows.length) {
+        await client.query('ROLLBACK');
+        const existing = dupCod.rows[0];
+        return NextResponse.json({
+          orderId: existing.order_number,
+          duplicate: true,
+          totalAmount: Number(existing.total_amount || totalAmount),
+          message: 'Duplicate order blocked — returning your existing order.',
+        });
+      }
+    }
 
     if (appliedCouponId && coupon) {
       await client.query(`UPDATE coupons SET used_count = COALESCE(used_count, 0) + 1 WHERE id = $1`, [
@@ -241,8 +295,8 @@ export async function POST(request: Request) {
 
     await client.query(
       `INSERT INTO orders (id, order_number, user_id, subtotal, discount, total_amount, payment_method, payment_status, order_status,
-        courier_name, shipment_id, awb_number, shipping_address, razorpay_order_id, razorpay_payment_id, razorpay_signature, coupon_code, coupon_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'ST Courier Express', $10, NULL, $11, $12, $13, $14, $15, $16)`,
+        courier_name, shipment_id, awb_number, shipping_address, razorpay_order_id, razorpay_payment_id, razorpay_signature, coupon_code, coupon_id, idempotency_key)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'ST Courier Express', $10, NULL, $11, $12, $13, $14, $15, $16, $17)`,
       [
         id,
         orderNumber,
@@ -260,6 +314,7 @@ export async function POST(request: Request) {
         razorpaySignature || null,
         appliedCouponCode,
         appliedCouponId,
+        idemKey,
       ]
     );
 

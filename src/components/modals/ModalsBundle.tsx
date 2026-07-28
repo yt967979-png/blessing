@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -48,7 +48,7 @@ export const ModalsBundle = () => {
     pendingCouponCode,
     products,
     publicCoupons,
-    clearCart,
+    clearCartAfterOrder,
     addToCart,
     user,
     loginUser,
@@ -126,6 +126,17 @@ export const ModalsBundle = () => {
   const [couponInput, setCouponInput] = useState('');
   const [couponBusy, setCouponBusy] = useState(false);
   const [freeBookPickId, setFreeBookPickId] = useState('');
+  const [isPlacingOrder, setIsPlacingOrder] = useState(false);
+  const orderSubmitLock = useRef(false);
+  const idempotencyKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!isCheckoutOpen) {
+      idempotencyKeyRef.current = null;
+      orderSubmitLock.current = false;
+      setIsPlacingOrder(false);
+    }
+  }, [isCheckoutOpen]);
 
   useEffect(() => {
     if (pendingCouponCode) setCouponInput(pendingCouponCode);
@@ -197,176 +208,206 @@ export const ModalsBundle = () => {
 
   const handlePlaceOrder = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (orderSubmitLock.current || isPlacingOrder) return;
 
-    if (selectedAddrId === 'new') {
-      const saved = await handleSaveInlineAddress();
-      if (!saved) return;
-    }
+    orderSubmitLock.current = true;
+    setIsPlacingOrder(true);
 
-    const finalAmount = checkoutTotal > 0 ? checkoutTotal : cartGrandTotal > 0 ? cartGrandTotal : cartTotal;
-
-    const processOrderCompletion = async (payId?: string, rzpOrderId?: string, rzpSignature?: string) => {
-      let serverOrderId = '';
-      try {
-        const orderRes = await fetch('/api/orders', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(user?.token ? { Authorization: `Bearer ${user.token}` } : {}),
-          },
-          body: JSON.stringify({
-            userId: user?.id,
-            customerName: selectedAddress.name || user?.name || 'Customer',
-            customerPhone: selectedAddress.phone || user?.phone || '',
-            address: selectedAddress.address,
-            city: selectedAddress.city || 'Chennai',
-            pincode: selectedAddress.pincode || '600012',
-            items: cart.map((i) => ({ id: i.id, qty: i.qty, price: i.price })),
-            paymentMethod: paymentMethod === 'razorpay' ? 'Razorpay UPI / Cards' : 'Cash on Delivery (COD)',
-            razorpayPaymentId: payId || null,
-            razorpayOrderId: rzpOrderId || null,
-            razorpaySignature: rzpSignature || null,
-            couponCode: appliedCoupon?.code || null,
-            freeBookId: appliedCoupon?.freeBookId || null,
-          }),
-        });
-        const orderData = await orderRes.json();
-        if (!orderRes.ok) {
-          showToast(`❌ ${orderData.error || 'Order failed'}`);
-          return;
-        }
-        if (orderData.orderId) {
-          serverOrderId = orderData.orderId;
-        }
-        if (orderData.duplicate) {
-          showToast('ℹ️ Payment already recorded — order restored.');
-        }
-      } catch (_) {
-        showToast('❌ Could not place order. Try again.');
-        return;
-      }
-
-      if (!serverOrderId) {
-        showToast('❌ Order was not saved. Please try again.');
-        return;
-      }
-
-      const confirmedOrderId = serverOrderId;
-
-      setIsCheckoutOpen(false);
-      clearCart();
-      clearAppliedCoupon();
-      setOrderSuccessData({
-        orderId: confirmedOrderId,
-        totalAmount: finalAmount,
-        customerName: selectedAddress.name || user?.name || 'Customer',
-        address: selectedAddress.address,
-        city: selectedAddress.city || 'Chennai',
-        phone: selectedAddress.phone || user?.phone || '',
-        paymentMethod: paymentMethod === 'razorpay' ? 'Razorpay UPI' : 'Cash on Delivery (COD)',
-        paymentStatus: paymentMethod === 'razorpay' ? 'Payment Confirmed' : 'Pending COD',
-      });
-      showToast(`🎉 Order #${confirmedOrderId} placed successfully!`);
+    const releaseOrderLock = () => {
+      orderSubmitLock.current = false;
+      setIsPlacingOrder(false);
     };
 
-    if (paymentMethod === 'razorpay') {
-      const receiptId = `rcpt-${Date.now()}`;
-      try {
-        const cartPayload = cart.map((i) => ({ id: i.id, qty: i.qty }));
-        const res = await fetch('/api/razorpay', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(user?.token ? { Authorization: `Bearer ${user.token}` } : {}),
-          },
-          body: JSON.stringify({
-            items: cartPayload,
-            receipt: receiptId,
-            couponCode: appliedCoupon?.code || null,
-            freeBookId: appliedCoupon?.freeBookId || null,
-          }),
-        });
-        const rzpData = await res.json();
+    try {
+      if (selectedAddrId === 'new') {
+        const saved = await handleSaveInlineAddress();
+        if (!saved) {
+          releaseOrderLock();
+          return;
+        }
+      }
 
-        if (!res.ok || !rzpData.id) {
-          if (rzpData.needsConfig) {
-            showToast('⚠️ Online payment is not available yet — please use Cash on Delivery.');
-            window.location.href = '/payment/failed?reason=no_config';
+      if (!idempotencyKeyRef.current) {
+        idempotencyKeyRef.current = `bpg-${user?.id || 'guest'}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+      }
+
+      const finalAmount = checkoutTotal > 0 ? checkoutTotal : cartGrandTotal > 0 ? cartGrandTotal : cartTotal;
+
+      const processOrderCompletion = async (payId?: string, rzpOrderId?: string, rzpSignature?: string) => {
+        let serverOrderId = '';
+        let wasDuplicate = false;
+        try {
+          const orderRes = await fetch('/api/orders', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(user?.token ? { Authorization: `Bearer ${user.token}` } : {}),
+            },
+            body: JSON.stringify({
+              userId: user?.id,
+              customerName: selectedAddress.name || user?.name || 'Customer',
+              customerPhone: selectedAddress.phone || user?.phone || '',
+              address: selectedAddress.address,
+              city: selectedAddress.city || 'Chennai',
+              pincode: selectedAddress.pincode || '600012',
+              items: cart.map((i) => ({ id: i.id, qty: i.qty, price: i.price })),
+              paymentMethod: paymentMethod === 'razorpay' ? 'Razorpay UPI / Cards' : 'Cash on Delivery (COD)',
+              razorpayPaymentId: payId || null,
+              razorpayOrderId: rzpOrderId || null,
+              razorpaySignature: rzpSignature || null,
+              couponCode: appliedCoupon?.code || null,
+              freeBookId: appliedCoupon?.freeBookId || null,
+              idempotencyKey: idempotencyKeyRef.current,
+            }),
+          });
+          const orderData = await orderRes.json();
+          if (!orderRes.ok) {
+            showToast(`❌ ${orderData.error || 'Order failed'}`);
+            return false;
+          }
+          if (orderData.orderId) {
+            serverOrderId = orderData.orderId;
+          }
+          wasDuplicate = Boolean(orderData.duplicate);
+          if (wasDuplicate) {
+            showToast(`ℹ️ Order #${serverOrderId} was already placed — cart cleared.`);
+          }
+        } catch (_) {
+          showToast('❌ Could not place order. Try again.');
+          return false;
+        }
+
+        if (!serverOrderId) {
+          showToast('❌ Order was not saved. Please try again.');
+          return false;
+        }
+
+        setIsCheckoutOpen(false);
+        clearCartAfterOrder();
+        clearAppliedCoupon();
+        idempotencyKeyRef.current = null;
+        setOrderSuccessData({
+          orderId: serverOrderId,
+          totalAmount: finalAmount,
+          customerName: selectedAddress.name || user?.name || 'Customer',
+          address: selectedAddress.address,
+          city: selectedAddress.city || 'Chennai',
+          phone: selectedAddress.phone || user?.phone || '',
+          paymentMethod: paymentMethod === 'razorpay' ? 'Razorpay UPI' : 'Cash on Delivery (COD)',
+          paymentStatus: paymentMethod === 'razorpay' ? 'Payment Confirmed' : 'Pending COD',
+        });
+        if (!wasDuplicate) {
+          showToast(`🎉 Order #${serverOrderId} placed successfully!`);
+        }
+        return true;
+      };
+
+      if (paymentMethod === 'razorpay') {
+        const receiptId = `rcpt-${Date.now()}`;
+        try {
+          const cartPayload = cart.map((i) => ({ id: i.id, qty: i.qty }));
+          const res = await fetch('/api/razorpay', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(user?.token ? { Authorization: `Bearer ${user.token}` } : {}),
+            },
+            body: JSON.stringify({
+              items: cartPayload,
+              receipt: receiptId,
+              couponCode: appliedCoupon?.code || null,
+              freeBookId: appliedCoupon?.freeBookId || null,
+            }),
+          });
+          const rzpData = await res.json();
+
+          if (!res.ok || !rzpData.id) {
+            if (rzpData.needsConfig) {
+              showToast('⚠️ Online payment is not available yet — please use Cash on Delivery.');
+              window.location.href = '/payment/failed?reason=no_config';
+              return;
+            }
+            showToast(`❌ ${rzpData.error || 'Could not create payment order.'}`);
+            window.location.href = '/payment/failed?reason=create_failed';
             return;
           }
-          showToast(`❌ ${rzpData.error || 'Could not create payment order.'}`);
-          window.location.href = '/payment/failed?reason=create_failed';
-          return;
-        }
 
-        if (typeof window !== 'undefined' && (window as any).Razorpay) {
-          const options = {
-            key: rzpData.key,
-            amount: rzpData.amount,
-            currency: 'INR',
-            name: 'BLESSING POWER GUIDE',
-            description: 'Educational Guide Books Order',
-            order_id: rzpData.id,
-            prefill: {
-              name: selectedAddress.name || user?.name || '',
-              email: user?.email || '',
-              contact: selectedAddress.phone || user?.phone || '',
-            },
-            theme: { color: '#001B3A' },
-            handler: async function (response: any) {
-              const verifyRes = await fetch('/api/razorpay', {
-                method: 'PUT',
-                headers: {
-                  'Content-Type': 'application/json',
-                  ...(user?.token ? { Authorization: `Bearer ${user.token}` } : {}),
-                },
-                body: JSON.stringify({
-                  razorpay_order_id: response.razorpay_order_id,
-                  razorpay_payment_id: response.razorpay_payment_id,
-                  razorpay_signature: response.razorpay_signature,
-                  items: cartPayload,
-                  expectedRupees: rzpData.expectedRupees,
-                  couponCode: appliedCoupon?.code || null,
-                  freeBookId: appliedCoupon?.freeBookId || null,
-                }),
-              });
-              const verifyData = await verifyRes.json();
-
-              if (!verifyData.verified) {
-                showToast(`❌ ${verifyData.error || 'Payment verification failed.'}`);
-                window.location.href = '/payment/failed?reason=verify_failed';
-                return;
-              }
-
-              showToast('💳 Payment verified!');
-              processOrderCompletion(
-                response.razorpay_payment_id,
-                response.razorpay_order_id,
-                response.razorpay_signature
-              );
-            },
-            modal: {
-              ondismiss: function () {
-                window.location.href = '/payment/failed?reason=dismissed';
+          if (typeof window !== 'undefined' && (window as any).Razorpay) {
+            const options = {
+              key: rzpData.key,
+              amount: rzpData.amount,
+              currency: 'INR',
+              name: 'BLESSING POWER GUIDE',
+              description: 'Educational Guide Books Order',
+              order_id: rzpData.id,
+              prefill: {
+                name: selectedAddress.name || user?.name || '',
+                email: user?.email || '',
+                contact: selectedAddress.phone || user?.phone || '',
               },
-            },
-          };
+              theme: { color: '#001B3A' },
+              handler: async function (response: any) {
+                const verifyRes = await fetch('/api/razorpay', {
+                  method: 'PUT',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    ...(user?.token ? { Authorization: `Bearer ${user.token}` } : {}),
+                  },
+                  body: JSON.stringify({
+                    razorpay_order_id: response.razorpay_order_id,
+                    razorpay_payment_id: response.razorpay_payment_id,
+                    razorpay_signature: response.razorpay_signature,
+                    items: cartPayload,
+                    expectedRupees: rzpData.expectedRupees,
+                    couponCode: appliedCoupon?.code || null,
+                    freeBookId: appliedCoupon?.freeBookId || null,
+                  }),
+                });
+                const verifyData = await verifyRes.json();
 
-          const rzp = new (window as any).Razorpay(options);
-          rzp.on('payment.failed', function () {
-            window.location.href = '/payment/failed?reason=failed';
-          });
-          rzp.open();
+                if (!verifyData.verified) {
+                  showToast(`❌ ${verifyData.error || 'Payment verification failed.'}`);
+                  window.location.href = '/payment/failed?reason=verify_failed';
+                  releaseOrderLock();
+                  return;
+                }
+
+                showToast('💳 Payment verified!');
+                await processOrderCompletion(
+                  response.razorpay_payment_id,
+                  response.razorpay_order_id,
+                  response.razorpay_signature
+                );
+                releaseOrderLock();
+              },
+              modal: {
+                ondismiss: function () {
+                  releaseOrderLock();
+                  window.location.href = '/payment/failed?reason=dismissed';
+                },
+              },
+            };
+
+            const rzp = new (window as any).Razorpay(options);
+            rzp.on('payment.failed', function () {
+              releaseOrderLock();
+              window.location.href = '/payment/failed?reason=failed';
+            });
+            rzp.open();
+            return;
+          }
+        } catch {
+          showToast('❌ Payment service error. Please try again.');
           return;
         }
-      } catch (err) {
-        showToast('❌ Payment service error. Please try again.');
-        return;
+      } else {
+        await processOrderCompletion();
+      }
+    } finally {
+      if (paymentMethod === 'cod') {
+        releaseOrderLock();
       }
     }
-
-    // COD path
-    await processOrderCompletion();
   };
 
   return (
@@ -740,9 +781,10 @@ export const ModalsBundle = () => {
 
                 <button
                   type="submit"
-                  className="w-full bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-[#001B3A] font-extrabold text-sm py-3.5 rounded-xl shadow-md uppercase tracking-wider mt-4"
+                  disabled={isPlacingOrder || cart.length === 0}
+                  className="w-full bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-[#001B3A] font-extrabold text-sm py-3.5 rounded-xl shadow-md uppercase tracking-wider mt-4 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  CONFIRM & PLACE ORDER (₹{cartGrandTotal})
+                  {isPlacingOrder ? 'PLACING ORDER…' : `CONFIRM & PLACE ORDER (₹${cartGrandTotal})`}
                 </button>
               </form>
             </motion.div>
