@@ -3,6 +3,11 @@
 import React, { useState } from 'react';
 import { Send, Phone, Mail, MapPin, CheckCircle, Clock } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
+import {
+  OFFICE_ADDRESS_LINES,
+  OFFICE_MAPS_EMBED_URL,
+  OFFICE_MAPS_SEARCH_URL,
+} from '@/lib/officeLocation';
 
 export const ContactSection = () => {
   const { showToast, user } = useStore();
@@ -81,11 +86,12 @@ export const ContactSection = () => {
                   <div>
                     <h4 className="font-bold text-white mb-1">Publication & Dispatch Address</h4>
                     <p className="text-slate-400 leading-relaxed text-xs">
-                      BLESSING PATHWAY EDUCATION (OPC) PRIVATE LIMITED<br />
-                      No.12, Ganesh Apartment, Trust Square St, Nammalwarpet, Ayanavaram, Chennai, Tamil Nadu — 600012
+                      {OFFICE_ADDRESS_LINES[0]}
+                      <br />
+                      {OFFICE_ADDRESS_LINES[1]}
                     </p>
                     <a
-                      href="https://www.google.com/maps/search/?api=1&query=No.12+Ganesh+Apartment+Trust+Square+St+Nammalwarpet+Ayanavaram+Chennai+600012"
+                      href={OFFICE_MAPS_SEARCH_URL}
                       target="_blank"
                       rel="noreferrer"
                       className="inline-block mt-2 text-[11px] font-bold text-blue-400 hover:text-amber-400 underline transition-colors"
@@ -99,7 +105,7 @@ export const ContactSection = () => {
                 <div className="rounded-2xl overflow-hidden border border-slate-700 shadow-lg aspect-[16/10] bg-slate-900">
                   <iframe
                     title="Blessing Power Guide — Ayanavaram, Chennai"
-                    src="https://maps.google.com/maps?q=No.12%20Ganesh%20Apartment%20Trust%20Square%20St%20Nammalwarpet%20Ayanavaram%20Chennai%20600012&t=&z=16&ie=UTF8&iwloc=&output=embed"
+                    src={OFFICE_MAPS_EMBED_URL}
                     className="w-full h-full border-0"
                     loading="lazy"
                     referrerPolicy="no-referrer-when-downgrade"

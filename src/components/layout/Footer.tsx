@@ -2,6 +2,11 @@
 
 import React from 'react';
 import { BrandLogo } from '@/components/ui/BrandLogo';
+import {
+  OFFICE_ADDRESS_LINES,
+  OFFICE_COMPANY_NAME,
+  OFFICE_MAPS_SEARCH_URL,
+} from '@/lib/officeLocation';
 
 export const Footer = () => {
   return (
@@ -100,14 +105,14 @@ export const Footer = () => {
           </h4>
           <div className="space-y-2 font-medium text-slate-300">
             <p className="font-bold text-white">
-              BLESSING PATHWAY EDUCATION (OPC) PRIVATE LIMITED
+              {OFFICE_COMPANY_NAME}
             </p>
             <p className="text-slate-400">BLESSING TUITION & TUTORIAL CENTRE</p>
             <p className="text-slate-400 leading-relaxed">
-              No.12, Ganesh Apartment, Trust Square St, Nammalwarpet, Ayanavaram, Chennai, Tamil Nadu — 600012
+              {OFFICE_ADDRESS_LINES[1]}
             </p>
             <a
-              href="https://maps.google.com/?q=No.12+Ganesh+Apartment+Trust+Square+St+Nammalwarpet+Ayanavaram+Chennai+600012"
+              href={OFFICE_MAPS_SEARCH_URL}
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center gap-1 text-[11px] text-blue-400 hover:text-amber-400 font-bold underline transition-colors pt-1"
