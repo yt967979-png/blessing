@@ -38,8 +38,43 @@ export async function register() {
       () => stopLeaderBackgroundServices()
     );
 
+    const sendErrorAlertEmail = async (errorType: string, errorDetails: any) => {
+      try {
+        const adminEmail = process.env.ADMIN_ALERT_EMAIL || process.env.GMAIL_USER || 'blessingpowerguide@gmail.com';
+        const gmailUser = process.env.GMAIL_USER;
+        const gmailPass = (process.env.GMAIL_APP_PASSWORD || '').replace(/\s+/g, '');
+        if (!gmailUser || !gmailPass) return;
+
+        const nodemailer = await import('nodemailer');
+        const transporter = nodemailer.createTransport({
+          host: 'smtp.gmail.com',
+          port: 587,
+          secure: false,
+          auth: { user: gmailUser, pass: gmailPass },
+        });
+
+        await transporter.sendMail({
+          from: `"BLESSING ALERT SYSTEM" <${gmailUser}>`,
+          to: adminEmail,
+          subject: `🚨 ALERT: Server Issue Detected on Blessing Power Guide (${errorType})`,
+          html: `
+            <div style="font-family: Arial, sans-serif; padding: 20px; border: 2px solid #ef4444; border-radius: 8px;">
+              <h2 style="color: #dc2626;">🚨 Server Error Alert</h2>
+              <p>An issue occurred on your website: <strong>${errorType}</strong></p>
+              <pre style="background: #f1f5f9; padding: 15px; border-radius: 5px; font-size: 13px; color: #1e293b; overflow-x: auto;">${String(errorDetails?.stack || errorDetails)}</pre>
+              <p style="font-size: 12px; color: #64748b;">Timestamp: ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</p>
+            </div>
+          `,
+        });
+        console.log(`📧 [ALERT SENT] Error notification email sent to ${adminEmail}`);
+      } catch (alertErr: any) {
+        console.error('[ALERT EMAIL FAILED]', alertErr?.message);
+      }
+    };
+
     process.on('unhandledRejection', (reason) => {
       console.error('[process] unhandledRejection:', reason);
+      void sendErrorAlertEmail('unhandledRejection', reason);
     });
 
     process.on('uncaughtException', (err: any) => {
@@ -48,6 +83,7 @@ export async function register() {
         return;
       }
       console.error('[process] uncaughtException:', err);
+      void sendErrorAlertEmail('uncaughtException', err);
     });
 
     process.on('SIGTERM', () => {
