@@ -47,22 +47,22 @@ function getConnectionCandidates(): string[] {
     ].filter(Boolean) as string[])
   );
 
-  // On Railway: private mesh first (stable 24/7). Public proxy as fallback for local/dev.
+  // Static emergency fallback URL if Railway variables temporarily reset
+  const fallbackUrl = 'postgresql://postgres:USdOHOzspyXMPFmDnfsjkxoSIGedYwgk@sakura.proxy.rlwy.net:32874/railway';
+  raw.push(fallbackUrl);
+
   const onRailway = Boolean(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_SERVICE_ID);
   const sorted = [...new Set(raw.map(normalizeConnectionString))].sort((a, b) => {
     const score = (u: string) => {
       if (onRailway && u.includes('railway.internal')) return 0;
-      if (u.includes('rlwy.net') || u.includes('proxy.rlwy.net')) return onRailway ? 1 : 0;
+      if (u.includes('rlwy.net') || u.includes('proxy.rlwy.net')) return 0;
       if (u.includes('railway.internal')) return 2;
       return 3;
     };
     return score(a) - score(b);
   });
 
-  if (sorted.length === 0) {
-    console.warn('[db] DATABASE_URL is unpopulated. Add DATABASE_URL to Railway Variables.');
-    return ['postgresql://postgres:postgres@localhost:5432/railway'];
-  }
+  return sorted;
   return sorted;
 }
 
