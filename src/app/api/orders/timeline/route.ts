@@ -48,7 +48,33 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: `Unknown status key "${status}". Valid: ${Object.keys(STAGE_META).join(', ')}` }, { status: 400 });
     }
 
+    // Cancel must go through /api/orders/cancel (stock + coupon restore)
+    if (status === 'CANCELLED') {
+      await client.end();
+      return NextResponse.json(
+        { error: 'Use POST /api/orders/cancel to cancel orders (restores stock).' },
+        { status: 400 }
+      );
+    }
+
     await ensureColumns(client);
+
+    const existing = await client.query(
+      `SELECT id, order_status, awb_number FROM orders WHERE id = $1 OR order_number = $1 LIMIT 1`,
+      [orderId]
+    );
+    if (!existing.rows.length) {
+      await client.end();
+      return NextResponse.json({ error: 'Order not found' }, { status: 404 });
+    }
+    const currentStatus = String(existing.rows[0].order_status || '').toLowerCase();
+    if (currentStatus.includes('cancel')) {
+      await client.end();
+      return NextResponse.json(
+        { error: 'Cannot update status or AWB on a cancelled order.' },
+        { status: 409 }
+      );
+    }
 
     const eventId = `TL-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
     const statusLabel = STAGE_META[status].label;

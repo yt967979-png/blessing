@@ -27,7 +27,8 @@ export async function GET(request: NextRequest) {
          u.email AS user_email,
          u.phone AS user_phone,
          o.order_number,
-         o.total_amount
+         o.total_amount,
+         o.order_status
        FROM coupon_redemptions r
        LEFT JOIN coupons c ON c.id = r.coupon_id
        LEFT JOIN users u ON u.id = r.user_id
@@ -48,6 +49,8 @@ export async function GET(request: NextRequest) {
         userPhone: row.user_phone,
         orderId: row.order_number || row.order_id,
         orderTotal: Number(row.total_amount) || 0,
+        orderStatus: row.order_status || null,
+        cancelled: String(row.order_status || '').toLowerCase().includes('cancel'),
       }))
     );
   } catch (err: any) {

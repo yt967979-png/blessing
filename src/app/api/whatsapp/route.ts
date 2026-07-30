@@ -44,7 +44,10 @@ export async function POST(request: Request) {
     let stepTitle = '📚 ORDER CONFIRMED';
     let stepDescription = 'Your study guide order has been received and verified!';
 
-    if (statusClean.includes('DELIVERED')) {
+    if (statusClean.includes('CANCEL')) {
+      stepTitle = '❌ ORDER CANCELLED';
+      stepDescription = 'Your order has been cancelled. Stock is restored — you can place a new order anytime from our website.';
+    } else if (statusClean.includes('DELIVERED')) {
       stepTitle = '🎉 ORDER DELIVERED SUCCESSFULLY';
       stepDescription = 'Your guide books were successfully delivered to your address! Thank you for choosing Blessing Power Guide. Good luck with your studies!';
     } else if (statusClean.includes('OUT_FOR_DELIVERY') || statusClean.includes('OUT FOR DELIVERY')) {

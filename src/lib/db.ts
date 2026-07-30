@@ -841,6 +841,23 @@ async function runSchemaInit(client: any) {
       /* schema already exists or partial — safe to continue */
     }
 
+    // Heal: cancelled orders must not look like collectible COD / paid sales
+    try {
+      await client.query(`
+        UPDATE orders
+        SET payment_status = CASE
+              WHEN COALESCE(payment_method, '') ILIKE '%cod%'
+                THEN 'Cancelled — COD not collectible'
+              ELSE 'Cancelled'
+            END,
+            updated_at = NOW()
+        WHERE COALESCE(order_status, '') ILIKE '%cancel%'
+          AND COALESCE(payment_status, '') NOT ILIKE '%cancel%'
+      `);
+    } catch (_) {
+      /* ignore */
+    }
+
     // Ensure default admin + catalog categories (empty DB or missing seeds)
     await ensureDefaultCategories(client);
     await ensureAdminUser(client);

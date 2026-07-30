@@ -14,18 +14,25 @@ export function generateTaxInvoiceHtml(orderData: {
   trackingNumber?: string;
   courierName?: string;
   paymentStatus?: string;
+  orderStatus?: string;
+  courierStatus?: string;
   createdAt?: string;
 }) {
   const dateStr = orderData.createdAt || new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
   const itemsList = orderData.items && orderData.items.length > 0
     ? orderData.items
     : [{ title: 'Study Guide Book', qty: 1, price: orderData.totalAmount }];
+  const cancelled = String(orderData.orderStatus || orderData.courierStatus || '').toLowerCase().includes('cancel');
 
   const taxable = orderData.totalAmount / 1.05;
   const gst = orderData.totalAmount - taxable;
   const gstinLine = formatGstinLine();
   const legal = getShopLegalName();
   const addrLine = getShopInvoiceAddress();
+  const statusColor = cancelled ? '#991b1b' : '#16a34a';
+  const statusText = cancelled
+    ? 'ORDER CANCELLED'
+    : (orderData.paymentStatus || 'Pending');
 
   return `
 <!DOCTYPE html>
@@ -40,6 +47,7 @@ export function generateTaxInvoiceHtml(orderData: {
     .brand { font-size: 24px; font-weight: 900; color: #001b3a; letter-spacing: 0.5px; }
     .subbrand { font-size: 11px; color: #64748b; font-weight: 700; margin-top: 4px; }
     .invoice-title { font-size: 20px; font-weight: 900; color: #0284c7; text-transform: uppercase; text-align: right; }
+    .cancel-banner { background: #fef2f2; border: 2px solid #991b1b; color: #991b1b; text-align: center; font-weight: 900; padding: 12px; border-radius: 10px; margin-bottom: 20px; letter-spacing: 1px; }
     .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px; font-size: 12px; }
     .box { background: #f8fafc; border: 1px solid #e2e8f0; padding: 16px; border-radius: 12px; }
     .box-title { font-weight: 800; text-transform: uppercase; font-size: 10px; color: #64748b; margin-bottom: 8px; }
@@ -59,6 +67,7 @@ export function generateTaxInvoiceHtml(orderData: {
     <button onclick="window.print()">Print / Save as PDF</button>
   </div>
   <div class="invoice-card">
+    ${cancelled ? '<div class="cancel-banner">ORDER CANCELLED — NOT FOR COLLECTION / SHIPMENT</div>' : ''}
     <div class="header">
       <div style="display:flex;align-items:center;gap:12px;">
         <img src="/logo.png" alt="Blessing Power Guide" width="48" height="48" style="border-radius:12px;" />
@@ -89,10 +98,10 @@ export function generateTaxInvoiceHtml(orderData: {
 
       <div class="box">
         <div class="box-title">Logistics & Payment</div>
-        <div><strong>Courier:</strong> ${orderData.courierName || 'ST Courier Express'}</div>
-        <div><strong>AWB:</strong> ${orderData.trackingNumber || 'Pending'}</div>
+        <div><strong>Courier:</strong> ${cancelled ? 'N/A — Cancelled' : (orderData.courierName || 'ST Courier Express')}</div>
+        <div><strong>AWB:</strong> ${cancelled ? 'N/A' : (orderData.trackingNumber || 'Pending')}</div>
         <div><strong>Payment:</strong> ${orderData.paymentMethod}</div>
-        <div style="margin-top: 6px; color: #16a34a; font-weight: 800;">Status: ${orderData.paymentStatus || 'Pending'}</div>
+        <div style="margin-top: 6px; color: ${statusColor}; font-weight: 800;">Status: ${statusText}</div>
       </div>
     </div>
 

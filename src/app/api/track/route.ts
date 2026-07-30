@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getDbClient, releaseDbClient } from '@/lib/db';
 import { applyRateLimitAsync, clientIp } from '@/lib/serverSecurity';
 import { isOfficialAwb, syncOrderByAwb } from '@/lib/stCourier';
+import { isOrderCancelled } from '@/lib/orderStatus';
 
 const CUSTOMER_STEPS = [
   { key: 'Order Placed', label: 'Order Placed', short: 'Placed' },
@@ -28,6 +29,7 @@ function phonesMatch(input: string, stored: string): boolean {
 
 function stepIndex(status: string): number {
   const s = (status || '').toLowerCase();
+  if (isOrderCancelled(s)) return -1;
   if (s.includes('delivered')) return 5;
   if (s.includes('out for delivery')) return 4;
   if (s.includes('in transit') || s.includes('shipped')) return 3;
@@ -150,9 +152,11 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string) {
 
     releaseDbClient(client);
 
-    // Live refresh from ST Courier when official AWB exists
+    const cancelled = isOrderCancelled(o.order_status);
+
+    // Live refresh from ST Courier when official AWB exists (never for cancelled)
     let live: any = null;
-    if (isOfficialAwb(o.awb_number)) {
+    if (!cancelled && isOfficialAwb(o.awb_number)) {
       try {
         live = await syncOrderByAwb(o.awb_number, { sendWhatsApp: false });
         if (live.updated && live.status) {
@@ -176,15 +180,16 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string) {
       order: {
         orderId: o.order_number || o.id,
         status,
+        cancelled,
         currentStep,
         steps: CUSTOMER_STEPS.map((s, i) => ({
           ...s,
-          done: i <= currentStep,
-          active: i === currentStep,
+          done: cancelled ? false : i <= currentStep,
+          active: cancelled ? false : i === currentStep,
         })),
-        awb,
+        awb: cancelled ? null : awb,
         courierName: o.courier_name || 'ST Courier Express',
-        trackingUrl,
+        trackingUrl: cancelled ? null : trackingUrl,
         paymentStatus: o.payment_status,
         placedAt: o.ordered_at,
         customer: {
@@ -197,9 +202,9 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string) {
           ? o.items.map((it: any) => ({ title: it.title, qty: it.qty }))
           : [],
         timeline,
-        scans,
-        liveSynced: !!(live && live.verified),
-        autoUpdated: !!(live && live.updated),
+        scans: cancelled ? [] : scans,
+        liveSynced: !cancelled && !!(live && live.verified),
+        autoUpdated: !cancelled && !!(live && live.updated),
       },
     });
   } catch (err: any) {

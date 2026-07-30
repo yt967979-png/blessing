@@ -12,7 +12,9 @@ import {
   ExternalLink,
   Phone,
   Clock,
+  X,
 } from 'lucide-react';
+import { isOrderCancelled } from '@/lib/orderStatus';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
@@ -131,17 +133,29 @@ function TrackForm() {
               </p>
             </div>
             <div className="text-right">
-              <span className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold px-3 py-1.5 rounded-full">
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                {order.status}
-              </span>
-              {order.autoUpdated && (
+              {order.cancelled || isOrderCancelled(order.status) ? (
+                <span className="inline-flex items-center gap-1.5 bg-red-50 text-red-800 border border-red-200 text-xs font-bold px-3 py-1.5 rounded-full">
+                  <X className="w-3.5 h-3.5" />
+                  Cancelled
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold px-3 py-1.5 rounded-full">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  {order.status}
+                </span>
+              )}
+              {!order.cancelled && !isOrderCancelled(order.status) && order.autoUpdated && (
                 <p className="text-[10px] text-blue-600 font-semibold mt-1">Just synced from ST Courier</p>
               )}
             </div>
           </div>
 
-          {/* Flipkart-style stepper */}
+          {order.cancelled || isOrderCancelled(order.status) ? (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-5 text-center space-y-1">
+              <p className="font-heading font-black text-red-800 text-sm">Order Cancelled</p>
+              <p className="text-xs text-red-700/80">This order will not be shipped. You can place a new order anytime.</p>
+            </div>
+          ) : (
           <div className="overflow-x-auto pb-2">
             <div className="flex items-start min-w-[520px] gap-0">
               {order.steps?.map((step: any, i: number) => (
@@ -176,10 +190,15 @@ function TrackForm() {
               ))}
             </div>
           </div>
+          )}
 
           <div className="grid sm:grid-cols-2 gap-3 text-xs">
             <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
               <p className="font-bold text-slate-500 uppercase text-[10px] mb-1">Courier</p>
+              {order.cancelled || isOrderCancelled(order.status) ? (
+                <p className="font-extrabold text-red-700">No shipment — order cancelled</p>
+              ) : (
+                <>
               <p className="font-extrabold text-[#001B3A] flex items-center gap-1.5">
                 <Truck className="w-4 h-4 text-blue-600" />
                 {order.courierName}
@@ -197,6 +216,8 @@ function TrackForm() {
                 >
                   Open ST Courier site <ExternalLink className="w-3.5 h-3.5" />
                 </a>
+              )}
+                </>
               )}
             </div>
             <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">

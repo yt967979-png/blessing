@@ -35,8 +35,12 @@ export async function GET(request: NextRequest) {
 
     const res = await client.query(
       `SELECT u.id, u.name, u.email, u.phone, u.status, u.created_at,
-              COUNT(DISTINCT o.id)::int AS order_count,
-              COALESCE(SUM(o.total_amount), 0)::numeric AS total_spent
+              COUNT(DISTINCT o.id) FILTER (
+                WHERE o.id IS NOT NULL AND COALESCE(o.order_status, '') NOT ILIKE '%cancel%'
+              )::int AS order_count,
+              COALESCE(SUM(o.total_amount) FILTER (
+                WHERE COALESCE(o.order_status, '') NOT ILIKE '%cancel%'
+              ), 0)::numeric AS total_spent
        FROM users u
        LEFT JOIN orders o ON o.user_id = u.id
        WHERE COALESCE(u.role, 'customer') != 'admin'

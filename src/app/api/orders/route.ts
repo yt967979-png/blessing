@@ -44,8 +44,10 @@ function mapOrderRow(o: any) {
     state: addrObj.state || 'Tamil Nadu',
     totalAmount: Number(o.total_amount || 0),
     paymentMethod: o.payment_method || 'Razorpay',
-    paymentStatus: o.payment_status || 'Payment Confirmed',
+    paymentStatus: o.payment_status || 'Pending',
     courierStatus: o.order_status || 'Order Placed',
+    orderStatus: o.order_status || 'Order Placed',
+    isCancelled: String(o.order_status || '').toLowerCase().includes('cancel'),
     shipmentId: o.shipment_id || `SHP-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-000101`,
     trackingNumber: awb,
     isOfficialAwb,
@@ -451,7 +453,28 @@ export async function PATCH(request: NextRequest) {
 
     client = await getDbClient();
 
+    const existing = await client.query(
+      `SELECT order_status FROM orders WHERE order_number = $1 OR id = $1 LIMIT 1`,
+      [orderId]
+    );
+    if (!existing.rows.length) {
+      return NextResponse.json({ error: 'Order not found' }, { status: 404 });
+    }
+    const currentStatus = String(existing.rows[0].order_status || '').toLowerCase();
+    if (currentStatus.includes('cancel')) {
+      return NextResponse.json(
+        { error: 'Cannot update status or AWB on a cancelled order.' },
+        { status: 409 }
+      );
+    }
+
     const newStatus = status || 'Handed to ST Courier';
+    if (String(newStatus).toLowerCase().includes('cancel')) {
+      return NextResponse.json(
+        { error: 'Use POST /api/orders/cancel to cancel (restores stock + coupon).' },
+        { status: 400 }
+      );
+    }
     const isOfficial = awbNumber && (awbNumber.startsWith('STC') || !awbNumber.startsWith('SHP-'));
     const trackingUrl = isOfficial ? `https://stcourier.com/track/shipment?docket=${awbNumber}` : 'https://stcourier.com';
 

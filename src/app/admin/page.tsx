@@ -325,7 +325,13 @@ export default function AdminPage() {
     });
   }, [orders, filterStatus, filterPayment, orderSearch, filterDateFrom, filterDateTo]);
 
-  const totalRevenue = orders.reduce((s, o) => s + Number(o.totalAmount || 0), 0);
+  const totalRevenue = orders.reduce((s, o) => {
+    if ((o.courierStatus || '').toLowerCase().includes('cancel')) return s;
+    return s + Number(o.totalAmount || 0);
+  }, 0);
+  const activeOrderCount = orders.filter(
+    (o) => !(o.courierStatus || '').toLowerCase().includes('cancel')
+  ).length;
   const uniqueStatuses = useMemo(() => ['all', ...Array.from(new Set(orders.map((o) => o.courierStatus).filter(Boolean)))], [orders]);
 
   // ── Catalog handlers
@@ -391,6 +397,11 @@ export default function AdminPage() {
 
   // ── Dispatch + auto ST Courier sync
   const handleDispatch = async (orderId: string) => {
+    const order = orders.find((x) => x.orderId === orderId);
+    if ((order?.courierStatus || '').toLowerCase().includes('cancel')) {
+      showToast('❌ Cannot add AWB — order is cancelled');
+      return;
+    }
     const awb = (shiprocketAwbInput[orderId] ?? '').trim();
     if (!awb) { alert('Enter ST Courier docket number first.'); return; }
     setDispatchingOrderIds((p) => ({ ...p, [orderId]: true }));
@@ -437,7 +448,12 @@ export default function AdminPage() {
   // ── WhatsApp
   const handleResendWhatsApp = async (o: Order) => {
     if (!o.customerPhone) { showToast('❌ No customer phone on this order'); return; }
-    showToast('📲 Sending WhatsApp from linked admin number...');
+    if ((o.courierStatus || '').toLowerCase().includes('cancel')) {
+      // Only send cancel confirmation — never "order confirmed"
+      showToast('📲 Sending cancel confirmation…');
+    } else {
+      showToast('📲 Sending WhatsApp from linked admin number...');
+    }
     try {
       const r = await fetch('/api/whatsapp', {
         method: 'POST',
@@ -492,6 +508,7 @@ export default function AdminPage() {
         }
         showToast(`✅ Order ${o.orderId} cancelled`);
         loadLiveOrders();
+        void loadAnalytics();
       } catch {
         showToast('❌ Cancel failed');
       } finally {
@@ -535,7 +552,11 @@ export default function AdminPage() {
     }
   };
   const handlePrintLabel = (o: Order) => {
+    if ((o.courierStatus || '').toLowerCase().includes('cancel')) {
+      if (!confirm(`Order ${o.orderId} is CANCELLED.\nPrint label with CANCELLED watermark anyway?`)) return;
+    }
     const pw = window.open('', '_blank', 'width=800,height=1000'); if (!pw) return;
+    const isCancelled = (o.courierStatus || '').toLowerCase().includes('cancel');
     const isCod = (o.paymentMethod || '').toLowerCase().includes('cod');
     const orderDate = o.createdAt ? new Date(o.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
     const hasOfficialAwb = Boolean(o.trackingNumber && !o.trackingNumber.startsWith('SHP-'));
@@ -664,6 +685,7 @@ export default function AdminPage() {
 </head><body>
 
 <div class="label-container">
+  ${isCancelled ? `<div style="background:#991b1b;color:#fff;text-align:center;padding:10px;font-size:14px;font-weight:900;letter-spacing:2px;">⚠ CANCELLED — DO NOT SHIP</div>` : ''}
   <!-- Top Banner -->
   <div class="top-banner">
     <div class="brand-left">
@@ -727,8 +749,8 @@ export default function AdminPage() {
 
   <!-- Payment Bar -->
   <div class="payment-bar">
-    <div class="${isCod ? 'badge-cod' : 'badge-prepaid'}">
-      ${isCod ? '₹ COLLECT ON DELIVERY' : '✓ PREPAID — DO NOT COLLECT'}
+    <div class="${isCancelled ? 'badge-cod' : isCod ? 'badge-cod' : 'badge-prepaid'}" style="${isCancelled ? 'background:#fef2f2;border-color:#991b1b;color:#991b1b;' : ''}">
+      ${isCancelled ? '🚫 CANCELLED — DO NOT COLLECT / DO NOT SHIP' : isCod ? '₹ COLLECT ON DELIVERY' : '✓ PREPAID — DO NOT COLLECT'}
     </div>
     <div class="total-amount-display">₹${totalAmount.toLocaleString('en-IN')}</div>
   </div>
@@ -921,7 +943,7 @@ export default function AdminPage() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {[
             { label: 'Total Revenue', value: fmt(analytics?.summary.totalRevenue ?? totalRevenue), icon: IndianRupee, color: 'text-green-600', bg: 'bg-green-50', sub: analytics ? `₹${analytics.summary.todayRevenue.toLocaleString('en-IN')} today` : '' },
-            { label: 'Total Orders', value: analytics?.summary.totalOrders ?? orders.length, icon: ShoppingCart, color: 'text-blue-600', bg: 'bg-blue-50', sub: analytics ? `${analytics.summary.todayOrders} today` : '' },
+            { label: 'Total Orders', value: analytics?.summary.totalOrders ?? activeOrderCount, icon: ShoppingCart, color: 'text-blue-600', bg: 'bg-blue-50', sub: analytics ? `${analytics.summary.todayOrders} today` : '' },
             { label: 'Products', value: products.length, icon: Box, color: 'text-orange-600', bg: 'bg-orange-50', sub: `${dbStats.books} in DB` },
             { label: 'Customers', value: dbStats.users, icon: Users, color: 'text-purple-600', bg: 'bg-purple-50', sub: analytics ? `Avg order ${fmt(analytics.summary.avgOrderValue)}` : '' },
           ].map((s) => (
@@ -1055,8 +1077,9 @@ export default function AdminPage() {
                         {analytics.orderStatuses.map((s) => {
                           const total = analytics.orderStatuses.reduce((sum, x) => sum + x.count, 0);
                           const isDelivered = s.status.toLowerCase().includes('deliver');
+                          const isCancelledStatus = s.status.toLowerCase().includes('cancel');
                           const isInTransit = s.status.toLowerCase().includes('transit') || s.status.toLowerCase().includes('courier');
-                          const col = isDelivered ? 'bg-green-500' : isInTransit ? 'bg-blue-500' : 'bg-amber-400';
+                          const col = isCancelledStatus ? 'bg-red-500' : isDelivered ? 'bg-green-500' : isInTransit ? 'bg-blue-500' : 'bg-amber-400';
                           return (
                             <div key={s.status}>
                               <div className="flex items-center justify-between text-xs mb-1">
@@ -1232,11 +1255,12 @@ export default function AdminPage() {
               <div className="space-y-3">
                 {filteredOrders.map((o) => {
                   const allSteps = ['Order Placed', 'Payment Confirmed', 'Preparing Order', 'Packed', 'Handed to ST Courier', 'In Transit', 'Out for Delivery', 'Delivered'];
-                  const stepIdx = Math.max(0, allSteps.findIndex((s) => s.toLowerCase() === (o.courierStatus || '').toLowerCase()));
+                  const isCancelled = (o.courierStatus || '').toLowerCase().includes('cancel');
+                  const stepIdx = isCancelled ? -1 : Math.max(0, allSteps.findIndex((s) => s.toLowerCase() === (o.courierStatus || '').toLowerCase()));
                   const isCod = (o.paymentMethod || '').toLowerCase().includes('cod');
-                  const isDelivered = stepIdx >= 7;
+                  const isDelivered = !isCancelled && stepIdx >= 7;
                   return (
-                    <div key={o.orderId} className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-sm transition-shadow">
+                    <div key={o.orderId} className={`bg-white rounded-xl border overflow-hidden hover:shadow-sm transition-shadow ${isCancelled ? 'border-red-200' : 'border-gray-200'}`}>
                       {/* Order header */}
                       <div className="px-4 py-3 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                         <div className="flex items-center gap-2.5 flex-wrap">
@@ -1244,7 +1268,8 @@ export default function AdminPage() {
                           <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase ${isCod ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-green-50 text-green-700 border border-green-200'}`}>
                             {isCod ? 'COD' : 'PAID'} • {fmt(o.totalAmount)}
                           </span>
-                          {o.isOfficialAwb && <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-50 text-blue-600 border border-blue-200">AUTO-TRACKED</span>}
+                          {isCancelled && <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-red-50 text-red-700 border border-red-200">CANCELLED</span>}
+                          {!isCancelled && o.isOfficialAwb && <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-50 text-blue-600 border border-blue-200">AUTO-TRACKED</span>}
                           {isDelivered && <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-green-50 text-green-700 border border-green-200 flex items-center gap-1"><CheckCircle2 className="w-2.5 h-2.5" />DELIVERED</span>}
                         </div>
                         <div className="flex items-center gap-1.5 text-xs text-gray-400"><Clock className="w-3 h-3" /><span>{o.createdAt}</span></div>
@@ -1278,11 +1303,15 @@ export default function AdminPage() {
                         </div>
 
                         {/* Progress bar */}
-                        <div className="bg-[#f8f9fa] rounded-lg p-3">
+                        <div className={`rounded-lg p-3 ${isCancelled ? 'bg-red-50' : 'bg-[#f8f9fa]'}`}>
                           <div className="flex items-center justify-between mb-2">
-                            <span className="text-[11px] font-semibold text-gray-500">Delivery Progress</span>
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${isDelivered ? 'bg-green-50 text-green-700' : stepIdx >= 4 ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700'}`}>{o.courierStatus || 'Order Placed'}</span>
+                            <span className="text-[11px] font-semibold text-gray-500">{isCancelled ? 'Order status' : 'Delivery Progress'}</span>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${isCancelled ? 'bg-red-100 text-red-700' : isDelivered ? 'bg-green-50 text-green-700' : stepIdx >= 4 ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700'}`}>{isCancelled ? 'Cancelled' : (o.courierStatus || 'Order Placed')}</span>
                           </div>
+                          {isCancelled ? (
+                            <p className="text-[11px] text-red-700 font-medium">Cancelled — AWB / dispatch locked. Revenue not counted.</p>
+                          ) : (
+                          <>
                           <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
                             <div className={`h-full rounded-full transition-all duration-500 ${isDelivered ? 'bg-green-500' : 'bg-[#2874f0]'}`} style={{ width: `${((stepIdx + 1) / allSteps.length) * 100}%` }} />
                           </div>
@@ -1294,6 +1323,8 @@ export default function AdminPage() {
                               </div>
                             ))}
                           </div>
+                          </>
+                          )}
                         </div>
 
                         {/* Status steps — each sends WhatsApp from linked admin number */}
@@ -1327,18 +1358,25 @@ export default function AdminPage() {
                           </div>
                         </div>
 
-                        {/* Dispatch */}
-                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-[#f8f9fa] rounded-lg p-3">
-                          <div className="flex items-center gap-2 text-xs text-gray-500 shrink-0"><Truck className="w-4 h-4 text-gray-400" /><span className="font-medium">AWB:</span></div>
-                          <input type="text" placeholder="ST Courier Docket e.g. STC241568974"
-                            value={shiprocketAwbInput[o.orderId] !== undefined ? shiprocketAwbInput[o.orderId] : (o.trackingNumber && !o.trackingNumber.startsWith('SHP-') ? o.trackingNumber : '')}
-                            onChange={(e) => setShiprocketAwbInput((p) => ({ ...p, [o.orderId]: e.target.value }))}
-                            className="flex-1 px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-mono uppercase placeholder:normal-case placeholder:text-gray-300 outline-none focus:border-[#2874f0] focus:ring-1 focus:ring-[#2874f0]/20 transition-all" />
-                          <button disabled={!!dispatchingOrderIds[o.orderId]} onClick={() => handleDispatch(o.orderId)}
-                            className="px-4 py-2 text-xs font-semibold text-white bg-[#2874f0] hover:bg-[#1a5dc8] disabled:bg-gray-300 disabled:cursor-not-allowed rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0">
-                            {dispatchingOrderIds[o.orderId] ? <><span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />Verifying...</> : <><Send className="w-3 h-3" />Dispatch</>}
-                          </button>
-                        </div>
+                        {/* Dispatch — disabled after cancel */}
+                        {(o.courierStatus || '').toLowerCase().includes('cancel') ? (
+                          <div className="flex items-center gap-2 bg-red-50 border border-red-100 rounded-lg px-3 py-2.5 text-xs text-red-700">
+                            <Truck className="w-4 h-4 shrink-0 opacity-60" />
+                            <span className="font-medium">AWB / Dispatch locked — order cancelled</span>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-[#f8f9fa] rounded-lg p-3">
+                            <div className="flex items-center gap-2 text-xs text-gray-500 shrink-0"><Truck className="w-4 h-4 text-gray-400" /><span className="font-medium">AWB:</span></div>
+                            <input type="text" placeholder="ST Courier Docket e.g. STC241568974"
+                              value={shiprocketAwbInput[o.orderId] !== undefined ? shiprocketAwbInput[o.orderId] : (o.trackingNumber && !o.trackingNumber.startsWith('SHP-') ? o.trackingNumber : '')}
+                              onChange={(e) => setShiprocketAwbInput((p) => ({ ...p, [o.orderId]: e.target.value }))}
+                              className="flex-1 px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-mono uppercase placeholder:normal-case placeholder:text-gray-300 outline-none focus:border-[#2874f0] focus:ring-1 focus:ring-[#2874f0]/20 transition-all" />
+                            <button disabled={!!dispatchingOrderIds[o.orderId]} onClick={() => handleDispatch(o.orderId)}
+                              className="px-4 py-2 text-xs font-semibold text-white bg-[#2874f0] hover:bg-[#1a5dc8] disabled:bg-gray-300 disabled:cursor-not-allowed rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0">
+                              {dispatchingOrderIds[o.orderId] ? <><span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />Verifying...</> : <><Send className="w-3 h-3" />Dispatch</>}
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   );

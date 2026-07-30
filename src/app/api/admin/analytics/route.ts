@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { getDbClient, releaseDbClient } from '@/lib/db';
 import { verifyAdminRequest, forbiddenResponse } from '@/lib/serverSecurity';
 
+/** Active (non-cancelled) orders only — cancelled sales do not count toward revenue. */
+const ACTIVE = `COALESCE(order_status, '') NOT ILIKE '%cancel%'`;
+
 export async function GET(request: Request) {
   const auth = await verifyAdminRequest(request);
   if (!auth.isAdmin) return forbiddenResponse(auth.error);
@@ -19,16 +22,16 @@ export async function GET(request: Request) {
   try {
     const days = Math.min(Math.max(Number(range) || 30, 1), 365);
 
-    // 1. Overall summary
+    // 1. Overall summary — exclude cancelled from revenue & order totals
     const summaryRes = await client.query(`
       SELECT
-        COUNT(*)::int                                        AS total_orders,
-        COALESCE(SUM(total_amount), 0)::numeric              AS total_revenue,
-        COALESCE(AVG(total_amount), 0)::numeric              AS avg_order_value,
-        COUNT(*) FILTER (WHERE payment_status ILIKE '%confirm%' OR payment_status ILIKE '%paid%')::int AS paid_orders,
-        COUNT(*) FILTER (WHERE payment_method ILIKE '%cod%')::int   AS cod_orders,
-        COUNT(*) FILTER (WHERE ordered_at >= NOW() - INTERVAL '1 day')::int   AS today_orders,
-        COALESCE(SUM(total_amount) FILTER (WHERE ordered_at >= NOW() - INTERVAL '1 day'), 0)::numeric AS today_revenue
+        COUNT(*) FILTER (WHERE ${ACTIVE})::int                                        AS total_orders,
+        COALESCE(SUM(total_amount) FILTER (WHERE ${ACTIVE}), 0)::numeric              AS total_revenue,
+        COALESCE(AVG(total_amount) FILTER (WHERE ${ACTIVE}), 0)::numeric              AS avg_order_value,
+        COUNT(*) FILTER (WHERE ${ACTIVE} AND (payment_status ILIKE '%confirm%' OR payment_status ILIKE '%paid%'))::int AS paid_orders,
+        COUNT(*) FILTER (WHERE ${ACTIVE} AND payment_method ILIKE '%cod%')::int   AS cod_orders,
+        COUNT(*) FILTER (WHERE ${ACTIVE} AND ordered_at >= NOW() - INTERVAL '1 day')::int   AS today_orders,
+        COALESCE(SUM(total_amount) FILTER (WHERE ${ACTIVE} AND ordered_at >= NOW() - INTERVAL '1 day'), 0)::numeric AS today_revenue
       FROM orders
     `);
 
@@ -42,6 +45,7 @@ export async function GET(request: Request) {
         COALESCE(SUM(total_amount) FILTER (WHERE payment_method ILIKE '%cod%'), 0)::numeric     AS cod_revenue
       FROM orders
       WHERE ordered_at >= NOW() - ($1 || ' days')::INTERVAL
+        AND ${ACTIVE}
       GROUP BY day
       ORDER BY day ASC
     `, [days]);
@@ -53,16 +57,17 @@ export async function GET(request: Request) {
         COUNT(*)::int                           AS count,
         COALESCE(SUM(total_amount), 0)::numeric AS revenue
       FROM orders
+      WHERE ${ACTIVE}
       GROUP BY payment_method
       ORDER BY revenue DESC
     `);
 
-    // 4. Order status breakdown
+    // 4. Order status breakdown (include cancelled for visibility; revenue 0 for cancelled)
     const statusRes = await client.query(`
       SELECT
         order_status                            AS status,
         COUNT(*)::int                           AS count,
-        COALESCE(SUM(total_amount), 0)::numeric AS revenue
+        COALESCE(SUM(CASE WHEN ${ACTIVE} THEN total_amount ELSE 0 END), 0)::numeric AS revenue
       FROM orders
       GROUP BY order_status
       ORDER BY count DESC
@@ -75,6 +80,7 @@ export async function GET(request: Request) {
         COUNT(*)::int                           AS count,
         COALESCE(SUM(total_amount), 0)::numeric AS revenue
       FROM orders
+      WHERE ${ACTIVE}
       GROUP BY payment_status
       ORDER BY count DESC
     `);
@@ -88,6 +94,7 @@ export async function GET(request: Request) {
         COUNT(DISTINCT oi.order_id)::int         AS order_count
       FROM order_items oi
       JOIN orders o ON oi.order_id = o.id
+      WHERE COALESCE(o.order_status, '') NOT ILIKE '%cancel%'
       GROUP BY oi.book_title
       ORDER BY total_qty DESC
       LIMIT 10
@@ -100,6 +107,7 @@ export async function GET(request: Request) {
         COUNT(*)::int AS orders
       FROM orders
       WHERE ordered_at >= NOW() - INTERVAL '7 days'
+        AND ${ACTIVE}
       GROUP BY hour
       ORDER BY hour ASC
     `);
@@ -112,6 +120,7 @@ export async function GET(request: Request) {
         COALESCE(SUM(total_amount), 0)::numeric     AS revenue
       FROM orders
       WHERE ordered_at >= NOW() - INTERVAL '6 months'
+        AND ${ACTIVE}
       GROUP BY DATE_TRUNC('month', ordered_at AT TIME ZONE 'Asia/Kolkata')
       ORDER BY DATE_TRUNC('month', ordered_at AT TIME ZONE 'Asia/Kolkata') ASC
     `);

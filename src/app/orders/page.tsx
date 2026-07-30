@@ -59,6 +59,8 @@ function OrdersContent() {
     { key: 'Delivered', label: 'Delivered', desc: 'Successfully delivered to student' },
   ];
 
+  const isCancelledStatus = (status: string) => (status || '').toLowerCase().includes('cancel');
+
   const getCurrentStepIndex = (status: string) => {
     const s = (status || '').toLowerCase();
     if (s.includes('cancel')) return -1;
@@ -266,9 +268,14 @@ function OrdersContent() {
     }
   };
 
-  const currentStepIdx = searchedOrderData ? getCurrentStepIndex(searchedOrderData.courierStatus) : 0;
+  const currentStepIdx = searchedOrderData ? getCurrentStepIndex(searchedOrderData.courierStatus || searchedOrderData.status) : 0;
+  const orderIsCancelled = searchedOrderData
+    ? isCancelledStatus(searchedOrderData.courierStatus || searchedOrderData.status || '')
+    : false;
   const isOfficialAwb = searchedOrderData?.trackingNumber && (searchedOrderData.trackingNumber.startsWith('STC') || !searchedOrderData.trackingNumber.startsWith('SHP-'));
-  const progressPercent = Math.min(100, Math.max(12, ((currentStepIdx + 1) / 8) * 100));
+  const progressPercent = orderIsCancelled
+    ? 0
+    : Math.min(100, Math.max(12, ((currentStepIdx + 1) / 8) * 100));
 
   if (!user) {
     return (
@@ -362,11 +369,20 @@ function OrdersContent() {
               </div>
 
               <div>
-                <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider block">ESTIMATED DELIVERY</span>
-                <span className="font-extrabold text-emerald-700 text-sm flex items-center gap-1.5 bg-emerald-50 border border-emerald-200/80 px-3 py-1 rounded-xl">
-                  <Truck className="w-4 h-4 text-emerald-600" />
-                  <span>Arriving by {getSTCourierDeliveryEstimate(searchedOrderData?.shippingAddress?.city).formattedDate} before 11 PM</span>
+                <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider block">
+                  {orderIsCancelled ? 'ORDER STATUS' : 'ESTIMATED DELIVERY'}
                 </span>
+                {orderIsCancelled ? (
+                  <span className="font-extrabold text-red-700 text-sm flex items-center gap-1.5 bg-red-50 border border-red-200 px-3 py-1 rounded-xl">
+                    <X className="w-4 h-4" />
+                    <span>Cancelled</span>
+                  </span>
+                ) : (
+                  <span className="font-extrabold text-emerald-700 text-sm flex items-center gap-1.5 bg-emerald-50 border border-emerald-200/80 px-3 py-1 rounded-xl">
+                    <Truck className="w-4 h-4 text-emerald-600" />
+                    <span>Arriving by {getSTCourierDeliveryEstimate(searchedOrderData?.shippingAddress?.city).formattedDate} before 11 PM</span>
+                  </span>
+                )}
               </div>
 
               <div>
@@ -395,6 +411,17 @@ function OrdersContent() {
             </div>
 
             {/* Amazon / Flipkart Horizontal Connected Stepper Line */}
+            {orderIsCancelled ? (
+              <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-6 text-center space-y-2">
+                <div className="w-12 h-12 rounded-full bg-red-100 border border-red-200 text-red-600 flex items-center justify-center mx-auto">
+                  <X className="w-6 h-6" />
+                </div>
+                <h3 className="font-heading font-black text-lg text-red-800">Order Cancelled</h3>
+                <p className="text-xs text-red-700/80 max-w-md mx-auto">
+                  This order is cancelled. Stock is restored — you can place a new order anytime from the shop.
+                </p>
+              </div>
+            ) : (
             <div className="pt-2 pb-4">
               <div className="relative">
                 {/* Background Line */}
@@ -446,24 +473,45 @@ function OrdersContent() {
                 </div>
               </div>
             </div>
+            )}
 
             {/* 2. Realtime Current Situation & Location Card */}
-            <div className="bg-gradient-to-br from-slate-900 via-[#001B3A] to-slate-900 rounded-3xl p-6 text-white space-y-4 shadow-xl border border-slate-800">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-4">
+            <div className={`rounded-3xl p-6 text-white space-y-4 shadow-xl border ${
+              orderIsCancelled
+                ? 'bg-gradient-to-br from-red-950 via-red-900 to-slate-900 border-red-800'
+                : 'bg-gradient-to-br from-slate-900 via-[#001B3A] to-slate-900 border-slate-800'
+            }`}>
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-2xl bg-amber-400/20 border border-amber-400/30 flex items-center justify-center text-amber-400">
-                    <MapPin className="w-5 h-5 animate-bounce" />
+                  <div className={`w-10 h-10 rounded-2xl flex items-center justify-center ${
+                    orderIsCancelled
+                      ? 'bg-red-400/20 border border-red-400/30 text-red-300'
+                      : 'bg-amber-400/20 border border-amber-400/30 text-amber-400'
+                  }`}>
+                    {orderIsCancelled ? <X className="w-5 h-5" /> : <MapPin className="w-5 h-5 animate-bounce" />}
                   </div>
                   <div>
-                    <span className="text-[10px] font-extrabold text-amber-400 uppercase tracking-widest block">CURRENT PACKAGE SITUATION</span>
-                    <h3 className="font-heading font-black text-lg text-white">{searchedOrderData.courierStatus || 'Order Placed'}</h3>
+                    <span className={`text-[10px] font-extrabold uppercase tracking-widest block ${
+                      orderIsCancelled ? 'text-red-300' : 'text-amber-400'
+                    }`}>
+                      {orderIsCancelled ? 'ORDER STATUS' : 'CURRENT PACKAGE SITUATION'}
+                    </span>
+                    <h3 className="font-heading font-black text-lg text-white">
+                      {orderIsCancelled ? 'Cancelled' : (searchedOrderData.courierStatus || 'Order Placed')}
+                    </h3>
                   </div>
                 </div>
 
-                <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-extrabold text-xs px-3.5 py-1.5 rounded-full flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                  <span>LIVE DATABASE TRACKING ACTIVE</span>
-                </span>
+                {orderIsCancelled ? (
+                  <span className="bg-red-500/20 text-red-200 border border-red-500/30 font-extrabold text-xs px-3.5 py-1.5 rounded-full">
+                    CANCELLED — NO FURTHER SHIPPING
+                  </span>
+                ) : (
+                  <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-extrabold text-xs px-3.5 py-1.5 rounded-full flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                    <span>LIVE DATABASE TRACKING ACTIVE</span>
+                  </span>
+                )}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
@@ -498,12 +546,21 @@ function OrdersContent() {
               {/* Direct Actions Banner */}
               <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3">
                 <div className="text-xs text-slate-300 flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                  <span>Free WhatsApp notification sent to <strong>+91 {searchedOrderData.customerPhone}</strong></span>
+                  {orderIsCancelled ? (
+                    <>
+                      <AlertCircle className="w-4 h-4 text-red-300" />
+                      <span>This order was cancelled. No shipment will be sent.</span>
+                    </>
+                  ) : (
+                    <>
+                      <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                      <span>Free WhatsApp notification sent to <strong>+91 {searchedOrderData.customerPhone}</strong></span>
+                    </>
+                  )}
                 </div>
 
                 <div className="flex gap-2 w-full sm:w-auto">
-                  {isOfficialAwb ? (
+                  {!orderIsCancelled && (isOfficialAwb ? (
                     <a
                       href={searchedOrderData.trackingUrl || `https://stcourier.com/track/shipment?docket=${searchedOrderData.trackingNumber}`}
                       target="_blank"
@@ -521,7 +578,7 @@ function OrdersContent() {
                       <Send className="w-4 h-4 text-amber-400" />
                       <span>VIEW TIMELINE</span>
                     </button>
-                  )}
+                  ))}
 
                   <a
                     href={`https://wa.me/919842100000?text=${encodeURIComponent(`Hi Blessing Power Guide! I need help with my order #${searchedOrderData.orderId || ''}. My name is ${searchedOrderData.customerName || 'Student'}.`)}`}
@@ -537,6 +594,7 @@ function OrdersContent() {
             </div>
 
             {/* 3. Detailed 8-Stage Progress Checklist */}
+            {!orderIsCancelled && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="font-heading font-black text-sm text-[#001B3A] flex items-center gap-2">
@@ -569,6 +627,7 @@ function OrdersContent() {
                 })}
               </div>
             </div>
+            )}
 
             {/* Shipment Hub & Address Grid */}
             <div className="grid grid-cols-1 md:grid-cols-12 gap-6 pt-4">
@@ -696,16 +755,22 @@ function OrdersContent() {
                 No orders in this tab.
               </div>
             ) : null}
-            {filteredOrders.map((ord: any) => (
+            {filteredOrders.map((ord: any) => {
+              const listCancelled = isCancelledStatus(ord.courierStatus || ord.status || '');
+              return (
               <div
                 key={ord.orderId}
                 onClick={() => setSearchedOrderData(ord)}
-                className="bg-white border border-slate-200 hover:border-amber-400 rounded-3xl p-6 shadow-sm hover:shadow-md transition-all cursor-pointer space-y-4 group"
+                className={`bg-white border hover:border-amber-400 rounded-3xl p-6 shadow-sm hover:shadow-md transition-all cursor-pointer space-y-4 group ${
+                  listCancelled ? 'border-red-200' : 'border-slate-200'
+                }`}
               >
                 <div className="flex flex-wrap justify-between items-center gap-3 text-xs pb-3 border-b border-slate-100">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-2xl bg-[#001B3A] text-amber-400 flex items-center justify-center font-black text-sm shadow-sm group-hover:scale-105 transition-transform">
-                      📦
+                    <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-black text-sm shadow-sm group-hover:scale-105 transition-transform ${
+                      listCancelled ? 'bg-red-100 text-red-600' : 'bg-[#001B3A] text-amber-400'
+                    }`}>
+                      {listCancelled ? <X className="w-5 h-5" /> : '📦'}
                     </div>
                     <div>
                       <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider block">ORDER ID</span>
@@ -723,9 +788,17 @@ function OrdersContent() {
                     <span className="font-black text-slate-900 text-sm">₹{ord.totalAmount}</span>
                   </div>
 
-                  <span className="bg-emerald-50 text-emerald-700 font-black text-xs px-3.5 py-1.5 rounded-full border border-emerald-200 flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                    <span>{ord.courierStatus || 'Order Placed'}</span>
+                  <span className={`font-black text-xs px-3.5 py-1.5 rounded-full border flex items-center gap-1.5 ${
+                    listCancelled
+                      ? 'bg-red-50 text-red-700 border-red-200'
+                      : (ord.courierStatus || '').toLowerCase().includes('delivered')
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        : 'bg-blue-50 text-blue-700 border-blue-200'
+                  }`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${
+                      listCancelled ? 'bg-red-500' : (ord.courierStatus || '').toLowerCase().includes('delivered') ? 'bg-emerald-500' : 'bg-blue-500'
+                    }`} />
+                    <span>{listCancelled ? 'Cancelled' : (ord.courierStatus || 'Order Placed')}</span>
                   </span>
                 </div>
 
@@ -767,15 +840,18 @@ function OrdersContent() {
                         e.stopPropagation();
                         setSearchedOrderData(ord);
                       }}
-                      className="bg-[#001B3A] hover:bg-blue-600 text-white font-extrabold text-xs px-5 py-2.5 rounded-xl shadow-xs transition-all flex items-center gap-2 cursor-pointer"
+                      className={`font-extrabold text-xs px-5 py-2.5 rounded-xl shadow-xs transition-all flex items-center gap-2 cursor-pointer text-white ${
+                        listCancelled ? 'bg-red-700 hover:bg-red-800' : 'bg-[#001B3A] hover:bg-blue-600'
+                      }`}
                     >
-                      <Truck className="w-4 h-4 text-amber-400" />
-                      <span>TRACK →</span>
+                      {listCancelled ? <X className="w-4 h-4" /> : <Truck className="w-4 h-4 text-amber-400" />}
+                      <span>{listCancelled ? 'VIEW →' : 'TRACK →'}</span>
                     </button>
                   </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       ) : (

@@ -1,0 +1,24 @@
+---
+description: Cross-cutting changes must update every related surface (admin, API, customer UI, DB)
+alwaysApply: true
+---
+
+# Update every place a change affects
+
+When changing behavior (orders, cancel, status, payment, AWB, revenue, auth, checkout, WhatsApp, coupons, stock, etc.), **do not stop at one file**. Trace and update **all** related layers in the same pass.
+
+## Checklist before finishing
+
+1. **API / DB** — write path, read path, analytics, guards, heal/migrate if old rows exist
+2. **Admin UI** — badges, actions, labels, locked states, KPIs
+3. **Customer UI** — `/orders`, `/profile`, `/track`, checkout, invoices
+4. **Side effects** — WhatsApp copy, stock, coupons, courier sync, cron
+5. **Shared helpers** — prefer one helper (e.g. `isOrderCancelled`) over copy-paste status checks
+
+## Example (cancel)
+
+Cancel is not only `order_status = Cancelled`. It also needs: revenue exclude, AWB lock, payment_status, stock restore, coupon rollback, admin + customer + track UI, WhatsApp cancel template, invoice/label watermark, block soft-cancel via PATCH/timeline.
+
+## Rule of thumb
+
+If the user could open another page and still see the **old** behavior, the change is incomplete. Search the repo for the status/field/feature name and close every hit that still assumes the previous behavior.

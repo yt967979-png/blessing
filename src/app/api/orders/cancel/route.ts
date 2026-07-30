@@ -9,12 +9,13 @@ import {
   clientIp,
 } from '@/lib/serverSecurity';
 import { broadcastOrderChange, notifyOrderChanged } from '@/app/api/orders/stream/route';
+import { paymentStatusAfterCancel } from '@/lib/orderStatus';
 
 const BLOCKED_AFTER = ['handed to st courier', 'in transit', 'out for delivery', 'delivered', 'cancelled'];
 
 /**
  * Cancel order — admin anytime (before delivered), customer only before packed/shipped.
- * Restores stock and notifies via WhatsApp.
+ * Restores stock, rolls back coupon usage, updates payment_status, notifies via WhatsApp.
  */
 export async function POST(request: NextRequest) {
   const session = await getAuthenticatedUser(request);
@@ -41,7 +42,8 @@ export async function POST(request: NextRequest) {
     await client.query('BEGIN');
 
     const ord = await client.query(
-      `SELECT id, order_number, user_id, order_status, payment_method, shipping_address
+      `SELECT id, order_number, user_id, order_status, payment_method, payment_status,
+              shipping_address, coupon_id
        FROM orders WHERE order_number = $1 OR id = $1 LIMIT 1 FOR UPDATE`,
       [orderId]
     );
@@ -98,15 +100,38 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const payStatus = paymentStatusAfterCancel(row.payment_method);
     await client.query(
-      `UPDATE orders SET order_status = 'Cancelled', updated_at = NOW() WHERE id = $1`,
-      [row.id]
+      `UPDATE orders
+       SET order_status = 'Cancelled',
+           payment_status = $2,
+           updated_at = NOW()
+       WHERE id = $1`,
+      [row.id, payStatus]
     );
     await client.query(
       `INSERT INTO order_timeline (id, order_id, status, remarks)
        VALUES ($1, $2, 'Cancelled', $3)`,
       [`tl-cancel-${Date.now()}`, row.id, reason]
     );
+
+    // Restore coupon usage so customer can reuse after cancel
+    if (row.coupon_id) {
+      try {
+        await client.query(
+          `UPDATE coupons
+           SET used_count = GREATEST(COALESCE(used_count, 0) - 1, 0)
+           WHERE id = $1`,
+          [row.coupon_id]
+        );
+        await client.query(
+          `DELETE FROM coupon_redemptions WHERE order_id = $1 OR order_id = $2`,
+          [row.id, row.order_number]
+        );
+      } catch (e: any) {
+        console.warn('[cancel] coupon rollback skipped:', e?.message);
+      }
+    }
 
     await client.query('COMMIT');
 

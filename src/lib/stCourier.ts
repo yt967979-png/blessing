@@ -308,6 +308,20 @@ export async function syncOrderByAwb(
     let updated = false;
     let nextStatus = previous;
 
+    // Never revive or overwrite a cancelled order via courier sync
+    if (String(previous).toLowerCase().includes('cancel')) {
+      return {
+        verified: true,
+        updated: false,
+        status: previous,
+        previousStatus: previous,
+        orderId: order.order_number || order.id,
+        trackingUrl: tracked.trackingUrl,
+        events: tracked.events,
+        error: 'Order is cancelled — status not updated.',
+      };
+    }
+
     await client.query(
       `UPDATE orders SET tracking_url = $1, courier_name = 'ST Courier Express', updated_at = NOW()
        WHERE id = $2`,
@@ -409,6 +423,7 @@ export async function syncAllActiveAwbOrders(): Promise<{ checked: number; updat
        WHERE awb_number IS NOT NULL
          AND awb_number NOT ILIKE 'SHP-%'
          AND COALESCE(order_status, '') NOT ILIKE '%delivered%'
+         AND COALESCE(order_status, '') NOT ILIKE '%cancel%'
        LIMIT 40`
     );
     rows = res.rows;

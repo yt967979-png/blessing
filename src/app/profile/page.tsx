@@ -21,6 +21,7 @@ import {
   AlertCircle,
   ShoppingBag,
   Download,
+  X,
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { createUserAddress, deleteUserAddress, migrateLocalAddressesToDb, updateUserAddress } from '@/lib/addresses';
@@ -497,7 +498,8 @@ export default function ProfilePage() {
                 ) : (
                   <div className="space-y-5">
                     {liveOrders.map((o) => {
-                      const currentStatus = o.courierStatus || 'Order Placed';
+                      const currentStatus = o.courierStatus || o.status || 'Order Placed';
+                      const cancelled = String(currentStatus).toLowerCase().includes('cancel');
                       const allSteps = [
                         'Order Placed',
                         'Payment Confirmed',
@@ -509,12 +511,14 @@ export default function ProfilePage() {
                         'Delivered',
                       ];
                       const activeIdx = allSteps.findIndex((s) => s.toLowerCase() === currentStatus.toLowerCase());
-                      const stepIdx = activeIdx >= 0 ? activeIdx : 0;
+                      const stepIdx = cancelled ? -1 : activeIdx >= 0 ? activeIdx : 0;
 
                       return (
                         <div
                           key={o.orderId}
-                          className="border border-slate-200 hover:border-blue-300 rounded-2xl p-5 bg-white shadow-xs space-y-4 transition-all"
+                          className={`border rounded-2xl p-5 bg-white shadow-xs space-y-4 transition-all ${
+                            cancelled ? 'border-red-200' : 'border-slate-200 hover:border-blue-300'
+                          }`}
                         >
                           <div className="flex flex-wrap justify-between items-center gap-2 pb-3 border-b border-slate-100">
                             <div className="flex items-center gap-3">
@@ -526,13 +530,24 @@ export default function ProfilePage() {
                               </span>
                             </div>
 
-                            <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-700 font-extrabold text-xs px-3 py-1 rounded-full">
-                              <Truck className="w-4 h-4 text-emerald-600 animate-pulse" />
-                              <span>{o.courierStatus || 'Handed to ST Courier'}</span>
-                            </div>
+                            {cancelled ? (
+                              <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 font-extrabold text-xs px-3 py-1 rounded-full">
+                                <X className="w-4 h-4" />
+                                <span>Cancelled</span>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-700 font-extrabold text-xs px-3 py-1 rounded-full">
+                                <Truck className="w-4 h-4 text-emerald-600 animate-pulse" />
+                                <span>{o.courierStatus || 'Order Placed'}</span>
+                              </div>
+                            )}
                           </div>
 
-                          {/* 8-Stage Progress Tracker */}
+                          {cancelled ? (
+                            <div className="bg-red-50 border border-red-100 rounded-xl px-3 py-3 text-xs text-red-700 font-semibold">
+                              This order is cancelled — no shipment will be sent.
+                            </div>
+                          ) : (
                           <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 space-y-1.5">
                             <div className="flex justify-between items-center text-[10px] font-extrabold uppercase text-slate-500">
                               <span>Shipment Progress (Stage {stepIdx + 1} of 8):</span>
@@ -559,6 +574,7 @@ export default function ProfilePage() {
                               })}
                             </div>
                           </div>
+                          )}
 
                           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-1">
                             <div className="text-xs space-y-0.5">
@@ -568,7 +584,7 @@ export default function ProfilePage() {
                               <p className="text-slate-500 text-[11px]">
                                 Deliver to: <strong className="text-slate-800">{o.customerName}</strong> ({o.address}{o.city ? `, ${o.city}` : ''})
                               </p>
-                              {o.trackingNumber && (
+                              {!cancelled && o.trackingNumber && (
                                 <span className="text-[11px] font-mono text-amber-700 font-bold block pt-0.5">
                                   ST Courier Docket AWB: {o.trackingNumber}
                                 </span>
@@ -590,6 +606,14 @@ export default function ProfilePage() {
                                 <span>INVOICE</span>
                               </a>
 
+                              {cancelled ? (
+                                <Link
+                                  href="/orders"
+                                  className="bg-red-700 hover:bg-red-800 text-white font-black text-xs px-4 py-2.5 rounded-xl shadow-xs transition-colors flex items-center justify-center gap-1.5 flex-1 sm:flex-none"
+                                >
+                                  <span>VIEW DETAILS</span>
+                                </Link>
+                              ) : (
                               <Link
                                 href={`/track?orderId=${encodeURIComponent(o.orderId)}`}
                                 className="bg-[#001B3A] hover:bg-blue-600 text-white font-black text-xs px-4 py-2.5 rounded-xl shadow-xs transition-colors flex items-center justify-center gap-1.5 flex-1 sm:flex-none"
@@ -597,6 +621,7 @@ export default function ProfilePage() {
                                 <Truck className="w-3.5 h-3.5 text-amber-400" />
                                 <span>TRACK LIVE</span>
                               </Link>
+                              )}
                             </div>
                           </div>
                         </div>
