@@ -2,17 +2,34 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { ShoppingBag, ArrowLeft, Trash2, Plus, Minus, ShieldCheck, Truck, MapPin, Tag, Check } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { ShoppingBag, ArrowLeft, Trash2, Plus, Minus, ShieldCheck, Truck, MapPin, Tag, Check, Bookmark } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
+import { pincodeDeliveryMessage } from '@/lib/pincode';
+import { getSTCourierDeliveryEstimate } from '@/lib/deliveryEstimator';
 import { Header } from '@/components/layout/Header';
 import { NavBar } from '@/components/layout/NavBar';
 import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
 import { Footer } from '@/components/layout/Footer';
 
 export default function CartPage() {
-  const { cart, updateQty, removeFromCart, cartTotal, setIsCheckoutOpen, user, setIsAuthOpen, setCheckoutTotal } = useStore();
+  const router = useRouter();
+  const {
+    cart,
+    updateQty,
+    removeFromCart,
+    cartTotal,
+    setIsCheckoutOpen,
+    user,
+    setIsAuthOpen,
+    setCheckoutTotal,
+    saveForLater,
+    savedForLater,
+    moveToCartFromSaved,
+  } = useStore();
   const [pincode, setPincode] = useState('600012');
-  const [pincodeChecked, setPincodeChecked] = useState(true);
+  const [pincodeMsg, setPincodeMsg] = useState('✓ Deliverable via ST Courier — usually 2–3 days in Tamil Nadu.');
+  const [pincodeOk, setPincodeOk] = useState(true);
 
   const totalMrp = cart.reduce((sum, item) => sum + (item.mrp || item.price + 40) * item.qty, 0);
   const totalDiscount = totalMrp - cartTotal;
@@ -20,8 +37,13 @@ export default function CartPage() {
 
   const handleCheckPincode = (e: React.FormEvent) => {
     e.preventDefault();
-    if (pincode.length === 6) {
-      setPincodeChecked(true);
+    const result = pincodeDeliveryMessage(pincode);
+    setPincodeOk(result.ok);
+    if (result.ok) {
+      const estimate = getSTCourierDeliveryEstimate(result.region === 'tn' ? 'Tamil Nadu' : 'Other State');
+      setPincodeMsg(`✓ ${result.message} Est. ${estimate.formattedDate}.`);
+    } else {
+      setPincodeMsg(`⚠️ ${result.message}`);
     }
   };
 
@@ -43,19 +65,18 @@ export default function CartPage() {
           Shopping Cart ({cart.length} items)
         </h1>
 
-        {cart.length === 0 ? (
+        {cart.length === 0 && savedForLater.length === 0 ? (
           <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center text-slate-500 max-w-lg mx-auto shadow-xs">
             <ShoppingBag className="w-16 h-16 mx-auto mb-4 opacity-20 text-[#001B3A]" />
             <h3 className="font-heading font-bold text-lg text-slate-800 mb-1">Your cart is empty</h3>
             <p className="text-xs mb-2 text-slate-500">Login, then add guide books for classes 6th–12th.</p>
-            <p className="text-[11px] mb-6 text-slate-400">Empty cart? Browse bestsellers and start your order.</p>
-            <div className="flex flex-col sm:flex-row gap-2 justify-center">
+            <div className="flex flex-col sm:flex-row gap-2 justify-center mt-6">
               {!user && (
                 <button
                   onClick={() => setIsAuthOpen(true)}
                   className="inline-block bg-amber-400 text-[#001B3A] font-bold text-xs px-6 py-3.5 rounded-xl shadow-md hover:bg-amber-500 transition-colors uppercase tracking-wider min-h-12"
                 >
-                  LOGIN / REGISTER
+                  LOGIN
                 </button>
               )}
               <Link
@@ -77,9 +98,14 @@ export default function CartPage() {
                       <span>Deliver to:</span>
                       <span className="text-blue-700">{pincode}</span>
                     </div>
-                    {pincodeChecked && (
-                      <span className="text-[11px] text-emerald-600 font-bold flex items-center gap-1 mt-0.5">
-                        <Check className="w-3.5 h-3.5" /> Express Delivery available (FREE)
+                    {pincodeMsg && (
+                      <span
+                        className={`text-[11px] font-bold flex items-center gap-1 mt-0.5 ${
+                          pincodeOk ? 'text-emerald-600' : 'text-red-600'
+                        }`}
+                      >
+                        {pincodeOk && <Check className="w-3.5 h-3.5" />}
+                        {pincodeMsg}
                       </span>
                     )}
                   </div>
@@ -121,12 +147,9 @@ export default function CartPage() {
                     <div className="flex items-baseline gap-2 mt-1">
                       <span className="font-black text-base text-slate-900">₹{item.price}</span>
                       <span className="text-xs text-slate-400 line-through">₹{item.mrp || item.price + 40}</span>
-                      <span className="text-xs font-bold text-emerald-600">
-                        {Math.round((((item.mrp || item.price + 40) - item.price) / (item.mrp || item.price + 40)) * 100)}% OFF
-                      </span>
                     </div>
 
-                    <div className="flex items-center gap-3 mt-3">
+                    <div className="flex items-center gap-3 mt-3 flex-wrap">
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => updateQty(item.id, -1)}
@@ -146,79 +169,124 @@ export default function CartPage() {
                       </div>
 
                       <button
+                        onClick={() => saveForLater(item.id)}
+                        className="text-blue-600 hover:text-blue-800 text-xs font-semibold flex items-center gap-1 min-h-11 px-2"
+                      >
+                        <Bookmark className="w-4 h-4" />
+                        Save for later
+                      </button>
+                      <button
                         onClick={() => removeFromCart(item.id)}
                         className="text-red-500 hover:text-red-700 text-xs font-semibold flex items-center gap-1 ml-auto min-h-11 px-2"
                       >
                         <Trash2 className="w-4 h-4" />
-                        <span>Remove</span>
+                        Remove
                       </button>
                     </div>
                   </div>
                 </div>
               ))}
+
+              {savedForLater.length > 0 && (
+                <div className="pt-4 space-y-3">
+                  <h2 className="font-heading font-bold text-sm text-slate-700 uppercase tracking-wider">
+                    Saved for later ({savedForLater.length})
+                  </h2>
+                  {savedForLater.map((item) => (
+                    <div
+                      key={item.id}
+                      className="bg-white border border-dashed border-slate-200 rounded-2xl p-4 flex gap-4 items-center"
+                    >
+                      <img src={item.image} alt="" className="w-16 h-16 object-contain bg-slate-50 rounded-lg" />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold text-sm text-[#001B3A] truncate">{item.title}</p>
+                        <p className="text-xs text-slate-500">₹{item.price}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => moveToCartFromSaved(item.id)}
+                        className="text-xs font-extrabold text-white bg-[#0044AA] px-3 py-2 rounded-lg"
+                      >
+                        Move to cart
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
-            <div className="lg:col-span-4">
-              <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs sticky top-24 space-y-4">
-                <h3 className="font-heading font-extrabold text-base text-[#001B3A] uppercase tracking-wider pb-3 border-b border-slate-100">
-                  PRICE DETAILS
-                </h3>
+            {cart.length > 0 && (
+              <div className="lg:col-span-4">
+                <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs sticky top-24 space-y-4">
+                  <h3 className="font-heading font-extrabold text-base text-[#001B3A] uppercase tracking-wider pb-3 border-b border-slate-100">
+                    PRICE DETAILS
+                  </h3>
 
-                <div className="space-y-3 text-xs border-b border-slate-200 pb-4">
-                  <div className="flex justify-between text-slate-600">
-                    <span>Price ({cart.length} items):</span>
-                    <span className="font-bold text-slate-800">₹{totalMrp}</span>
+                  <div className="space-y-3 text-xs border-b border-slate-200 pb-4">
+                    <div className="flex justify-between text-slate-600">
+                      <span>Price ({cart.length} items):</span>
+                      <span className="font-bold text-slate-800">₹{totalMrp}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-600">
+                      <span>Discount Savings:</span>
+                      <span className="font-bold text-emerald-600">- ₹{totalDiscount}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-600">
+                      <span>Delivery Charges:</span>
+                      <span className="font-bold text-emerald-600">FREE</span>
+                    </div>
                   </div>
-                  <div className="flex justify-between text-slate-600">
-                    <span>Discount Savings:</span>
-                    <span className="font-bold text-emerald-600">- ₹{totalDiscount}</span>
-                  </div>
-                  <div className="flex justify-between text-slate-600">
-                    <span>Delivery Charges:</span>
-                    <span className="font-bold text-emerald-600">FREE</span>
-                  </div>
-                </div>
 
-                <div className="flex justify-between items-baseline font-black text-lg text-[#001B3A]">
-                  <span>Total Amount:</span>
-                  <span>₹{grandTotal}</span>
-                </div>
-
-                {totalDiscount > 0 && (
-                  <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-800 font-bold flex items-center gap-2">
-                    <Tag className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-                    <span>You will save ₹{totalDiscount} on this order!</span>
+                  <div className="flex justify-between items-baseline font-black text-lg text-[#001B3A]">
+                    <span>Total Amount:</span>
+                    <span>₹{grandTotal}</span>
                   </div>
-                )}
 
-                <button
-                  onClick={() => {
-                    if (!user) { setIsAuthOpen(true); return; }
-                    setCheckoutTotal(grandTotal);
-                    setIsCheckoutOpen(true);
-                  }}
-                  className="w-full bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-[#001B3A] font-extrabold text-xs py-3.5 rounded-xl shadow-md uppercase tracking-wider transition-colors min-h-12"
-                >
-                  PROCEED TO CHECKOUT
-                </button>
-                {!user && (
-                  <p className="text-[10px] text-center text-slate-500 font-medium">
-                    Sign in with Google to place an order
-                  </p>
-                )}
+                  {totalDiscount > 0 && (
+                    <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-800 font-bold flex items-center gap-2">
+                      <Tag className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                      <span>You will save ₹{totalDiscount} on this order!</span>
+                    </div>
+                  )}
 
-                <div className="pt-2 text-[11px] text-slate-500 space-y-2 border-t border-slate-100">
-                  <div className="flex items-center gap-2 text-slate-700 font-bold">
-                    <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                    <span>100% Original Book Guarantee</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-slate-600 font-medium">
-                    <Truck className="w-4 h-4 text-blue-600" />
-                    <span>Express Dispatch via ST Courier</span>
+                  <button
+                    onClick={() => {
+                      if (!user) {
+                        setIsAuthOpen(true);
+                        return;
+                      }
+                      if (!pincodeOk) {
+                        return;
+                      }
+                      setCheckoutTotal(grandTotal);
+                      setIsCheckoutOpen(true);
+                      router.push('/checkout');
+                    }}
+                    disabled={!pincodeOk}
+                    className="w-full bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 disabled:opacity-50 text-[#001B3A] font-extrabold text-xs py-3.5 rounded-xl shadow-md uppercase tracking-wider transition-colors min-h-12"
+                  >
+                    PLACE ORDER
+                  </button>
+                  {!user && (
+                    <p className="text-[10px] text-center text-slate-500 font-medium">Login required to place an order</p>
+                  )}
+                  {!pincodeOk && (
+                    <p className="text-[10px] text-center text-red-600 font-medium">Check a serviceable pincode first</p>
+                  )}
+
+                  <div className="pt-2 text-[11px] text-slate-500 space-y-2 border-t border-slate-100">
+                    <div className="flex items-center gap-2 text-slate-700 font-bold">
+                      <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                      <span>100% Original Book Guarantee</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-slate-600 font-medium">
+                      <Truck className="w-4 h-4 text-blue-600" />
+                      <span>Express Dispatch via ST Courier</span>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
+            )}
           </div>
         )}
       </div>

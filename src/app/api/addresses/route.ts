@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getDbClient } from '@/lib/db';
 import { getAuthenticatedUser } from '@/lib/serverSecurity';
+import { isValidMobileNumber, normalizeMobileDigits } from '@/lib/authValidation';
 
 function mapAddress(row: any) {
   return {
@@ -8,6 +9,7 @@ function mapAddress(row: any) {
     type: row.landmark || 'HOME',
     name: row.full_name,
     phone: row.phone,
+    alternatePhone: row.alternate_phone || '',
     address: row.address_line1,
     city: row.city,
     pincode: row.pincode,
@@ -16,12 +18,25 @@ function mapAddress(row: any) {
   };
 }
 
+async function ensureAddressColumns(client: any) {
+  await client.query(`ALTER TABLE addresses ADD COLUMN IF NOT EXISTS alternate_phone VARCHAR(20)`);
+}
+
 async function resolveUserId(request: Request): Promise<string | null> {
   const session = await getAuthenticatedUser(request);
   return session?.userId || null;
 }
 
-// GET /api/addresses?userId=xxx
+function normalizeOptionalAlt(raw: string): { ok: true; value: string } | { ok: false; error: string } {
+  const trimmed = String(raw || '').trim();
+  if (!trimmed) return { ok: true, value: '' };
+  if (!isValidMobileNumber(trimmed)) {
+    return { ok: false, error: 'Enter a valid 10-digit alternate mobile number.' };
+  }
+  return { ok: true, value: normalizeMobileDigits(trimmed) };
+}
+
+// GET /api/addresses
 export async function GET(request: Request) {
   const userId = await resolveUserId(request);
   if (!userId) {
@@ -30,6 +45,7 @@ export async function GET(request: Request) {
 
   const client = await getDbClient();
   try {
+    await ensureAddressColumns(client);
     const res = await client.query(
       `SELECT * FROM addresses WHERE user_id = $1 ORDER BY is_default DESC, created_at DESC`,
       [userId]
@@ -51,19 +67,35 @@ export async function POST(request: Request) {
   }
 
   const name = String(body.name || '').trim();
-  const phone = String(body.phone || '').trim();
+  const phoneRaw = String(body.phone || '').trim();
   const address = String(body.address || '').trim();
   const city = String(body.city || 'Chennai').trim();
-  const pincode = String(body.pincode || '').trim();
+  const pincode = String(body.pincode || '').replace(/\D/g, '').slice(0, 6);
   const type = String(body.type || 'HOME').trim();
   const isDefault = !!body.isDefault;
+  const alt = normalizeOptionalAlt(String(body.alternatePhone || body.alternate_phone || ''));
 
-  if (!name || !address || !pincode || pincode.length !== 6) {
+  if (!name || !address || pincode.length !== 6) {
     return NextResponse.json({ error: 'Name, address, and 6-digit pincode are required.' }, { status: 400 });
+  }
+  if (!isValidMobileNumber(phoneRaw)) {
+    return NextResponse.json({ error: 'Enter a valid 10-digit delivery mobile number.' }, { status: 400 });
+  }
+  if (!alt.ok) {
+    return NextResponse.json({ error: alt.error }, { status: 400 });
+  }
+
+  const phone = normalizeMobileDigits(phoneRaw);
+  if (alt.value && alt.value === phone) {
+    return NextResponse.json(
+      { error: 'Alternate number must be different from the primary phone.' },
+      { status: 400 }
+    );
   }
 
   const client = await getDbClient();
   try {
+    await ensureAddressColumns(client);
     const userCheck = await client.query('SELECT id FROM users WHERE id = $1', [userId]);
     if (userCheck.rows.length === 0) {
       return NextResponse.json({ error: 'User not found.' }, { status: 404 });
@@ -75,10 +107,10 @@ export async function POST(request: Request) {
 
     const id = `addr-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const res = await client.query(
-      `INSERT INTO addresses (id, user_id, full_name, phone, address_line1, city, pincode, landmark, state, is_default)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'Tamil Nadu', $9)
+      `INSERT INTO addresses (id, user_id, full_name, phone, alternate_phone, address_line1, city, pincode, landmark, state, is_default)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'Tamil Nadu', $10)
        RETURNING *`,
-      [id, userId, name, phone || '', address, city, pincode, type, isDefault]
+      [id, userId, name, phone, alt.value || null, address, city, pincode, type, isDefault]
     );
 
     return NextResponse.json(mapAddress(res.rows[0]), { status: 201 });
@@ -100,6 +132,7 @@ export async function PATCH(request: Request) {
 
   const client = await getDbClient();
   try {
+    await ensureAddressColumns(client);
     if (body.isDefault) {
       await client.query(`UPDATE addresses SET is_default = FALSE WHERE user_id = $1`, [userId]);
     }
@@ -108,13 +141,46 @@ export async function PATCH(request: Request) {
     const values: any[] = [];
     let idx = 1;
 
-    if (body.name !== undefined) { fields.push(`full_name = $${idx++}`); values.push(String(body.name).trim()); }
-    if (body.phone !== undefined) { fields.push(`phone = $${idx++}`); values.push(String(body.phone).trim()); }
-    if (body.address !== undefined) { fields.push(`address_line1 = $${idx++}`); values.push(String(body.address).trim()); }
-    if (body.city !== undefined) { fields.push(`city = $${idx++}`); values.push(String(body.city).trim()); }
-    if (body.pincode !== undefined) { fields.push(`pincode = $${idx++}`); values.push(String(body.pincode).trim()); }
-    if (body.type !== undefined) { fields.push(`landmark = $${idx++}`); values.push(String(body.type).trim()); }
-    if (body.isDefault !== undefined) { fields.push(`is_default = $${idx++}`); values.push(!!body.isDefault); }
+    if (body.name !== undefined) {
+      fields.push(`full_name = $${idx++}`);
+      values.push(String(body.name).trim());
+    }
+    if (body.phone !== undefined) {
+      const phoneRaw = String(body.phone).trim();
+      if (!isValidMobileNumber(phoneRaw)) {
+        return NextResponse.json({ error: 'Enter a valid 10-digit delivery mobile number.' }, { status: 400 });
+      }
+      fields.push(`phone = $${idx++}`);
+      values.push(normalizeMobileDigits(phoneRaw));
+    }
+    if (body.alternatePhone !== undefined || body.alternate_phone !== undefined) {
+      const alt = normalizeOptionalAlt(String(body.alternatePhone ?? body.alternate_phone ?? ''));
+      if (!alt.ok) {
+        return NextResponse.json({ error: alt.error }, { status: 400 });
+      }
+      fields.push(`alternate_phone = $${idx++}`);
+      values.push(alt.value || null);
+    }
+    if (body.address !== undefined) {
+      fields.push(`address_line1 = $${idx++}`);
+      values.push(String(body.address).trim());
+    }
+    if (body.city !== undefined) {
+      fields.push(`city = $${idx++}`);
+      values.push(String(body.city).trim());
+    }
+    if (body.pincode !== undefined) {
+      fields.push(`pincode = $${idx++}`);
+      values.push(String(body.pincode).replace(/\D/g, '').slice(0, 6));
+    }
+    if (body.type !== undefined) {
+      fields.push(`landmark = $${idx++}`);
+      values.push(String(body.type).trim());
+    }
+    if (body.isDefault !== undefined) {
+      fields.push(`is_default = $${idx++}`);
+      values.push(!!body.isDefault);
+    }
 
     if (fields.length === 0) {
       return NextResponse.json({ error: 'No fields to update.' }, { status: 400 });
@@ -140,7 +206,7 @@ export async function PATCH(request: Request) {
   }
 }
 
-// DELETE /api/addresses?id=xxx&userId=xxx
+// DELETE /api/addresses
 export async function DELETE(request: Request) {
   const { searchParams } = new URL(request.url);
   const id = searchParams.get('id');

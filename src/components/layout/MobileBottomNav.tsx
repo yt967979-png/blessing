@@ -50,23 +50,23 @@ export const MobileBottomNav = () => {
 
   return (
     <nav
-      className="md:hidden fixed bottom-0 inset-x-0 z-[55] border-t border-slate-200/90 bg-white/95 backdrop-blur-lg shadow-[0_-8px_32px_rgba(0,27,58,0.12)]"
-      style={{ paddingBottom: 'max(8px, env(safe-area-inset-bottom))' }}
+      className="md:hidden fixed bottom-0 inset-x-0 z-[55] border-t border-slate-200 bg-white shadow-[0_-4px_20px_rgba(0,27,58,0.08)] mobile-no-blur"
+      style={{ paddingBottom: 'max(6px, env(safe-area-inset-bottom))' }}
       aria-label="Mobile navigation"
     >
-      <div className="flex items-stretch justify-around gap-0.5 px-2 pt-1.5 w-full max-w-lg mx-auto">
+      <div className="flex items-stretch justify-around px-1 pt-1 w-full max-w-lg mx-auto">
         {items.map((item) => {
           const Icon = item.icon;
           const inner = (
             <>
               <span
-                className={`relative flex items-center justify-center w-10 h-10 rounded-2xl transition-all duration-200 ${
-                  item.active ? 'bg-[#2874f0] text-white shadow-md shadow-blue-500/25' : 'text-slate-500'
+                className={`relative flex items-center justify-center w-9 h-9 rounded-xl ${
+                  item.active ? 'bg-[#2874f0] text-white' : 'text-slate-500'
                 }`}
               >
-                <Icon className={`w-[22px] h-[22px] ${item.active ? 'stroke-[2.5px]' : 'stroke-2'}`} />
+                <Icon className="w-5 h-5" strokeWidth={item.active ? 2.5 : 2} />
                 {'badge' in item && item.badge != null && item.badge > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-red-500 text-white font-black text-[9px] min-w-[17px] h-[17px] rounded-full flex items-center justify-center px-1 border-2 border-white">
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white font-black text-[9px] min-w-[16px] h-[16px] rounded-full flex items-center justify-center px-0.5 border-2 border-white">
                     {item.badge > 99 ? '99+' : item.badge}
                   </span>
                 )}
@@ -82,7 +82,7 @@ export const MobileBottomNav = () => {
           );
 
           const className =
-            'flex flex-1 flex-col items-center justify-center gap-0.5 min-h-[56px] max-w-[80px] py-1 rounded-xl touch-manipulation select-none active:scale-95 transition-transform';
+            'flex flex-1 flex-col items-center justify-center gap-0.5 min-h-[52px] max-w-[76px] py-1 rounded-xl touch-manipulation select-none active:opacity-70';
 
           if (item.onClick) {
             return (

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 import { useStore } from '@/context/StoreContext';
@@ -23,15 +23,17 @@ import {
   MapPin,
   Check,
   PackageCheck,
-  Sparkles
+  Sparkles,
+  RefreshCw,
 } from 'lucide-react';
 import { downloadTaxInvoice } from '@/lib/invoiceGenerator';
 import { getSTCourierDeliveryEstimate } from '@/lib/deliveryEstimator';
 
 function OrdersContent() {
-  const { user } = useStore();
+  const { user, showToast, setIsAuthOpen, addToCart, setIsCheckoutOpen, products } = useStore();
   const searchParams = useSearchParams();
   const queryOrderId = searchParams.get('orderId');
+  const router = useRouter();
 
   const [orderSearchInput, setOrderSearchInput] = useState('');
   const [searchedOrderData, setSearchedOrderData] = useState<any>(null);
@@ -42,6 +44,8 @@ function OrdersContent() {
   const [rating, setRating] = useState(5);
   const [reviewComment, setReviewComment] = useState('');
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+  const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
+  const [orderTab, setOrderTab] = useState<'all' | 'active' | 'delivered' | 'cancelled'>('all');
 
   // Recommended 8 Status Flow
   const ALL_STATUS_STEPS = [
@@ -57,6 +61,7 @@ function OrdersContent() {
 
   const getCurrentStepIndex = (status: string) => {
     const s = (status || '').toLowerCase();
+    if (s.includes('cancel')) return -1;
     if (s.includes('delivered')) return 7;
     if (s.includes('out for delivery')) return 6;
     if (s.includes('in transit') || s.includes('shipped')) return 5;
@@ -66,6 +71,74 @@ function OrdersContent() {
     if (s.includes('payment confirmed') || s.includes('paid')) return 1;
     return 0; // Order Placed
   };
+
+  const canCustomerCancel = (status: string) => {
+    const s = (status || '').toLowerCase();
+    if (!s || s.includes('cancel') || s.includes('delivered')) return false;
+    if (s.includes('packed') || s.includes('handed') || s.includes('transit') || s.includes('out for delivery')) {
+      return false;
+    }
+    return true;
+  };
+
+  const handleCancelOrder = async (orderId: string) => {
+    if (!user || !orderId) return;
+    if (!confirm(`Cancel order ${orderId}? This cannot be undone.`)) return;
+    setCancellingOrderId(orderId);
+    try {
+      const res = await fetch('/api/orders/cancel', {
+        method: 'POST',
+        headers: authHeaders(user),
+        body: JSON.stringify({ orderId, reason: 'Cancelled by customer' }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(`❌ ${data.error || 'Could not cancel'}`);
+        return;
+      }
+      showToast('✅ Order cancelled');
+      setSearchedOrderData((prev: any) =>
+        prev && prev.orderId === orderId ? { ...prev, courierStatus: 'Cancelled', status: 'Cancelled' } : prev
+      );
+      setUserOrders((prev) =>
+        prev.map((o) =>
+          o.orderId === orderId ? { ...o, courierStatus: 'Cancelled', status: 'Cancelled' } : o
+        )
+      );
+    } catch {
+      showToast('❌ Cancel failed');
+    } finally {
+      setCancellingOrderId(null);
+    }
+  };
+
+  const handleReorder = (ord: any) => {
+    const items = Array.isArray(ord.items) ? ord.items : [];
+    let added = 0;
+    for (const it of items) {
+      const match = products.find((p) => String(p.id) === String(it.id) || p.title === it.title);
+      if (match && match.inStock !== false) {
+        addToCart(match, Number(it.qty) || 1);
+        added++;
+      }
+    }
+    if (!added) {
+      showToast('Those books are not available to reorder right now');
+      return;
+    }
+    showToast(`✓ ${added} item(s) added — checkout`);
+    setIsCheckoutOpen(true);
+    router.push('/checkout');
+  };
+
+  const filteredOrders = userOrders.filter((o) => {
+    const s = String(o.courierStatus || o.status || '').toLowerCase();
+    if (orderTab === 'all') return true;
+    if (orderTab === 'cancelled') return s.includes('cancel');
+    if (orderTab === 'delivered') return s.includes('delivered');
+    if (orderTab === 'active') return !s.includes('cancel') && !s.includes('delivered');
+    return true;
+  });
 
   useEffect(() => {
     const fetchOrders = async () => {
@@ -197,6 +270,30 @@ function OrdersContent() {
   const isOfficialAwb = searchedOrderData?.trackingNumber && (searchedOrderData.trackingNumber.startsWith('STC') || !searchedOrderData.trackingNumber.startsWith('SHP-'));
   const progressPercent = Math.min(100, Math.max(12, ((currentStepIdx + 1) / 8) * 100));
 
+  if (!user) {
+    return (
+      <div className="bg-white border border-slate-200 rounded-3xl p-10 sm:p-14 text-center max-w-lg mx-auto shadow-sm space-y-5">
+        <div className="w-16 h-16 bg-[#001B3A] text-amber-400 rounded-3xl flex items-center justify-center mx-auto shadow-xs">
+          <Package className="w-8 h-8" />
+        </div>
+        <h1 className="font-heading font-black text-2xl text-[#001B3A]">Login to view your orders</h1>
+        <p className="text-sm text-slate-500 leading-relaxed">
+          Order history, saved tracking, invoices, and cancel options are available only after you sign in — same as Flipkart.
+        </p>
+        <button
+          type="button"
+          onClick={() => setIsAuthOpen(true)}
+          className="inline-flex items-center justify-center gap-2 bg-[#2874f0] hover:bg-[#1a5dc8] text-white font-extrabold text-sm px-8 py-3.5 rounded-xl shadow-md cursor-pointer"
+        >
+          Login to continue
+        </button>
+        <p className="text-[11px] text-slate-400">
+          Need AWB tracking without login? Use the Track page with your docket number.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8 pb-16">
       {/* Page Title & Order Search Bar */}
@@ -284,6 +381,17 @@ function OrdersContent() {
                 <Download className="w-4 h-4 text-amber-400" />
                 <span>TAX INVOICE PDF</span>
               </button>
+              {user && canCustomerCancel(searchedOrderData.courierStatus || searchedOrderData.status) && (
+                <button
+                  type="button"
+                  disabled={cancellingOrderId === searchedOrderData.orderId}
+                  onClick={() => void handleCancelOrder(searchedOrderData.orderId)}
+                  className="bg-white border border-red-200 text-red-700 hover:bg-red-50 font-extrabold text-xs px-4 py-2.5 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  <X className="w-4 h-4" />
+                  <span>{cancellingOrderId === searchedOrderData.orderId ? 'CANCELLING…' : 'CANCEL ORDER'}</span>
+                </button>
+              )}
             </div>
 
             {/* Amazon / Flipkart Horizontal Connected Stepper Line */}
@@ -552,16 +660,43 @@ function OrdersContent() {
         </div>
       ) : userOrders.length > 0 ? (
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="font-heading font-black text-xl text-[#001B3A] flex items-center gap-2">
               <Package className="w-5 h-5 text-amber-500" />
-              <span>My Recent Orders ({userOrders.length})</span>
+              <span>My Orders ({userOrders.length})</span>
             </h2>
-            <span className="text-xs text-slate-500 font-bold">Select any order card to view live tracking</span>
+            <div className="flex flex-wrap gap-1.5">
+              {(
+                [
+                  ['all', 'All'],
+                  ['active', 'Active'],
+                  ['delivered', 'Delivered'],
+                  ['cancelled', 'Cancelled'],
+                ] as const
+              ).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setOrderTab(key)}
+                  className={`px-3 py-1.5 rounded-full text-[11px] font-extrabold border transition-colors ${
+                    orderTab === key
+                      ? 'bg-[#2874f0] text-white border-[#2874f0]'
+                      : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="grid grid-cols-1 gap-4">
-            {userOrders.map((ord: any) => (
+            {filteredOrders.length === 0 ? (
+              <div className="bg-white border border-slate-200 rounded-2xl p-10 text-center text-sm text-slate-500">
+                No orders in this tab.
+              </div>
+            ) : null}
+            {filteredOrders.map((ord: any) => (
               <div
                 key={ord.orderId}
                 onClick={() => setSearchedOrderData(ord)}
@@ -604,7 +739,7 @@ function OrdersContent() {
                     </p>
                   </div>
 
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -619,12 +754,23 @@ function OrdersContent() {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
+                        handleReorder(ord);
+                      }}
+                      className="bg-white border border-slate-200 hover:border-blue-400 text-slate-800 font-extrabold text-xs px-4 py-2.5 rounded-xl flex items-center gap-1.5"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      Reorder
+                    </button>
+
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
                         setSearchedOrderData(ord);
                       }}
                       className="bg-[#001B3A] hover:bg-blue-600 text-white font-extrabold text-xs px-5 py-2.5 rounded-xl shadow-xs transition-all flex items-center gap-2 cursor-pointer"
                     >
                       <Truck className="w-4 h-4 text-amber-400" />
-                      <span>TRACK PACKAGE →</span>
+                      <span>TRACK →</span>
                     </button>
                   </div>
                 </div>
@@ -637,9 +783,9 @@ function OrdersContent() {
           <div className="w-16 h-16 bg-amber-100 text-amber-600 rounded-3xl flex items-center justify-center mx-auto text-2xl shadow-xs">
             📦
           </div>
-          <h3 className="font-heading font-black text-xl text-slate-900">No Active Order Selected</h3>
+          <h3 className="font-heading font-black text-xl text-slate-900">No orders yet</h3>
           <p className="text-xs text-slate-500 leading-relaxed max-w-xs mx-auto">
-            Enter your Order ID (e.g. BPG-1082) in the search box above to view shipment progress &amp; ST Courier live tracking!
+            Your order history will appear here after you place an order while logged in.
           </p>
         </div>
       )}

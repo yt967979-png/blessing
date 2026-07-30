@@ -105,7 +105,10 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string) {
       addr = typeof o.shipping_address === 'string' ? JSON.parse(o.shipping_address) : o.shipping_address || {};
     } catch (_) {}
 
-    if (!phonesMatch(phone, addr.phone || '')) {
+    if (
+      !phonesMatch(phone, addr.phone || '') &&
+      !phonesMatch(phone, addr.alternatePhone || addr.alternate_phone || '')
+    ) {
       releaseDbClient(client);
       return NextResponse.json(
         { error: 'Phone number does not match this order. Use the mobile number from checkout.' },

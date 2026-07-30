@@ -1,22 +1,32 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 @import "tailwindcss";
 
 :root {
-  --font-inter: 'Inter', sans-serif;
-  --font-outfit: 'Outfit', sans-serif;
+  --font-sans: 'Plus Jakarta Sans', system-ui, sans-serif;
+  --font-outfit: 'Outfit', system-ui, sans-serif;
   --primary-navy: #001B3A;
   --primary-blue: #0044AA;
   --accent-gold: #D4A843;
   --accent-gold-hover: #F0C14B;
+  /* Sticky header height: announcement + logo row + mobile search */
+  --header-sticky-offset: 118px;
+  --bottom-nav-height: 4.75rem;
+}
+
+@media (min-width: 640px) {
+  :root {
+    --header-sticky-offset: 72px;
+  }
 }
 
 body {
-  font-family: var(--font-inter);
+  font-family: var(--font-sans);
   background-color: #f8fafc;
   color: #0f172a;
   overflow-x: hidden;
   -webkit-tap-highlight-color: transparent;
   text-size-adjust: 100%;
+  -webkit-font-smoothing: antialiased;
 }
 
 html {
@@ -36,7 +46,7 @@ html {
 
 /* Mobile page shell — clears fixed bottom nav */
 .page-mobile-nav {
-  padding-bottom: calc(4.75rem + env(safe-area-inset-bottom, 0px));
+  padding-bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px));
 }
 
 @media (min-width: 768px) {
@@ -50,13 +60,45 @@ html {
   min-width: 44px;
 }
 
+.touch-manipulation {
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
 /* Horizontal scroll chips (filters, admin tabs) */
 .scroll-chips {
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
+  overscroll-behavior-x: contain;
 }
 .scroll-chips::-webkit-scrollbar {
   display: none;
+}
+
+.no-scrollbar {
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Product cards: skip offscreen paint work on long lists */
+.product-card-shell {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 380px;
+}
+
+/* Heavy blur is expensive on mobile GPUs — keep simple fills under md */
+@media (max-width: 767px) {
+  .mobile-no-blur {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+  .mobile-hide-fx {
+    display: none !important;
+  }
 }
 
 input, select, textarea, button {
@@ -73,38 +115,50 @@ h1, h2, h3, h4, h5, h6, .font-heading {
   font-family: var(--font-outfit);
 }
 
-/* Custom scrollbar */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-::-webkit-scrollbar-track {
-  background: #f1f5f9;
-}
-::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 4px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+/* Custom scrollbar — desktop only */
+@media (min-width: 768px) {
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #f1f5f9;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+  }
 }
 
-/* Glassmorphism utility */
 .glass-card {
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: rgba(255, 255, 255, 0.92);
   border: 1px solid rgba(226, 232, 240, 0.8);
 }
 
+@media (min-width: 768px) {
+  .glass-card {
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+}
+
 .glass-dark {
-  background: rgba(0, 27, 58, 0.85);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: rgba(0, 27, 58, 0.92);
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-/* Gold Gradient Text */
+@media (min-width: 768px) {
+  .glass-dark {
+    background: rgba(0, 27, 58, 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+}
+
 .gold-gradient-text {
   background: linear-gradient(135deg, #FFD54F 0%, #F0C14B 50%, #D4A843 100%);
   -webkit-background-clip: text;

@@ -39,6 +39,7 @@ export default function PaymentFailedPage() {
           <button
             onClick={() => {
               setIsCheckoutOpen(true);
+              window.location.href = '/checkout';
               router.push('/cart');
             }}
             className="w-full bg-gradient-to-r from-amber-400 to-amber-500 text-[#001B3A] font-extrabold text-sm py-3.5 px-6 rounded-xl shadow-md flex items-center justify-center gap-2 mb-3"

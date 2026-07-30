@@ -1,7 +1,10 @@
+import { formatGstinLine, getShopInvoiceAddress, getShopLegalName } from '@/lib/shopConfig';
+
 export function generateTaxInvoiceHtml(orderData: {
   orderId: string;
   customerName: string;
   customerPhone: string;
+  customerAltPhone?: string;
   address?: string;
   city?: string;
   pincode?: string;
@@ -16,7 +19,13 @@ export function generateTaxInvoiceHtml(orderData: {
   const dateStr = orderData.createdAt || new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
   const itemsList = orderData.items && orderData.items.length > 0
     ? orderData.items
-    : [{ title: '10th Standard Mathematics Exam Power Guide Book', qty: 1, price: 360 }];
+    : [{ title: 'Study Guide Book', qty: 1, price: orderData.totalAmount }];
+
+  const taxable = orderData.totalAmount / 1.05;
+  const gst = orderData.totalAmount - taxable;
+  const gstinLine = formatGstinLine();
+  const legal = getShopLegalName();
+  const addrLine = getShopInvoiceAddress();
 
   return `
 <!DOCTYPE html>
@@ -35,9 +44,9 @@ export function generateTaxInvoiceHtml(orderData: {
     .box { background: #f8fafc; border: 1px solid #e2e8f0; padding: 16px; border-radius: 12px; }
     .box-title { font-weight: 800; text-transform: uppercase; font-size: 10px; color: #64748b; margin-bottom: 8px; }
     table { width: 100%; border-collapse: collapse; margin-bottom: 24px; font-size: 12px; }
-    th { background: #001b3a; color: #ffffff; text-align: left; padding: 10px 12px; font-weight: 800; border-radius: 4px; }
+    th { background: #001b3a; color: #ffffff; text-align: left; padding: 10px 12px; font-weight: 800; }
     td { padding: 12px; border-bottom: 1px solid #e2e8f0; }
-    .total-row { font-weight: 900; font-size: 14px; background: #f1f5f9; }
+    .total-row { font-weight: 900; font-size: 13px; background: #f1f5f9; }
     .footer { border-top: 1px solid #e2e8f0; padding-top: 16px; font-size: 11px; color: #64748b; text-align: center; }
     .toolbar { position: sticky; top: 0; background: #001b3a; color: #fff; padding: 12px 20px; display: flex; gap: 12px; justify-content: center; align-items: center; z-index: 10; }
     .toolbar button { background: #fbbf24; color: #001b3a; border: 0; font-weight: 800; font-size: 12px; padding: 8px 16px; border-radius: 8px; cursor: pointer; }
@@ -55,12 +64,13 @@ export function generateTaxInvoiceHtml(orderData: {
         <img src="/logo.png" alt="Blessing Power Guide" width="48" height="48" style="border-radius:12px;" />
         <div>
           <div class="brand">BLESSING POWER GUIDE</div>
-          <div class="subbrand">Official Tamil Nadu State Board & CBSE Exam Prep Guides</div>
-          <div style="font-size: 11px; color: #475569; margin-top: 4px;">GSTIN: 33AAAC1234F1Z9 | Reg: Chennai, Tamil Nadu</div>
+          <div class="subbrand">${legal}</div>
+          <div style="font-size: 11px; color: #475569; margin-top: 4px;">${gstinLine}</div>
+          <div style="font-size: 10px; color: #64748b;">${addrLine}</div>
         </div>
       </div>
       <div>
-        <div class="invoice-title">OFFICIAL TAX INVOICE</div>
+        <div class="invoice-title">TAX INVOICE</div>
         <div style="font-size: 12px; font-weight: 800; color: #0f172a; margin-top: 4px;">Invoice #${orderData.orderId}</div>
         <div style="font-size: 11px; color: #64748b;">Date: ${dateStr}</div>
       </div>
@@ -70,25 +80,26 @@ export function generateTaxInvoiceHtml(orderData: {
       <div class="box">
         <div class="box-title">Billed & Shipped To</div>
         <div style="font-weight: 800; font-size: 14px; color: #0f172a;">${orderData.customerName}</div>
-        <div style="margin-top: 4px;">${orderData.address}</div>
-        <div>${orderData.city}${orderData.pincode ? ` - ${orderData.pincode}` : ''}</div>
-        <div style="font-weight: 700; margin-top: 6px; color: #0284c7;">Phone: ${orderData.customerPhone}</div>
+        <div style="margin-top: 4px;">${orderData.address || ''}</div>
+        <div>${orderData.city || ''}${orderData.pincode ? ` - ${orderData.pincode}` : ''}</div>
+        <div style="font-weight: 700; margin-top: 6px; color: #0284c7;">Phone: ${orderData.customerPhone}${
+          orderData.customerAltPhone ? ` | Alt: ${orderData.customerAltPhone}` : ''
+        }</div>
       </div>
 
       <div class="box">
-        <div class="box-title">Logistics & Payment Info</div>
-        <div><strong>Courier Partner:</strong> ${orderData.courierName || 'ST Courier Express'}</div>
-        <div><strong>Docket Number:</strong> ${orderData.trackingNumber || 'Pending AWB Assignment'}</div>
-        <div><strong>Payment Method:</strong> ${orderData.paymentMethod}</div>
-        <div style="margin-top: 6px; color: #16a34a; font-weight: 800;">Status: ${orderData.paymentStatus || 'PAID'}</div>
+        <div class="box-title">Logistics & Payment</div>
+        <div><strong>Courier:</strong> ${orderData.courierName || 'ST Courier Express'}</div>
+        <div><strong>AWB:</strong> ${orderData.trackingNumber || 'Pending'}</div>
+        <div><strong>Payment:</strong> ${orderData.paymentMethod}</div>
+        <div style="margin-top: 6px; color: #16a34a; font-weight: 800;">Status: ${orderData.paymentStatus || 'Pending'}</div>
       </div>
     </div>
 
     <table>
       <thead>
         <tr>
-          <th>Item Description</th>
-          <th>HSN Code</th>
+          <th>Item (HSN 4901)</th>
           <th>Qty</th>
           <th>Price</th>
           <th>Total</th>
@@ -100,24 +111,32 @@ export function generateTaxInvoiceHtml(orderData: {
             (item: any) => `
           <tr>
             <td><strong>${item.title}</strong></td>
-            <td>4901.10</td>
             <td>${item.qty || 1}</td>
-            <td>₹${item.price}</td>
-            <td><strong>₹${(item.price * (item.qty || 1)).toFixed(2)}</strong></td>
+            <td>₹${Number(item.price).toFixed(2)}</td>
+            <td><strong>₹${(Number(item.price) * (item.qty || 1)).toFixed(2)}</strong></td>
           </tr>
         `
           )
           .join('')}
+        <tr>
+          <td colspan="3" style="text-align:right;">Taxable value (approx, GST incl. in price)</td>
+          <td>₹${taxable.toFixed(2)}</td>
+        </tr>
+        <tr>
+          <td colspan="3" style="text-align:right;">GST component (illustrative 5% on books*)</td>
+          <td>₹${gst.toFixed(2)}</td>
+        </tr>
         <tr class="total-row">
-          <td colspan="4" style="text-align: right;">GRAND TOTAL (INCL. GST):</td>
-          <td style="color: #001b3a;">₹${orderData.totalAmount.toFixed(2)}</td>
+          <td colspan="3" style="text-align: right;">GRAND TOTAL:</td>
+          <td style="color: #001b3a;">₹${Number(orderData.totalAmount).toFixed(2)}</td>
         </tr>
       </tbody>
     </table>
+    <p style="font-size:10px;color:#94a3b8;">*GST breakup is indicative for invoice clarity. Set SHOP_GSTIN in env for your registered GSTIN. Confirm tax treatment with your CA.</p>
 
     <div class="footer">
-      <p>Thank you for studying with <strong>Blessing Power Guide</strong>! Wish you 100% success in your exams!</p>
-      <p>For questions or bulk school orders, contact blessingpowerguide@gmail.com | +91 98404 18228</p>
+      <p>Thank you for studying with <strong>Blessing Power Guide</strong>!</p>
+      <p>Support: +91 98404 18228 | blessingpowerguide@gmail.com</p>
     </div>
   </div>
 </body>

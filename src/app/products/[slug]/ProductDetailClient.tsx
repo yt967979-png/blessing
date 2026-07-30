@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   Star,
   ShoppingBag,
@@ -18,10 +19,12 @@ import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
 import { Footer } from '@/components/layout/Footer';
 import { ProductCard } from '@/components/ui/ProductCard';
 import { getSTCourierDeliveryEstimate } from '@/lib/deliveryEstimator';
+import { pincodeDeliveryMessage } from '@/lib/pincode';
 import { authHeaders } from '@/lib/clientAuth';
 
 export default function ProductDetailClient({ slug }: { slug: string }) {
-  const { products, addToCart, toggleWishlist, wishlist, user, setIsAuthOpen } = useStore();
+  const router = useRouter();
+  const { products, addToCart, toggleWishlist, wishlist, user, setIsAuthOpen, setIsCheckoutOpen } = useStore();
   const [dbProduct, setDbProduct] = useState<any>(null);
   const [dbReviews, setDbReviews] = useState<any[]>([]);
   const [reviewStats, setReviewStats] = useState({ count: 0, avgRating: 0 });
@@ -85,7 +88,8 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
     loadReviews();
   }, [product?.id, user?.token]);
   const [pincode, setPincode] = useState('600012');
-  const [pincodeMsg, setPincodeMsg] = useState('✓ Delivery available in 2-3 business days (Express Post)');
+  const [pincodeMsg, setPincodeMsg] = useState('✓ Deliverable via ST Courier — usually 2–3 days in Tamil Nadu.');
+  const [pincodeOk, setPincodeOk] = useState(true);
   const [showReviewForm, setShowReviewForm] = useState(false);
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewText, setReviewText] = useState('');
@@ -176,16 +180,58 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
   }
 
   const isWishlisted = wishlist.includes(product.id);
-  const relatedProducts = products.filter((p: any) => p.id !== product.id && p.inStock).slice(0, 4);
+  const relatedProducts = (() => {
+    const others = products.filter((p: any) => p.id !== product.id && p.inStock !== false);
+    const sameClass = others.filter((p: any) => p.cls === product.cls);
+    const combos = others.filter((p: any) => p.category === 'combo');
+    const pool = [...combos, ...sameClass, ...others];
+    const seen = new Set<string | number>();
+    return pool.filter((p) => {
+      if (seen.has(p.id)) return false;
+      seen.add(p.id);
+      return true;
+    }).slice(0, 4);
+  })();
+  const comboUpsell = products.find(
+    (p: any) =>
+      p.id !== product.id &&
+      p.category === 'combo' &&
+      p.inStock !== false &&
+      (p.cls === product.cls || String(p.title || '').includes(product.cls))
+  );
 
   const checkPincode = (e: React.FormEvent) => {
     e.preventDefault();
-    if (pincode.length === 6) {
-      const isTN = ['6', '60', '62', '63', '64'].some(p => pincode.startsWith(p));
-      const estimate = getSTCourierDeliveryEstimate(isTN ? 'Tamil Nadu' : 'Other State');
-      setPincodeMsg(`✓ Delivery to ${pincode} by ${estimate.formattedDate}, ${estimate.formattedTime} via ST Courier Express (${isTN ? '2 days' : '3-4 days'})`);
+    const result = pincodeDeliveryMessage(pincode);
+    setPincodeOk(result.ok);
+    if (result.ok) {
+      const estimate = getSTCourierDeliveryEstimate(result.region === 'tn' ? 'Tamil Nadu' : 'Other State');
+      setPincodeMsg(`✓ ${result.message} Est. ${estimate.formattedDate}.`);
     } else {
-      setPincodeMsg('⚠️ Please enter a valid 6-digit Indian Pincode');
+      setPincodeMsg(`⚠️ ${result.message}`);
+    }
+  };
+
+  const shareProduct = async () => {
+    const url = typeof window !== 'undefined' ? window.location.href : '';
+    const text = `${product.title} — ₹${product.price} | Blessing Power Guide`;
+    try {
+      if (typeof navigator !== 'undefined' && navigator.share) {
+        await navigator.share({ title: product.title, text, url });
+        return;
+      }
+    } catch {
+      /* user cancelled or share failed — fall through */
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      alert('Link copied — share it with classmates!');
+    } catch {
+      window.open(
+        `https://wa.me/?text=${encodeURIComponent(`${text}\n${url}`)}`,
+        '_blank',
+        'noopener,noreferrer'
+      );
     }
   };
 
@@ -288,8 +334,10 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
                   <Heart className={`w-5 h-5 ${isWishlisted ? 'text-red-500 fill-red-500' : 'text-slate-400'}`} />
                 </button>
                 <button
-                  onClick={() => alert('Link copied to clipboard!')}
+                  type="button"
+                  onClick={() => void shareProduct()}
                   className="p-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 transition-colors"
+                  aria-label="Share product"
                 >
                   <Share2 className="w-5 h-5 text-slate-600" />
                 </button>
@@ -369,11 +417,11 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
 
               {pincodeMsg && (
                 <div className="mt-3 space-y-2">
-                  <p className={`text-xs font-bold flex items-center gap-1.5 ${pincodeMsg.startsWith('✓') ? 'text-emerald-700' : 'text-red-600'}`}>
-                    {pincodeMsg.startsWith('✓') && <CheckCircle className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />}
+                  <p className={`text-xs font-bold flex items-center gap-1.5 ${pincodeOk ? 'text-emerald-700' : 'text-red-600'}`}>
+                    {pincodeOk && <CheckCircle className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />}
                     {pincodeMsg}
                   </p>
-                  {pincodeMsg.startsWith('✓') && (
+                  {pincodeOk && (
                     <div className="flex flex-wrap gap-3 text-[11px]">
                       <span className="text-emerald-700 font-bold flex items-center gap-1">
                         <Truck className="w-3 h-3" /> FREE Delivery
@@ -388,8 +436,25 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
               )}
             </div>
 
+            {comboUpsell && (
+              <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50/80 p-4 flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
+                <div>
+                  <p className="text-[10px] font-extrabold text-amber-800 uppercase tracking-wider">Save more — combo</p>
+                  <p className="text-sm font-bold text-[#001B3A] mt-0.5">{comboUpsell.title}</p>
+                  <p className="text-xs text-slate-600">₹{comboUpsell.price} · often cheaper than buying subjects one by one</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => addToCart(comboUpsell)}
+                  className="shrink-0 px-4 py-2.5 bg-[#001B3A] text-white text-xs font-extrabold rounded-xl hover:bg-blue-800"
+                >
+                  Add combo
+                </button>
+              </div>
+            )}
+
             {/* Actions */}
-            <div className="flex gap-4 mt-auto">
+            <div className="flex gap-3 mt-auto">
               {product.inStock === false ? (
                 <button
                   disabled
@@ -398,16 +463,31 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
                   OUT OF STOCK
                 </button>
               ) : (
-                <button
-                  onClick={() => {
-                    if (!user) { setIsAuthOpen(true); return; }
-                    addToCart(product);
-                  }}
-                  className="w-full bg-gradient-to-r from-amber-400 to-amber-500 text-[#001B3A] font-extrabold text-sm py-3.5 px-6 rounded-xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 uppercase tracking-wider"
-                >
-                  <ShoppingBag className="w-4 h-4" />
-                  <span>ADD TO CART</span>
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!user) { setIsAuthOpen(true); return; }
+                      addToCart(product);
+                    }}
+                    className="flex-1 bg-[#0044AA] text-white font-extrabold text-sm py-3.5 px-4 rounded-xl shadow-md flex items-center justify-center gap-2 uppercase tracking-wider"
+                  >
+                    <ShoppingBag className="w-4 h-4 text-amber-400" />
+                    <span>ADD TO CART</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!user) { setIsAuthOpen(true); return; }
+                      addToCart(product);
+                      setIsCheckoutOpen(true);
+                      router.push('/checkout');
+                    }}
+                    className="flex-1 bg-gradient-to-r from-amber-400 to-amber-500 text-[#001B3A] font-extrabold text-sm py-3.5 px-4 rounded-xl shadow-md uppercase tracking-wider"
+                  >
+                    BUY NOW
+                  </button>
+                </>
               )}
             </div>
           </div>
@@ -585,7 +665,9 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
         {relatedProducts.length > 0 && (
           <section className="mt-12">
             <h3 className="font-heading font-extrabold text-xl text-[#001B3A] mb-6 uppercase tracking-wide">
-              RECOMMENDED FOR YOU
+              {comboUpsell || relatedProducts.some((p) => p.category === 'combo')
+                ? 'COMBOS & RELATED GUIDES'
+                : 'RECOMMENDED FOR YOU'}
             </h3>
             <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-4">
               {relatedProducts.map((p) => (

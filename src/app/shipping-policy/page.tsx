@@ -3,16 +3,16 @@ import { Header } from '@/components/layout/Header';
 import { NavBar } from '@/components/layout/NavBar';
 import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
 import { Footer } from '@/components/layout/Footer';
-import { Truck, RotateCcw, CheckCircle, Clock } from 'lucide-react';
+import { Truck, CheckCircle, Clock } from 'lucide-react';
 
 export const metadata = {
-  title: 'Shipping & Return Policy | Blessing Power Guide',
-  description: 'ST Courier shipping times, delivery policies, and return guidelines.',
+  title: 'Shipping Policy | Blessing Power Guide',
+  description: 'ST Courier shipping times and delivery policy for Blessing Power Guide books.',
 };
 
-export default function ShippingReturnPolicyPage() {
+export default function ShippingPolicyPage() {
   return (
-    <div className="min-h-screen bg-[#f8fafc] text-slate-800" style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
+    <div className="min-h-screen bg-[#f8fafc] text-slate-800">
       <AnnouncementBar />
       <Header />
       <NavBar />
@@ -21,35 +21,47 @@ export default function ShippingReturnPolicyPage() {
         <div className="bg-white rounded-2xl border border-slate-200 p-6 sm:p-10 shadow-xs space-y-8">
           <div className="border-b border-slate-100 pb-6">
             <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-50 text-[#2874f0] rounded-full text-xs font-bold uppercase tracking-wider mb-3">
-              <Truck className="w-4 h-4" /> Logistics & Returns
+              <Truck className="w-4 h-4" /> Shipping
             </div>
-            <h1 className="font-black text-2xl sm:text-3xl text-slate-900">Shipping & Return Policy</h1>
-            <p className="text-xs text-slate-500 mt-1">Official Shipping & Return terms • Blessing Pathway Education</p>
+            <h1 className="font-black text-2xl sm:text-3xl text-slate-900">Shipping & Delivery Policy</h1>
+            <p className="text-xs text-slate-500 mt-1">Blessing Pathway Education · Guide books</p>
           </div>
 
           <section className="space-y-3 text-xs sm:text-sm leading-relaxed text-slate-600">
             <h2 className="font-bold text-base text-slate-900 flex items-center gap-2">
-              <Truck className="w-4 h-4 text-[#2874f0]" /> 1. Shipping Partners & Delivery Timelines
+              <Truck className="w-4 h-4 text-[#2874f0]" /> Shipping partners & timelines
             </h2>
             <p>
               We ship all physical guide books via <strong>ST Courier Express</strong> across Tamil Nadu, Puducherry, Karnataka, Kerala, and Andhra Pradesh.
             </p>
             <ul className="list-disc list-inside space-y-1 pl-2">
-              <li><strong>Tamil Nadu & Puducherry:</strong> Delivered within 1 to 3 working days.</li>
-              <li><strong>South India (Other States):</strong> Delivered within 3 to 5 working days.</li>
-              <li><strong>Rest of India:</strong> Delivered within 4 to 7 working days.</li>
+              <li><strong>Tamil Nadu & Puducherry:</strong> 1 to 3 working days.</li>
+              <li><strong>South India (other states):</strong> 3 to 5 working days.</li>
+              <li><strong>Rest of India:</strong> 4 to 7 working days.</li>
             </ul>
           </section>
 
           <section className="space-y-3 text-xs sm:text-sm leading-relaxed text-slate-600">
             <h2 className="font-bold text-base text-slate-900 flex items-center gap-2">
-              <RotateCcw className="w-4 h-4 text-[#2874f0]" /> 2. 7-Day Replacement & Return Policy
+              <CheckCircle className="w-4 h-4 text-[#2874f0]" /> No returns / no refunds
             </h2>
             <p>
-              If you receive a damaged book, missing pages, or wrong edition parcel, you are eligible for a <strong>100% free replacement or refund</strong> within 7 days of delivery.
+              Blessing Power Guide sells <strong>educational guide books</strong>. All sales are <strong>final</strong>.
+              We do <strong>not</strong> offer returns, exchanges, or refunds once an order is placed.
             </p>
             <p>
-              To initiate a return or exchange, send your Order ID and photo/video proof to our WhatsApp helpdesk at <strong>+91 9840418228</strong> or email <strong>support@blessingpowerguide.in</strong>.
+              If your parcel arrives damaged in transit or you received a clearly wrong title, WhatsApp us at{' '}
+              <strong>+91 9840418228</strong> with your Order ID and photos — we will help case by case.
+            </p>
+          </section>
+
+          <section className="space-y-3 text-xs sm:text-sm leading-relaxed text-slate-600">
+            <h2 className="font-bold text-base text-slate-900 flex items-center gap-2">
+              <Clock className="w-4 h-4 text-[#2874f0]" /> Support
+            </h2>
+            <p>
+              Order updates are sent on WhatsApp. For delivery questions, contact{' '}
+              <strong>+91 9840418228</strong> or <strong>blessingpowerguide@gmail.com</strong>.
             </p>
           </section>
         </div>

@@ -6,6 +6,7 @@ export interface SavedAddress {
   type: string;
   name: string;
   phone: string;
+  alternatePhone?: string;
   address: string;
   city: string;
   pincode: string;
@@ -32,6 +33,21 @@ export async function createUserAddress(
     method: 'POST',
     headers: authHeaders(user),
     body: JSON.stringify({ userId: user.id, ...addr }),
+  });
+  if (!res.ok) return null;
+  return res.json();
+}
+
+export async function updateUserAddress(
+  user: UserData | null,
+  id: string,
+  patch: Partial<Omit<SavedAddress, 'id'>> & { isDefault?: boolean }
+): Promise<SavedAddress | null> {
+  if (!user?.id || !id) return null;
+  const res = await fetch('/api/addresses', {
+    method: 'PATCH',
+    headers: authHeaders(user),
+    body: JSON.stringify({ id, userId: user.id, ...patch }),
   });
   if (!res.ok) return null;
   return res.json();
@@ -74,6 +90,7 @@ export async function migrateLocalAddressesToDb(user: UserData | null): Promise<
         type: addr.type || 'HOME',
         name: addr.name || user.name || 'Customer',
         phone: addr.phone || user.phone || '',
+        alternatePhone: addr.alternatePhone || '',
         address: addr.address || '',
         city: addr.city || 'Chennai',
         pincode: String(addr.pincode || ''),

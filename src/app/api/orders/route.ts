@@ -37,6 +37,7 @@ function mapOrderRow(o: any) {
     orderId: o.order_number || o.id,
     customerName: addrObj.name || o.user_id || 'Customer',
     customerPhone: addrObj.phone || '',
+    customerAltPhone: addrObj.alternatePhone || addrObj.alternate_phone || '',
     address: addrObj.address || '',
     city: addrObj.city || '',
     pincode: addrObj.pincode || '',
@@ -130,7 +131,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const session = await getAuthenticatedUser(request);
   if (!session) {
-    return unauthorizedResponse('Please sign in with Google to place an order.');
+    return unauthorizedResponse('Please login to place an order.');
   }
 
   const rl = await applyRateLimitAsync(`orders:${session.userId}:${clientIp(request)}`, 10, 60000);
@@ -144,6 +145,7 @@ export async function POST(request: Request) {
     const {
       customerName,
       customerPhone,
+      alternatePhone,
       address,
       city,
       pincode,
@@ -286,6 +288,7 @@ export async function POST(request: Request) {
     const shippingAddressObj = JSON.stringify({
       name: customerName,
       phone: customerPhone,
+      alternatePhone: String(alternatePhone || '').replace(/\D/g, '').slice(-10) || '',
       address: address || '',
       city: city || 'Chennai',
       pincode: pincode || '600012',
@@ -337,7 +340,7 @@ export async function POST(request: Request) {
              status = CASE WHEN COALESCE(stock, 0) - $1 <= 0 THEN 'out_of_stock' ELSE status END,
              updated_at = NOW()
          WHERE id = $2 AND COALESCE(stock, 0) >= $1
-         RETURNING id`,
+         RETURNING id, title, stock`,
         [item.qty, item.id]
       );
       if (stockRes.rowCount === 0) {
@@ -346,6 +349,19 @@ export async function POST(request: Request) {
           { error: `"${item.title}" went out of stock. Please refresh your cart.` },
           { status: 409 }
         );
+      }
+      const left = Number(stockRes.rows[0]?.stock ?? 0);
+      if (left <= 5) {
+        try {
+          const adminPhone = String(process.env.ADMIN_PHONE || '9840418228').replace(/\D/g, '').slice(-10);
+          const { sendWhatsAppMessageInProcess } = await import('@/lib/whatsapp');
+          void sendWhatsAppMessageInProcess(
+            adminPhone,
+            `*LOW STOCK*\n${stockRes.rows[0].title}\nRemaining: *${left}*\nOrder: ${orderNumber}`
+          ).catch(() => {});
+        } catch {
+          /* ignore */
+        }
       }
     }
 
@@ -363,6 +379,18 @@ export async function POST(request: Request) {
     );
 
     await client.query('COMMIT');
+
+    try {
+      const phoneDigits = String(customerPhone || '').replace(/\D/g, '').slice(-10);
+      if (phoneDigits.length === 10) {
+        await client.query(
+          `UPDATE abandoned_carts SET reminded = TRUE, updated_at = NOW() WHERE id = $1`,
+          [`ac-${phoneDigits}`]
+        ).catch(() => {});
+      }
+    } catch {
+      /* table may not exist yet */
+    }
 
     const event = { type: 'ORDER_UPDATED', orderId: orderNumber, status: initialStatus, timestamp: Date.now() };
     try {

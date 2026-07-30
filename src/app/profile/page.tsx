@@ -23,7 +23,7 @@ import {
   Download,
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
-import { createUserAddress, deleteUserAddress, migrateLocalAddressesToDb } from '@/lib/addresses';
+import { createUserAddress, deleteUserAddress, migrateLocalAddressesToDb, updateUserAddress } from '@/lib/addresses';
 import { authHeaders } from '@/lib/clientAuth';
 import { Header } from '@/components/layout/Header';
 import { NavBar } from '@/components/layout/NavBar';
@@ -143,6 +143,7 @@ export default function ProfilePage() {
   const [newAddrType, setNewAddrType] = useState('HOME');
   const [newAddrName, setNewAddrName] = useState('');
   const [newAddrPhone, setNewAddrPhone] = useState('');
+  const [newAddrAltPhone, setNewAddrAltPhone] = useState('');
   const [newAddrText, setNewAddrText] = useState('');
   const [newAddrCity, setNewAddrCity] = useState('');
   const [newAddrPincode, setNewAddrPincode] = useState('');
@@ -158,13 +159,14 @@ export default function ProfilePage() {
       type: newAddrType,
       name: newAddrName || user.name || 'Customer',
       phone: newAddrPhone || user.phone || '',
+      alternatePhone: newAddrAltPhone || '',
       address: newAddrText,
       city: newAddrCity || 'Chennai',
       pincode: newAddrPincode,
       isDefault: addresses.length === 0,
     });
     if (!created) {
-      showToast('❌ Failed to save address. Please try again.');
+      showToast('❌ Failed to save address. Check phone numbers and try again.');
       return;
     }
     setAddresses((prev) => [created, ...prev]);
@@ -172,6 +174,7 @@ export default function ProfilePage() {
     setNewAddrText('');
     setNewAddrPincode('');
     setNewAddrCity('');
+    setNewAddrAltPhone('');
     showToast('✓ Address saved to your account');
   };
 
@@ -184,6 +187,21 @@ export default function ProfilePage() {
     }
     setAddresses((prev) => prev.filter((a) => a.id !== id));
     showToast('🗑️ Address removed');
+  };
+
+  const handleSetDefaultAddress = async (id: string | number) => {
+    if (!user?.id) return;
+    const updated = await updateUserAddress(user, String(id), { isDefault: true });
+    if (!updated) {
+      showToast('❌ Could not set default');
+      return;
+    }
+    setAddresses((prev) =>
+      prev
+        .map((a) => ({ ...a, isDefault: a.id === id }))
+        .sort((a, b) => (b.isDefault ? 1 : 0) - (a.isDefault ? 1 : 0))
+    );
+    showToast('✓ Default address updated');
   };
 
   const wishlistedProducts = products.filter((p) => wishlist.includes(p.id));
@@ -199,15 +217,15 @@ export default function ProfilePage() {
           <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mx-auto border border-blue-200">
             <User className="w-8 h-8" />
           </div>
-          <h2 className="font-heading font-black text-xl text-[#001B3A]">Please Sign In to Access Profile</h2>
+          <h2 className="font-heading font-black text-xl text-[#001B3A]">Login to access your account</h2>
           <p className="text-xs text-slate-500 leading-relaxed">
-            Log in to manage your profile settings, view active orders, and access saved addresses.
+            Order history, saved addresses, and profile are available only after login.
           </p>
           <button
             onClick={() => setIsAuthOpen(true)}
             className="w-full bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-[#001B3A] font-extrabold text-xs py-3.5 rounded-xl uppercase tracking-wider shadow-md transition-all"
           >
-            LOGIN / REGISTER NOW
+            LOGIN TO CONTINUE
           </button>
         </div>
         <Footer />
@@ -645,12 +663,19 @@ export default function ProfilePage() {
                       />
                       <input
                         type="tel"
-                        placeholder="Phone Number"
+                        placeholder="Primary phone *"
                         value={newAddrPhone}
                         onChange={(e) => setNewAddrPhone(e.target.value)}
                         className="px-3 py-2 bg-white border border-slate-300 rounded-xl outline-none"
                       />
                     </div>
+                    <input
+                      type="tel"
+                      placeholder="Alternate phone (optional — for delivery)"
+                      value={newAddrAltPhone}
+                      onChange={(e) => setNewAddrAltPhone(e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl outline-none"
+                    />
 
                     <input
                       type="text"
@@ -706,21 +731,40 @@ export default function ProfilePage() {
                         key={addr.id}
                         className="border border-blue-200 bg-blue-50/40 rounded-2xl p-5 text-xs space-y-2 relative"
                       >
-                        <div className="flex justify-between items-center">
-                          <div className="flex items-center gap-2">
+                        <div className="flex justify-between items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
                             <span className="bg-blue-600 text-white text-[10px] font-black px-2 py-0.5 rounded uppercase">
                               {addr.type}
                             </span>
+                            {addr.isDefault && (
+                              <span className="bg-emerald-100 text-emerald-700 text-[10px] font-black px-2 py-0.5 rounded uppercase">
+                                Default
+                              </span>
+                            )}
                             <span className="font-extrabold text-slate-900">{addr.name}</span>
                             <span className="text-slate-500">• {addr.phone}</span>
+                            {addr.alternatePhone ? (
+                              <span className="text-slate-400">· alt {addr.alternatePhone}</span>
+                            ) : null}
                           </div>
 
-                          <button
-                            onClick={() => handleDeleteAddress(addr.id)}
-                            className="text-red-500 hover:text-red-700"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {!addr.isDefault && (
+                              <button
+                                type="button"
+                                onClick={() => void handleSetDefaultAddress(addr.id)}
+                                className="text-[10px] font-extrabold text-blue-700 hover:underline"
+                              >
+                                Set default
+                              </button>
+                            )}
+                            <button
+                              onClick={() => handleDeleteAddress(addr.id)}
+                              className="text-red-500 hover:text-red-700"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
                         </div>
                         <p className="text-slate-700 leading-relaxed font-medium">
                           {addr.address}, {addr.city} — {addr.pincode}
@@ -742,6 +786,9 @@ export default function ProfilePage() {
                     </h2>
                     <p className="text-xs text-slate-500 font-medium">Your saved guide books</p>
                   </div>
+                  <Link href="/wishlist" className="text-xs font-bold text-blue-600 hover:underline">
+                    Open wishlist page →
+                  </Link>
                 </div>
 
                 {wishlistedProducts.length === 0 ? (

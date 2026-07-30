@@ -39,22 +39,22 @@ export const ProductGrid = () => {
   }, [products, selectedClass, selectedCategory, searchQuery]);
 
   return (
-    <section id="products" className="py-12 bg-white border-t border-slate-200">
-      <div className="max-w-7xl mx-auto px-4">
+    <section id="products" className="py-8 sm:py-12 bg-white border-t border-slate-200">
+      <div className="max-w-7xl mx-auto px-3 sm:px-4">
         {/* Header Bar */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 mb-5 sm:mb-8">
           <div>
             <div className="flex items-center gap-2 mb-1">
               <Sparkles className="w-4 h-4 text-amber-500" />
-              <span className="text-xs font-bold text-amber-800 uppercase tracking-wider">
+              <span className="text-[10px] sm:text-xs font-bold text-amber-800 uppercase tracking-wider">
                 Official Catalog
               </span>
             </div>
-            <h2 className="font-heading font-black text-2xl md:text-3xl text-[#001B3A] tracking-tight">
+            <h2 className="font-heading font-black text-xl sm:text-2xl md:text-3xl text-[#001B3A] tracking-tight">
               FEATURED STUDY GUIDES
             </h2>
             <p className="text-xs text-slate-500 font-medium mt-0.5">
-              {filteredProducts.length} Guide Books in Catalog
+              {filteredProducts.length} guide{filteredProducts.length === 1 ? '' : 's'}
             </p>
           </div>
 
@@ -104,7 +104,7 @@ export const ProductGrid = () => {
 
         {/* Grid or Clean Empty State */}
         {productsLoading ? (
-          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
+          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-4 md:gap-6">
             {Array.from({ length: 8 }).map((_, i) => (
               <div key={i} className="rounded-2xl border border-slate-200 bg-white p-3 h-72 animate-pulse">
                 <div className="h-40 bg-slate-100 rounded-xl mb-3" />
@@ -139,7 +139,7 @@ export const ProductGrid = () => {
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
+          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-4 md:gap-6">
             {filteredProducts.map((product) => (
               <ProductCard key={product.id} product={product} />
             ))}

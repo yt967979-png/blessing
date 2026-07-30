@@ -41,6 +41,7 @@ export interface UserData {
   token?: string;
   role?: string;
   needsProfile?: boolean;
+  isGuest?: boolean;
 }
 
 export interface PublicCoupon {
@@ -101,6 +102,9 @@ interface StoreContextType {
   removeFromCart: (id: string | number) => void;
   clearCart: () => void;
   clearCartAfterOrder: () => void;
+  saveForLater: (id: string | number) => void;
+  moveToCartFromSaved: (id: string | number) => void;
+  savedForLater: CartItem[];
   toggleWishlist: (id: string | number) => void;
   loginUser: (
     u: UserData,
@@ -160,6 +164,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [products, setProducts] = useState<Product[]>([]);
   const [productsLoading, setProductsLoading] = useState(true);
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [savedForLater, setSavedForLater] = useState<CartItem[]>([]);
   const [wishlist, setWishlist] = useState<(string | number)[]>([]);
   const [user, setUser] = useState<UserData | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -204,6 +209,15 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const localWish = readLocalWishlist();
     if (localCart.length) setCart(localCart);
     if (localWish.length) setWishlist(localWish);
+    try {
+      const raw = localStorage.getItem('bpg_saved_later');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) setSavedForLater(parsed);
+      }
+    } catch {
+      /* ignore */
+    }
 
     const savedUser = localStorage.getItem('bpg_user_next');
     if (savedUser) {
@@ -307,12 +321,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const addToCart = (product: Product, qty: number = 1) => {
     if (!user) {
       setIsAuthOpen(true);
-      showToast('Please sign in with Google to add items to cart');
+      showToast('Login required to add items to cart');
       return;
     }
     if (user.needsProfile || userNeedsProfile(user.phone)) {
       setIsAuthOpen(true);
-      showToast('Please complete your profile (mobile number) to shop');
+      showToast('Add your mobile number to continue shopping');
       return;
     }
     if (product.inStock === false) {
@@ -338,12 +352,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const requestCheckout = (open: boolean) => {
     if (open && !user) {
       setIsAuthOpen(true);
-      showToast('Please sign in with Google to place an order');
+      showToast('Login required to place an order');
       return;
     }
     if (open && user && (user.needsProfile || userNeedsProfile(user.phone))) {
       setIsAuthOpen(true);
-      showToast('Please complete your profile (mobile number) before checkout');
+      showToast('Add your mobile number before checkout');
       return;
     }
     setIsCheckoutOpen(open);
@@ -365,6 +379,41 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const removeFromCart = (id: string | number) => {
     setCart((prev) => prev.filter((item) => item.id !== id));
+  };
+
+  const saveForLater = (id: string | number) => {
+    setCart((prev) => {
+      const item = prev.find((i) => i.id === id);
+      if (!item) return prev;
+      setSavedForLater((later) => {
+        const next = later.some((l) => l.id === id)
+          ? later.map((l) => (l.id === id ? { ...l, qty: l.qty + item.qty } : l))
+          : [...later, item];
+        try {
+          localStorage.setItem('bpg_saved_later', JSON.stringify(next));
+        } catch {
+          /* ignore */
+        }
+        return next;
+      });
+      showToast('Saved for later');
+      return prev.filter((i) => i.id !== id);
+    });
+  };
+
+  const moveToCartFromSaved = (id: string | number) => {
+    const item = savedForLater.find((i) => i.id === id);
+    if (!item) return;
+    setSavedForLater((later) => {
+      const next = later.filter((i) => i.id !== id);
+      try {
+        localStorage.setItem('bpg_saved_later', JSON.stringify(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+    addToCart(item, item.qty);
   };
 
   const clearCart = useCallback(() => {
@@ -399,7 +448,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const toggleWishlist = (id: string | number) => {
     if (!user) {
       setIsAuthOpen(true);
-      showToast('Please sign in with Google to use wishlist');
+      showToast('Login required to use wishlist');
       return;
     }
     setWishlist((prev) => {
@@ -713,6 +762,26 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (cart.length === 0) clearAppliedCoupon();
   }, [cart.length]);
 
+  /** Debounced abandoned-cart ping for WhatsApp reminder (no SMS). */
+  useEffect(() => {
+    if (!hydrated || !user?.phone || cart.length === 0) return;
+    const t = setTimeout(() => {
+      fetch('/api/cart/abandon', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(user.token ? { Authorization: `Bearer ${user.token}` } : {}),
+        },
+        body: JSON.stringify({
+          phone: user.phone,
+          name: user.name,
+          cart: cart.map((c) => ({ id: c.id, title: c.title, qty: c.qty, price: c.price })),
+        }),
+      }).catch(() => {});
+    }, 8000);
+    return () => clearTimeout(t);
+  }, [hydrated, user?.phone, user?.name, user?.token, cart]);
+
   return (
     <StoreContext.Provider
       value={{
@@ -745,6 +814,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         removeFromCart,
         clearCart,
         clearCartAfterOrder,
+        saveForLater,
+        moveToCartFromSaved,
+        savedForLater,
         toggleWishlist,
         loginUser,
         logoutUser,

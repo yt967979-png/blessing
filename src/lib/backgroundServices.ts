@@ -1,6 +1,7 @@
 import { isBackgroundLeader } from '@/lib/backgroundLeader';
 
 let leaderServicesRunning = false;
+let abandonCartTimer: ReturnType<typeof setInterval> | null = null;
 
 /** WhatsApp, courier cron, outbox — leader replica only. */
 export async function startLeaderBackgroundServices() {
@@ -14,13 +15,34 @@ export async function startLeaderBackgroundServices() {
   startWhatsAppOutboxWorker();
   void initWhatsAppInProcess();
 
-  console.log('[background] leader services started (WhatsApp, courier cron, outbox)');
+  if (!abandonCartTimer) {
+    const drain = async () => {
+      try {
+        const { drainAbandonedCarts } = await import('@/app/api/cart/abandon/route');
+        const result = await drainAbandonedCarts();
+        if (result.sent > 0) {
+          console.log(`[abandon-cart] reminded ${result.sent} cart(s)`);
+        }
+      } catch (e: any) {
+        console.warn('[abandon-cart]', e?.message || e);
+      }
+    };
+    setTimeout(() => void drain(), 5 * 60 * 1000);
+    abandonCartTimer = setInterval(() => void drain(), 30 * 60 * 1000);
+  }
+
+  console.log('[background] leader services started (WhatsApp, courier cron, outbox, abandon-cart)');
 }
 
 /** Release leader-only resources when another replica takes over. */
 export async function stopLeaderBackgroundServices() {
   if (!leaderServicesRunning) return;
   leaderServicesRunning = false;
+
+  if (abandonCartTimer) {
+    clearInterval(abandonCartTimer);
+    abandonCartTimer = null;
+  }
 
   const { stopCourierSyncCron } = await import('@/lib/courierCron');
   stopCourierSyncCron();

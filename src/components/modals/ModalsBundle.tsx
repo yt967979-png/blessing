@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { getSTCourierDeliveryEstimate } from '@/lib/deliveryEstimator';
+import { pincodeDeliveryMessage } from '@/lib/pincode';
 import { createUserAddress, migrateLocalAddressesToDb } from '@/lib/addresses';
 import { GoogleAuthModal } from '@/components/auth/GoogleAuthModal';
 
@@ -61,8 +62,7 @@ export const ModalsBundle = () => {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      if (isCheckoutOpen) setIsCheckoutOpen(false);
-      else if (isAuthOpen) setIsAuthOpen(false);
+      if (isAuthOpen) setIsAuthOpen(false);
       else if (isTrackOpen) setIsTrackOpen(false);
       else if (isProfileOpen) setIsProfileOpen(false);
       else if (quickViewProduct) setQuickViewProduct(null);
@@ -71,19 +71,24 @@ export const ModalsBundle = () => {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [
-    isCheckoutOpen,
     isAuthOpen,
     isTrackOpen,
     isProfileOpen,
     quickViewProduct,
     orderSuccessData,
-    setIsCheckoutOpen,
     setIsAuthOpen,
     setIsTrackOpen,
     setIsProfileOpen,
     setQuickViewProduct,
     setOrderSuccessData,
   ]);
+
+  /** Flipkart-style: checkout is a full page, not a modal */
+  useEffect(() => {
+    if (!isCheckoutOpen) return;
+    setIsCheckoutOpen(false);
+    router.push('/checkout');
+  }, [isCheckoutOpen, router, setIsCheckoutOpen]);
 
   // Saved Addresses (from DB — login required for checkout)
   const [savedAddresses, setSavedAddresses] = useState<any[]>([]);
@@ -103,7 +108,7 @@ export const ModalsBundle = () => {
     if (!user?.id) {
       setIsCheckoutOpen(false);
       setIsAuthOpen(true);
-      showToast('Please sign in with Google to place an order');
+      showToast('Please login to place an order');
       return;
     }
     let cancelled = false;
@@ -168,15 +173,16 @@ export const ModalsBundle = () => {
     if (e) e.preventDefault();
     if (!user?.id) {
       setIsAuthOpen(true);
-      showToast('Please sign in with Google to save address & order');
+      showToast('Please login to save address & order');
       return false;
     }
     if (!newAddr.name || !newAddr.address || !newAddr.pincode) {
       alert('Please fill out Receiver Name, Address, and Pincode.');
       return false;
     }
-    if (String(newAddr.pincode).length !== 6) {
-      alert('Please enter a valid 6-digit pincode.');
+    const pinCheck = pincodeDeliveryMessage(String(newAddr.pincode));
+    if (!pinCheck.ok) {
+      alert(pinCheck.message);
       return false;
     }
 
@@ -482,311 +488,6 @@ export const ModalsBundle = () => {
                   </button>
                 </div>
               </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* Checkout Modal */}
-      <AnimatePresence>
-        {isCheckoutOpen && (
-          <div
-            onClick={() => setIsCheckoutOpen(false)}
-            className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
-          >
-            <motion.div
-              initial={{ y: 40, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: 40, opacity: 0 }}
-              onClick={(e) => e.stopPropagation()}
-              className="bg-white rounded-t-2xl sm:rounded-2xl p-5 sm:p-6 max-w-lg w-full relative shadow-2xl max-h-[92vh] overflow-y-auto"
-              style={{ paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom))' }}
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="checkout-title"
-            >
-              <div className="sm:hidden w-10 h-1 rounded-full bg-slate-200 mx-auto mb-3" />
-              <button
-                onClick={() => setIsCheckoutOpen(false)}
-                className="absolute top-3 right-3 w-11 h-11 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200"
-              >
-                <X className="w-4 h-4" />
-              </button>
-
-              <div className="flex items-center gap-2 mb-1">
-                <Lock className="w-5 h-5 text-amber-500" />
-                <h3 id="checkout-title" className="font-heading font-black text-lg sm:text-xl text-[#001B3A] leading-snug">
-                  Select Delivery Address & Checkout
-                </h3>
-              </div>
-              <p className="text-xs text-slate-500 mb-4">
-                Choose a saved address or add a new shipping address for express delivery.
-              </p>
-
-              <form onSubmit={handlePlaceOrder} className="space-y-4 text-xs">
-                {/* Flipkart Address Selector List */}
-                <div className="space-y-3">
-                  <label className="block font-black text-slate-800 uppercase tracking-wider text-[10px] flex items-center gap-1">
-                    <MapPin className="w-3.5 h-3.5 text-blue-600" />
-                    <span>Select Delivery Address</span>
-                  </label>
-
-                  {savedAddresses.map((addr) => (
-                    <div
-                      key={addr.id}
-                      onClick={() => setSelectedAddrId(addr.id)}
-                      className={`p-3.5 border-2 rounded-xl cursor-pointer transition-all flex items-start gap-3 ${
-                        selectedAddrId === addr.id
-                          ? 'border-blue-600 bg-blue-50/50 shadow-xs'
-                          : 'border-slate-200 hover:border-slate-300'
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="addr"
-                        checked={selectedAddrId === addr.id}
-                        onChange={() => setSelectedAddrId(addr.id)}
-                        className="mt-1"
-                      />
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-0.5">
-                          <span className="bg-slate-900 text-amber-400 font-black text-[9px] px-2 py-0.5 rounded uppercase">
-                            {addr.type}
-                          </span>
-                          <span className="font-extrabold text-slate-900">{addr.name}</span>
-                          <span className="text-slate-500 font-semibold">• {addr.phone}</span>
-                        </div>
-                        <p className="text-slate-600 leading-relaxed font-medium">
-                          {addr.address}, {addr.city} — {addr.pincode}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-
-                  {/* Add New Address Option */}
-                  <div
-                    onClick={() => setSelectedAddrId('new')}
-                    className={`p-3.5 border-2 border-dashed rounded-xl cursor-pointer transition-all flex items-center gap-2 font-bold ${
-                      selectedAddrId === 'new'
-                        ? 'border-blue-600 bg-blue-50/50 text-blue-700'
-                        : 'border-slate-300 text-slate-700 hover:bg-slate-50'
-                    }`}
-                  >
-                    <Plus className="w-4 h-4 text-blue-600" />
-                    <span>+ Add New Shipping Address</span>
-                  </div>
-                </div>
-
-                {/* New Address Form Input Fields */}
-                {selectedAddrId === 'new' && (
-                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block font-bold text-slate-700 mb-1">Full Name *</label>
-                        <input
-                          type="text"
-                          required
-                          placeholder="e.g. Student Name"
-                          value={newAddr.name}
-                          onChange={(e) => setNewAddr({ ...newAddr, name: e.target.value })}
-                          className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none bg-white focus:border-blue-600"
-                        />
-                      </div>
-                      <div>
-                        <label className="block font-bold text-slate-700 mb-1">Mobile (WhatsApp) *</label>
-                        <input
-                          type="tel"
-                          required
-                          placeholder="e.g. 9840418228"
-                          value={newAddr.phone}
-                          onChange={(e) => setNewAddr({ ...newAddr, phone: e.target.value })}
-                          className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none bg-white focus:border-blue-600"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block font-bold text-slate-700 mb-1">Street Address & Door No *</label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="No. 45, Medavakkam High Rd..."
-                        value={newAddr.address}
-                        onChange={(e) => setNewAddr({ ...newAddr, address: e.target.value })}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none bg-white focus:border-blue-600"
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block font-bold text-slate-700 mb-1">City / District *</label>
-                        <input
-                          type="text"
-                          required
-                          placeholder="e.g. Chennai"
-                          value={newAddr.city}
-                          onChange={(e) => setNewAddr({ ...newAddr, city: e.target.value })}
-                          className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none bg-white focus:border-blue-600"
-                        />
-                      </div>
-                      <div>
-                        <label className="block font-bold text-slate-700 mb-1">6-Digit Pincode *</label>
-                        <input
-                          type="text"
-                          maxLength={6}
-                          required
-                          placeholder="e.g. 600012"
-                          value={newAddr.pincode}
-                          onChange={(e) => setNewAddr({ ...newAddr, pincode: e.target.value })}
-                          className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none bg-white focus:border-blue-600"
-                        />
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={handleSaveInlineAddress}
-                      className="w-full bg-blue-600 hover:bg-[#001B3A] text-white font-extrabold text-xs py-2.5 rounded-lg transition-colors mt-2 shadow-xs cursor-pointer"
-                    >
-                      ✓ SAVE & USE THIS ADDRESS
-                    </button>
-                  </div>
-                )}
-
-                {/* Coupon */}
-                <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-3 space-y-2">
-                  <label className="block font-black text-slate-800 uppercase tracking-wider text-[10px] flex items-center gap-1">
-                    <Tag className="w-3.5 h-3.5 text-amber-600" />
-                    Coupon / Offer Code
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      value={couponInput}
-                      onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
-                      placeholder="Enter code from homepage"
-                      className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-xs font-bold uppercase bg-white"
-                    />
-                    <button
-                      type="button"
-                      disabled={couponBusy}
-                      onClick={async () => {
-                        setCouponBusy(true);
-                        await applyCouponCode(couponInput, freeBookPickId || undefined);
-                        setCouponBusy(false);
-                      }}
-                      className="px-4 py-2 bg-[#001B3A] text-white text-xs font-bold rounded-lg disabled:opacity-60"
-                    >
-                      Apply
-                    </button>
-                  </div>
-                  {appliedCoupon && (
-                    <p className="text-[11px] font-bold text-emerald-700">
-                      ✓ {appliedCoupon.code}: {appliedCoupon.label}
-                      {appliedCoupon.freeBookTitle ? ` — ${appliedCoupon.freeBookTitle}` : ''}
-                      {appliedCoupon.offerType === 'discount' && appliedCoupon.discountAmount > 0
-                        ? ` (−₹${appliedCoupon.discountAmount})`
-                        : ''}
-                      <button type="button" onClick={clearAppliedCoupon} className="ml-2 text-red-600">
-                        Remove
-                      </button>
-                    </p>
-                  )}
-                  {(pendingCouponCode && !appliedCoupon) ||
-                  (appliedCoupon?.offerType === 'free_book' && !appliedCoupon?.freeBookId) ? (
-                    <div className="pt-2 border-t border-amber-200/80">
-                      <p className="text-[10px] font-black uppercase text-amber-900 mb-2">
-                        Pick your FREE book
-                      </p>
-                      <select
-                        value={freeBookPickId}
-                        onChange={(e) => setFreeBookPickId(e.target.value)}
-                        className="w-full px-3 py-2 border rounded-lg text-xs bg-white"
-                      >
-                        <option value="">Select a book…</option>
-                        {freeBookOptions.map((p) => (
-                            <option key={p.id} value={String(p.id)}>
-                              {p.title} — ₹{p.price}
-                            </option>
-                          ))}
-                      </select>
-                      <button
-                        type="button"
-                        disabled={!freeBookPickId || couponBusy}
-                        onClick={async () => {
-                          setCouponBusy(true);
-                          await applyCouponCode(couponInput || pendingCouponCode, freeBookPickId);
-                          setCouponBusy(false);
-                        }}
-                        className="mt-2 w-full py-2 bg-emerald-600 text-white text-xs font-bold rounded-lg disabled:opacity-60"
-                      >
-                        Confirm Free Book
-                      </button>
-                    </div>
-                  ) : null}
-                  <div className="flex justify-between text-xs font-bold pt-1">
-                    <span>Order total</span>
-                    <span>₹{cartGrandTotal}</span>
-                  </div>
-                </div>
-
-                {/* Quality & Payment Method */}
-                <div className="pt-2">
-                  <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-center justify-between text-xs mb-3">
-                    <div className="flex items-center gap-2 text-emerald-800 font-bold">
-                      <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                      <span>100% Original Book Guarantee</span>
-                    </div>
-                    <span className="text-[10px] bg-emerald-600 text-white font-extrabold px-2 py-0.5 rounded">FREE EXPRESS DELIVERY</span>
-                  </div>
-
-                  <label className="block font-black text-slate-800 uppercase tracking-wider text-[10px] mb-2">
-                    Payment Method:
-                  </label>
-                  <div className="grid grid-cols-2 gap-3">
-                    <label
-                      onClick={() => setPaymentMethod('razorpay')}
-                      className={`p-3 border-2 rounded-xl cursor-pointer flex items-center gap-2 font-bold text-xs transition-colors ${
-                        paymentMethod === 'razorpay'
-                          ? 'border-blue-600 bg-blue-50/50 text-blue-700'
-                          : 'border-slate-200 text-slate-700'
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="pay"
-                        checked={paymentMethod === 'razorpay'}
-                        onChange={() => {}}
-                      />
-                      <span>Razorpay (UPI / Cards)</span>
-                    </label>
-
-                    <label
-                      onClick={() => setPaymentMethod('cod')}
-                      className={`p-3 border-2 rounded-xl cursor-pointer flex items-center gap-2 font-bold text-xs transition-colors ${
-                        paymentMethod === 'cod'
-                          ? 'border-blue-600 bg-blue-50/50 text-blue-700'
-                          : 'border-slate-200 text-slate-700'
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="pay"
-                        checked={paymentMethod === 'cod'}
-                        onChange={() => {}}
-                      />
-                      <span>Cash on Delivery (COD)</span>
-                    </label>
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={isPlacingOrder || cart.length === 0}
-                  className="w-full bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-[#001B3A] font-extrabold text-sm py-3.5 rounded-xl shadow-md uppercase tracking-wider mt-4 disabled:opacity-60 disabled:cursor-not-allowed"
-                >
-                  {isPlacingOrder ? 'PLACING ORDER…' : `CONFIRM & PLACE ORDER (₹${cartGrandTotal})`}
-                </button>
-              </form>
             </motion.div>
           </div>
         )}

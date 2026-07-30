@@ -8,7 +8,7 @@ import {
   Plus, Trash2, MessageSquare, Truck, Send, ShieldCheck,
   Download, X, Search, RefreshCw, TrendingUp, IndianRupee,
   Box, Clock, CheckCircle2, LogOut, BarChart2,
-  CreditCard, Banknote, Smartphone, Star, AlertCircle, Tag, Gift,
+  CreditCard, Banknote, Smartphone, Star, AlertCircle, Tag, Gift, Upload,
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { authHeaders } from '@/lib/clientAuth';
@@ -38,6 +38,7 @@ const AdminReviewsTab = dynamic(() => import('@/components/admin/AdminReviewsTab
 interface OrderItem { title: string; qty: number; price?: number; subtotal?: number; }
 interface Order {
   orderId: string; id: string; customerName: string; customerPhone: string;
+  customerAltPhone?: string;
   address: string; city: string; pincode: string; totalAmount: number;
   paymentMethod: string; paymentStatus: string; courierStatus: string;
   trackingNumber: string; shipmentId: string; isOfficialAwb: boolean;
@@ -471,9 +472,33 @@ export default function AdminPage() {
     { label: 'In Transit', statusKey: 'IN_TRANSIT', orderStatus: 'In Transit' },
     { label: 'Out for Delivery', statusKey: 'OUT_FOR_DELIVERY', orderStatus: 'Out for Delivery' },
     { label: 'Delivered', statusKey: 'DELIVERED', orderStatus: 'Delivered' },
+    { label: 'Cancel', statusKey: 'CANCELLED', orderStatus: 'Cancelled' },
   ];
 
   const handleUpdateOrderStatus = async (o: Order, statusKey: string, orderStatus: string) => {
+    if (statusKey === 'CANCELLED') {
+      if (!confirm(`Cancel order ${o.orderId}? Stock will be restored.`)) return;
+      setUpdatingStatusId(`${o.orderId}-${statusKey}`);
+      try {
+        const r = await fetch('/api/orders/cancel', {
+          method: 'POST',
+          headers: authHeaders(user),
+          body: JSON.stringify({ orderId: o.orderId, reason: 'Cancelled by admin' }),
+        });
+        const d = await r.json();
+        if (!r.ok) {
+          showToast(`❌ ${d.error || 'Cancel failed'}`);
+          return;
+        }
+        showToast(`✅ Order ${o.orderId} cancelled`);
+        loadLiveOrders();
+      } catch {
+        showToast('❌ Cancel failed');
+      } finally {
+        setUpdatingStatusId(null);
+      }
+      return;
+    }
     setUpdatingStatusId(`${o.orderId}-${statusKey}`);
     showToast(`Updating → ${orderStatus} & notifying customer...`);
     try {
@@ -491,7 +516,6 @@ export default function AdminPage() {
         showToast(`❌ ${d.error || 'Failed to update'}`);
         return;
       }
-      // Also sync plain status label used in orders list
       await fetch('/api/orders', {
         method: 'PATCH',
         headers: authHeaders(user),
@@ -686,7 +710,9 @@ export default function AdminPage() {
         TAMIL NADU, INDIA
       </div>
       <div class="customer-phone">
-        <span class="phone-badge">☎</span> +91 ${o.customerPhone || ''}
+        <span class="phone-badge">☎</span> +91 ${o.customerPhone || ''}${
+          o.customerAltPhone ? ` &nbsp;|&nbsp; Alt +91 ${o.customerAltPhone}` : ''
+        }
       </div>
     </div>
     ${hasOfficialAwb ? `
@@ -1233,7 +1259,10 @@ export default function AdminPage() {
                             </div>
                             <div className="min-w-0">
                               <p className="text-sm font-semibold text-gray-900">{o.customerName}</p>
-                              <p className="text-xs text-gray-400">{o.customerPhone && `+91 ${o.customerPhone}`}</p>
+                              <p className="text-xs text-gray-400">
+                                {o.customerPhone && `+91 ${o.customerPhone}`}
+                                {o.customerAltPhone ? ` · alt +91 ${o.customerAltPhone}` : ''}
+                              </p>
                               <p className="text-xs text-gray-400 mt-0.5 line-clamp-1">{o.address}{o.city ? `, ${o.city}` : ''}{o.pincode ? ` - ${o.pincode}` : ''}</p>
                               <div className="flex flex-wrap gap-1 mt-1.5">
                                 {(o.items || []).map((item: { title: string; qty: number }, i: number) => (
@@ -1274,15 +1303,22 @@ export default function AdminPage() {
                             {ORDER_STATUS_ACTIONS.map((a) => {
                               const busy = updatingStatusId === `${o.orderId}-${a.statusKey}`;
                               const isCurrent = (o.courierStatus || '').toLowerCase() === a.orderStatus.toLowerCase();
+                              const isCancelled = (o.courierStatus || '').toLowerCase().includes('cancel');
+                              const isCancelBtn = a.statusKey === 'CANCELLED';
                               return (
                                 <button
                                   key={a.statusKey}
-                                  disabled={busy || isCurrent}
+                                  disabled={busy || isCurrent || (isCancelBtn && isCancelled) || (!isCancelBtn && isCancelled)}
                                   onClick={() => handleUpdateOrderStatus(o, a.statusKey, a.orderStatus)}
-                                  className={`px-2.5 py-1.5 text-[11px] font-semibold rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${isCurrent
-                                      ? 'bg-green-100 text-green-700 border border-green-200'
-                                      : 'bg-white text-gray-700 border border-gray-200 hover:border-[#2874f0] hover:text-[#2874f0]'
-                                    }`}
+                                  className={`px-2.5 py-1.5 text-[11px] font-semibold rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                                    isCancelBtn
+                                      ? isCurrent || isCancelled
+                                        ? 'bg-red-100 text-red-700 border border-red-200'
+                                        : 'bg-white text-red-700 border border-red-200 hover:bg-red-50'
+                                      : isCurrent
+                                        ? 'bg-green-100 text-green-700 border border-green-200'
+                                        : 'bg-white text-gray-700 border border-gray-200 hover:border-[#2874f0] hover:text-[#2874f0]'
+                                  }`}
                                 >
                                   {busy ? '...' : a.label}
                                 </button>
@@ -1322,11 +1358,48 @@ export default function AdminPage() {
                 <h2 className="text-base font-bold text-gray-900">Product Catalog</h2>
                 <p className="text-xs text-gray-400 mt-0.5">Manage guide books, pricing, and stock</p>
               </div>
-              <button onClick={() => setShowAddForm(!showAddForm)} className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-[#2874f0] hover:bg-[#1a5dc8] rounded-lg transition-colors cursor-pointer">
-                {showAddForm ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
-                {showAddForm ? 'Close' : 'Add Product'}
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-gray-700 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg transition-colors cursor-pointer">
+                  <Upload className="w-3.5 h-3.5" />
+                  Import CSV
+                  <input
+                    type="file"
+                    accept=".csv,text/csv"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      e.target.value = '';
+                      if (!file) return;
+                      showToast('⏳ Importing CSV…');
+                      try {
+                        const csv = await file.text();
+                        const r = await fetch('/api/products/bulk', {
+                          method: 'POST',
+                          headers: authHeaders(user),
+                          body: JSON.stringify({ csv }),
+                        });
+                        const d = await r.json();
+                        if (!r.ok) {
+                          showToast(`❌ ${d.error || 'Import failed'}`);
+                          return;
+                        }
+                        showToast(`✅ Imported ${d.imported || 0} book(s)`);
+                        window.location.reload();
+                      } catch {
+                        showToast('❌ CSV import failed');
+                      }
+                    }}
+                  />
+                </label>
+                <button onClick={() => setShowAddForm(!showAddForm)} className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-[#2874f0] hover:bg-[#1a5dc8] rounded-lg transition-colors cursor-pointer">
+                  {showAddForm ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
+                  {showAddForm ? 'Close' : 'Add Product'}
+                </button>
+              </div>
             </div>
+            <p className="text-[10px] text-gray-400 px-1">
+              CSV columns: <code className="bg-gray-100 px-1 rounded">title,cls,category,price,mrp,stock,badge</code>
+            </p>
 
             {showAddForm && (
               <div className="bg-white rounded-xl border-2 border-[#2874f0]/30 p-5">

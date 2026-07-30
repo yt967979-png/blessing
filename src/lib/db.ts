@@ -568,6 +568,7 @@ async function runSchemaInit(client: any) {
           user_id VARCHAR(255) REFERENCES users(id) ON DELETE CASCADE,
           full_name VARCHAR(255) NOT NULL,
           phone VARCHAR(255) NOT NULL,
+          alternate_phone VARCHAR(20),
           address_line1 TEXT NOT NULL,
           address_line2 TEXT,
           city VARCHAR(255) NOT NULL,
@@ -791,6 +792,7 @@ async function runSchemaInit(client: any) {
         );
 
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_address TEXT;
+        ALTER TABLE addresses ADD COLUMN IF NOT EXISTS alternate_phone VARCHAR(20);
         ALTER TABLE reviews ADD COLUMN IF NOT EXISTS user_name VARCHAR(255);
         ALTER TABLE reviews ADD COLUMN IF NOT EXISTS order_id VARCHAR(255);
         ALTER TABLE reviews ADD COLUMN IF NOT EXISTS images JSONB DEFAULT '[]'::jsonb;

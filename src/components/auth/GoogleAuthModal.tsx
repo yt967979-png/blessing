@@ -22,7 +22,7 @@ declare global {
   }
 }
 
-type Step = 'google' | 'profile';
+type Step = 'google' | 'profile' | 'guest';
 
 export function GoogleAuthModal({
   onClose,
@@ -41,6 +41,8 @@ export function GoogleAuthModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [profileName, setProfileName] = useState('');
   const [profilePhone, setProfilePhone] = useState('');
+  const [guestName, setGuestName] = useState('');
+  const [guestPhone, setGuestPhone] = useState('');
   const [sessionToken, setSessionToken] = useState<string | null>(user?.token || null);
 
   useEffect(() => {
@@ -130,6 +132,42 @@ export function GoogleAuthModal({
     document.head.appendChild(script);
   }, [clientId, step, handleGoogleCredential]);
 
+  const submitGuest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError(null);
+    if (!guestName.trim() || guestName.trim().length < 2) {
+      setAuthError('Please enter your full name.');
+      return;
+    }
+    if (!isValidMobileNumber(guestPhone)) {
+      setAuthError('Please enter a valid 10-digit mobile number.');
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      const res = await fetch('/api/auth/guest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: guestName.trim(),
+          phone: normalizeMobileDigits(guestPhone),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        setAuthError(data.error || 'Could not continue as guest.');
+        return;
+      }
+      loginUser(data.user, data.cart || [], data.wishlist || [], []);
+      showToast('✓ Ready to shop — WhatsApp updates on this number');
+      onClose();
+    } catch {
+      setAuthError('Network error. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const submitProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError(null);
@@ -202,12 +240,18 @@ export function GoogleAuthModal({
             </span>
           </div>
           <h3 className="font-heading font-black text-xl text-white">
-            {step === 'google' ? 'Sign in to continue' : 'Complete your profile'}
+            {step === 'google'
+              ? 'Login to continue'
+              : step === 'guest'
+                ? 'Login with phone'
+                : 'Complete your profile'}
           </h3>
           <p className="text-xs text-slate-300 mt-1">
             {step === 'google'
-              ? 'Use your Google account — quick and secure sign-in'
-              : 'We need your mobile number for orders & WhatsApp delivery updates'}
+              ? 'Login required to order, view history &amp; saved addresses'
+              : step === 'guest'
+                ? 'Name + WhatsApp number — no SMS OTP'
+                : 'We need your mobile number for orders & WhatsApp delivery updates'}
           </p>
         </div>
 
@@ -223,7 +267,7 @@ export function GoogleAuthModal({
             <>
               {!clientId ? (
                 <div className="text-center text-sm text-slate-600 bg-amber-50 border border-amber-200 rounded-xl p-4">
-                  Google Sign-In is not available right now. Please try again later or contact support.
+                  Google Sign-In is not configured. Use phone checkout below, or contact support.
                 </div>
               ) : (
                 <div className="flex flex-col items-center gap-3 py-2">
@@ -233,12 +277,80 @@ export function GoogleAuthModal({
                   )}
                 </div>
               )}
+              <div className="relative flex items-center gap-3 py-1">
+                <div className="flex-1 h-px bg-slate-200" />
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">or</span>
+                <div className="flex-1 h-px bg-slate-200" />
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthError(null);
+                  setStep('guest');
+                }}
+                className="w-full border border-slate-200 hover:border-blue-500 hover:bg-blue-50 text-slate-800 font-bold text-xs py-3 rounded-xl transition-colors"
+              >
+                Login with name &amp; phone
+              </button>
               <ul className="text-[11px] text-slate-500 space-y-1.5 bg-slate-50 rounded-xl p-3 border border-slate-100">
-                <li>• One tap sign-in — no password to remember</li>
-                <li>• Then add phone for COD orders & WhatsApp tracking</li>
-                <li>• Your cart and orders stay saved on this account</li>
+                <li>• Login first — then add to cart &amp; place COD orders</li>
+                <li>• Order history &amp; saved addresses stay on your account</li>
+                <li>• Updates go to WhatsApp on your number (no SMS OTP)</li>
               </ul>
             </>
+          ) : step === 'guest' ? (
+            <form onSubmit={submitGuest} className="space-y-3.5 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1" htmlFor="guest-name">
+                  Full name *
+                </label>
+                <div className="relative">
+                  <input
+                    id="guest-name"
+                    type="text"
+                    required
+                    value={guestName}
+                    onChange={(e) => setGuestName(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-600 font-medium"
+                  />
+                  <User className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                </div>
+              </div>
+              <div>
+                <label className="block font-bold text-slate-700 mb-1" htmlFor="guest-phone">
+                  Mobile number (WhatsApp) *
+                </label>
+                <div className="relative">
+                  <input
+                    id="guest-phone"
+                    type="tel"
+                    required
+                    placeholder="e.g. 9840418228"
+                    value={guestPhone}
+                    onChange={(e) => setGuestPhone(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-600 font-medium"
+                  />
+                  <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                </div>
+              </div>
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-[#001B3A] font-extrabold text-xs py-3.5 rounded-xl shadow-md uppercase tracking-wider disabled:opacity-50"
+              >
+                {isSubmitting ? 'LOGGING IN…' : 'LOGIN & CONTINUE'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthError(null);
+                  setStep('google');
+                }}
+                className="w-full text-[11px] font-semibold text-slate-500 hover:text-blue-600"
+              >
+                ← Back to Google login
+              </button>
+            </form>
           ) : (
             <form onSubmit={submitProfile} className="space-y-3.5 text-xs">
               <div>
@@ -289,7 +401,7 @@ export function GoogleAuthModal({
 
           <div className="pt-2 border-t border-slate-100 flex items-center justify-center gap-1.5 text-[10px] text-slate-400 font-semibold">
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-            <span>Secured sign-in via Google</span>
+            <span>{step === 'guest' ? 'No SMS OTP — WhatsApp only for orders' : 'Secured sign-in via Google'}</span>
           </div>
         </div>
       </motion.div>
