@@ -173,7 +173,7 @@ export default function AdminPage() {
         const d = await fRes.json();
         if (Array.isArray(d)) setFaqs(d);
       }
-    } catch (_) {}
+    } catch (_) { }
   }, [user]);
 
   // ── Data loaders
@@ -253,7 +253,7 @@ export default function AdminPage() {
             void loadLiveOrders();
           }
         })
-        .catch(() => {});
+        .catch(() => { });
     };
     runCourierSync();
     const courierSync = setInterval(runCourierSync, 45000);
@@ -263,7 +263,7 @@ export default function AdminPage() {
         const b = d.tableRowCounts.books || 0;
         setTimeout(() => setDbStats({ users: u, books: b }), 0);
       }
-    }).catch(() => {});
+    }).catch(() => { });
     return () => { clearInterval(interval); clearInterval(courierSync); if (es) es.close(); };
   }, [loadLiveOrders, loadAnalytics, user]);
 
@@ -384,7 +384,7 @@ export default function AdminPage() {
       const fd = new FormData(); fd.append('file', file); fd.append('folder', 'blessing_power_guides');
       const r = await fetch('/api/upload', { method: 'POST', body: fd });
       if (r.ok) { const d = await r.json(); if (d.url) { setNewImg(d.url); showToast('☁️ Uploaded!'); return; } }
-    } catch (_) {}
+    } catch (_) { }
     const reader = new FileReader(); reader.onloadend = () => { if (typeof reader.result === 'string') { setNewImg(reader.result); showToast('✅ Image ready'); } }; reader.readAsDataURL(file);
   };
 
@@ -426,8 +426,8 @@ export default function AdminPage() {
   const handleExportCsv = () => {
     if (!filteredOrders.length) { showToast('⚠️ No orders to export'); return; }
     const rows = [
-      ['Order ID','Date','Customer','Phone','City','Amount','Payment','Status','AWB'].join(','),
-      ...filteredOrders.map((o) => [`"${o.orderId}"`,`"${o.createdAt}"`,`"${(o.customerName||'').replace(/"/g,'""')}"`,`"${o.customerPhone}"`,`"${o.city}"`,o.totalAmount,`"${o.paymentMethod}"`,`"${o.courierStatus}"`,`"${o.trackingNumber||''}"`].join(',')),
+      ['Order ID', 'Date', 'Customer', 'Phone', 'City', 'Amount', 'Payment', 'Status', 'AWB'].join(','),
+      ...filteredOrders.map((o) => [`"${o.orderId}"`, `"${o.createdAt}"`, `"${(o.customerName || '').replace(/"/g, '""')}"`, `"${o.customerPhone}"`, `"${o.city}"`, o.totalAmount, `"${o.paymentMethod}"`, `"${o.courierStatus}"`, `"${o.trackingNumber || ''}"`].join(',')),
     ].join('\n');
     const a = document.createElement('a'); a.href = 'data:text/csv;charset=utf-8,' + encodeURI(rows); a.download = `orders_${Date.now()}.csv`; a.click();
     showToast('📥 CSV exported');
@@ -514,7 +514,9 @@ export default function AdminPage() {
     const pw = window.open('', '_blank', 'width=800,height=1000'); if (!pw) return;
     const isCod = (o.paymentMethod || '').toLowerCase().includes('cod');
     const orderDate = o.createdAt ? new Date(o.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
-    const trackingNum = (o.trackingNumber && !o.trackingNumber.startsWith('SHP-')) ? o.trackingNumber : `ST${(o.orderId || '').replace(/\D/g, '').padEnd(10, '9876543210').slice(0, 10)}`;
+    const hasOfficialAwb = Boolean(o.trackingNumber && !o.trackingNumber.startsWith('SHP-'));
+    const displayAwb = hasOfficialAwb ? o.trackingNumber : 'PENDING DISPATCH';
+    const barcodeText = hasOfficialAwb ? o.trackingNumber : (o.orderId || 'BPG-3578');
     const invoiceNum = `BPG/INV/${(o.orderId || '').replace(/\D/g, '') || '3578'}`;
     const totalAmount = Number(o.totalAmount || 0);
 
@@ -545,7 +547,7 @@ export default function AdminPage() {
 
     const totalItems = (o.items || []).reduce((s, i) => s + (i.qty || 1), 0);
     const estWeight = totalItems * 400;
-    const barcodeUrl = `https://bwipjs-api.metafloor.com/?bcid=code128&text=${encodeURIComponent(trackingNum)}&scale=2&height=12&textsize=10&includetext`;
+    const barcodeUrl = `https://bwipjs-api.metafloor.com/?bcid=code128&text=${encodeURIComponent(barcodeText)}&scale=2&height=12&textsize=10&includetext`;
     const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&margin=0&data=${encodeURIComponent(`https://blessing-production.up.railway.app/track?orderId=${o.orderId}`)}`;
 
     pw.document.write(`<!DOCTYPE html><html><head><title>Invoice #${o.orderId}</title>
@@ -689,10 +691,10 @@ export default function AdminPage() {
     </div>
     <div class="awb-card">
       <div class="awb-lbl">AWB / TRACKING NUMBER</div>
-      <div class="awb-val">${trackingNum}</div>
+      <div class="awb-val">${displayAwb}</div>
       <div class="courier-lbl">COURIER</div>
       <div class="courier-val">${o.courierName || 'ST Courier Express'}</div>
-      <img src="${barcodeUrl}" class="barcode-img" alt="Barcode ${trackingNum}" />
+      <img src="${barcodeUrl}" class="barcode-img" alt="Barcode ${barcodeText}" />
     </div>
   </div>
 
@@ -790,7 +792,7 @@ export default function AdminPage() {
   };
   const handleUnlinkWhatsApp = async () => {
     if (!confirm('Unlink WhatsApp session?')) return;
-    try { const r = await fetch('/api/whatsapp/qr', { method: 'DELETE' }); if (r.ok) { showToast('✅ Session unlinked'); setWaStatus({ status: 'DISCONNECTED' }); } } catch (_) {}
+    try { const r = await fetch('/api/whatsapp/qr', { method: 'DELETE' }); if (r.ok) { showToast('✅ Session unlinked'); setWaStatus({ status: 'DISCONNECTED' }); } } catch (_) { }
   };
   const handleRequestPairingCode = async (e: React.FormEvent) => {
     e.preventDefault(); if (!waPhoneInput) return;
@@ -807,7 +809,7 @@ export default function AdminPage() {
           <div>
             <h2 className="font-semibold text-xl text-gray-900">Admin Access Required</h2>
             <p className="text-sm text-gray-500 mt-2 leading-relaxed">
-              {user ? <></>: 'You must be signed in with an administrator account.'}
+              {user ? <></> : 'You must be signed in with an administrator account.'}
             </p>
           </div>
           <div className="space-y-3 pt-2">
@@ -821,13 +823,13 @@ export default function AdminPage() {
 
   const tabs = [
     { id: 'analytics' as Tab, label: 'Analytics', icon: BarChart2 },
-    { id: 'orders'    as Tab, label: 'Orders',    icon: ShoppingCart, count: orders.length },
-    { id: 'catalog'   as Tab, label: 'Products',  icon: Package, count: products.length },
-    { id: 'coupons'   as Tab, label: 'Coupons',   icon: Gift },
-    { id: 'users'     as Tab, label: 'Customers', icon: Users },
-    { id: 'reviews'   as Tab, label: 'Reviews',   icon: Star },
-    { id: 'content'   as Tab, label: 'Content',   icon: Tag },
-    { id: 'whatsapp'  as Tab, label: 'WhatsApp',  icon: MessageSquare },
+    { id: 'orders' as Tab, label: 'Orders', icon: ShoppingCart, count: orders.length },
+    { id: 'catalog' as Tab, label: 'Products', icon: Package, count: products.length },
+    { id: 'coupons' as Tab, label: 'Coupons', icon: Gift },
+    { id: 'users' as Tab, label: 'Customers', icon: Users },
+    { id: 'reviews' as Tab, label: 'Reviews', icon: Star },
+    { id: 'content' as Tab, label: 'Content', icon: Tag },
+    { id: 'whatsapp' as Tab, label: 'WhatsApp', icon: MessageSquare },
   ];
 
   return (
@@ -875,13 +877,13 @@ export default function AdminPage() {
         {/* Mobile tab bar — horizontal scroll */}
         <div className="md:hidden border-t border-gray-100 bg-white overflow-x-auto scroll-chips">
           <div className="flex min-w-max px-1">
-          {tabs.map((t) => (
-            <button key={t.id} onClick={() => setActiveTab(t.id)}
-              className={`min-w-[72px] px-3 py-2.5 flex flex-col items-center gap-0.5 text-[10px] font-semibold transition-colors border-b-2 cursor-pointer touch-target ${activeTab === t.id ? 'border-[#2874f0] text-[#2874f0] bg-blue-50/40' : 'border-transparent text-gray-400'}`}>
-              <t.icon className="w-4 h-4" />
-              <span>{t.label}</span>
-            </button>
-          ))}
+            {tabs.map((t) => (
+              <button key={t.id} onClick={() => setActiveTab(t.id)}
+                className={`min-w-[72px] px-3 py-2.5 flex flex-col items-center gap-0.5 text-[10px] font-semibold transition-colors border-b-2 cursor-pointer touch-target ${activeTab === t.id ? 'border-[#2874f0] text-[#2874f0] bg-blue-50/40' : 'border-transparent text-gray-400'}`}>
+                <t.icon className="w-4 h-4" />
+                <span>{t.label}</span>
+              </button>
+            ))}
           </div>
         </div>
       </header>
@@ -892,9 +894,9 @@ export default function AdminPage() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {[
             { label: 'Total Revenue', value: fmt(analytics?.summary.totalRevenue ?? totalRevenue), icon: IndianRupee, color: 'text-green-600', bg: 'bg-green-50', sub: analytics ? `₹${analytics.summary.todayRevenue.toLocaleString('en-IN')} today` : '' },
-            { label: 'Total Orders',  value: analytics?.summary.totalOrders ?? orders.length, icon: ShoppingCart, color: 'text-blue-600', bg: 'bg-blue-50', sub: analytics ? `${analytics.summary.todayOrders} today` : '' },
-            { label: 'Products',      value: products.length, icon: Box, color: 'text-orange-600', bg: 'bg-orange-50', sub: `${dbStats.books} in DB` },
-            { label: 'Customers',     value: dbStats.users, icon: Users, color: 'text-purple-600', bg: 'bg-purple-50', sub: analytics ? `Avg order ${fmt(analytics.summary.avgOrderValue)}` : '' },
+            { label: 'Total Orders', value: analytics?.summary.totalOrders ?? orders.length, icon: ShoppingCart, color: 'text-blue-600', bg: 'bg-blue-50', sub: analytics ? `${analytics.summary.todayOrders} today` : '' },
+            { label: 'Products', value: products.length, icon: Box, color: 'text-orange-600', bg: 'bg-orange-50', sub: `${dbStats.books} in DB` },
+            { label: 'Customers', value: dbStats.users, icon: Users, color: 'text-purple-600', bg: 'bg-purple-50', sub: analytics ? `Avg order ${fmt(analytics.summary.avgOrderValue)}` : '' },
           ].map((s) => (
             <div key={s.label} className="bg-white rounded-xl border border-gray-200 p-3.5 hover:shadow-sm transition-shadow">
               <div className="flex items-start justify-between gap-2">
@@ -959,10 +961,10 @@ export default function AdminPage() {
                 {/* Today spotlight */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {[
-                    { label: "Today's Revenue",  value: fmt(analytics.summary.todayRevenue),  icon: IndianRupee, color: 'text-green-600',  bg: 'bg-green-50' },
-                    { label: "Today's Orders",   value: analytics.summary.todayOrders,        icon: ShoppingCart, color: 'text-blue-600',  bg: 'bg-blue-50' },
-                    { label: 'Online Payments',  value: analytics.summary.paidOrders,         icon: CreditCard,   color: 'text-violet-600', bg: 'bg-violet-50' },
-                    { label: 'COD Orders',        value: analytics.summary.codOrders,          icon: Banknote,     color: 'text-amber-600',  bg: 'bg-amber-50' },
+                    { label: "Today's Revenue", value: fmt(analytics.summary.todayRevenue), icon: IndianRupee, color: 'text-green-600', bg: 'bg-green-50' },
+                    { label: "Today's Orders", value: analytics.summary.todayOrders, icon: ShoppingCart, color: 'text-blue-600', bg: 'bg-blue-50' },
+                    { label: 'Online Payments', value: analytics.summary.paidOrders, icon: CreditCard, color: 'text-violet-600', bg: 'bg-violet-50' },
+                    { label: 'COD Orders', value: analytics.summary.codOrders, icon: Banknote, color: 'text-amber-600', bg: 'bg-amber-50' },
                   ].map((s) => (
                     <div key={s.label} className="bg-white rounded-xl border border-gray-200 p-3.5">
                       <div className={`w-8 h-8 ${s.bg} rounded-lg flex items-center justify-center ${s.color} mb-2`}><s.icon className="w-4 h-4" /></div>
@@ -1089,7 +1091,7 @@ export default function AdminPage() {
                             <div key={p.title}>
                               <div className="flex items-center justify-between text-xs mb-1 gap-2">
                                 <div className="flex items-center gap-1.5 min-w-0">
-                                  <span className="w-4 h-4 rounded-full bg-gray-100 text-gray-500 text-[9px] font-black flex items-center justify-center shrink-0">{i+1}</span>
+                                  <span className="w-4 h-4 rounded-full bg-gray-100 text-gray-500 text-[9px] font-black flex items-center justify-center shrink-0">{i + 1}</span>
                                   <span className="font-medium text-gray-700 truncate">{p.title}</span>
                                 </div>
                                 <div className="text-right shrink-0">
@@ -1202,9 +1204,9 @@ export default function AdminPage() {
             ) : (
               <div className="space-y-3">
                 {filteredOrders.map((o) => {
-                  const allSteps = ['Order Placed','Payment Confirmed','Preparing Order','Packed','Handed to ST Courier','In Transit','Out for Delivery','Delivered'];
-                  const stepIdx = Math.max(0, allSteps.findIndex((s) => s.toLowerCase() === (o.courierStatus||'').toLowerCase()));
-                  const isCod = (o.paymentMethod||'').toLowerCase().includes('cod');
+                  const allSteps = ['Order Placed', 'Payment Confirmed', 'Preparing Order', 'Packed', 'Handed to ST Courier', 'In Transit', 'Out for Delivery', 'Delivered'];
+                  const stepIdx = Math.max(0, allSteps.findIndex((s) => s.toLowerCase() === (o.courierStatus || '').toLowerCase()));
+                  const isCod = (o.paymentMethod || '').toLowerCase().includes('cod');
                   const isDelivered = stepIdx >= 7;
                   return (
                     <div key={o.orderId} className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-sm transition-shadow">
@@ -1226,7 +1228,7 @@ export default function AdminPage() {
                         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
                           <div className="flex items-start gap-3">
                             <div className="w-9 h-9 bg-gray-100 rounded-full flex items-center justify-center text-gray-600 text-sm font-black shrink-0">
-                              {(o.customerName||'C').charAt(0).toUpperCase()}
+                              {(o.customerName || 'C').charAt(0).toUpperCase()}
                             </div>
                             <div className="min-w-0">
                               <p className="text-sm font-semibold text-gray-900">{o.customerName}</p>
@@ -1276,11 +1278,10 @@ export default function AdminPage() {
                                   key={a.statusKey}
                                   disabled={busy || isCurrent}
                                   onClick={() => handleUpdateOrderStatus(o, a.statusKey, a.orderStatus)}
-                                  className={`px-2.5 py-1.5 text-[11px] font-semibold rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
-                                    isCurrent
+                                  className={`px-2.5 py-1.5 text-[11px] font-semibold rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${isCurrent
                                       ? 'bg-green-100 text-green-700 border border-green-200'
                                       : 'bg-white text-gray-700 border border-gray-200 hover:border-[#2874f0] hover:text-[#2874f0]'
-                                  }`}
+                                    }`}
                                 >
                                   {busy ? '...' : a.label}
                                 </button>
@@ -1337,7 +1338,7 @@ export default function AdminPage() {
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">Class</label>
                     <select value={newCls} onChange={(e) => setNewCls(e.target.value)} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:border-[#2874f0] cursor-pointer bg-white">
-                      {['6th','7th','8th','9th','10th','11th','12th'].map((c) => <option key={c} value={c}>{c} Std</option>)}
+                      {['6th', '7th', '8th', '9th', '10th', '11th', '12th'].map((c) => <option key={c} value={c}>{c} Std</option>)}
                     </select>
                   </div>
                   <div>
@@ -1383,7 +1384,7 @@ export default function AdminPage() {
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs">
-                    <thead><tr className="bg-[#f8f9fa] border-b border-gray-200">{['Product','Class','Price','MRP','Badge','Stock','Actions'].map((h) => <th key={h} className={`py-3 px-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide ${h === 'Actions' ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
+                    <thead><tr className="bg-[#f8f9fa] border-b border-gray-200">{['Product', 'Class', 'Price', 'MRP', 'Badge', 'Stock', 'Actions'].map((h) => <th key={h} className={`py-3 px-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide ${h === 'Actions' ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
                     <tbody className="divide-y divide-gray-100">
                       {products.map((p) => {
                         const isEditing = editingId === p.id;
@@ -1399,7 +1400,7 @@ export default function AdminPage() {
                             </td>
                             <td className="py-3 px-3 text-gray-400">
                               {isEditing ? <input type="number" value={editMrp} onChange={(e) => { const v = Number(e.target.value); setEditMrp(v); if (!editDiscountEnabled) setEditPrice(v); }} className="w-16 px-2 py-1 bg-gray-50 border border-gray-200 rounded text-xs font-semibold text-gray-700 outline-none" />
-                              : <span className={disc > 0 ? 'line-through' : ''}>₹{p.mrp}</span>}
+                                : <span className={disc > 0 ? 'line-through' : ''}>₹{p.mrp}</span>}
                             </td>
                             <td className="py-3 px-3">
                               {isEditing ? (
@@ -1419,13 +1420,12 @@ export default function AdminPage() {
                                 <button
                                   type="button"
                                   onClick={() => toggleStock(p.id, !!p.inStock)}
-                                  className={`text-[10px] font-bold px-2 py-1 rounded-md transition-colors cursor-pointer ${
-                                    !p.inStock || (p.stock ?? 0) <= 0
+                                  className={`text-[10px] font-bold px-2 py-1 rounded-md transition-colors cursor-pointer ${!p.inStock || (p.stock ?? 0) <= 0
                                       ? 'bg-red-50 text-red-600 border border-red-200'
                                       : (p.stock ?? 99) <= 5
                                         ? 'bg-amber-50 text-amber-700 border border-amber-200'
                                         : 'bg-green-50 text-green-700 border border-green-200'
-                                  }`}
+                                    }`}
                                 >
                                   {p.inStock ? `${p.stock ?? '—'} left` : 'Off'}
                                 </button>
