@@ -511,138 +511,280 @@ export default function AdminPage() {
     }
   };
   const handlePrintLabel = (o: Order) => {
-    const pw = window.open('', '_blank', 'width=650,height=900'); if (!pw) return;
+    const pw = window.open('', '_blank', 'width=800,height=1000'); if (!pw) return;
     const isCod = (o.paymentMethod || '').toLowerCase().includes('cod');
-    const orderDate = o.createdAt ? new Date(o.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
+    const orderDate = o.createdAt ? new Date(o.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    const trackingNum = (o.trackingNumber && !o.trackingNumber.startsWith('SHP-')) ? o.trackingNumber : `ST${(o.orderId || '').replace(/\D/g, '').padEnd(10, '9876543210').slice(0, 10)}`;
+    const invoiceNum = `BPG/INV/${(o.orderId || '').replace(/\D/g, '') || '3578'}`;
+    const totalAmount = Number(o.totalAmount || 0);
+
+    const numberToWords = (num: number): string => {
+      const a = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+      const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+      const n = Math.floor(Math.abs(num));
+      if (n === 0) return 'Zero';
+      const inWords = (val: number): string => {
+        if (val < 20) return a[val];
+        if (val < 100) return b[Math.floor(val / 10)] + (val % 10 ? ' ' + a[val % 10] : '');
+        if (val < 1000) return a[Math.floor(val / 100)] + ' Hundred' + (val % 100 ? ' ' + inWords(val % 100) : '');
+        if (val < 100000) return inWords(Math.floor(val / 1000)) + ' Thousand' + (val % 1000 ? ' ' + inWords(val % 1000) : '');
+        return inWords(Math.floor(val / 100000)) + ' Lakh' + (val % 100000 ? ' ' + inWords(val % 100000) : '');
+      };
+      return 'Rupees ' + inWords(n) + ' Only';
+    };
+
     const itemsHtml = (o.items || []).map((item, i) =>
-      `<tr><td style="padding:4px 6px;font-size:11px;border-bottom:1px solid #eee">${i + 1}.</td><td style="padding:4px 6px;font-size:11px;border-bottom:1px solid #eee">${(item.title || '').replace(/</g, '&lt;')}</td><td style="padding:4px 6px;font-size:11px;border-bottom:1px solid #eee;text-align:center">${item.qty}</td><td style="padding:4px 6px;font-size:11px;border-bottom:1px solid #eee;text-align:right">₹${item.subtotal || item.price || ''}</td></tr>`
+      `<tr>
+        <td style="padding:8px 10px;font-size:12px;color:#64748b;border-bottom:1px solid #e2e8f0;text-align:center">${i + 1}</td>
+        <td style="padding:8px 10px;font-size:12px;font-weight:700;color:#0f172a;border-bottom:1px solid #e2e8f0">${(item.title || 'Educational Book').replace(/</g, '&lt;')}</td>
+        <td style="padding:8px 10px;font-size:12px;font-weight:700;color:#0f172a;border-bottom:1px solid #e2e8f0;text-align:center">${item.qty || 1}</td>
+        <td style="padding:8px 10px;font-size:12px;font-weight:700;color:#0f172a;border-bottom:1px solid #e2e8f0;text-align:right">₹${(item.price || item.subtotal || totalAmount).toLocaleString('en-IN')}</td>
+        <td style="padding:8px 10px;font-size:12px;font-weight:800;color:#0f172a;border-bottom:1px solid #e2e8f0;text-align:right">₹${((item.price || item.subtotal || totalAmount) * (item.qty || 1)).toLocaleString('en-IN')}</td>
+      </tr>`
     ).join('');
+
     const totalItems = (o.items || []).reduce((s, i) => s + (i.qty || 1), 0);
     const estWeight = totalItems * 400;
+    const barcodeUrl = `https://bwipjs-api.metafloor.com/?bcid=code128&text=${encodeURIComponent(trackingNum)}&scale=2&height=12&textsize=10&includetext`;
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&margin=0&data=${encodeURIComponent(`https://blessing-production.up.railway.app/track?orderId=${o.orderId}`)}`;
 
-    pw.document.write(`<!DOCTYPE html><html><head><title>Label #${o.orderId}</title>
+    pw.document.write(`<!DOCTYPE html><html><head><title>Invoice #${o.orderId}</title>
 <style>
-  @page { size: 148mm 210mm; margin: 0; }
+  @page { size: A5 portrait; margin: 0; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Segoe UI', Arial, sans-serif; width: 148mm; min-height: 210mm; margin: 0 auto; padding: 12px; background: #fff; color: #1a1a2e; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; width: 148mm; min-height: 210mm; margin: 0 auto; padding: 8px; background: #fff; color: #0f172a; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 
-  .label { border: 2.5px solid #1a1a2e; border-radius: 10px; overflow: hidden; }
+  .label-container { border: 2px solid #001B3A; border-radius: 12px; overflow: hidden; background: #fff; display: flex; flex-direction: column; justify-content: space-between; min-height: 200mm; }
 
   /* Header */
-  .header { background: linear-gradient(135deg, #001B3A 0%, #0a2e5c 100%); color: #fff; padding: 14px 16px; display: flex; align-items: center; gap: 12px; }
-  .header-logo { width: 44px; height: 44px; background: #fff; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 20px; color: #001B3A; flex-shrink: 0; }
-  .header-text h1 { font-size: 15px; font-weight: 800; letter-spacing: 0.5px; }
-  .header-text p { font-size: 10px; opacity: 0.8; margin-top: 2px; font-weight: 600; }
+  .top-banner { background: #001B3A; color: #ffffff; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; }
+  .brand-left { display: flex; align-items: center; gap: 12px; }
+  .logo-box { width: 40px; height: 40px; background: #ffffff; color: #001B3A; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 22px; }
+  .brand-titles h1 { font-size: 15px; font-weight: 900; letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 2px; }
+  .brand-titles p { font-size: 10px; opacity: 0.85; font-weight: 600; }
+  .invoice-title-right { text-align: right; }
+  .invoice-title-right h2 { font-size: 11px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; }
+  .invoice-title-right p { font-size: 9px; opacity: 0.8; font-weight: 600; margin-top: 2px; }
 
-  /* Order bar */
-  .order-bar { background: #f0f4ff; border-bottom: 2px solid #1a1a2e; padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; }
-  .order-id { font-family: 'Courier New', monospace; font-size: 18px; font-weight: 900; letter-spacing: 2px; color: #001B3A; }
-  .order-date { font-size: 10px; color: #64748b; font-weight: 600; text-align: right; }
-  .order-date span { display: block; font-size: 11px; color: #334155; font-weight: 700; }
+  /* Meta Bar */
+  .meta-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; border-bottom: 1.5px solid #001B3A; background: #f8fafc; }
+  .meta-item { padding: 8px 12px; border-right: 1px solid #e2e8f0; }
+  .meta-item:last-child { border-right: none; }
+  .meta-item .lbl { font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #64748b; }
+  .meta-item .val { font-size: 14px; font-weight: 900; color: #001B3A; margin-top: 2px; font-family: 'Segoe UI', sans-serif; }
+  .meta-item .val-sm { font-size: 11px; font-weight: 800; color: #334155; margin-top: 2px; }
 
-  /* Sections */
-  .section { padding: 12px 16px; border-bottom: 1px solid #e2e8f0; }
-  .section:last-child { border-bottom: none; }
-  .section-label { font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5px; color: #94a3b8; margin-bottom: 6px; }
-  .customer-name { font-size: 16px; font-weight: 800; color: #0f172a; }
-  .customer-addr { font-size: 12px; color: #475569; margin-top: 4px; line-height: 1.5; }
-  .customer-phone { font-size: 13px; font-weight: 700; color: #0f172a; margin-top: 8px; display: flex; align-items: center; gap: 6px; }
-  .phone-icon { display: inline-flex; width: 18px; height: 18px; background: #001B3A; color: #fff; border-radius: 4px; align-items: center; justify-content: center; font-size: 10px; }
+  /* Ship To + AWB Box */
+  .shipping-row { display: grid; grid-template-columns: 1.3fr 1fr; gap: 12px; padding: 12px 16px; border-bottom: 1px solid #e2e8f0; align-items: start; }
+  .ship-to-title { font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5px; color: #64748b; margin-bottom: 4px; }
+  .customer-name { font-size: 16px; font-weight: 900; color: #0f172a; text-transform: uppercase; }
+  .customer-address { font-size: 11px; color: #334155; margin-top: 4px; line-height: 1.45; font-weight: 600; }
+  .customer-phone { margin-top: 8px; font-size: 12px; font-weight: 800; color: #001B3A; display: flex; align-items: center; gap: 6px; }
+  .phone-badge { width: 18px; height: 18px; background: #001B3A; color: #fff; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; }
 
-  /* Payment badge */
-  .payment-strip { padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #e2e8f0; }
-  .badge-cod { background: #fef3c7; border: 2px dashed #d97706; color: #92400e; padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: 800; }
-  .badge-prepaid { background: #dcfce7; border: 2px solid #16a34a; color: #166534; padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: 800; }
-  .amount-large { font-size: 20px; font-weight: 900; color: #0f172a; }
+  .awb-card { border: 1.5px solid #cbd5e1; border-radius: 8px; padding: 8px 10px; background: #ffffff; text-align: center; }
+  .awb-card .awb-lbl { font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5px; color: #64748b; text-align: left; }
+  .awb-card .awb-val { font-family: 'Courier New', monospace; font-size: 14px; font-weight: 900; letter-spacing: 1.5px; color: #0f172a; text-align: left; margin: 2px 0 6px 0; }
+  .awb-card .courier-lbl { font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #64748b; text-align: left; }
+  .awb-card .courier-val { font-size: 11px; font-weight: 900; color: #001B3A; text-align: left; margin-bottom: 6px; }
+  .barcode-img { width: 100%; max-height: 48px; object-fit: contain; margin-top: 2px; }
 
-  /* Items table */
-  .items-table { width: 100%; border-collapse: collapse; }
-  .items-table th { font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8; padding: 4px 6px; text-align: left; border-bottom: 2px solid #e2e8f0; }
-  .items-table th:nth-child(3), .items-table th:nth-child(4) { text-align: center; }
-  .items-table th:last-child { text-align: right; }
+  /* Payment Badge & Amount */
+  .payment-bar { padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1.5px solid #e2e8f0; }
+  .badge-cod { background: #fffbeb; border: 2px dashed #d97706; color: #92400e; padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: 900; letter-spacing: 0.5px; }
+  .badge-prepaid { background: #f0fdf4; border: 2px solid #16a34a; color: #166534; padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: 900; letter-spacing: 0.5px; }
+  .total-amount-display { font-size: 26px; font-weight: 900; color: #0f172a; }
 
-  /* Meta row */
-  .meta-row { display: flex; gap: 0; border-bottom: 1px solid #e2e8f0; }
-  .meta-cell { flex: 1; padding: 8px 16px; border-right: 1px solid #e2e8f0; text-align: center; }
-  .meta-cell:last-child { border-right: none; }
-  .meta-cell .val { font-size: 13px; font-weight: 800; color: #0f172a; }
-  .meta-cell .lbl { font-size: 8px; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8; font-weight: 700; margin-top: 2px; }
+  /* Items Table */
+  .table-section { padding: 10px 16px; border-bottom: 1.5px solid #e2e8f0; }
+  .table-section-title { font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5px; color: #64748b; margin-bottom: 6px; }
+  .pkg-table { width: 100%; border-collapse: collapse; }
+  .pkg-table th { font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #64748b; padding: 6px 10px; border-bottom: 1.5px solid #cbd5e1; text-align: left; }
+  .pkg-table th:first-child, .pkg-table th:nth-child(3) { text-align: center; }
+  .pkg-table th:nth-child(4), .pkg-table th:last-child { text-align: right; }
 
-  /* AWB */
-  .awb-strip { background: #f8fafc; padding: 8px 16px; border-bottom: 1px solid #e2e8f0; text-align: center; }
-  .awb-strip .lbl { font-size: 8px; text-transform: uppercase; letter-spacing: 1.5px; color: #94a3b8; font-weight: 700; }
-  .awb-strip .val { font-family: 'Courier New', monospace; font-size: 16px; font-weight: 900; letter-spacing: 3px; color: #001B3A; margin-top: 2px; }
+  /* Icon Grid */
+  .metrics-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; border-bottom: 1.5px solid #e2e8f0; background: #ffffff; }
+  .metric-box { padding: 10px 8px; border-right: 1px solid #e2e8f0; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .metric-box:last-child { border-right: none; }
+  .metric-icon { width: 28px; height: 28px; margin-bottom: 4px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+  .metric-val { font-size: 12px; font-weight: 900; color: #0f172a; line-height: 1.1; }
+  .metric-lbl { font-size: 7.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.8px; color: #64748b; margin-top: 2px; }
 
-  /* Return */
-  .return-section { background: #f8fafc; padding: 10px 16px; font-size: 10px; color: #64748b; display: flex; justify-content: space-between; align-items: center; }
-  .return-section strong { color: #334155; }
+  /* Bottom Details Grid */
+  .bottom-grid { display: grid; grid-template-columns: 1.2fr 1fr 0.8fr; gap: 12px; padding: 12px 16px; border-bottom: 1px solid #e2e8f0; background: #ffffff; align-items: center; }
+  .summary-col h3, .return-col h3 { font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #64748b; margin-bottom: 6px; }
+  .summary-line { display: flex; justify-content: space-between; font-size: 11px; color: #334155; margin-bottom: 3px; font-weight: 600; }
+  .summary-line.total { border-top: 1px solid #cbd5e1; padding-top: 4px; margin-top: 4px; font-size: 13px; font-weight: 900; color: #0f172a; }
+  .words-text { font-size: 9.5px; font-style: italic; color: #475569; margin-top: 6px; font-weight: 600; }
 
-  /* Courier branding */
-  .courier-brand { background: #001B3A; color: #fff; text-align: center; padding: 6px; font-size: 11px; font-weight: 800; letter-spacing: 2px; }
+  .return-col p { font-size: 10.5px; color: #334155; line-height: 1.45; font-weight: 600; }
+  .return-col strong { color: #0f172a; font-weight: 800; }
+
+  .qr-col { border: 1.5px solid #cbd5e1; border-radius: 8px; padding: 8px; text-align: center; background: #ffffff; }
+  .qr-col img { width: 72px; height: 72px; display: block; margin: 0 auto; }
+  .qr-col .qr-lbl { font-size: 8px; font-weight: 900; letter-spacing: 1px; text-transform: uppercase; color: #001B3A; margin-top: 4px; }
+
+  /* Footer Notice & Dark Bar */
+  .notice-bar { background: #f8fafc; padding: 6px 12px; text-align: center; font-size: 8.5px; color: #475569; font-weight: 600; border-top: 1px solid #e2e8f0; }
+  .footer-banner { background: #001B3A; color: #ffffff; padding: 8px; text-align: center; font-size: 10px; font-weight: 900; letter-spacing: 1.5px; text-transform: uppercase; }
+  .footer-banner span { font-weight: 500; text-transform: none; font-size: 9.5px; opacity: 0.85; margin-left: 6px; font-style: italic; }
 
   @media print {
     body { padding: 0; }
-    .label { border-width: 2px; }
+    .label-container { border-width: 1.5px; }
   }
 </style>
 </head><body>
-<div class="label">
-  <div class="header">
-    <div class="header-logo">B</div>
-    <div class="header-text">
-      <h1>BLESSING POWER GUIDE</h1>
-      <p>Premium Educational Books &bull; Chennai</p>
+
+<div class="label-container">
+  <!-- Top Banner -->
+  <div class="top-banner">
+    <div class="brand-left">
+      <div class="logo-box">B</div>
+      <div class="brand-titles">
+        <h1>BLESSING POWER GUIDE</h1>
+        <p>Premium Educational Books &bull; Chennai</p>
+      </div>
+    </div>
+    <div class="invoice-title-right">
+      <h2>INVOICE / TAX INVOICE</h2>
+      <p>Original for Recipient</p>
     </div>
   </div>
 
-  <div class="order-bar">
-    <div class="order-id">#${o.orderId}</div>
-    <div class="order-date">Order Date<span>${orderDate}</span></div>
+  <!-- Meta Grid -->
+  <div class="meta-grid">
+    <div class="meta-item">
+      <div class="lbl">ORDER ID</div>
+      <div class="val">#${o.orderId}</div>
+    </div>
+    <div class="meta-item">
+      <div class="lbl">INVOICE NO.</div>
+      <div class="val-sm">${invoiceNum}</div>
+    </div>
+    <div class="meta-item">
+      <div class="lbl">ORDER DATE</div>
+      <div class="val-sm">${orderDate}</div>
+    </div>
+    <div class="meta-item">
+      <div class="lbl">DISPATCH DATE</div>
+      <div class="val-sm">${orderDate}</div>
+    </div>
   </div>
 
-  ${o.trackingNumber && !o.trackingNumber.startsWith('SHP-') ? `
-  <div class="awb-strip">
-    <div class="lbl">AWB / Docket Number</div>
-    <div class="val">${o.trackingNumber}</div>
-  </div>` : ''}
-
-  <div class="section">
-    <div class="section-label">Ship To</div>
-    <div class="customer-name">${o.customerName || 'Customer'}</div>
-    <div class="customer-addr">${o.address || ''}<br>${o.city || ''} — ${o.pincode || ''}</div>
-    <div class="customer-phone"><span class="phone-icon">☎</span> +91 ${o.customerPhone || ''}</div>
+  <!-- Shipping Address & AWB Box -->
+  <div class="shipping-row">
+    <div>
+      <div class="ship-to-title">SHIP TO</div>
+      <div class="customer-name">${o.customerName || 'Customer'}</div>
+      <div class="customer-address">
+        ${o.address || ''}<br>
+        ${o.city || ''} &mdash; ${o.pincode || ''}<br>
+        TAMIL NADU, INDIA
+      </div>
+      <div class="customer-phone">
+        <span class="phone-badge">☎</span> +91 ${o.customerPhone || ''}
+      </div>
+    </div>
+    <div class="awb-card">
+      <div class="awb-lbl">AWB / TRACKING NUMBER</div>
+      <div class="awb-val">${trackingNum}</div>
+      <div class="courier-lbl">COURIER</div>
+      <div class="courier-val">${o.courierName || 'ST Courier Express'}</div>
+      <img src="${barcodeUrl}" class="barcode-img" alt="Barcode ${trackingNum}" />
+    </div>
   </div>
 
-  <div class="payment-strip">
-    <div class="${isCod ? 'badge-cod' : 'badge-prepaid'}">${isCod ? '₹ COLLECT ON DELIVERY' : '✓ PREPAID — DO NOT COLLECT'}</div>
-    <div class="amount-large">₹${(o.totalAmount || 0).toLocaleString('en-IN')}</div>
+  <!-- Payment Bar -->
+  <div class="payment-bar">
+    <div class="${isCod ? 'badge-cod' : 'badge-prepaid'}">
+      ${isCod ? '₹ COLLECT ON DELIVERY' : '✓ PREPAID — DO NOT COLLECT'}
+    </div>
+    <div class="total-amount-display">₹${totalAmount.toLocaleString('en-IN')}</div>
   </div>
 
-  ${(o.items || []).length > 0 ? `
-  <div class="section" style="padding-bottom:6px">
-    <div class="section-label">Package Contents</div>
-    <table class="items-table">
-      <tr><th>#</th><th>Item</th><th>Qty</th><th>Amount</th></tr>
-      ${itemsHtml}
+  <!-- Items Table -->
+  <div class="table-section">
+    <div class="table-section-title">PACKAGE DETAILS</div>
+    <table class="pkg-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>ITEM</th>
+          <th>QTY</th>
+          <th>UNIT PRICE</th>
+          <th>AMOUNT</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${itemsHtml}
+      </tbody>
     </table>
-  </div>` : ''}
-
-  <div class="meta-row">
-    <div class="meta-cell"><div class="val">${totalItems}</div><div class="lbl">Items</div></div>
-    <div class="meta-cell"><div class="val">${estWeight}g</div><div class="lbl">Est. Weight</div></div>
-    <div class="meta-cell"><div class="val">${isCod ? 'COD' : 'PAID'}</div><div class="lbl">Payment</div></div>
-    <div class="meta-cell"><div class="val">${o.courierName || 'ST Courier'}</div><div class="lbl">Courier</div></div>
   </div>
 
-  <div class="return-section">
-    <div><strong>RETURN:</strong> Blessing Power Guide, Ayanavaram, Chennai 600012</div>
-    <div><strong>WA:</strong> +91 9840418228</div>
+  <!-- Icon Metrics Grid -->
+  <div class="metrics-grid">
+    <div class="metric-box">
+      <div class="metric-icon">📦</div>
+      <div class="metric-val">${totalItems}</div>
+      <div class="metric-lbl">ITEMS</div>
+    </div>
+    <div class="metric-box">
+      <div class="metric-icon">⚖️</div>
+      <div class="metric-val">${estWeight}g</div>
+      <div class="metric-lbl">EST. WEIGHT</div>
+    </div>
+    <div class="metric-box">
+      <div class="metric-icon">💳</div>
+      <div class="metric-val">${isCod ? 'COD' : 'PREPAID'}</div>
+      <div class="metric-lbl">PAYMENT</div>
+    </div>
+    <div class="metric-box">
+      <div class="metric-icon">🚚</div>
+      <div class="metric-val">${o.courierName || 'ST Courier'}</div>
+      <div class="metric-lbl">COURIER</div>
+    </div>
   </div>
 
-  <div class="courier-brand">ST COURIER EXPRESS — HANDLE WITH CARE</div>
+  <!-- Bottom Details Grid -->
+  <div class="bottom-grid">
+    <div class="summary-col">
+      <h3>AMOUNT SUMMARY</h3>
+      <div class="summary-line"><span>Item Total</span><span>₹${totalAmount.toLocaleString('en-IN')}</span></div>
+      <div class="summary-line"><span>Delivery Charges</span><span>₹0</span></div>
+      <div class="summary-line"><span>COD Charges</span><span>₹0</span></div>
+      <div class="summary-line total"><span>Total Amount</span><span>₹${totalAmount.toLocaleString('en-IN')}</span></div>
+      <div class="words-text">Amount in Words: ${numberToWords(totalAmount)}</div>
+    </div>
+    <div class="return-col">
+      <h3>RETURN ADDRESS</h3>
+      <p>
+        <strong>Blessing Power Guide</strong><br>
+        Ayanavaram<br>
+        Chennai 600012<br>
+        Tamil Nadu, India<br>
+        +91 9840418228
+      </p>
+    </div>
+    <div class="qr-col">
+      <img src="${qrUrl}" alt="QR Code" />
+      <div class="qr-lbl">SCAN FOR ORDER</div>
+    </div>
+  </div>
+
+  <!-- Footer Notice & Banner -->
+  <div>
+    <div class="notice-bar">
+      Please do not accept the shipment if the seal is tampered. For any queries, contact us at +91 9840418228
+    </div>
+    <div class="footer-banner">
+      THANK YOU FOR YOUR ORDER <span>Books that Guide. Knowledge that Lasts.</span>
+    </div>
+  </div>
 </div>
 
-<script>window.onload=function(){setTimeout(function(){window.print()},300)}</script>
+<script>window.onload=function(){setTimeout(function(){window.print()},350)}</script>
 </body></html>`);
     pw.document.close();
   };
