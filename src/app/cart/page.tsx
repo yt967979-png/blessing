@@ -268,7 +268,7 @@ export default function CartPage() {
                     PLACE ORDER
                   </button>
                   {!user && (
-                    <p className="text-[10px] text-center text-slate-500 font-medium">Login required to place an order</p>
+                    <p className="text-[10px] text-center text-slate-500 font-medium">Sign in with Google to place an order</p>
                   )}
                   {!pincodeOk && (
                     <p className="text-[10px] text-center text-red-600 font-medium">Check a serviceable pincode first</p>

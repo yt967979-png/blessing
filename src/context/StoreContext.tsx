@@ -321,12 +321,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const addToCart = (product: Product, qty: number = 1) => {
     if (!user) {
       setIsAuthOpen(true);
-      showToast('Login required to add items to cart');
+      showToast('Please sign in with Google to add items to cart');
       return;
     }
     if (user.needsProfile || userNeedsProfile(user.phone)) {
       setIsAuthOpen(true);
-      showToast('Add your mobile number to continue shopping');
+      showToast('Please complete your profile (mobile number) to shop');
       return;
     }
     if (product.inStock === false) {
@@ -352,12 +352,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const requestCheckout = (open: boolean) => {
     if (open && !user) {
       setIsAuthOpen(true);
-      showToast('Login required to place an order');
+      showToast('Please sign in with Google to place an order');
       return;
     }
     if (open && user && (user.needsProfile || userNeedsProfile(user.phone))) {
       setIsAuthOpen(true);
-      showToast('Add your mobile number before checkout');
+      showToast('Please complete your profile (mobile number) before checkout');
       return;
     }
     setIsCheckoutOpen(open);
@@ -448,7 +448,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const toggleWishlist = (id: string | number) => {
     if (!user) {
       setIsAuthOpen(true);
-      showToast('Login required to use wishlist');
+      showToast('Please sign in with Google to use wishlist');
       return;
     }
     setWishlist((prev) => {

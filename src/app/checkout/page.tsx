@@ -73,7 +73,7 @@ export default function CheckoutPage() {
   useEffect(() => {
     if (!user?.id) {
       setIsAuthOpen(true);
-      showToast('Login required to checkout');
+      showToast('Please sign in with Google');
       router.replace('/cart');
       return;
     }

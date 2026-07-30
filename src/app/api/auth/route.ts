@@ -24,7 +24,10 @@ function buildUserResponse(
   user: { id: string; name: string; email: string; phone: string; role: string; profile_completed?: boolean | null },
   token: string
 ) {
-  const needsProfile = userNeedsProfile(user.phone) || user.profile_completed === false;
+  const needsProfile =
+    userNeedsProfile(user.phone) ||
+    user.profile_completed !== true ||
+    String(user.name || '').trim().length < 2;
   return {
     id: user.id,
     name: user.name,

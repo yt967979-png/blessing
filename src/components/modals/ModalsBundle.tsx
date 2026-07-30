@@ -108,7 +108,7 @@ export const ModalsBundle = () => {
     if (!user?.id) {
       setIsCheckoutOpen(false);
       setIsAuthOpen(true);
-      showToast('Please login to place an order');
+      showToast('Please sign in with Google to place an order');
       return;
     }
     let cancelled = false;
@@ -173,7 +173,7 @@ export const ModalsBundle = () => {
     if (e) e.preventDefault();
     if (!user?.id) {
       setIsAuthOpen(true);
-      showToast('Please login to save address & order');
+      showToast('Please sign in with Google to save address & order');
       return false;
     }
     if (!newAddr.name || !newAddr.address || !newAddr.pincode) {

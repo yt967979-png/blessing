@@ -131,7 +131,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const session = await getAuthenticatedUser(request);
   if (!session) {
-    return unauthorizedResponse('Please login to place an order.');
+    return unauthorizedResponse('Please sign in with Google to place an order.');
   }
 
   const rl = await applyRateLimitAsync(`orders:${session.userId}:${clientIp(request)}`, 10, 60000);

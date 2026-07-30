@@ -178,7 +178,9 @@ export async function POST(request: Request) {
     }
 
     const needsProfile =
-      userNeedsProfile(dbUser.phone) || dbUser.profile_completed === false;
+      userNeedsProfile(dbUser.phone) ||
+      dbUser.profile_completed !== true ||
+      String(dbUser.name || '').trim().length < 2;
     const role = dbUser.role || 'customer';
     const token = createSessionToken(dbUser.id, role);
     const sessionData = needsProfile

@@ -276,17 +276,17 @@ function OrdersContent() {
         <div className="w-16 h-16 bg-[#001B3A] text-amber-400 rounded-3xl flex items-center justify-center mx-auto shadow-xs">
           <Package className="w-8 h-8" />
         </div>
-        <h1 className="font-heading font-black text-2xl text-[#001B3A]">Login to view your orders</h1>
-        <p className="text-sm text-slate-500 leading-relaxed">
-          Order history, saved tracking, invoices, and cancel options are available only after you sign in — same as Flipkart.
-        </p>
-        <button
-          type="button"
-          onClick={() => setIsAuthOpen(true)}
-          className="inline-flex items-center justify-center gap-2 bg-[#2874f0] hover:bg-[#1a5dc8] text-white font-extrabold text-sm px-8 py-3.5 rounded-xl shadow-md cursor-pointer"
-        >
-          Login to continue
-        </button>
+          <h1 className="font-heading font-black text-2xl text-[#001B3A]">Sign in with Google</h1>
+          <p className="text-sm text-slate-500 leading-relaxed">
+            Order history is available only after Google login.
+          </p>
+          <button
+            type="button"
+            onClick={() => setIsAuthOpen(true)}
+            className="inline-flex items-center justify-center gap-2 bg-[#2874f0] hover:bg-[#1a5dc8] text-white font-extrabold text-sm px-8 py-3.5 rounded-xl shadow-md cursor-pointer"
+          >
+            Continue with Google
+          </button>
         <p className="text-[11px] text-slate-400">
           Need AWB tracking without login? Use the Track page with your docket number.
         </p>

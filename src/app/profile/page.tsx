@@ -217,15 +217,15 @@ export default function ProfilePage() {
           <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mx-auto border border-blue-200">
             <User className="w-8 h-8" />
           </div>
-          <h2 className="font-heading font-black text-xl text-[#001B3A]">Login to access your account</h2>
+          <h2 className="font-heading font-black text-xl text-[#001B3A]">Sign in with Google</h2>
           <p className="text-xs text-slate-500 leading-relaxed">
-            Order history, saved addresses, and profile are available only after login.
+            Order history, saved addresses, and profile need Google login.
           </p>
           <button
             onClick={() => setIsAuthOpen(true)}
             className="w-full bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-[#001B3A] font-extrabold text-xs py-3.5 rounded-xl uppercase tracking-wider shadow-md transition-all"
           >
-            LOGIN TO CONTINUE
+            CONTINUE WITH GOOGLE
           </button>
         </div>
         <Footer />

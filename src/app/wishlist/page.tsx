@@ -26,14 +26,14 @@ export default function WishlistPage() {
         <NavBar />
         <div className="max-w-md mx-auto my-16 p-8 bg-white border border-slate-200 rounded-3xl shadow-sm text-center space-y-4">
           <Heart className="w-12 h-12 text-red-400 mx-auto" />
-          <h1 className="font-heading font-black text-xl text-[#001B3A]">Login to view wishlist</h1>
-          <p className="text-xs text-slate-500">Saved books stay on your account after login.</p>
+          <h1 className="font-heading font-black text-xl text-[#001B3A]">Sign in with Google</h1>
+          <p className="text-xs text-slate-500">Wishlist is available after Google login.</p>
           <button
             type="button"
             onClick={() => setIsAuthOpen(true)}
             className="w-full bg-[#2874f0] text-white font-extrabold text-sm py-3 rounded-xl"
           >
-            Login
+            Continue with Google
           </button>
         </div>
         <Footer />
