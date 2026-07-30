@@ -511,9 +511,139 @@ export default function AdminPage() {
     }
   };
   const handlePrintLabel = (o: Order) => {
-    const pw = window.open('','_blank','width=600,height=700'); if (!pw) return;
-    const isCod = (o.paymentMethod||'').toLowerCase().includes('cod');
-    pw.document.write(`<!DOCTYPE html><html><head><title>Label #${o.orderId}</title><style>body{font-family:Arial,sans-serif;padding:20px;max-width:450px;margin:auto;border:2.5px solid #000;border-radius:12px}.hdr{text-align:center;border-bottom:2px solid #000;padding-bottom:10px;margin-bottom:15px}.logo{font-size:22px;font-weight:900;color:#001B3A}.box{border:1px solid #000;padding:10px;margin-bottom:10px;border-radius:6px}.t{font-size:10px;font-weight:900;text-transform:uppercase;color:#444}.b{font-size:15px;font-weight:900;margin-top:2px}.cod{font-size:14px;font-weight:900;background:#fffbeb;padding:8px;text-align:center;border:2px dashed #d97706;margin:12px 0;border-radius:6px}.bar{font-family:monospace;font-size:18px;font-weight:900;letter-spacing:3px;text-align:center;margin:12px 0;background:#f1f5f9;padding:8px;border-radius:4px}</style></head><body><div class="hdr"><img src="/logo.png" alt="Blessing Power Guide" width="56" height="56" style="border-radius:14px;margin-bottom:8px"/><div class="logo">BLESSING POWER GUIDE</div><div style="font-size:13px;font-weight:800;color:#0044AA">ST COURIER EXPRESS</div></div><div class="bar">||| #${o.orderId} |||</div><div class="box"><div class="t">DELIVER TO:</div><div class="b">${o.customerName||'Customer'}</div><div style="font-size:13px;margin-top:4px">${o.address||''}, ${o.city||''} - ${o.pincode||''}</div><div style="margin-top:6px;font-size:13px"><strong>PHONE:</strong> +91 ${o.customerPhone||''}</div></div><div class="cod">PAYMENT: ${isCod?`₹${o.totalAmount} CASH ON DELIVERY`:'PREPAID — DO NOT COLLECT'}</div><div class="box" style="font-size:11px"><div class="t">RETURN ADDRESS:</div><div><strong>BLESSING POWER GUIDE</strong></div><div>Ayanavaram, Chennai 600012 | WA: +91 9840418228</div></div><script>window.onload=function(){window.print();window.close()}</script></body></html>`);
+    const pw = window.open('', '_blank', 'width=650,height=900'); if (!pw) return;
+    const isCod = (o.paymentMethod || '').toLowerCase().includes('cod');
+    const orderDate = o.createdAt ? new Date(o.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
+    const itemsHtml = (o.items || []).map((item, i) =>
+      `<tr><td style="padding:4px 6px;font-size:11px;border-bottom:1px solid #eee">${i + 1}.</td><td style="padding:4px 6px;font-size:11px;border-bottom:1px solid #eee">${(item.title || '').replace(/</g, '&lt;')}</td><td style="padding:4px 6px;font-size:11px;border-bottom:1px solid #eee;text-align:center">${item.qty}</td><td style="padding:4px 6px;font-size:11px;border-bottom:1px solid #eee;text-align:right">₹${item.subtotal || item.price || ''}</td></tr>`
+    ).join('');
+    const totalItems = (o.items || []).reduce((s, i) => s + (i.qty || 1), 0);
+    const estWeight = totalItems * 400;
+
+    pw.document.write(`<!DOCTYPE html><html><head><title>Label #${o.orderId}</title>
+<style>
+  @page { size: 148mm 210mm; margin: 0; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; width: 148mm; min-height: 210mm; margin: 0 auto; padding: 12px; background: #fff; color: #1a1a2e; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+  .label { border: 2.5px solid #1a1a2e; border-radius: 10px; overflow: hidden; }
+
+  /* Header */
+  .header { background: linear-gradient(135deg, #001B3A 0%, #0a2e5c 100%); color: #fff; padding: 14px 16px; display: flex; align-items: center; gap: 12px; }
+  .header-logo { width: 44px; height: 44px; background: #fff; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 20px; color: #001B3A; flex-shrink: 0; }
+  .header-text h1 { font-size: 15px; font-weight: 800; letter-spacing: 0.5px; }
+  .header-text p { font-size: 10px; opacity: 0.8; margin-top: 2px; font-weight: 600; }
+
+  /* Order bar */
+  .order-bar { background: #f0f4ff; border-bottom: 2px solid #1a1a2e; padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; }
+  .order-id { font-family: 'Courier New', monospace; font-size: 18px; font-weight: 900; letter-spacing: 2px; color: #001B3A; }
+  .order-date { font-size: 10px; color: #64748b; font-weight: 600; text-align: right; }
+  .order-date span { display: block; font-size: 11px; color: #334155; font-weight: 700; }
+
+  /* Sections */
+  .section { padding: 12px 16px; border-bottom: 1px solid #e2e8f0; }
+  .section:last-child { border-bottom: none; }
+  .section-label { font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5px; color: #94a3b8; margin-bottom: 6px; }
+  .customer-name { font-size: 16px; font-weight: 800; color: #0f172a; }
+  .customer-addr { font-size: 12px; color: #475569; margin-top: 4px; line-height: 1.5; }
+  .customer-phone { font-size: 13px; font-weight: 700; color: #0f172a; margin-top: 8px; display: flex; align-items: center; gap: 6px; }
+  .phone-icon { display: inline-flex; width: 18px; height: 18px; background: #001B3A; color: #fff; border-radius: 4px; align-items: center; justify-content: center; font-size: 10px; }
+
+  /* Payment badge */
+  .payment-strip { padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #e2e8f0; }
+  .badge-cod { background: #fef3c7; border: 2px dashed #d97706; color: #92400e; padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: 800; }
+  .badge-prepaid { background: #dcfce7; border: 2px solid #16a34a; color: #166534; padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: 800; }
+  .amount-large { font-size: 20px; font-weight: 900; color: #0f172a; }
+
+  /* Items table */
+  .items-table { width: 100%; border-collapse: collapse; }
+  .items-table th { font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8; padding: 4px 6px; text-align: left; border-bottom: 2px solid #e2e8f0; }
+  .items-table th:nth-child(3), .items-table th:nth-child(4) { text-align: center; }
+  .items-table th:last-child { text-align: right; }
+
+  /* Meta row */
+  .meta-row { display: flex; gap: 0; border-bottom: 1px solid #e2e8f0; }
+  .meta-cell { flex: 1; padding: 8px 16px; border-right: 1px solid #e2e8f0; text-align: center; }
+  .meta-cell:last-child { border-right: none; }
+  .meta-cell .val { font-size: 13px; font-weight: 800; color: #0f172a; }
+  .meta-cell .lbl { font-size: 8px; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8; font-weight: 700; margin-top: 2px; }
+
+  /* AWB */
+  .awb-strip { background: #f8fafc; padding: 8px 16px; border-bottom: 1px solid #e2e8f0; text-align: center; }
+  .awb-strip .lbl { font-size: 8px; text-transform: uppercase; letter-spacing: 1.5px; color: #94a3b8; font-weight: 700; }
+  .awb-strip .val { font-family: 'Courier New', monospace; font-size: 16px; font-weight: 900; letter-spacing: 3px; color: #001B3A; margin-top: 2px; }
+
+  /* Return */
+  .return-section { background: #f8fafc; padding: 10px 16px; font-size: 10px; color: #64748b; display: flex; justify-content: space-between; align-items: center; }
+  .return-section strong { color: #334155; }
+
+  /* Courier branding */
+  .courier-brand { background: #001B3A; color: #fff; text-align: center; padding: 6px; font-size: 11px; font-weight: 800; letter-spacing: 2px; }
+
+  @media print {
+    body { padding: 0; }
+    .label { border-width: 2px; }
+  }
+</style>
+</head><body>
+<div class="label">
+  <div class="header">
+    <div class="header-logo">B</div>
+    <div class="header-text">
+      <h1>BLESSING POWER GUIDE</h1>
+      <p>Premium Educational Books &bull; Chennai</p>
+    </div>
+  </div>
+
+  <div class="order-bar">
+    <div class="order-id">#${o.orderId}</div>
+    <div class="order-date">Order Date<span>${orderDate}</span></div>
+  </div>
+
+  ${o.trackingNumber && !o.trackingNumber.startsWith('SHP-') ? `
+  <div class="awb-strip">
+    <div class="lbl">AWB / Docket Number</div>
+    <div class="val">${o.trackingNumber}</div>
+  </div>` : ''}
+
+  <div class="section">
+    <div class="section-label">Ship To</div>
+    <div class="customer-name">${o.customerName || 'Customer'}</div>
+    <div class="customer-addr">${o.address || ''}<br>${o.city || ''} — ${o.pincode || ''}</div>
+    <div class="customer-phone"><span class="phone-icon">☎</span> +91 ${o.customerPhone || ''}</div>
+  </div>
+
+  <div class="payment-strip">
+    <div class="${isCod ? 'badge-cod' : 'badge-prepaid'}">${isCod ? '₹ COLLECT ON DELIVERY' : '✓ PREPAID — DO NOT COLLECT'}</div>
+    <div class="amount-large">₹${(o.totalAmount || 0).toLocaleString('en-IN')}</div>
+  </div>
+
+  ${(o.items || []).length > 0 ? `
+  <div class="section" style="padding-bottom:6px">
+    <div class="section-label">Package Contents</div>
+    <table class="items-table">
+      <tr><th>#</th><th>Item</th><th>Qty</th><th>Amount</th></tr>
+      ${itemsHtml}
+    </table>
+  </div>` : ''}
+
+  <div class="meta-row">
+    <div class="meta-cell"><div class="val">${totalItems}</div><div class="lbl">Items</div></div>
+    <div class="meta-cell"><div class="val">${estWeight}g</div><div class="lbl">Est. Weight</div></div>
+    <div class="meta-cell"><div class="val">${isCod ? 'COD' : 'PAID'}</div><div class="lbl">Payment</div></div>
+    <div class="meta-cell"><div class="val">${o.courierName || 'ST Courier'}</div><div class="lbl">Courier</div></div>
+  </div>
+
+  <div class="return-section">
+    <div><strong>RETURN:</strong> Blessing Power Guide, Ayanavaram, Chennai 600012</div>
+    <div><strong>WA:</strong> +91 9840418228</div>
+  </div>
+
+  <div class="courier-brand">ST COURIER EXPRESS — HANDLE WITH CARE</div>
+</div>
+
+<script>window.onload=function(){setTimeout(function(){window.print()},300)}</script>
+</body></html>`);
     pw.document.close();
   };
   const handleUnlinkWhatsApp = async () => {
