@@ -182,6 +182,8 @@ function createPool(connectionString: string): Pool {
     max: defaultPoolMax(),
     idleTimeoutMillis: Number(process.env.DB_IDLE_TIMEOUT_MS || 600000),
     connectionTimeoutMillis: defaultConnectTimeoutMs(),
+    statement_timeout: 5000,
+    query_timeout: 5000,
     keepAlive: true,
     keepAliveInitialDelayMillis: 10000,
     ssl: sslFor(normalized),
