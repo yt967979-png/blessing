@@ -15,13 +15,6 @@ export async function applyRateLimitAsync(
   try {
     const { getDbClient, releaseDbClient } = await import('@/lib/db');
     client = await getDbClient();
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS rate_limits (
-        key TEXT PRIMARY KEY,
-        count INTEGER NOT NULL DEFAULT 0,
-        reset_at TIMESTAMPTZ NOT NULL
-      )
-    `);
     const res = await client.query(`SELECT count, reset_at FROM rate_limits WHERE key = $1`, [key]);
     if (res.rows.length === 0 || new Date(res.rows[0].reset_at).getTime() <= now) {
       const resetAt = new Date(now + windowMs);
