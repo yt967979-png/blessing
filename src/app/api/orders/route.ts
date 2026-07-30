@@ -214,14 +214,14 @@ export async function POST(request: Request) {
         `SELECT o.order_number, o.total_amount
          FROM orders o
          WHERE o.user_id = $1
-           AND o.created_at > NOW() - INTERVAL '5 minutes'
+           AND COALESCE(o.ordered_at, o.created_at) > NOW() - INTERVAL '5 minutes'
            AND ABS(o.total_amount - $2) < 0.01
            AND (o.payment_method ILIKE '%cod%' OR o.payment_method ILIKE '%cash%')
            AND (
              SELECT COALESCE(string_agg(oi.book_id || ':' || oi.quantity::text, '|' ORDER BY oi.book_id), '')
              FROM order_items oi WHERE oi.order_id = o.id
            ) = $3
-         ORDER BY o.created_at DESC
+         ORDER BY COALESCE(o.ordered_at, o.created_at) DESC
          LIMIT 1`,
         [userId, totalAmount, cartFingerprint]
       );

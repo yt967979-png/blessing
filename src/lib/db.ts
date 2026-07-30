@@ -814,6 +814,8 @@ async function runSchemaInit(client: any) {
         ALTER TABLE coupons ADD COLUMN IF NOT EXISTS per_user_limit INT DEFAULT 1;
         ALTER TABLE coupons ADD COLUMN IF NOT EXISTS allowed_classes TEXT;
         ALTER TABLE coupons ADD COLUMN IF NOT EXISTS allowed_categories TEXT;
+        ALTER TABLE orders ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+        ALTER TABLE orders ADD COLUMN IF NOT EXISTS ordered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS coupon_code VARCHAR(50);
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS coupon_id VARCHAR(255);
 
