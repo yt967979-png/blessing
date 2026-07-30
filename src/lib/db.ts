@@ -63,7 +63,6 @@ function getConnectionCandidates(): string[] {
   });
 
   return sorted;
-  return sorted;
 }
 
 /** Log once at startup so Railway deploy logs show the fix immediately. */
@@ -185,7 +184,7 @@ function createPool(connectionString: string): Pool {
   const p = new Pool({
     connectionString: normalized,
     max: defaultPoolMax(),
-    idleTimeoutMillis: Number(process.env.DB_IDLE_TIMEOUT_MS || 120000),
+    idleTimeoutMillis: Number(process.env.DB_IDLE_TIMEOUT_MS || 600000),
     connectionTimeoutMillis: defaultConnectTimeoutMs(),
     keepAlive: true,
     keepAliveInitialDelayMillis: 10000,
@@ -366,21 +365,31 @@ async function ensureSchemaReady(activePool: Pool) {
   await schemaInitPromise;
 }
 
-/** Single-flight pool setup — prevents connection storms at cold start. */
+/** Single-flight pool setup — keeps pool alive 24/7, only reconnects on real failure. */
 async function ensurePoolReady(): Promise<Pool> {
-  const staleMs = Number(process.env.DB_POOL_STALE_MS || 180000);
-  if (
-    isPoolUsable(pool) &&
-    isSchemaInitialized &&
-    lastPoolPingAt > 0 &&
-    Date.now() - lastPoolPingAt < staleMs
-  ) {
+  // Fast path: pool is alive and heartbeat confirmed it recently → instant return
+  if (isPoolUsable(pool) && isSchemaInitialized && lastPoolPingAt > 0) {
     return pool;
   }
   if (poolReadyPromise) return poolReadyPromise;
 
   const myGeneration = poolGeneration;
   poolReadyPromise = (async () => {
+    // If pool exists and is usable, just verify with a quick query (no full probe)
+    if (isPoolUsable(pool) && activeConnectionString) {
+      try {
+        const testClient = await pool!.connect();
+        await testClient.query('SELECT 1');
+        testClient.release();
+        await ensureSchemaReady(pool!);
+        lastPoolPingAt = Date.now();
+        return pool!;
+      } catch {
+        // Pool is broken, fall through to full reconnect
+        await destroyPool(isSchemaInitialized);
+      }
+    }
+
     const candidates = getConnectionCandidates();
     let lastErr: Error | null = null;
 
