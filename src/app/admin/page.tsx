@@ -135,6 +135,7 @@ export default function AdminPage() {
   // ── Analytics state
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [analyticsError, setAnalyticsError] = useState<string | null>(null);
   const [analyticsRange, setAnalyticsRange] = useState(30);
 
   // ── Catalog edit state
@@ -205,13 +206,20 @@ export default function AdminPage() {
   const loadAnalytics = useCallback(async () => {
     if (!user?.id) return;
     setAnalyticsLoading(true);
+    setAnalyticsError(null);
     try {
       const res = await fetch(`/api/admin/analytics?range=${analyticsRange}`, {
         headers: authHeaders(user),
       });
-      if (res.ok) { const data = await res.json(); setAnalytics(data); }
-    } catch {
-      // network error — silently ignore
+      if (res.ok) {
+        const data = await res.json();
+        setAnalytics(data);
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        setAnalyticsError(errData.error || errData.message || `Database not connected (Status ${res.status})`);
+      }
+    } catch (e: any) {
+      setAnalyticsError(e?.message || 'Network error connecting to database');
     } finally { setAnalyticsLoading(false); }
   }, [user, analyticsRange]);
 
@@ -827,10 +835,32 @@ export default function AdminPage() {
                 </div>
               </>
             ) : (
-              <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-                <AlertCircle className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-                <p className="text-sm text-gray-500">Could not load analytics. Check DB connection.</p>
-                <button onClick={loadAnalytics} className="mt-3 px-4 py-2 text-xs font-semibold text-[#2874f0] bg-blue-50 rounded-lg cursor-pointer hover:bg-blue-100 transition-colors">Retry</button>
+              <div className="bg-white rounded-xl border border-amber-200 bg-amber-50/40 p-8 sm:p-12 text-center space-y-4">
+                <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto">
+                  <AlertCircle className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-gray-900">Database Connection Required</h3>
+                  <p className="text-xs text-gray-600 max-w-lg mx-auto mt-1 leading-relaxed">
+                    {analyticsError || 'PostgreSQL database is currently disconnected or unreachable.'}
+                  </p>
+                </div>
+                <div className="bg-white border border-amber-200 rounded-lg p-3 max-w-md mx-auto text-left text-[11px] text-gray-600 space-y-1">
+                  <p className="font-bold text-gray-800">💡 How to fix on Railway:</p>
+                  <ol className="list-decimal list-inside space-y-0.5 text-gray-600">
+                    <li>Open <strong>Railway Dashboard → Web Service → Variables</strong></li>
+                    <li>Set <code>DATABASE_URL</code> = <code>{'${{Postgres.DATABASE_PUBLIC_URL}}'}</code></li>
+                    <li>Ensure PostgreSQL service in Railway has <strong>Public Networking</strong> enabled.</li>
+                  </ol>
+                </div>
+                <div className="pt-2 flex items-center justify-center gap-3 flex-wrap">
+                  <button onClick={loadAnalytics} className="px-4 py-2 bg-[#2874f0] text-white text-xs font-semibold rounded-lg hover:bg-blue-600 transition-colors cursor-pointer flex items-center gap-1.5">
+                    <RefreshCw className="w-3.5 h-3.5" /> Retry Connection
+                  </button>
+                  <a href="/api/db-status" target="_blank" rel="noreferrer" className="px-4 py-2 bg-white border border-gray-300 text-gray-700 text-xs font-semibold rounded-lg hover:bg-gray-50 transition-colors">
+                    🔍 Test DB API Status
+                  </a>
+                </div>
               </div>
             )}
           </div>

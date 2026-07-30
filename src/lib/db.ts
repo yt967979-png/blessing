@@ -276,33 +276,21 @@ export async function shutdownDb() {
 
 async function probeConnection(connStr: string): Promise<void> {
   const normalized = normalizeConnectionString(connStr);
-  const attempts = Number(process.env.DB_CONNECT_RETRIES || 3);
-  let lastErr: Error | null = null;
-
-  for (let i = 0; i < attempts; i++) {
-    const client = new Client({
-      connectionString: normalized,
-      ssl: sslFor(normalized),
-      connectionTimeoutMillis: defaultConnectTimeoutMs(),
-    });
+  const client = new Client({
+    connectionString: normalized,
+    ssl: sslFor(normalized),
+    connectionTimeoutMillis: 4000,
+  });
+  try {
+    await client.connect();
+    await client.query('SELECT 1');
+    await client.end();
+  } catch (err: any) {
     try {
-      await client.connect();
-      await client.query('SELECT 1');
       await client.end();
-      return;
-    } catch (err: any) {
-      lastErr = err;
-      try {
-        await client.end();
-      } catch (_) {}
-      if (i < attempts - 1) {
-        const delay = (i + 1) * 4000;
-        console.warn(`[db] probe ${i + 1}/${attempts} failed (${err.message}), retry in ${delay}ms…`);
-        await new Promise((r) => setTimeout(r, delay));
-      }
-    }
+    } catch (_) {}
+    throw err;
   }
-  throw lastErr || new Error('Could not connect to PostgreSQL');
 }
 
 /** Config for long-lived dedicated pg Clients (LISTEN / NOTIFY helpers). */
