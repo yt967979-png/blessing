@@ -40,7 +40,6 @@ export async function POST(request: Request) {
     }
 
     client = await getDbClient();
-    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_completed BOOLEAN DEFAULT FALSE`);
 
     const dup = await client.query(
       `SELECT id FROM users WHERE phone = $1 AND id <> $2 LIMIT 1`,

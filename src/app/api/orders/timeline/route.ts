@@ -14,10 +14,7 @@ const STAGE_META: Record<string, { emoji: string; label: string; whatsappTitle: 
 };
 
 async function ensureColumns(client: any) {
-  try {
-    await client.query(`ALTER TABLE order_timeline ADD COLUMN IF NOT EXISTS hub_city VARCHAR(255)`);
-    await client.query(`ALTER TABLE order_timeline ADD COLUMN IF NOT EXISTS awb_number VARCHAR(255)`);
-  } catch (_) {}
+  /* columns added at DB startup init */
 }
 
 // POST /api/orders/timeline — Add a new tracking event

@@ -19,12 +19,10 @@ function setSessionCookie(response: NextResponse, token: string) {
 }
 
 async function ensureGoogleUserColumns(client: any) {
-  await client.query(`
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id VARCHAR(255);
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_image TEXT;
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_completed BOOLEAN DEFAULT FALSE;
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_id ON users (google_id) WHERE google_id IS NOT NULL;
-  `);
+  /* columns added at DB startup init */
+  try {
+    await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_id ON users (google_id) WHERE google_id IS NOT NULL`);
+  } catch (_) {}
 }
 
 async function loadUserSessionData(client: any, userId: string) {

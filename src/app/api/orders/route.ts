@@ -186,8 +186,6 @@ export async function POST(request: Request) {
       coupon,
     } = checkout;
 
-    await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS idempotency_key VARCHAR(80)`);
-
     const idemKey = String(idempotencyKey || '').trim().slice(0, 80) || null;
 
     if (idemKey) {

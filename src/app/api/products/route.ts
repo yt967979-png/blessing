@@ -149,14 +149,15 @@ export async function GET(request: Request) {
         const mapped = res.rows.map((d: any) => {
           const { price, mrp, discount } = mapBookPrices(d);
 
-          const isCombo = d.category_id === 'cat-combos' || d.title.toLowerCase().includes('combo');
-          const classMatch = d.title.match(/(6th|7th|8th|9th|10th|11th|12th)/i);
+          const safeTitle = String(d.title || '');
+          const isCombo = d.category_id === 'cat-combos' || safeTitle.toLowerCase().includes('combo');
+          const classMatch = safeTitle.match(/(6th|7th|8th|9th|10th|11th|12th)/i);
           const extractedClass = classMatch ? classMatch[0] : '10th';
 
           return {
             id: d.id,
             slug: d.slug || d.id,
-            title: d.title,
+            title: safeTitle || 'Guide Book',
             subtitle: `${extractedClass} Standard Guide`,
             cls: extractedClass,
             category: isCombo ? 'combo' : 'guide',
@@ -225,8 +226,6 @@ export async function POST(request: Request) {
     const finalDesc = description || `Complete ${cls || '10th'} Standard ${title} guide.`;
     const finalBadge = String(badge || '').trim().slice(0, 100);
 
-    await client.query(`ALTER TABLE books ADD COLUMN IF NOT EXISTS badge VARCHAR(100) DEFAULT ''`);
-    await client.query(`ALTER TABLE books ADD COLUMN IF NOT EXISTS stock INT DEFAULT 50`);
     await ensureDefaultCategories(client);
     await ensureCategory(client, categoryId, cls || '10th', category || 'guide');
 
@@ -274,8 +273,6 @@ export async function PATCH(request: Request) {
     const { id, title, price, mrp, inStock, stock, description, image, badge, hasDiscount } = await request.json();
     if (!id) return NextResponse.json({ error: 'Product id is required' }, { status: 400 });
 
-    await client.query(`ALTER TABLE books ADD COLUMN IF NOT EXISTS badge VARCHAR(100) DEFAULT ''`);
-    await client.query(`ALTER TABLE books ADD COLUMN IF NOT EXISTS stock INT DEFAULT 50`);
     const fields: string[] = [];
     const values: any[] = [];
     let idx = 1;

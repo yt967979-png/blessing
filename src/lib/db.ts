@@ -821,6 +821,10 @@ async function runSchemaInit(client: any) {
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS coupon_code VARCHAR(50);
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS coupon_id VARCHAR(255);
 
+        ALTER TABLE order_timeline ADD COLUMN IF NOT EXISTS hub_city VARCHAR(255);
+        ALTER TABLE order_timeline ADD COLUMN IF NOT EXISTS awb_number VARCHAR(255);
+        ALTER TABLE orders ADD COLUMN IF NOT EXISTS idempotency_key VARCHAR(80);
+
         CREATE TABLE IF NOT EXISTS coupon_redemptions (
           id VARCHAR(255) PRIMARY KEY,
           coupon_id VARCHAR(255) REFERENCES coupons(id) ON DELETE SET NULL,
