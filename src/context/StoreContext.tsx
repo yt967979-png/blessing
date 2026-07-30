@@ -496,6 +496,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       withDerived.stock = qty;
       withDerived.inStock = qty > 0;
     }
+    const previousProducts = products;
     setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, ...withDerived } : p)));
     try {
       const res = await fetch('/api/products', {
@@ -507,8 +508,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || 'Update failed');
       }
-      // Keep optimistic stock/badge; then sync full catalog fresh
-      refreshProducts(true);
       showToast(
         rest.stock !== undefined
           ? `✓ Stock updated — ${Math.max(0, Math.floor(Number(rest.stock) || 0))} units`
@@ -519,8 +518,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               : '✓ Product saved to database'
       );
     } catch (e: any) {
+      setProducts(previousProducts);
       showToast(`❌ ${e?.message || 'Failed to save product'}`);
-      refreshProducts(true);
     }
   };
 
@@ -529,6 +528,36 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       showToast('❌ Please log in again as admin');
       return;
     }
+    const tempId = `bpg-${Date.now()}`;
+    const mrp = Number(newProdData.mrp || newProdData.price || 0);
+    const price = Number(newProdData.price || mrp);
+    const hasDiscount = price < mrp;
+    const tempProduct: Product = {
+      id: tempId,
+      slug: tempId,
+      title: String(newProdData.title || 'New Book'),
+      subtitle: `${newProdData.cls || '10th'} Standard Guide`,
+      cls: newProdData.cls || '10th',
+      category: (newProdData.category as any) || 'guide',
+      subject: 'State Board',
+      price: hasDiscount ? price : mrp,
+      mrp,
+      discount: hasDiscount && mrp > 0 ? Math.round(((mrp - price) / mrp) * 100) : 0,
+      rating: 5,
+      reviews: 0,
+      badge: String(newProdData.badge || ''),
+      badgeColor: String(newProdData.badge || '').toUpperCase().includes('COMBO') ? 'bg-purple-600' : 'bg-blue-600',
+      image: newProdData.image || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80',
+      hoverImage: newProdData.image || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80',
+      description: newProdData.description || `Complete ${newProdData.cls || '10th'} Standard ${newProdData.title} guide.`,
+      features: ['Solved Papers', 'Chapter Notes'],
+      inStock: true,
+      stock: 50,
+      isBestSeller: String(newProdData.badge || '').toUpperCase().includes('BEST'),
+    };
+
+    setProducts((prev) => [tempProduct, ...prev]);
+
     try {
       const res = await fetch('/api/products', {
         method: 'POST',
@@ -548,9 +577,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (!res.ok) {
         throw new Error(data.error || `Create failed (${res.status})`);
       }
-      refreshProducts(true);
+      if (data?.id) {
+        setProducts((prev) => prev.map((p) => (p.id === tempId ? { ...p, id: data.id, slug: data.slug || data.id } : p)));
+      }
       showToast(`🎉 Book "${newProdData.title}" saved to database`);
     } catch (err: any) {
+      setProducts((prev) => prev.filter((p) => p.id !== tempId));
       const msg = err?.message || 'Unknown error';
       showToast(msg.includes('Forbidden') || msg.includes('Unauthorized')
         ? '❌ Admin login required — log out and log in again'
@@ -559,6 +591,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const deleteProductFromDb = async (id: string | number) => {
+    const previousProducts = products;
     setProducts((prev) => prev.filter((p) => p.id !== id));
     try {
       const res = await fetch(`/api/products?id=${encodeURIComponent(String(id))}`, {
@@ -566,11 +599,10 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         headers: getAdminHeaders(),
       });
       if (!res.ok) throw new Error('Delete failed');
-      refreshProducts(true);
       showToast(`🗑️ Book removed from database`);
     } catch {
+      setProducts(previousProducts);
       showToast('❌ Failed to delete product');
-      refreshProducts(true);
     }
   };
 

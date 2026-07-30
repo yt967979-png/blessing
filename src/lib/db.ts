@@ -40,24 +40,20 @@ function getConnectionCandidates(): string[] {
 
   raw.push(
     ...( [
-      process.env.DATABASE_URL,
-      process.env.DATABASE_PUBLIC_URL,
       process.env.DATABASE_PRIVATE_URL,
+      process.env.DATABASE_URL,
       process.env.POSTGRES_URL,
+      process.env.DATABASE_PUBLIC_URL,
     ].filter(Boolean) as string[])
   );
-
-  // Static emergency fallback URL if Railway variables temporarily reset
-  const fallbackUrl = 'postgresql://postgres:USdOHOzspyXMPFmDnfsjkxoSIGedYwgk@sakura.proxy.rlwy.net:32874/railway';
-  raw.push(fallbackUrl);
 
   const onRailway = Boolean(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_SERVICE_ID);
   const sorted = [...new Set(raw.map(normalizeConnectionString))].sort((a, b) => {
     const score = (u: string) => {
       if (onRailway && u.includes('railway.internal')) return 0;
-      if (u.includes('rlwy.net') || u.includes('proxy.rlwy.net')) return 0;
-      if (u.includes('railway.internal')) return 2;
-      return 3;
+      if (u.includes('railway.internal')) return 1;
+      if (u.includes('rlwy.net') || u.includes('proxy.rlwy.net')) return 3;
+      return 2;
     };
     return score(a) - score(b);
   });

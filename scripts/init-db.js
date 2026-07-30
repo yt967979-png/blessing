@@ -7,10 +7,10 @@ try {
 /** Prefer public *.rlwy.net over broken postgres.railway.internal (matches src/lib/db.ts). */
 function getConnectionCandidates() {
   const raw = [
-    process.env.DATABASE_URL,
-    process.env.DATABASE_PUBLIC_URL,
     process.env.DATABASE_PRIVATE_URL,
+    process.env.DATABASE_URL,
     process.env.POSTGRES_URL,
+    process.env.DATABASE_PUBLIC_URL,
   ].filter(Boolean);
 
   if (raw.length === 0 && process.env.PGHOST && process.env.PGUSER && process.env.PGPASSWORD) {
@@ -22,10 +22,12 @@ function getConnectionCandidates() {
     raw.push(`postgresql://${user}:${pass}@${host}:${port}/${db}`);
   }
 
+  const isRailway = Boolean(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_SERVICE_ID);
   return [...new Set(raw.map(normalizeConnectionString))].sort((a, b) => {
     const score = (u) => {
-      if (u.includes('rlwy.net') || u.includes('proxy.rlwy.net')) return 0;
+      if (isRailway && u.includes('railway.internal')) return 0;
       if (u.includes('railway.internal')) return 1;
+      if (u.includes('rlwy.net') || u.includes('proxy.rlwy.net')) return 3;
       return 2;
     };
     return score(a) - score(b);

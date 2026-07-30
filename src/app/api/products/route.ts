@@ -292,21 +292,30 @@ export async function PATCH(request: Request) {
     if (description !== undefined) { fields.push(`description = $${idx++}`); values.push(description); }
     if (image !== undefined) { fields.push(`cover_image = $${idx++}`); values.push(image); }
     if (badge !== undefined) { fields.push(`badge = $${idx++}`); values.push(String(badge || '').trim().slice(0, 100)); }
+    let finalStatus: string | undefined = undefined;
+    let finalStock: number | undefined = undefined;
+
     if (inStock !== undefined) {
       const available = Boolean(inStock);
-      fields.push(`status = $${idx++}`);
-      values.push(available ? 'published' : 'out_of_stock');
+      finalStatus = available ? 'published' : 'out_of_stock';
       if (stock === undefined) {
-        fields.push(`stock = $${idx++}`);
-        values.push(available ? 100 : 0);
+        finalStock = available ? 100 : 0;
       }
     }
+
     if (stock !== undefined) {
       const qty = Math.max(0, Math.floor(Number(stock) || 0));
-      fields.push(`stock = $${idx++}`);
-      values.push(qty);
+      finalStock = qty;
+      finalStatus = qty > 0 ? 'published' : 'out_of_stock';
+    }
+
+    if (finalStatus !== undefined) {
       fields.push(`status = $${idx++}`);
-      values.push(qty > 0 ? 'published' : 'out_of_stock');
+      values.push(finalStatus);
+    }
+    if (finalStock !== undefined) {
+      fields.push(`stock = $${idx++}`);
+      values.push(finalStock);
     }
 
     if (fields.length > 0) {
