@@ -1,17 +1,11 @@
 import { NextResponse } from 'next/server';
 import { getDbClient } from '@/lib/db';
-import { createSessionToken, getTokenFromRequest } from '@/lib/auth';
+import { createSessionToken, getTokenFromRequest, sessionCookieOptions } from '@/lib/auth';
 import { getAuthenticatedUser, applyRateLimitAsync, clientIp } from '@/lib/serverSecurity';
 import { isValidMobileNumber, normalizeMobileDigits } from '@/lib/authValidation';
 
 function setSessionCookie(response: NextResponse, token: string) {
-  response.cookies.set('bpg_session', token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    maxAge: 7 * 24 * 60 * 60,
-    path: '/',
-  });
+  response.cookies.set('bpg_session', token, sessionCookieOptions());
   return response;
 }
 

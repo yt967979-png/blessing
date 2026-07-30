@@ -29,7 +29,20 @@ function getSessionSecret(): string {
 export function assertSessionSecretConfigured(): void {
   getSessionSecret();
 }
-const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** ~10 years — stay signed in until user logs out or clears browser data */
+export const SESSION_TTL_MS = 10 * 365 * 24 * 60 * 60 * 1000;
+export const SESSION_COOKIE_MAX_AGE_SEC = Math.floor(SESSION_TTL_MS / 1000);
+
+export function sessionCookieOptions() {
+  return {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax' as const,
+    maxAge: SESSION_COOKIE_MAX_AGE_SEC,
+    path: '/',
+  };
+}
 
 function timingSafeHexEqual(a: string, b: string): boolean {
   try {

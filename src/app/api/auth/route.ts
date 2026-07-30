@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { getDbClient } from '@/lib/db';
-import { createSessionToken } from '@/lib/auth';
+import { createSessionToken, sessionCookieOptions } from '@/lib/auth';
 import { applyRateLimitAsync, clientIp, getAuthenticatedUser, unauthorizedResponse } from '@/lib/serverSecurity';
 import { isValidMobileNumber, normalizeMobileDigits } from '@/lib/authValidation';
 import { userNeedsProfile } from '@/lib/userProfile';
@@ -10,13 +10,7 @@ const LEGACY_AUTH_DISABLED =
   'Email/password login is disabled. Please sign in with Google.';
 
 function setSessionCookie(response: NextResponse, token: string) {
-  response.cookies.set('bpg_session', token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    maxAge: 7 * 24 * 60 * 60,
-    path: '/',
-  });
+  response.cookies.set('bpg_session', token, sessionCookieOptions());
   return response;
 }
 

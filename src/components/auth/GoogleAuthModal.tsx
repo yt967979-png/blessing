@@ -67,16 +67,19 @@ export function GoogleAuthModal({
           return;
         }
 
-        // Always ask for name + WhatsApp number after Google (confirm / complete profile)
-        setProfileName(data.user.name || '');
-        setProfilePhone(
-          data.user?.needsProfile || !data.user?.phone || String(data.user.phone).includes('000000')
-            ? ''
-            : String(data.user.phone).replace(/\D/g, '').slice(-10)
-        );
-        setSessionToken(data.user.token || null);
-        setStep('profile');
-        return;
+        // Ask name + number only when profile is incomplete
+        if (data.user?.needsProfile) {
+          setProfileName(data.user.name || '');
+          setProfilePhone('');
+          setSessionToken(data.user.token || null);
+          setStep('profile');
+          return;
+        }
+
+        loginUser(data.user, data.cart || [], data.wishlist || [], data.addresses || []);
+        onClose();
+        if (data.user?.role === 'admin') router.push('/admin');
+      } catch {
         setAuthError('Connection error. Please try again.');
       } finally {
         setIsSubmitting(false);
@@ -234,8 +237,8 @@ export function GoogleAuthModal({
               )}
               <ul className="text-[11px] text-slate-500 space-y-1.5 bg-slate-50 rounded-xl p-3 border border-slate-100">
                 <li>• Sign in with your Google account</li>
-                <li>• Next: enter your name &amp; WhatsApp number</li>
-                <li>• Then shop, COD orders &amp; order tracking</li>
+                <li>• First time only: enter name &amp; WhatsApp number</li>
+                <li>• You stay signed in — cart &amp; orders saved</li>
               </ul>
             </>
           ) : (
