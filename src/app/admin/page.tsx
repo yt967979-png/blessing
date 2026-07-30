@@ -676,7 +676,7 @@ export default function AdminPage() {
   </div>
 
   <!-- Shipping Address & AWB Box -->
-  <div class="shipping-row">
+  <div class="shipping-row" style="${hasOfficialAwb ? '' : 'grid-template-columns: 1fr;'}">
     <div>
       <div class="ship-to-title">SHIP TO</div>
       <div class="customer-name">${o.customerName || 'Customer'}</div>
@@ -689,13 +689,14 @@ export default function AdminPage() {
         <span class="phone-badge">☎</span> +91 ${o.customerPhone || ''}
       </div>
     </div>
+    ${hasOfficialAwb ? `
     <div class="awb-card">
       <div class="awb-lbl">AWB / TRACKING NUMBER</div>
-      <div class="awb-val">${displayAwb}</div>
+      <div class="awb-val">${o.trackingNumber}</div>
       <div class="courier-lbl">COURIER</div>
       <div class="courier-val">${o.courierName || 'ST Courier Express'}</div>
-      <img src="${barcodeUrl}" class="barcode-img" alt="Barcode ${barcodeText}" />
-    </div>
+      <img src="${barcodeUrl}" class="barcode-img" alt="Barcode ${o.trackingNumber}" />
+    </div>` : ''}
   </div>
 
   <!-- Payment Bar -->
