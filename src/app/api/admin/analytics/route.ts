@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getDbClient, releaseDbClient } from '@/lib/db';
+import { queryDb } from '@/lib/db';
 import { verifyAdminRequest, forbiddenResponse } from '@/lib/serverSecurity';
 
 /** Active (non-cancelled) orders only — cancelled sales do not count toward revenue. */
@@ -11,18 +11,10 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const range = searchParams.get('range') || '30';
-
-  let client: any = null;
-  try {
-    client = await getDbClient();
-  } catch (err: any) {
-    return NextResponse.json({ error: err?.message || 'Database connection failed' }, { status: 503 });
-  }
+  const days = Math.min(Math.max(Number(range) || 30, 1), 365);
 
   try {
-    const days = Math.min(Math.max(Number(range) || 30, 1), 365);
-
-    // Execute all 8 analytics queries concurrently in parallel using Promise.all for instant response (<15ms)
+    // Execute all 8 analytics queries concurrently in parallel using Promise.all on warm pool for sub-5ms response
     const [
       summaryRes,
       dailyRes,
@@ -34,7 +26,7 @@ export async function GET(request: Request) {
       momRes,
     ] = await Promise.all([
       // 1. Overall summary
-      client.query(`
+      queryDb(`
         SELECT
           COUNT(*) FILTER (WHERE ${ACTIVE})::int                                        AS total_orders,
           COALESCE(SUM(total_amount) FILTER (WHERE ${ACTIVE}), 0)::numeric              AS total_revenue,
@@ -47,7 +39,7 @@ export async function GET(request: Request) {
       `),
 
       // 2. Daily revenue for last N days
-      client.query(`
+      queryDb(`
         SELECT
           DATE(ordered_at AT TIME ZONE 'Asia/Kolkata') AS day,
           COUNT(*)::int                                AS orders,
@@ -62,7 +54,7 @@ export async function GET(request: Request) {
       `, [days]),
 
       // 3. Payment method breakdown
-      client.query(`
+      queryDb(`
         SELECT
           payment_method,
           COUNT(*)::int                           AS count,
@@ -74,7 +66,7 @@ export async function GET(request: Request) {
       `),
 
       // 4. Order status breakdown
-      client.query(`
+      queryDb(`
         SELECT
           order_status                            AS status,
           COUNT(*)::int                           AS count,
@@ -85,7 +77,7 @@ export async function GET(request: Request) {
       `),
 
       // 5. Payment status breakdown
-      client.query(`
+      queryDb(`
         SELECT
           payment_status,
           COUNT(*)::int                           AS count,
@@ -97,7 +89,7 @@ export async function GET(request: Request) {
       `),
 
       // 6. Top selling products
-      client.query(`
+      queryDb(`
         SELECT
           oi.book_title                            AS title,
           SUM(oi.quantity)::int                    AS total_qty,
@@ -112,7 +104,7 @@ export async function GET(request: Request) {
       `),
 
       // 7. Recent 7-day hourly heatmap
-      client.query(`
+      queryDb(`
         SELECT
           EXTRACT(HOUR FROM ordered_at AT TIME ZONE 'Asia/Kolkata')::int AS hour,
           COUNT(*)::int AS orders
@@ -124,7 +116,7 @@ export async function GET(request: Request) {
       `),
 
       // 8. Month-over-month comparison
-      client.query(`
+      queryDb(`
         SELECT
           TO_CHAR(DATE_TRUNC('month', ordered_at AT TIME ZONE 'Asia/Kolkata'), 'Mon YYYY') AS month,
           COUNT(*)::int                               AS orders,
@@ -192,7 +184,5 @@ export async function GET(request: Request) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     console.error('Analytics error:', message);
     return NextResponse.json({ error: message }, { status: 500 });
-  } finally {
-    releaseDbClient(client);
   }
 }
