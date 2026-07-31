@@ -51,9 +51,15 @@ function hostOf(connectionString: string): string {
 function getConnectionCandidates(): string[] {
   const raw: string[] = [];
 
-  // 1. Explicit DATABASE_URL / POSTGRES_URL always gets #1 top priority
-  if (process.env.DATABASE_URL) raw.push(process.env.DATABASE_URL);
-  if (process.env.POSTGRES_URL) raw.push(process.env.POSTGRES_URL);
+  // If explicit DATABASE_URL is set (e.g. Neon PostgreSQL), return it directly as primary candidate
+  if (process.env.DATABASE_URL) {
+    const norm = normalizeConnectionString(process.env.DATABASE_URL);
+    if (norm.includes('neon.tech') || norm.includes('supabase.co') || norm.includes('supabase.com')) {
+      return [norm];
+    }
+    raw.push(norm);
+  }
+  if (process.env.POSTGRES_URL) raw.push(normalizeConnectionString(process.env.POSTGRES_URL));
 
   const fromPgEnv = buildUrlFromPgEnv();
   if (fromPgEnv) raw.push(fromPgEnv);
