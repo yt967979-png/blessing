@@ -6,13 +6,12 @@ const path = require('path');
 const fs = require('fs');
 
 const PORT = process.env.WHATSAPP_PORT || 4000;
+
+/** Absolute default; never under the app tree (Turbopack NFT-traces cwd-relative session dirs). */
+const WA_SESSION_DIR_DEFAULT = '/var/lib/blessing/whatsapp_session';
 function resolveWhatsAppSessionDir() {
   const fromEnv = (process.env.WHATSAPP_SESSION_DIR || '').trim();
-  if (fromEnv) return fromEnv;
-  if (process.env.NODE_ENV === 'production' || process.env.HOSTING === 'aws') {
-    return '/var/lib/blessing/whatsapp_session';
-  }
-  return path.join(__dirname, '../whatsapp_session');
+  return fromEnv || WA_SESSION_DIR_DEFAULT;
 }
 const SESSION_DIR = resolveWhatsAppSessionDir();
 const PUBLIC_DIR = path.join(__dirname, '../public');

@@ -1,5 +1,6 @@
-# Pings production every 5 minutes so Railway Free is less likely to go cold.
-# Uses the public health endpoint (no secrets required).
+# Optional external ping so free/hobby hosts stay warm.
+# Set repository variable KEEP_ALIVE_BASE_URL to the live origin
+# (e.g. https://blessingpowerguide.in). No hardcoded Railway URL.
 
 name: Keep-alive ping
 
@@ -16,7 +17,8 @@ jobs:
         run: |
           BASE="${{ vars.KEEP_ALIVE_BASE_URL }}"
           if [ -z "$BASE" ]; then
-            BASE="https://blessing-production.up.railway.app"
+            echo "SKIP: set repo variable KEEP_ALIVE_BASE_URL to enable keep-alive pings."
+            exit 0
           fi
           BASE="${BASE%/}"
           echo "Pinging $BASE/api/health"

@@ -12,29 +12,45 @@ import { isBackgroundLeader } from '@/lib/backgroundLeader';
 import { resolveTunedNumber, shouldRunBackgroundTask } from '@/lib/runtimeProfile';
 
 /**
- * Baileys session files must live outside the app tree in production.
- * `path.join(process.cwd(), 'whatsapp_session')` causes Turbopack to trace
- * tens of thousands of files during `next build` and can hang/slow the build.
+ * Absolute default outside the app tree. Never path.join(cwd, 'whatsapp_session') —
+ * Turbopack NFT-traces that into the project and can hang builds.
+ *
+ * Prefer WHATSAPP_SESSION_DIR (absolute). FS path args use turbopackIgnore
+ * magic comments so env overrides are not NFT-traced as the whole project.
  */
-function resolveWhatsAppSessionDir(): string {
+const WA_SESSION_DIR_DEFAULT = '/var/lib/blessing/whatsapp_session';
+
+function waSessionDir(): string {
   const fromEnv = (process.env.WHATSAPP_SESSION_DIR || '').trim();
-  if (fromEnv) return fromEnv;
-  if (process.env.NODE_ENV === 'production' || process.env.HOSTING === 'aws') {
-    return '/var/lib/blessing/whatsapp_session';
-  }
-  return path.join(process.cwd(), 'whatsapp_session');
+  return fromEnv || WA_SESSION_DIR_DEFAULT;
 }
 
-const SESSION_DIR = resolveWhatsAppSessionDir();
-const PUBLIC_DIR = path.join(process.cwd(), 'public');
+function waSessionPath(...segments: string[]): string {
+  return path.join(/* turbopackIgnore: true */ waSessionDir(), ...segments);
+}
+
+function ensureWaSessionDir(): string {
+  const dir = /* turbopackIgnore: true */ waSessionDir();
+  try {
+    if (!fs.existsSync(/* turbopackIgnore: true */ dir)) {
+      fs.mkdirSync(/* turbopackIgnore: true */ dir, { recursive: true });
+    }
+  } catch {
+    // Build may lack write access; runtime init recreates when needed.
+  }
+  return dir;
+}
+
+const PUBLIC_DIR = path.join(/* turbopackIgnore: true */ process.cwd(), 'public');
 const waLogger = pino({ level: process.env.WHATSAPP_LOG_LEVEL || 'silent' });
 
 try {
-  if (!fs.existsSync(SESSION_DIR)) fs.mkdirSync(SESSION_DIR, { recursive: true });
+  if (!fs.existsSync(/* turbopackIgnore: true */ PUBLIC_DIR)) {
+    fs.mkdirSync(/* turbopackIgnore: true */ PUBLIC_DIR, { recursive: true });
+  }
 } catch {
-  // Build may lack write access; runtime init recreates the dir when needed.
+  /* ignore */
 }
-if (!fs.existsSync(PUBLIC_DIR)) fs.mkdirSync(PUBLIC_DIR, { recursive: true });
 
 let sock: any = null;
 let isConnected = false;
@@ -145,13 +161,10 @@ async function updateSessionStatus(data: {
 
 function clearLocalAuthFiles() {
   try {
-    if (!fs.existsSync(SESSION_DIR)) {
-      fs.mkdirSync(SESSION_DIR, { recursive: true });
-      return;
-    }
-    for (const f of fs.readdirSync(SESSION_DIR)) {
+    const dir = ensureWaSessionDir();
+    for (const f of fs.readdirSync(/* turbopackIgnore: true */ dir)) {
       try {
-        fs.rmSync(path.join(SESSION_DIR, f), { recursive: true, force: true });
+        fs.rmSync(waSessionPath(f), { recursive: true, force: true });
       } catch (_) {}
     }
   } catch (_) {}
@@ -211,12 +224,13 @@ export async function resetWhatsAppSession() {
 async function backupSessionToDb() {
   let client: any = null;
   try {
-    if (!fs.existsSync(SESSION_DIR)) return;
-    const files = fs.readdirSync(SESSION_DIR);
+    const dir = /* turbopackIgnore: true */ waSessionDir();
+    if (!fs.existsSync(/* turbopackIgnore: true */ dir)) return;
+    const files = fs.readdirSync(/* turbopackIgnore: true */ dir);
     const sessionMap: Record<string, string> = {};
     for (const f of files) {
       if (f.endsWith('.json')) {
-        sessionMap[f] = fs.readFileSync(path.join(SESSION_DIR, f), 'utf8');
+        sessionMap[f] = fs.readFileSync(waSessionPath(f), 'utf8');
       }
     }
     if (Object.keys(sessionMap).length === 0) return;
@@ -251,9 +265,9 @@ async function restoreSessionFromDb() {
     if (res.rows.length > 0 && res.rows[0].session_data) {
       const raw = res.rows[0].session_data;
       const sessionMap = typeof raw === 'string' ? JSON.parse(raw) : raw;
-      if (!fs.existsSync(SESSION_DIR)) fs.mkdirSync(SESSION_DIR, { recursive: true });
+      ensureWaSessionDir();
       for (const [filename, content] of Object.entries(sessionMap)) {
-        fs.writeFileSync(path.join(SESSION_DIR, filename), content as string);
+        fs.writeFileSync(waSessionPath(filename), content as string);
       }
       console.log('✅ WhatsApp Auth Credentials successfully restored in-process!');
     }
@@ -281,7 +295,10 @@ export async function initWhatsAppInProcess(opts?: { requireLeader?: boolean }) 
       restoreSessionFromDb(),
       new Promise<void>((resolve) => setTimeout(resolve, 2500)),
     ]);
-    const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
+    const sessionDir = ensureWaSessionDir();
+    const { state, saveCreds } = await useMultiFileAuthState(
+      /* turbopackIgnore: true */ sessionDir
+    );
 
     let version: [number, number, number] | undefined;
     try {
