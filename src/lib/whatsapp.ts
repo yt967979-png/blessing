@@ -174,20 +174,25 @@ async function backupSessionToDb() {
 }
 
 async function restoreSessionFromDb() {
+  let client: any = null;
   try {
-    const client = await getDbClient();
-    if (client) {
-      const res = await client.query(`SELECT session_data FROM whatsapp_sessions WHERE id = 'default' LIMIT 1`);
-      await client.end();
-      if (res.rows.length > 0 && res.rows[0].session_data) {
-        const sessionMap = JSON.parse(res.rows[0].session_data);
-        for (const [filename, content] of Object.entries(sessionMap)) {
-          fs.writeFileSync(path.join(SESSION_DIR, filename), content as string);
-        }
-        console.log('✅ WhatsApp Auth Credentials successfully restored in-process!');
+    client = await getDbClient();
+    if (!client) return;
+    const res = await client.query(`SELECT session_data FROM whatsapp_sessions WHERE id = 'default' LIMIT 1`);
+    if (res.rows.length > 0 && res.rows[0].session_data) {
+      const raw = res.rows[0].session_data;
+      const sessionMap = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      if (!fs.existsSync(SESSION_DIR)) fs.mkdirSync(SESSION_DIR, { recursive: true });
+      for (const [filename, content] of Object.entries(sessionMap)) {
+        fs.writeFileSync(path.join(SESSION_DIR, filename), content as string);
       }
+      console.log('✅ WhatsApp Auth Credentials successfully restored in-process!');
     }
-  } catch (_) {}
+  } catch (e: any) {
+    console.warn('[whatsapp] restore session:', e?.message || e);
+  } finally {
+    releaseDbClient(client);
+  }
 }
 
 export async function initWhatsAppInProcess(opts?: { requireLeader?: boolean }) {
