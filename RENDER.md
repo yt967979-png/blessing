@@ -1,5 +1,7 @@
 # Deploy on Render (from Railway)
 
+> **Prefer AWS if you have no Render payment card.** Use [`AWS.md`](AWS.md) (Lightsail Singapore + Neon + always-on Baileys). This Render path stays as an optional alternative when Starter billing works.
+
 Neon DB stays the same. App moves to Render **Starter** in **Singapore** (matches Neon `ap-southeast-1`). Do **not** use Render Free — it sleeps and kills WhatsApp (Baileys in-process).
 
 **Repo:** `yt967979-png/blessing` · **branch:** `main` · **Blueprint:** `render.yaml`

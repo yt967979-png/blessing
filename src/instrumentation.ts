@@ -25,6 +25,17 @@ export async function register() {
     if (process.env.RAILWAY_ENVIRONMENT) {
       console.log(`[railway] environment: ${process.env.RAILWAY_ENVIRONMENT}`);
     }
+    const onAws =
+      Boolean(process.env.AWS_EXECUTION_ENV) ||
+      Boolean(process.env.ECS_CONTAINER_METADATA_URI) ||
+      String(process.env.HOSTING || '').toLowerCase() === 'aws';
+    if (onAws) {
+      console.log(
+        `[aws] hosting=${process.env.HOSTING || 'detected'} ` +
+          `region=${process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || '(unset)'} ` +
+          `url=${process.env.PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_SITE_URL || '(set PUBLIC_BASE_URL)'}`
+      );
+    }
 
     await warmDbConnection();
 
@@ -33,6 +44,7 @@ export async function register() {
     if (keepAliveMs > 0) {
       const base =
         process.env.KEEP_ALIVE_URL ||
+        process.env.PUBLIC_BASE_URL ||
         process.env.NEXT_PUBLIC_SITE_URL ||
         process.env.RENDER_EXTERNAL_URL ||
         (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : '') ||

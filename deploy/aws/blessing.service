@@ -1,0 +1,24 @@
+[Unit]
+Description=Blessing Power Guide (Next.js + Baileys)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/opt/blessing
+EnvironmentFile=/etc/blessing.env
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/npm start
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+# Baileys + Next share this process — keep one replica only.
+KillMode=mixed
+
+# Soft limits for small Lightsail plans
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

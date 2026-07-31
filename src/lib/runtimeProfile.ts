@@ -23,13 +23,23 @@ let tier: RuntimeTier = 'local';
 let load: LoadLevel = 'normal';
 let monitorStarted = false;
 
+function isAwsHosted(): boolean {
+  return (
+    Boolean(process.env.AWS_EXECUTION_ENV) ||
+    Boolean(process.env.ECS_CONTAINER_METADATA_URI) ||
+    String(process.env.HOSTING || '').toLowerCase() === 'aws'
+  );
+}
+
 function isHostedRuntime(): boolean {
   return Boolean(
     process.env.RAILWAY_ENVIRONMENT ||
       process.env.RAILWAY_SERVICE_ID ||
       process.env.RENDER ||
       process.env.RENDER_SERVICE_ID ||
-      process.env.VERCEL
+      process.env.VERCEL ||
+      isAwsHosted() ||
+      (process.env.PUBLIC_BASE_URL && process.env.NODE_ENV === 'production')
   );
 }
 
@@ -145,6 +155,7 @@ function measureLoadLevel(): LoadLevel {
     tier === 'hobby' ||
     String(process.env.LAUNCH_SCALE || 'soft').toLowerCase() !== 'peak' ||
     Boolean(process.env.RENDER) ||
+    isAwsHosted() ||
     String(process.env.RUNTIME_TIER || process.env.RAILWAY_PLAN_TIER || '')
       .toLowerCase() === 'free' ||
     String(process.env.RUNTIME_TIER || '').toLowerCase() === 'hobby';
@@ -181,7 +192,9 @@ export function initRuntimeProfile(): RuntimeTuning {
       ? ` replica ${process.env.RAILWAY_REPLICA_ID.slice(0, 8)}`
       : process.env.RENDER
         ? ' render'
-        : '';
+        : isAwsHosted()
+          ? ' aws'
+          : '';
   console.log(
     `[runtime] tier=${tuning.tier} load=${tuning.load} cpus=${os.cpus().length} mem=${(os.totalmem() / 1024 ** 3).toFixed(2)}GB pool=${resolveDbPoolMaxPerReplica(tuning.dbPoolMax)}${replica}`
   );

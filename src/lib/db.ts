@@ -107,6 +107,10 @@ function getConnectionCandidates(): string[] {
 
   const onRailway = Boolean(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_SERVICE_ID);
   const onRender = Boolean(process.env.RENDER || process.env.RENDER_SERVICE_ID);
+  const onAws =
+    Boolean(process.env.AWS_EXECUTION_ENV) ||
+    Boolean(process.env.ECS_CONTAINER_METADATA_URI) ||
+    String(process.env.HOSTING || '').toLowerCase() === 'aws';
   let sorted = [...new Set(raw.map(normalizeConnectionString).filter(Boolean))];
 
   // Never try railway.internal when a managed cloud URL is present.
@@ -117,6 +121,7 @@ function getConnectionCandidates(): string[] {
   const preferPrivate =
     !sorted.some(isManagedCloudPg) &&
     !onRender &&
+    !onAws &&
     (onRailway || String(process.env.DB_TRY_PRIVATE || '').toLowerCase() === 'true');
 
   sorted.sort((a, b) => {

@@ -1,6 +1,7 @@
-# Exports Railway blessing env keys (masked) to help paste into Render.
+# Exports Railway blessing env keys (masked) to help paste into Render or AWS (/etc/blessing.env).
 # Usage: powershell -File scripts/export-railway-env-for-render.ps1
 # Requires: railway CLI logged in (`railway whoami`).
+# AWS: also set HOSTING=aws and PUBLIC_BASE_URL — see deploy/aws/env.example / AWS.md.
 
 $ErrorActionPreference = 'Stop'
 Write-Host "Fetching Railway variables for service blessing..."
