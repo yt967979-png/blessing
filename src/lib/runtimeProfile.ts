@@ -125,10 +125,22 @@ function applyLoadAdjustments(base: RuntimeTuning, level: LoadLevel): RuntimeTun
 }
 
 function measureLoadLevel(): LoadLevel {
-  const cpus = Math.max(1, os.cpus().length);
-  const load1 = os.loadavg()[0] / cpus;
+  // Railway Free/shared hosts often expose host-wide cpus/mem/loadavg (e.g. 48 CPUs /
+  // 300GB). That falsely flips us to "critical" and thrashes DB workers. When the
+  // tier is forced via env, only use this process's heap pressure.
+  const forced = String(process.env.RAILWAY_PLAN_TIER || process.env.RUNTIME_TIER || '').toLowerCase();
   const mem = process.memoryUsage();
   const heapPressure = mem.heapUsed / Math.max(mem.heapTotal, 1);
+
+  if (forced === 'free' || forced === 'hobby') {
+    if (heapPressure >= 0.92) return 'critical';
+    if (heapPressure >= 0.82) return 'high';
+    if (heapPressure <= 0.55) return 'low';
+    return 'normal';
+  }
+
+  const cpus = Math.max(1, os.cpus().length);
+  const load1 = os.loadavg()[0] / cpus;
   const rssGb = mem.rss / 1024 ** 3;
   const memLimitGb = os.totalmem() / 1024 ** 3;
   const rssPressure = rssGb / Math.max(memLimitGb, 0.1);

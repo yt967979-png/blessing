@@ -35,12 +35,14 @@ export function parseYesNoReply(text: string): 'yes' | 'no' | null {
   if (
     t === 'yes' ||
     t === 'y' ||
+    t === 'ha' ||
     t === '1' ||
     t === 'ok' ||
     t === 'okay' ||
     t === 'confirm' ||
     t === 'confirmed' ||
-    t.startsWith('yes ')
+    t.startsWith('yes ') ||
+    t.startsWith('ha ')
   ) {
     return 'yes';
   }

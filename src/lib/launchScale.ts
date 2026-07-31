@@ -33,7 +33,11 @@ export function getDbConnectionBudget(): number {
 export function resolveDbPoolMaxPerReplica(tierDefault: number): number {
   if (process.env.DB_POOL_MAX) {
     const n = Number(process.env.DB_POOL_MAX);
-    if (Number.isFinite(n) && n > 0) return Math.floor(n);
+    if (Number.isFinite(n) && n > 0) {
+      // Soft launch / free: clamp hard — large pools cause Railway PG connect timeouts.
+      const softCap = getLaunchScale() === 'peak' ? Math.floor(n) : Math.min(Math.floor(n), 5);
+      return softCap;
+    }
   }
   const replicas = getAppReplicaCount();
   const perReplica = Math.max(1, Math.floor(getDbConnectionBudget() / replicas));

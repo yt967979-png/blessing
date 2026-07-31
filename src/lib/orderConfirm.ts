@@ -9,22 +9,24 @@ import {
   parseYesNoReply,
 } from '@/lib/orderStatus';
 import { executeOrderCancel } from '@/lib/orderCancel';
-import {
-  adminOrderConfirmedMessage,
-  confirmYesReplyMessage,
-} from '@/lib/notify/templates';
-import { notifyWhatsApp, notifyWhatsAppMany } from '@/lib/notify/send';
+import { notify } from '@/lib/notify/send';
 import { broadcastOrderChange, notifyOrderChanged } from '@/app/api/orders/stream/route';
 
 function last10(phone: string) {
   return String(phone || '').replace(/\D/g, '').slice(-10);
 }
 
-function parseAddr(raw: unknown): { phone: string; name: string; city?: string } {
+function parseAddr(raw: unknown): {
+  phone: string;
+  alternatePhone?: string;
+  name: string;
+  city?: string;
+} {
   try {
     const addr = typeof raw === 'string' ? JSON.parse(raw) : raw;
     return {
       phone: String((addr as any)?.phone || ''),
+      alternatePhone: String((addr as any)?.alternatePhone || (addr as any)?.altPhone || ''),
       name: String((addr as any)?.name || 'Student'),
       city: String((addr as any)?.city || (addr as any)?.district || ''),
     };
@@ -61,7 +63,9 @@ export async function getAdminAlertPhones(): Promise<string[]> {
   const stored = await getStoredAdminAlertPhones();
   if (stored.length > 0) return stored;
 
-  const envPhone = last10(process.env.ADMIN_PHONE || '9840418228');
+  const envPhone = last10(
+    process.env.ADMIN_NOTIFY_PHONE || process.env.ADMIN_PHONE || '9840418228'
+  );
   return envPhone.length === 10 ? [envPhone] : [];
 }
 
@@ -103,7 +107,7 @@ export async function findAwaitingOrderByPhone(phone: string) {
   );
   for (const row of res.rows) {
     const addr = parseAddr(row.shipping_address);
-    if (last10(addr.phone) === dig) return row;
+    if (last10(addr.phone) === dig || last10(addr.alternatePhone || '') === dig) return row;
   }
   return null;
 }
@@ -118,7 +122,7 @@ export async function confirmAwaitingOrder(orderId: string): Promise<
     await client.query('BEGIN');
 
     const ord = await client.query(
-      `SELECT id, order_number, order_status, total_amount, shipping_address
+      `SELECT id, order_number, order_status, total_amount, shipping_address, payment_method
        FROM orders WHERE order_number = $1 OR id = $1 LIMIT 1 FOR UPDATE`,
       [orderId]
     );
@@ -155,21 +159,23 @@ export async function confirmAwaitingOrder(orderId: string): Promise<
     const { phone, name, city } = parseAddr(row.shipping_address);
 
     if (phone) {
-      await notifyWhatsApp(
-        phone,
-        confirmYesReplyMessage({ customerName: name, orderId: row.order_number })
-      );
+      await notify('order.confirmed', {
+        customerPhone: phone,
+        customerName: name,
+        orderId: row.order_number,
+      });
     }
 
-    const adminMsg = adminOrderConfirmedMessage({
+    const admins = await getAdminAlertPhones();
+    await notify('admin.new_order', {
       orderId: row.order_number,
       customerName: name,
       customerPhone: phone,
       totalAmount: row.total_amount,
       city,
+      paymentMethod: row.payment_method,
+      adminPhones: admins,
     });
-    const admins = await getAdminAlertPhones();
-    await notifyWhatsAppMany(admins, adminMsg);
 
     const event = {
       type: 'ORDER_UPDATED',

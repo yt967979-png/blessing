@@ -585,7 +585,14 @@ function newOutboxId() {
 }
 
 async function enqueueWhatsAppOutbox(to: string, message: string) {
-  const client = await getDbClient();
+  const { tryGetDbClient } = await import('@/lib/db');
+  const client = await Promise.race([
+    tryGetDbClient(),
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
+  ]);
+  if (!client) {
+    throw new Error('WhatsApp outbox unavailable (database disconnected)');
+  }
   try {
     await client.query(
       `INSERT INTO whatsapp_outbox (id, phone, message) VALUES ($1, $2, $3)`,
@@ -711,22 +718,51 @@ export async function shutdownWhatsAppInProcess() {
 }
 
 export async function sendWhatsAppMessageInProcess(to: string, message: string) {
-  if (!isBackgroundLeader()) {
-    await enqueueWhatsAppOutbox(to, message);
-    return { success: true, queued: true, recipient: to.replace(/\D/g, '') };
+  const digits = String(to || '').replace(/\D/g, '');
+  if (digits.length < 10) {
+    throw new Error('Customer phone number is missing or invalid');
   }
 
-  const task = sendQueue.then(async () => {
-    try {
-      return await sendWhatsAppDirect(to, message);
-    } catch (err: any) {
-      console.error('Failed to send WhatsApp message in-process:', err.message);
-      throw err;
-    }
-  });
+  // Prefer live socket on this process; otherwise queue for the leader outbox worker.
+  if (isConnected && sock) {
+    const task = sendQueue.then(async () => {
+      try {
+        return await sendWhatsAppDirect(digits, message);
+      } catch (err: any) {
+        console.error('Failed to send WhatsApp message in-process:', err.message);
+        try {
+          await enqueueWhatsAppOutbox(digits, message);
+          return { success: true, queued: true, recipient: digits, deferred: true };
+        } catch (qErr: any) {
+          throw err;
+        }
+      }
+    });
+    sendQueue = task.catch(() => {});
+    return task;
+  }
 
-  sendQueue = task.catch(() => {});
-  return task;
+  // Not linked here — queue so outbox worker / other replica can send when WA is up
+  try {
+    await enqueueWhatsAppOutbox(digits, message);
+    // Kick Baileys on leader so pending outbox drains soon
+    if (isBackgroundLeader()) {
+      void initWhatsAppInProcess().catch(() => {});
+    }
+    return { success: true, queued: true, recipient: digits };
+  } catch (queueErr: any) {
+    // Last resort: try open socket anyway (may reconnect)
+    if (isBackgroundLeader()) {
+      const task = sendQueue.then(() => sendWhatsAppDirect(digits, message));
+      sendQueue = task.catch(() => {});
+      return task;
+    }
+    throw queueErr instanceof Error
+      ? queueErr
+      : new Error(
+          'WhatsApp not linked and outbox unavailable. Open Admin → WhatsApp and scan QR; fix DATABASE_URL if DB is down.'
+        );
+  }
 }
 
 export function getWhatsAppConnectionState() {

@@ -123,24 +123,26 @@ export async function POST(request: Request) {
 
     await client.end();
 
-    // Fire WhatsApp directly in-process
+    // Fire WhatsApp via shared notify layer
     const order = orderRes.rows[0];
     if (order) {
       try {
         let addr: any = {};
-        try { addr = JSON.parse(order.shipping_address || '{}'); } catch (_) {}
+        try {
+          addr = JSON.parse(order.shipping_address || '{}');
+        } catch (_) {}
         const phone = addr.phone || '';
         const name = addr.name || 'Student';
-        const awb = awbNumber || order.awb_number || 'Pending Assignment';
-        const meta = STAGE_META[status];
-        const hubInfo = hubCity ? `\n📍 *Current Hub:* ${hubCity}` : '';
-        const trackUrl = `${process.env.NEXT_PUBLIC_SITE_URL || 'https://blessing-production.up.railway.app'}/track?orderId=${encodeURIComponent(order.order_number)}`;
-
-        if (phone && meta) {
-          const message = `*BLESSING POWER GUIDE*\n*${meta.whatsappTitle}*\n\nDear *${name}*,\n${meta.whatsappDesc}\n\n📦 *Order ID:* ${order.order_number}\n🚚 *Partner:* ST Courier Express\n📍 *Docket AWB:* ${awb}${hubInfo}\n\n👉 *Track Live:* ${trackUrl}`;
-
-          const { sendWhatsAppMessageInProcess } = await import('@/lib/whatsapp');
-          await sendWhatsAppMessageInProcess(phone, message);
+        const awb = awbNumber || order.awb_number || undefined;
+        const { notify, statusToNotifyEvent } = await import('@/lib/notify/send');
+        const mapped = statusToNotifyEvent(status) || statusToNotifyEvent(statusLabel || '');
+        if (phone && mapped) {
+          await notify(mapped, {
+            customerPhone: phone,
+            customerName: name,
+            orderId: order.order_number,
+            awbNumber: awb,
+          });
         }
       } catch (err: any) {
         console.error('Error firing WhatsApp in timeline route:', err.message);

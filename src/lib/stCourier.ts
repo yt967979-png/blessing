@@ -394,8 +394,11 @@ export async function syncOrderByAwb(
       } catch (_) {}
 
       if (opts.sendWhatsApp !== false) {
-        const waKey = STAGE_TO_WHATSAPP_KEY[nextStatus];
-        if (waKey && (nextStatus === 'Out for Delivery' || nextStatus === 'Delivered' || nextStatus === 'In Transit')) {
+        if (
+          nextStatus === 'Out for Delivery' ||
+          nextStatus === 'Delivered' ||
+          nextStatus === 'In Transit'
+        ) {
           try {
             let addr: any = {};
             try {
@@ -406,18 +409,16 @@ export async function syncOrderByAwb(
             } catch (_) {}
             const phone = addr.phone || '';
             if (phone) {
-              const origin = process.env.NEXT_PUBLIC_SITE_URL || 'https://blessing-production.up.railway.app';
-              await fetch(`${origin}/api/whatsapp`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  step: waKey,
-                  orderId: order.order_number,
-                  customerName: addr.name || 'Customer',
+              const { notify, statusToNotifyEvent } = await import('@/lib/notify/send');
+              const mapped = statusToNotifyEvent(nextStatus);
+              if (mapped) {
+                await notify(mapped, {
                   customerPhone: phone,
-                  trackingNumber: tracked.docket,
-                }),
-              }).catch(() => {});
+                  customerName: addr.name || 'Customer',
+                  orderId: order.order_number,
+                  awbNumber: tracked.docket,
+                });
+              }
             }
           } catch (_) {}
         }

@@ -75,6 +75,14 @@ export async function GET() {
       status: 'CONNECTED',
       database: 'PostgreSQL',
       connectionUrlFound: !!connectionString,
+      preferredHostHint: (() => {
+        try {
+          const u = connectionString || '';
+          return new URL(u.replace(/^postgres(ql)?:\/\//, 'http://')).hostname;
+        } catch {
+          return null;
+        }
+      })(),
       tableRowCounts: {
         books: books ?? 0,
         categories: categories ?? 0,

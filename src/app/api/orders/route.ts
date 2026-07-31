@@ -12,6 +12,7 @@ import {
 import { priceCartItems, verifyRazorpayPayment } from '@/lib/orderPricing';
 import { priceCheckoutOrder } from '@/lib/checkoutPricing';
 import { ensureCouponSchema } from '@/lib/coupons';
+import { notify, statusToNotifyEvent, getEnvAdminNotifyPhones } from '@/lib/notify/send';
 
 function mapOrderRow(o: any) {
   let addrObj: any = {};
@@ -356,12 +357,13 @@ export async function POST(request: Request) {
       const left = Number(stockRes.rows[0]?.stock ?? 0);
       if (left <= 5) {
         try {
-          const adminPhone = String(process.env.ADMIN_PHONE || '9840418228').replace(/\D/g, '').slice(-10);
-          const { sendWhatsAppMessageInProcess } = await import('@/lib/whatsapp');
-          void sendWhatsAppMessageInProcess(
-            adminPhone,
-            `*LOW STOCK*\n${stockRes.rows[0].title}\nRemaining: *${left}*\nOrder: ${orderNumber}`
-          ).catch(() => {});
+          void notify('admin.low_stock', {
+            title: stockRes.rows[0].title,
+            stockLeft: left,
+            bookId: String(item.id),
+            orderId: orderNumber,
+            adminPhones: getEnvAdminNotifyPhones(),
+          }).catch(() => {});
         } catch {
           /* ignore */
         }
@@ -402,21 +404,37 @@ export async function POST(request: Request) {
     } catch (_) {}
 
     try {
-      const originUrl = new URL(request.url).origin;
-      fetch(`${originUrl}/api/whatsapp`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          step: 'CONFIRM_REQUEST',
-          customerPhone,
+      const phone = String(customerPhone || '').replace(/\D/g, '');
+      if (phone.length >= 10) {
+        const bookTitle =
+          verifiedItems.map((i: { title?: string }) => i.title).filter(Boolean).join(', ') ||
+          'Blessing Power Guide';
+
+        if (isRazorpay) {
+          void notify('payment.confirmed', {
+            customerPhone: phone,
+            customerName,
+            orderId: orderNumber,
+            totalAmount,
+          }).catch((e) => console.warn('[orders] payment WhatsApp:', e?.message || e));
+        }
+
+        void notify('order.confirm_request', {
+          customerPhone: phone,
           customerName,
           orderId: orderNumber,
           totalAmount,
-          trackingNumber: null,
-          items: verifiedItems,
-        }),
-      }).catch(() => {});
-    } catch (_) {}
+          bookTitle,
+          itemsSummary: bookTitle,
+        }).then((r) => {
+          if (!r.ok) console.warn('[orders] confirm WhatsApp:', r.error);
+        });
+      } else {
+        console.warn('[orders] confirm WhatsApp skipped — missing customer phone');
+      }
+    } catch (e: any) {
+      console.warn('[orders] confirm WhatsApp failed:', e?.message || e);
+    }
 
     return NextResponse.json(
       {
@@ -541,10 +559,15 @@ export async function PATCH(request: NextRequest) {
 
           if (phone) {
             try {
-              const { sendWhatsAppMessageInProcess } = await import('@/lib/whatsapp');
-              const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://blessing-production.up.railway.app';
-              const message = `*BLESSING POWER GUIDE*\n*${newStatus.toUpperCase()}*\n\nDear *${customerName}*,\nYour order status has been updated to: *${newStatus}*.\n\n📦 *Order ID:* ${orderRow.order_number || orderId}\n🚚 *Partner:* ST Courier Express\n📍 *Docket AWB:* ${awbNumber || orderRow.awb_number || 'Pending'}\n\n👉 *Track Live:* ${siteUrl}/track?orderId=${encodeURIComponent(orderRow.order_number || orderId)}`;
-              await sendWhatsAppMessageInProcess(phone, message);
+              const mapped = statusToNotifyEvent(newStatus);
+              if (mapped) {
+                await notify(mapped, {
+                  customerPhone: phone,
+                  customerName,
+                  orderId: orderRow.order_number || orderId,
+                  awbNumber: awbNumber || orderRow.awb_number || undefined,
+                });
+              }
             } catch (waErr: any) {
               console.error('In-process WhatsApp dispatch error in PATCH /api/orders:', waErr.message);
             }

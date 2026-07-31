@@ -4,8 +4,7 @@
 import { getDbClient, releaseDbClient } from '@/lib/db';
 import { paymentStatusAfterCancel, isOrderCancelled } from '@/lib/orderStatus';
 import { broadcastOrderChange, notifyOrderChanged } from '@/app/api/orders/stream/route';
-import { confirmNoReplyMessage } from '@/lib/notify/templates';
-import { notifyWhatsApp } from '@/lib/notify/send';
+import { notify } from '@/lib/notify/send';
 
 export type CancelActor = 'customer' | 'admin' | 'system' | 'whatsapp_no';
 
@@ -132,10 +131,20 @@ export async function executeOrderCancel(opts: {
 
     const { phone, name } = parseAddr(row.shipping_address);
     if (phone && !opts.skipCustomerWhatsApp) {
-      await notifyWhatsApp(
-        phone,
-        confirmNoReplyMessage({ customerName: name, orderId: row.order_number })
-      );
+      const cancelReason =
+        opts.actor === 'system'
+          ? reason
+          : opts.actor === 'whatsapp_no' || opts.actor === 'customer'
+            ? 'requested'
+            : opts.actor === 'admin'
+              ? `admin: ${reason}`
+              : reason;
+      await notify('order.cancelled', {
+        customerPhone: phone,
+        customerName: name,
+        orderId: row.order_number,
+        cancelReason,
+      });
     }
 
     const event = {

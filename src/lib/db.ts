@@ -32,6 +32,22 @@ function buildUrlFromPgEnv(): string | null {
   return `postgresql://${user}:${pass}@${host}:${port}/${db}`;
 }
 
+function isPublicProxyUrl(u: string): boolean {
+  return u.includes('rlwy.net') || u.includes('proxy.rlwy.net');
+}
+
+function isPrivateRailwayUrl(u: string): boolean {
+  return u.includes('railway.internal');
+}
+
+function hostOf(connectionString: string): string {
+  try {
+    return new URL(connectionString.replace(/^postgres(ql)?:\/\//, 'http://')).hostname;
+  } catch {
+    return '(unparseable)';
+  }
+}
+
 function getConnectionCandidates(): string[] {
   const raw: string[] = [];
 
@@ -40,25 +56,32 @@ function getConnectionCandidates(): string[] {
 
   raw.push(
     ...( [
-      process.env.DATABASE_PRIVATE_URL,
       process.env.DATABASE_URL,
-      process.env.POSTGRES_URL,
       process.env.DATABASE_PUBLIC_URL,
+      process.env.POSTGRES_URL,
+      process.env.DATABASE_PRIVATE_URL,
     ].filter(Boolean) as string[])
   );
 
   const onRailway = Boolean(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_SERVICE_ID);
   // Prefer public proxy first — private hostname often times out when Private Networking
   // is off / broken, which makes Admin analytics + QR look "broken".
-  const sorted = [...new Set(raw.map(normalizeConnectionString))].sort((a, b) => {
+  let sorted = [...new Set(raw.map(normalizeConnectionString))].sort((a, b) => {
     const score = (u: string) => {
-      if (u.includes('rlwy.net') || u.includes('proxy.rlwy.net')) return 0;
-      if (onRailway && u.includes('railway.internal')) return 1;
-      if (u.includes('railway.internal')) return 2;
+      if (isPublicProxyUrl(u)) return 0;
+      if (onRailway && isPrivateRailwayUrl(u)) return 1;
+      if (isPrivateRailwayUrl(u)) return 2;
       return 3;
     };
     return score(a) - score(b);
   });
+
+  // Soft launch default: if a public proxy URL exists, do not burn connect timeouts on
+  // private hostnames unless explicitly opted in (DB_TRY_PRIVATE=true).
+  const tryPrivate = String(process.env.DB_TRY_PRIVATE || '').toLowerCase() === 'true';
+  if (!tryPrivate && sorted.some(isPublicProxyUrl)) {
+    sorted = sorted.filter((u) => !isPrivateRailwayUrl(u));
+  }
 
   return sorted;
 }
@@ -71,21 +94,19 @@ export function logDbConnectionConfig() {
 
   const candidates = getConnectionCandidates();
   const primary = candidates[0];
+  if (!primary) {
+    console.error('[db] FIX: no DATABASE_URL / DATABASE_PUBLIC_URL candidates found');
+    return;
+  }
   const masked = primary.replace(/:[^:@/]+@/, ':***@');
-  const host = (() => {
-    try {
-      return new URL(primary.replace(/^postgres(ql)?:\/\//, 'http://')).hostname;
-    } catch {
-      return '(unparseable)';
-    }
-  })();
+  const host = hostOf(primary);
 
-  console.log(`[db] primary host: ${host} (${masked.slice(0, 72)}…)`);
+  console.log(
+    `[db] primary host: ${host} candidates=${candidates.length} (${masked.slice(0, 72)}…)`
+  );
 
   const dbUrl = process.env.DATABASE_URL || '';
-  const hasPublic = candidates.some(
-    (u) => u.includes('rlwy.net') || u.includes('proxy.rlwy.net')
-  );
+  const hasPublic = candidates.some(isPublicProxyUrl);
   if (dbUrl.includes('railway.internal') && !hasPublic) {
     console.error(
       '[db] FIX: DATABASE_URL points at postgres.railway.internal but that hostname is not resolving. ' +
@@ -165,7 +186,19 @@ function isRecoverablePgError(err: any): boolean {
 }
 
 function defaultPoolMax(): number {
-  if (process.env.DB_POOL_MAX) return Number(process.env.DB_POOL_MAX);
+  // Free / soft launch: never honour oversized DB_POOL_MAX (was 50 → connection storms).
+  const tier = String(process.env.RUNTIME_TIER || process.env.RAILWAY_PLAN_TIER || '').toLowerCase();
+  const freeSoft = tier === 'free' || String(process.env.LAUNCH_SCALE || 'soft') !== 'peak';
+  if (process.env.DB_POOL_MAX) {
+    const n = Number(process.env.DB_POOL_MAX);
+    if (Number.isFinite(n) && n > 0) {
+      const capped = freeSoft ? Math.min(Math.floor(n), 5) : Math.floor(n);
+      if (capped !== Math.floor(n)) {
+        console.warn(`[db] DB_POOL_MAX=${n} capped to ${capped} for soft/free launch`);
+      }
+      return capped;
+    }
+  }
   return resolveDbPoolMaxPerReplica(getRuntimeTuning().dbPoolMax);
 }
 
@@ -279,10 +312,12 @@ export async function shutdownDb() {
 
 async function probeConnection(connStr: string): Promise<void> {
   const normalized = normalizeConnectionString(connStr);
+  // Fail private hosts faster so public proxy can take over without multi-second stalls.
+  const timeoutMs = isPrivateRailwayUrl(normalized) ? 2500 : 4000;
   const client = new Client({
     connectionString: normalized,
     ssl: sslFor(normalized),
-    connectionTimeoutMillis: 4000,
+    connectionTimeoutMillis: timeoutMs,
   });
   try {
     await client.connect();
@@ -292,7 +327,11 @@ async function probeConnection(connStr: string): Promise<void> {
     try {
       await client.end();
     } catch (_) {}
-    throw err;
+    const msg = String(err?.message || err);
+    throw Object.assign(new Error(`${hostOf(normalized)}: ${msg}`), {
+      code: err?.code,
+      cause: err,
+    });
   }
 }
 
@@ -410,14 +449,7 @@ async function ensurePoolReady(): Promise<Pool> {
           await destroyPool(isSchemaInitialized);
           activeConnectionString = normalized;
           pool = createPool(normalized);
-          const host = (() => {
-            try {
-              return new URL(normalized.replace(/^postgres(ql)?:\/\//, 'http://')).hostname;
-            } catch {
-              return '(unknown)';
-            }
-          })();
-          console.log(`[db] connected via ${host}`);
+          console.log(`[db] connected via ${hostOf(normalized)}`);
         }
 
         await ensureSchemaReady(pool!);
@@ -432,13 +464,12 @@ async function ensurePoolReady(): Promise<Pool> {
           poolReadyPromise = null;
           return ensurePoolReady();
         }
-        console.error('[db] connect failed:', msg);
+        console.error(`[db] connect failed (${hostOf(connStr)}):`, msg);
         await destroyPool(isSchemaInitialized);
 
-        const isPrivateFail = connStr.includes('railway.internal');
-        if (isPrivateFail) {
+        if (isPrivateRailwayUrl(connStr)) {
           console.warn(
-            '[db] private Railway host failed — trying next candidate (set DATABASE_PUBLIC_URL if missing)…'
+            '[db] private Railway host failed — trying next candidate (prefer DATABASE_URL=*.proxy.rlwy.net)…'
           );
         }
         if (candidates.indexOf(connStr) < candidates.length - 1) continue;
@@ -630,7 +661,11 @@ async function runSchemaInit(client: any) {
           tracking_url TEXT,
           estimated_delivery VARCHAR(100),
           shipping_address TEXT,
+          packed_at TIMESTAMP,
+          shipped_at TIMESTAMP,
+          delivered_at TIMESTAMP,
           ordered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
@@ -870,6 +905,9 @@ async function runSchemaInit(client: any) {
     const heals = [
       `ALTER TABLE orders ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`,
       `ALTER TABLE orders ADD COLUMN IF NOT EXISTS ordered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`,
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS packed_at TIMESTAMP`,
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipped_at TIMESTAMP`,
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMP`,
       `ALTER TABLE order_timeline ADD COLUMN IF NOT EXISTS hub_city VARCHAR(255)`,
       `ALTER TABLE order_timeline ADD COLUMN IF NOT EXISTS awb_number VARCHAR(255)`,
       `ALTER TABLE courier_tracking ADD COLUMN IF NOT EXISTS awb_number VARCHAR(255)`,
@@ -879,6 +917,8 @@ async function runSchemaInit(client: any) {
       `ALTER TABLE courier_tracking ADD COLUMN IF NOT EXISTS event_time TIMESTAMP`,
       `ALTER TABLE courier_tracking ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`,
       `ALTER TABLE courier_tracking ADD COLUMN IF NOT EXISTS docket_number VARCHAR(255)`,
+      `ALTER TABLE courier_tracking ADD COLUMN IF NOT EXISTS current_status VARCHAR(255)`,
+      `ALTER TABLE courier_tracking ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`,
       `ALTER TABLE books ADD COLUMN IF NOT EXISTS badge VARCHAR(100) DEFAULT ''`,
       `ALTER TABLE books ADD COLUMN IF NOT EXISTS stock INT DEFAULT 50`,
       `ALTER TABLE books ADD COLUMN IF NOT EXISTS discount_price NUMERIC`,

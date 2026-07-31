@@ -40,16 +40,23 @@ export async function GET(request: Request) {
           `SELECT order_status FROM orders WHERE id = $1 OR order_number = $1 LIMIT 1`,
           [orderId]
         );
-        if (ord.rows.length && String(ord.rows[0].order_status || '').toLowerCase().includes('cancel')) {
-          return NextResponse.json(
-            {
-              isValid: false,
-              verified: false,
-              error: 'Cannot assign AWB — order is cancelled.',
-              docket,
-            },
-            { status: 409 }
-          );
+        if (ord.rows.length) {
+          const { blocksShippingActions } = await import('@/lib/orderStatus');
+          const st = ord.rows[0].order_status;
+          if (blocksShippingActions(st)) {
+            const awaiting = String(st || '').toLowerCase().includes('awaiting');
+            return NextResponse.json(
+              {
+                isValid: false,
+                verified: false,
+                error: awaiting
+                  ? 'Cannot assign AWB — wait for customer WhatsApp YES first.'
+                  : 'Cannot assign AWB — order is cancelled.',
+                docket,
+              },
+              { status: 409 }
+            );
+          }
         }
         await client.query(
           `UPDATE orders
@@ -58,7 +65,8 @@ export async function GET(request: Request) {
                courier_name = 'ST Courier Express',
                updated_at = NOW()
            WHERE (id = $3 OR order_number = $3)
-             AND COALESCE(order_status, '') NOT ILIKE '%cancel%'`,
+             AND COALESCE(order_status, '') NOT ILIKE '%cancel%'
+             AND COALESCE(order_status, '') NOT ILIKE '%awaiting confirmation%'`,
           [docket, `https://stcourier.com/track/shipment?docket=${encodeURIComponent(docket)}`, orderId]
         );
       }
