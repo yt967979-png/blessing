@@ -176,36 +176,52 @@ sudo systemctl restart blessing
 
 ## 4. HTTPS with Caddy
 
-Prefer a real domain (Let’s Encrypt needs a hostname pointing at the static IP).
+**Order:** smoke-test over HTTP on the static IP first, then switch to the domain + Let's Encrypt when DNS is ready.
 
-1. DNS: `A` record for `blessingpowerguide.in` (and `www` if used) → Lightsail **static IP**.
-2. Edit `/etc/caddy/Caddyfile` (repo template: [`deploy/aws/Caddyfile`](deploy/aws/Caddyfile)):
+### 4a. Temporary HTTP (no domain yet)
 
-```caddy
-blessingpowerguide.in, www.blessingpowerguide.in {
-	reverse_proxy 127.0.0.1:3000
-}
-```
-
-3. Reload:
+Repo [`deploy/aws/Caddyfile`](deploy/aws/Caddyfile) ships with `:80` -> `127.0.0.1:3000` **active** for smoke tests (example IP `18.139.220.64`).
 
 ```bash
+# After git pull in the clone (see nested path note below):
+sudo cp /home/ubuntu/blessing/blessing/deploy/aws/Caddyfile /etc/caddy/Caddyfile
+sudo systemctl reload caddy
+curl -sS http://18.139.220.64/api/health
+```
+
+In `/etc/blessing.env` for this phase (then rebuild if `NEXT_PUBLIC_*` changed):
+
+```text
+PUBLIC_BASE_URL=http://18.139.220.64
+NEXT_PUBLIC_SITE_URL=http://18.139.220.64
+```
+
+**Google Sign-In and production cutover need HTTPS + domain** — IP HTTP is smoke-test only.
+
+`/opt/blessing` may be an rsync copy **without** `.git`. Pull in `~/blessing/blessing`, then copy the Caddyfile (and re-rsync the app tree if you deploy that way).
+
+### 4b. Domain + Let's Encrypt
+
+1. DNS: `A` record for `blessingpowerguide.in` (and `www`) → Lightsail **static IP**.
+2. In the Caddyfile: comment out the `:80` block; uncomment `blessingpowerguide.in, www.blessingpowerguide.in`.
+3. Copy + reload:
+
+```bash
+sudo cp /home/ubuntu/blessing/blessing/deploy/aws/Caddyfile /etc/caddy/Caddyfile
 sudo systemctl reload caddy
 ```
 
-Until the custom domain is ready you can temporarily use HTTP on port 80 only for smoke tests (`curl http://<STATIC_IP>/api/health`) — **Google Sign-In and production should use HTTPS + domain**.
-
-Set:
+4. Set production URLs and rebuild:
 
 ```text
 NEXT_PUBLIC_SITE_URL=https://blessingpowerguide.in
 PUBLIC_BASE_URL=https://blessingpowerguide.in
 ```
 
-Rebuild if `NEXT_PUBLIC_*` changed (`npm run build` embeds public env), then `sudo systemctl restart blessing`.
-
----
-
+```bash
+cd /opt/blessing && npm ci && npm run build
+sudo systemctl restart blessing
+```
 ## 5. Google Cloud Console (required or Sign-In stays broken)
 
 This shop uses **Google Identity Services (GIS)** — the “Continue with Google” button returns an ID token posted to `/api/auth/google`. It is **not** the OAuth redirect flow.
