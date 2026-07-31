@@ -418,6 +418,83 @@ file /etc/blessing.env   # should say "ASCII text", not "with CRLF"
 
 ---
 
+## 9. Recover from `502 Bad Gateway` (Caddy up, Next down)
+
+DuckDNS/`blessingpowerguide.duckdns.org` returning **502** with `Server: Caddy` means Caddy is listening on 443 but **nothing healthy on `127.0.0.1:3000`**. CSP and app fixes only apply after Next is running again — **do not pause Railway** until AWS is stable (§6).
+
+### Diagnose (SSH)
+
+```bash
+sudo systemctl status blessing caddy --no-pager
+sudo journalctl -u blessing -n 50 --no-pager
+curl -sS http://127.0.0.1:3000/api/health || true
+ss -lntp | grep 3000 || true
+```
+
+| Symptom | Likely cause |
+|---------|----------------|
+| `blessing` inactive / failed | Process crashed or never started |
+| Active but restarts every few seconds | Crash-loop (env CRLF, missing secrets, bad `DATABASE_URL`) |
+| `ExecStartPre` fails / no `.next` | Mid-deploy: `rsync --delete` or `npm run build` wiped/replaced `.next` while service restarted |
+| Exit 137 / “Killed” in journal | **OOM** on 1 GB plan (prefer $10 / 2 GB) |
+| `curl :3000` fails but unit “active” | Crash-loop or wrong `WorkingDirectory` |
+
+### Recover
+
+```bash
+# Soft restart
+sudo systemctl restart blessing
+sleep 8
+curl -sS http://127.0.0.1:3000/api/health
+curl -sS https://blessingpowerguide.duckdns.org/api/health
+```
+
+If health still fails — **stop before rebuild** (never `restart` mid-build):
+
+```bash
+sudo systemctl stop blessing
+sudo sed -i 's/\r$//' /etc/blessing.env
+
+# Prefer git-pull path you actually use:
+cd ~/blessing/blessing && git pull origin main
+# then rsync into /opt/blessing if that is how you deploy (§8)
+# OR: cd /opt/blessing && git pull origin main
+
+cd /opt/blessing
+set -a; source /etc/blessing.env; set +a
+# Build as the app user so ownership of .next stays correct
+sudo -u ubuntu -E bash -lc 'cd /opt/blessing && npm ci && npm run build'
+test -d /opt/blessing/.next
+
+sudo cp /opt/blessing/deploy/aws/blessing.service /etc/systemd/system/blessing.service
+sudo systemctl daemon-reload
+sudo systemctl start blessing
+sleep 8
+curl -sS http://127.0.0.1:3000/api/health
+curl -sS https://blessingpowerguide.duckdns.org/api/health
+```
+
+**Deploy rule:** stop `blessing` → pull/rsync → `npm run build` → start. Restarting while `.next` is incomplete is the #1 cause of mass 502s on orders/analytics/courier.
+
+---
+
+## 10. Cloudflare Free in front of Lightsail (optional, recommended)
+
+App already emits `s-maxage` / `stale-while-revalidate` for `/`, `/api/products`, and `/_next/image`. Cloudflare Free absorbs repeat catalog/static hits so the VM stays free for checkout + WhatsApp.
+
+1. Cloudflare → **Add site** → Free plan → add `blessingpowerguide.duckdns.org` **or** your future `.in` domain.
+2. DNS: orange-cloud **proxied** record to Lightsail static IP (`18.139.220.64` today). For DuckDNS you may need a Cloudflare CNAME/A as Cloudflare documents for third-party DNS, or move the zone to Cloudflare nameservers when you own `.in`.
+3. SSL/TLS mode: **Full** (Caddy already terminates HTTPS on the origin) or **Full (strict)** once the origin cert matches the hostname.
+4. Cache rules (Free):
+   - Cache everything under `/_next/static/*` (long TTL)
+   - Short Edge TTL (60–120s) for `/` and anonymous catalog HTML
+   - **Bypass cache** for `/api/*` when `Cookie` or `Authorization` is present (auth, orders, admin, checkout)
+5. Do **not** cache WhatsApp/admin streams. Keep Railway running until §6 passes on the Cloudflare hostname too.
+
+More Free-tier notes: [`docs/FREE-SCALE.md`](docs/FREE-SCALE.md). Skip catalog virtualization — the guide catalog is small.
+
+---
+
 ## Files in this repo
 
 | Path | Purpose |

@@ -22,16 +22,7 @@ import { ProductCard } from '@/components/ui/ProductCard';
 import { getSTCourierDeliveryEstimate } from '@/lib/deliveryEstimator';
 import { pincodeDeliveryMessage } from '@/lib/pincode';
 import { authHeaders } from '@/lib/clientAuth';
-
-function imageNeedsUnoptimized(src: string) {
-  if (!src || src.startsWith('/')) return false;
-  try {
-    const host = new URL(src).hostname;
-    return !host.includes('cloudinary.com') && !host.includes('unsplash.com');
-  } catch {
-    return true;
-  }
-}
+import { imageNeedsUnoptimized } from '@/lib/productImage';
 
 function applyReviewsPayload(
   data: any,
@@ -706,7 +697,14 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
                 <div className="flex flex-wrap gap-2 items-center">
                   {reviewImages.map((url, i) => (
                     <div key={i} className="relative w-16 h-16 rounded-lg overflow-hidden border">
-                      <img src={url} alt="" className="w-full h-full object-cover" />
+                      <Image
+                        src={url}
+                        alt=""
+                        width={64}
+                        height={64}
+                        className="w-full h-full object-cover"
+                        unoptimized={imageNeedsUnoptimized(url)}
+                      />
                       <button
                         type="button"
                         onClick={() => setReviewImages((p) => p.filter((_, j) => j !== i))}
@@ -762,7 +760,15 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
                   {rev.images?.length > 0 && (
                     <div className="flex gap-2 mt-3 flex-wrap">
                       {rev.images.map((url: string, i: number) => (
-                        <img key={i} src={url} alt="" className="w-14 h-14 rounded-lg object-cover border" />
+                        <Image
+                          key={i}
+                          src={url}
+                          alt=""
+                          width={56}
+                          height={56}
+                          className="w-14 h-14 rounded-lg object-cover border"
+                          unoptimized={imageNeedsUnoptimized(url)}
+                        />
                       ))}
                     </div>
                   )}

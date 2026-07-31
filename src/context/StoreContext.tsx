@@ -192,8 +192,37 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const productsRef = useRef<Product[]>([]);
   productsRef.current = products;
 
+  const CATALOG_CACHE_KEY = 'bpg_catalog_cache_v1';
+  const CATALOG_TTL_MS = 5 * 60 * 1000;
+
+  const readCatalogCache = (): Product[] | null => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const raw = sessionStorage.getItem(CATALOG_CACHE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed?.products)) return null;
+      if (typeof parsed.at !== 'number' || Date.now() - parsed.at > CATALOG_TTL_MS) return null;
+      return parsed.products as Product[];
+    } catch {
+      return null;
+    }
+  };
+
+  const writeCatalogCache = (list: Product[]) => {
+    if (typeof window === 'undefined') return;
+    try {
+      sessionStorage.setItem(
+        CATALOG_CACHE_KEY,
+        JSON.stringify({ at: Date.now(), products: list })
+      );
+    } catch {
+      /* ignore quota */
+    }
+  };
+
   const refreshProducts = (forceFresh = false) => {
-    // Keep previous catalog on screen — only skeleton when we have nothing yet
+    // Soft SWR: keep previous catalog on screen — only skeleton when empty
     if (productsRef.current.length === 0) {
       setProductsLoading(true);
     }
@@ -201,7 +230,10 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     fetch(url, forceFresh ? { cache: 'no-store' } : undefined)
       .then((res) => res.json())
       .then((data) => {
-        if (Array.isArray(data)) setProducts(data);
+        if (Array.isArray(data)) {
+          setProducts(data);
+          writeCatalogCache(data);
+        }
       })
       .catch(() => {
         if (productsRef.current.length === 0) setProducts([]);
@@ -211,6 +243,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   // Hydrate cart/wishlist/user BEFORE any sync (prevents empty-cart wipe)
   useEffect(() => {
+    const cached = readCatalogCache();
+    if (cached?.length) {
+      setProducts(cached);
+      setProductsLoading(false);
+    }
     refreshProducts();
 
     const localCart = readLocalCart();

@@ -7,16 +7,7 @@ import { useRouter } from 'next/navigation';
 import { Heart, Star, ShoppingBag, Truck } from 'lucide-react';
 import { Product } from '@/lib/products';
 import { useStore } from '@/context/StoreContext';
-
-function imageNeedsUnoptimized(src: string) {
-  if (!src || src.startsWith('/')) return false;
-  try {
-    const host = new URL(src).hostname;
-    return !host.includes('cloudinary.com') && !host.includes('unsplash.com');
-  } catch {
-    return true;
-  }
-}
+import { imageNeedsUnoptimized } from '@/lib/productImage';
 
 export const ProductCard = ({ product }: { product: Product }) => {
   const router = useRouter();

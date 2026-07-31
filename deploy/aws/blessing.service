@@ -14,6 +14,8 @@ EnvironmentFile=-/etc/blessing.env
 Environment=NODE_ENV=production
 Environment=WHATSAPP_SESSION_DIR=/var/lib/blessing/whatsapp_session
 # Prefer direct next binary over `npm start` (avoids npm wrapper / PATH quirks).
+# Fail fast if .next is missing (common after interrupted build / rsync --delete mid-deploy).
+ExecStartPre=/usr/bin/test -d /opt/blessing/.next
 ExecStart=/usr/bin/node /opt/blessing/node_modules/next/dist/bin/next start --hostname 0.0.0.0 --port 3000
 Restart=always
 RestartSec=5

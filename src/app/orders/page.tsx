@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
+import Image from 'next/image';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
@@ -28,6 +29,7 @@ import {
 } from 'lucide-react';
 import { downloadTaxInvoice } from '@/lib/invoiceGenerator';
 import { getSTCourierDeliveryEstimate } from '@/lib/deliveryEstimator';
+import { imageNeedsUnoptimized } from '@/lib/productImage';
 
 function OrdersContent() {
   const { user, showToast, setIsAuthOpen, addToCart, setIsCheckoutOpen, products } = useStore();
@@ -690,7 +692,14 @@ function OrdersContent() {
                       <div className="flex items-center gap-3">
                         <div className="w-12 h-14 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden flex-shrink-0 flex items-center justify-center">
                           {item.image ? (
-                            <img src={item.image} alt={item.title} className="w-full h-full object-cover" />
+                            <Image
+                              src={item.image}
+                              alt={item.title}
+                              width={48}
+                              height={56}
+                              className="w-full h-full object-cover"
+                              unoptimized={imageNeedsUnoptimized(item.image)}
+                            />
                           ) : (
                             <Package className="w-6 h-6 text-amber-500 opacity-60" />
                           )}

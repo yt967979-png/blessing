@@ -1,23 +1,14 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { Search, Heart, ShoppingBag, User, ShieldCheck } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { BrandLogo } from '@/components/ui/BrandLogo';
+import { imageNeedsUnoptimized } from '@/lib/productImage';
 import { useCartBadgeBump } from '@/hooks/useCartBadgeBump';
-
-function imageNeedsUnoptimized(src: string) {
-  if (!src || src.startsWith('/')) return false;
-  try {
-    const host = new URL(src).hostname;
-    return !host.includes('cloudinary.com') && !host.includes('unsplash.com');
-  } catch {
-    return true;
-  }
-}
 
 export const Header = () => {
   const router = useRouter();
@@ -34,7 +25,17 @@ export const Header = () => {
   } = useStore();
 
   const [showSearchDropdown, setShowSearchDropdown] = useState(false);
+  const [localQuery, setLocalQuery] = useState(searchQuery);
   const cartBump = useCartBadgeBump(cartCount);
+
+  useEffect(() => {
+    setLocalQuery(searchQuery);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    const t = setTimeout(() => setSearchQuery(localQuery), 160);
+    return () => clearTimeout(t);
+  }, [localQuery, setSearchQuery]);
 
   const queryText = (searchQuery || '').trim();
   const filteredSearch = queryText
@@ -46,18 +47,79 @@ export const Header = () => {
               p.cls.toLowerCase().includes(queryText.toLowerCase()) ||
               p.subject.toLowerCase().includes(queryText.toLowerCase()))
         )
-        .slice(0, 5)
+        .slice(0, 6)
     : [];
 
   const goSearch = () => {
-    if (!searchQuery.trim()) return;
-    router.push(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
+    const q = localQuery.trim() || searchQuery.trim();
+    if (!q) return;
+    setSearchQuery(q);
+    router.push(`/search?q=${encodeURIComponent(q)}`);
     setShowSearchDropdown(false);
   };
 
   const prefetchProduct = (slug: string) => {
     router.prefetch(`/products/${slug}`);
   };
+
+  const onQueryChange = (value: string) => {
+    setLocalQuery(value);
+    setShowSearchDropdown(true);
+  };
+
+  const searchHit = (p: (typeof products)[number]) => (
+    <button
+      type="button"
+      key={p.id}
+      onPointerEnter={() => prefetchProduct(p.slug)}
+      onClick={() => {
+        router.push(`/products/${p.slug}`);
+        setShowSearchDropdown(false);
+      }}
+      className="w-full p-3 hover:bg-blue-50/60 active:bg-blue-50 cursor-pointer flex items-center gap-3 text-left touch-manipulation"
+    >
+      <Image
+        src={
+          p.image ||
+          'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=80&q=80'
+        }
+        alt=""
+        width={36}
+        height={36}
+        className="w-9 h-9 object-contain rounded bg-slate-100 p-0.5 flex-shrink-0"
+        unoptimized={imageNeedsUnoptimized(p.image || '')}
+      />
+      <div className="flex-1 min-w-0">
+        <div className="font-bold text-[#001B3A] truncate">{p.title}</div>
+        <div className="text-[10px] text-slate-500 flex items-center gap-2">
+          <span>{p.cls}</span>
+          <span className="font-extrabold text-slate-800">₹{p.price}</span>
+          {p.mrp > p.price ? (
+            <span className="line-through text-slate-400">₹{p.mrp}</span>
+          ) : null}
+        </div>
+      </div>
+    </button>
+  );
+
+  const dropdownBody = (
+    <>
+      {filteredSearch.length > 0 ? (
+        <div className="divide-y divide-slate-100">
+          {filteredSearch.map(searchHit)}
+          <button
+            type="button"
+            onClick={goSearch}
+            className="w-full px-3 py-2.5 text-center text-[11px] font-extrabold text-blue-600 hover:bg-blue-50"
+          >
+            View all results for &ldquo;{queryText}&rdquo;
+          </button>
+        </div>
+      ) : (
+        <div className="p-4 text-center text-slate-500 text-[11px]">No matching books found</div>
+      )}
+    </>
+  );
 
   return (
     <header className="sticky top-0 z-40 bg-white border-b border-slate-200 shadow-sm mobile-no-blur md:bg-white/95 md:backdrop-blur-md">
@@ -99,11 +161,8 @@ export const Header = () => {
             <input
               type="text"
               placeholder="Search guides, subjects…"
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                setShowSearchDropdown(true);
-              }}
+              value={localQuery}
+              onChange={(e) => onQueryChange(e.target.value)}
               onFocus={() => setShowSearchDropdown(true)}
               onBlur={() => setTimeout(() => setShowSearchDropdown(false), 200)}
               className="w-full px-3 py-2 text-sm outline-none bg-transparent"
@@ -120,42 +179,7 @@ export const Header = () => {
 
           {showSearchDropdown && queryText.length > 0 && (
             <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-2xl z-50 overflow-hidden text-xs">
-              {filteredSearch.length > 0 ? (
-                <div className="divide-y divide-slate-100">
-                  {filteredSearch.map((p) => (
-                    <button
-                      type="button"
-                      key={p.id}
-                      onPointerEnter={() => prefetchProduct(p.slug)}
-                      onClick={() => {
-                        router.push(`/products/${p.slug}`);
-                        setShowSearchDropdown(false);
-                      }}
-                      className="w-full p-3 hover:bg-blue-50/60 cursor-pointer flex items-center gap-3 text-left"
-                    >
-                      <Image
-                        src={
-                          p.image ||
-                          'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=80&q=80'
-                        }
-                        alt=""
-                        width={32}
-                        height={32}
-                        className="w-8 h-8 object-contain rounded bg-slate-100 p-0.5"
-                        unoptimized={imageNeedsUnoptimized(p.image || '')}
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="font-bold text-[#001B3A] truncate">{p.title}</div>
-                        <div className="text-[10px] text-slate-500">
-                          {p.cls} • ₹{p.price}
-                        </div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <div className="p-4 text-center text-slate-500">No matching books found</div>
-              )}
+              {dropdownBody}
             </div>
           )}
         </div>
@@ -231,11 +255,8 @@ export const Header = () => {
               type="search"
               enterKeyHint="search"
               placeholder="Search 10th, 12th guides…"
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                setShowSearchDropdown(true);
-              }}
+              value={localQuery}
+              onChange={(e) => onQueryChange(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') goSearch();
               }}
@@ -255,42 +276,7 @@ export const Header = () => {
 
           {showSearchDropdown && queryText.length > 0 && (
             <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden text-xs max-h-[50vh] overflow-y-auto">
-              {filteredSearch.length > 0 ? (
-                <div className="divide-y divide-slate-100">
-                  {filteredSearch.map((p) => (
-                    <button
-                      type="button"
-                      key={p.id}
-                      onPointerEnter={() => prefetchProduct(p.slug)}
-                      onClick={() => {
-                        router.push(`/products/${p.slug}`);
-                        setShowSearchDropdown(false);
-                      }}
-                      className="w-full p-3 active:bg-blue-50 flex items-center gap-3 text-left touch-manipulation"
-                    >
-                      <Image
-                        src={
-                          p.image ||
-                          'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=80&q=80'
-                        }
-                        alt=""
-                        width={36}
-                        height={36}
-                        className="w-9 h-9 object-contain rounded bg-slate-100 p-0.5"
-                        unoptimized={imageNeedsUnoptimized(p.image || '')}
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="font-bold text-[#001B3A] truncate">{p.title}</div>
-                        <div className="text-[10px] text-slate-500">
-                          {p.cls} • ₹{p.price}
-                        </div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <div className="p-3 text-center text-slate-500 text-[11px]">No matching books</div>
-              )}
+              {dropdownBody}
             </div>
           )}
         </div>

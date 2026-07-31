@@ -2,11 +2,13 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { ShoppingBag, ArrowLeft, Trash2, Plus, Minus, ShieldCheck, Truck, MapPin, Tag, Check, Bookmark } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { pincodeDeliveryMessage } from '@/lib/pincode';
 import { getSTCourierDeliveryEstimate } from '@/lib/deliveryEstimator';
+import { imageNeedsUnoptimized } from '@/lib/productImage';
 import { Header } from '@/components/layout/Header';
 import { NavBar } from '@/components/layout/NavBar';
 import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
@@ -135,10 +137,13 @@ export default function CartPage() {
                   key={item.id}
                   className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 flex gap-4 sm:gap-6 items-center shadow-xs"
                 >
-                  <img
-                    src={item.image}
+                  <Image
+                    src={item.image || '/logo.png'}
                     alt={item.title}
+                    width={80}
+                    height={80}
                     className="w-20 h-20 object-contain bg-slate-50 border border-slate-200 rounded-xl p-2 flex-shrink-0"
+                    unoptimized={imageNeedsUnoptimized(item.image || '')}
                   />
                   <div className="flex-1 min-w-0">
                     <span className="text-[10px] font-bold text-blue-600 uppercase">{item.cls} Standard</span>
@@ -197,7 +202,14 @@ export default function CartPage() {
                       key={item.id}
                       className="bg-white border border-dashed border-slate-200 rounded-2xl p-4 flex gap-4 items-center"
                     >
-                      <img src={item.image} alt="" className="w-16 h-16 object-contain bg-slate-50 rounded-lg" />
+                      <Image
+                        src={item.image || '/logo.png'}
+                        alt=""
+                        width={64}
+                        height={64}
+                        className="w-16 h-16 object-contain bg-slate-50 rounded-lg"
+                        unoptimized={imageNeedsUnoptimized(item.image || '')}
+                      />
                       <div className="flex-1 min-w-0">
                         <p className="font-bold text-sm text-[#001B3A] truncate">{item.title}</p>
                         <p className="text-xs text-slate-500">₹{item.price}</p>

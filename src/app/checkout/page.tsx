@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import {
   Lock,
@@ -17,6 +18,7 @@ import { useStore } from '@/context/StoreContext';
 import { createUserAddress, migrateLocalAddressesToDb, type SavedAddress } from '@/lib/addresses';
 import { pincodeDeliveryMessage } from '@/lib/pincode';
 import { isValidMobileNumber } from '@/lib/authValidation';
+import { imageNeedsUnoptimized } from '@/lib/productImage';
 import { Header } from '@/components/layout/Header';
 import { NavBar } from '@/components/layout/NavBar';
 import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
@@ -566,7 +568,14 @@ export default function CheckoutPage() {
               <div className="space-y-2">
                 {cart.map((item) => (
                   <div key={item.id} className="flex gap-3 items-center border border-slate-100 rounded-xl p-3">
-                    <img src={item.image} alt="" className="w-12 h-12 object-contain bg-slate-50 rounded-lg" />
+                    <Image
+                      src={item.image || '/logo.png'}
+                      alt=""
+                      width={48}
+                      height={48}
+                      className="w-12 h-12 object-contain bg-slate-50 rounded-lg"
+                      unoptimized={imageNeedsUnoptimized(item.image || '')}
+                    />
                     <div className="flex-1 min-w-0">
                       <p className="font-bold text-slate-900 truncate">{item.title}</p>
                       <p className="text-slate-500">
