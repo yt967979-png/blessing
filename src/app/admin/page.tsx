@@ -13,6 +13,7 @@ import {
 import { useStore } from '@/context/StoreContext';
 import { authHeaders } from '@/lib/clientAuth';
 import { BrandLogo } from '@/components/ui/BrandLogo';
+import { openShippingLabelPrint } from '@/lib/shippingLabel';
 
 const AdminWhatsAppTab = dynamic(() => import('@/components/admin/AdminWhatsAppTab'), {
   ssr: false,
@@ -39,7 +40,7 @@ interface OrderItem { title: string; qty: number; price?: number; subtotal?: num
 interface Order {
   orderId: string; id: string; customerName: string; customerPhone: string;
   customerAltPhone?: string;
-  address: string; city: string; pincode: string; totalAmount: number;
+  address: string; city: string; pincode: string; state?: string; totalAmount: number;
   paymentMethod: string; paymentStatus: string; courierStatus: string;
   trackingNumber: string; shipmentId: string; isOfficialAwb: boolean;
   trackingUrl: string; courierName: string; items: OrderItem[]; createdAt: string;
@@ -555,289 +556,24 @@ export default function AdminPage() {
     if ((o.courierStatus || '').toLowerCase().includes('cancel')) {
       if (!confirm(`Order ${o.orderId} is CANCELLED.\nPrint label with CANCELLED watermark anyway?`)) return;
     }
-    const pw = window.open('', '_blank', 'width=800,height=1000'); if (!pw) return;
-    const isCancelled = (o.courierStatus || '').toLowerCase().includes('cancel');
-    const isCod = (o.paymentMethod || '').toLowerCase().includes('cod');
-    const orderDate = o.createdAt ? new Date(o.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
-    const hasOfficialAwb = Boolean(o.trackingNumber && !o.trackingNumber.startsWith('SHP-'));
-    const displayAwb = hasOfficialAwb ? o.trackingNumber : 'PENDING DISPATCH';
-    const barcodeText = hasOfficialAwb ? o.trackingNumber : (o.orderId || 'BPG-3578');
-    const invoiceNum = `BPG/INV/${(o.orderId || '').replace(/\D/g, '') || '3578'}`;
-    const totalAmount = Number(o.totalAmount || 0);
-
-    const numberToWords = (num: number): string => {
-      const a = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
-      const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
-      const n = Math.floor(Math.abs(num));
-      if (n === 0) return 'Zero';
-      const inWords = (val: number): string => {
-        if (val < 20) return a[val];
-        if (val < 100) return b[Math.floor(val / 10)] + (val % 10 ? ' ' + a[val % 10] : '');
-        if (val < 1000) return a[Math.floor(val / 100)] + ' Hundred' + (val % 100 ? ' ' + inWords(val % 100) : '');
-        if (val < 100000) return inWords(Math.floor(val / 1000)) + ' Thousand' + (val % 1000 ? ' ' + inWords(val % 1000) : '');
-        return inWords(Math.floor(val / 100000)) + ' Lakh' + (val % 100000 ? ' ' + inWords(val % 100000) : '');
-      };
-      return 'Rupees ' + inWords(n) + ' Only';
-    };
-
-    const itemsHtml = (o.items || []).map((item, i) =>
-      `<tr>
-        <td style="padding:8px 10px;font-size:12px;color:#64748b;border-bottom:1px solid #e2e8f0;text-align:center">${i + 1}</td>
-        <td style="padding:8px 10px;font-size:12px;font-weight:700;color:#0f172a;border-bottom:1px solid #e2e8f0">${(item.title || 'Educational Book').replace(/</g, '&lt;')}</td>
-        <td style="padding:8px 10px;font-size:12px;font-weight:700;color:#0f172a;border-bottom:1px solid #e2e8f0;text-align:center">${item.qty || 1}</td>
-        <td style="padding:8px 10px;font-size:12px;font-weight:700;color:#0f172a;border-bottom:1px solid #e2e8f0;text-align:right">₹${(item.price || item.subtotal || totalAmount).toLocaleString('en-IN')}</td>
-        <td style="padding:8px 10px;font-size:12px;font-weight:800;color:#0f172a;border-bottom:1px solid #e2e8f0;text-align:right">₹${((item.price || item.subtotal || totalAmount) * (item.qty || 1)).toLocaleString('en-IN')}</td>
-      </tr>`
-    ).join('');
-
-    const totalItems = (o.items || []).reduce((s, i) => s + (i.qty || 1), 0);
-    const estWeight = totalItems * 400;
-    const barcodeUrl = `https://bwipjs-api.metafloor.com/?bcid=code128&text=${encodeURIComponent(barcodeText)}&scale=2&height=12&textsize=10&includetext`;
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&margin=0&data=${encodeURIComponent(`https://blessing-production.up.railway.app/track?orderId=${o.orderId}`)}`;
-
-    pw.document.write(`<!DOCTYPE html><html><head><title>Invoice #${o.orderId}</title>
-<style>
-  @page { size: A5 portrait; margin: 0; }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; width: 148mm; min-height: 210mm; margin: 0 auto; padding: 8px; background: #fff; color: #0f172a; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-
-  .label-container { border: 2px solid #001B3A; border-radius: 12px; overflow: hidden; background: #fff; display: flex; flex-direction: column; justify-content: space-between; min-height: 200mm; }
-
-  /* Header */
-  .top-banner { background: #001B3A; color: #ffffff; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; }
-  .brand-left { display: flex; align-items: center; gap: 12px; }
-  .logo-box { width: 40px; height: 40px; background: #ffffff; color: #001B3A; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 22px; }
-  .brand-titles h1 { font-size: 15px; font-weight: 900; letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 2px; }
-  .brand-titles p { font-size: 10px; opacity: 0.85; font-weight: 600; }
-  .invoice-title-right { text-align: right; }
-  .invoice-title-right h2 { font-size: 11px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; }
-  .invoice-title-right p { font-size: 9px; opacity: 0.8; font-weight: 600; margin-top: 2px; }
-
-  /* Meta Bar */
-  .meta-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; border-bottom: 1.5px solid #001B3A; background: #f8fafc; }
-  .meta-item { padding: 8px 12px; border-right: 1px solid #e2e8f0; }
-  .meta-item:last-child { border-right: none; }
-  .meta-item .lbl { font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #64748b; }
-  .meta-item .val { font-size: 14px; font-weight: 900; color: #001B3A; margin-top: 2px; font-family: 'Segoe UI', sans-serif; }
-  .meta-item .val-sm { font-size: 11px; font-weight: 800; color: #334155; margin-top: 2px; }
-
-  /* Ship To + AWB Box */
-  .shipping-row { display: grid; grid-template-columns: 1.3fr 1fr; gap: 12px; padding: 12px 16px; border-bottom: 1px solid #e2e8f0; align-items: start; }
-  .ship-to-title { font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5px; color: #64748b; margin-bottom: 4px; }
-  .customer-name { font-size: 16px; font-weight: 900; color: #0f172a; text-transform: uppercase; }
-  .customer-address { font-size: 11px; color: #334155; margin-top: 4px; line-height: 1.45; font-weight: 600; }
-  .customer-phone { margin-top: 8px; font-size: 12px; font-weight: 800; color: #001B3A; display: flex; align-items: center; gap: 6px; }
-  .phone-badge { width: 18px; height: 18px; background: #001B3A; color: #fff; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; }
-
-  .awb-card { border: 1.5px solid #cbd5e1; border-radius: 8px; padding: 8px 10px; background: #ffffff; text-align: center; }
-  .awb-card .awb-lbl { font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5px; color: #64748b; text-align: left; }
-  .awb-card .awb-val { font-family: 'Courier New', monospace; font-size: 14px; font-weight: 900; letter-spacing: 1.5px; color: #0f172a; text-align: left; margin: 2px 0 6px 0; }
-  .awb-card .courier-lbl { font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #64748b; text-align: left; }
-  .awb-card .courier-val { font-size: 11px; font-weight: 900; color: #001B3A; text-align: left; margin-bottom: 6px; }
-  .barcode-img { width: 100%; max-height: 48px; object-fit: contain; margin-top: 2px; }
-
-  /* Payment Badge & Amount */
-  .payment-bar { padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1.5px solid #e2e8f0; }
-  .badge-cod { background: #fffbeb; border: 2px dashed #d97706; color: #92400e; padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: 900; letter-spacing: 0.5px; }
-  .badge-prepaid { background: #f0fdf4; border: 2px solid #16a34a; color: #166534; padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: 900; letter-spacing: 0.5px; }
-  .total-amount-display { font-size: 26px; font-weight: 900; color: #0f172a; }
-
-  /* Items Table */
-  .table-section { padding: 10px 16px; border-bottom: 1.5px solid #e2e8f0; }
-  .table-section-title { font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5px; color: #64748b; margin-bottom: 6px; }
-  .pkg-table { width: 100%; border-collapse: collapse; }
-  .pkg-table th { font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #64748b; padding: 6px 10px; border-bottom: 1.5px solid #cbd5e1; text-align: left; }
-  .pkg-table th:first-child, .pkg-table th:nth-child(3) { text-align: center; }
-  .pkg-table th:nth-child(4), .pkg-table th:last-child { text-align: right; }
-
-  /* Icon Grid */
-  .metrics-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; border-bottom: 1.5px solid #e2e8f0; background: #ffffff; }
-  .metric-box { padding: 10px 8px; border-right: 1px solid #e2e8f0; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-  .metric-box:last-child { border-right: none; }
-  .metric-icon { width: 28px; height: 28px; margin-bottom: 4px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
-  .metric-val { font-size: 12px; font-weight: 900; color: #0f172a; line-height: 1.1; }
-  .metric-lbl { font-size: 7.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.8px; color: #64748b; margin-top: 2px; }
-
-  /* Bottom Details Grid */
-  .bottom-grid { display: grid; grid-template-columns: 1.2fr 1fr 0.8fr; gap: 12px; padding: 12px 16px; border-bottom: 1px solid #e2e8f0; background: #ffffff; align-items: center; }
-  .summary-col h3, .return-col h3 { font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #64748b; margin-bottom: 6px; }
-  .summary-line { display: flex; justify-content: space-between; font-size: 11px; color: #334155; margin-bottom: 3px; font-weight: 600; }
-  .summary-line.total { border-top: 1px solid #cbd5e1; padding-top: 4px; margin-top: 4px; font-size: 13px; font-weight: 900; color: #0f172a; }
-  .words-text { font-size: 9.5px; font-style: italic; color: #475569; margin-top: 6px; font-weight: 600; }
-
-  .return-col p { font-size: 10.5px; color: #334155; line-height: 1.45; font-weight: 600; }
-  .return-col strong { color: #0f172a; font-weight: 800; }
-
-  .qr-col { border: 1.5px solid #cbd5e1; border-radius: 8px; padding: 8px; text-align: center; background: #ffffff; }
-  .qr-col img { width: 72px; height: 72px; display: block; margin: 0 auto; }
-  .qr-col .qr-lbl { font-size: 8px; font-weight: 900; letter-spacing: 1px; text-transform: uppercase; color: #001B3A; margin-top: 4px; }
-
-  /* Footer Notice & Dark Bar */
-  .notice-bar { background: #f8fafc; padding: 6px 12px; text-align: center; font-size: 8.5px; color: #475569; font-weight: 600; border-top: 1px solid #e2e8f0; }
-  .footer-banner { background: #001B3A; color: #ffffff; padding: 8px; text-align: center; font-size: 10px; font-weight: 900; letter-spacing: 1.5px; text-transform: uppercase; }
-  .footer-banner span { font-weight: 500; text-transform: none; font-size: 9.5px; opacity: 0.85; margin-left: 6px; font-style: italic; }
-
-  @media print {
-    body { padding: 0; }
-    .label-container { border-width: 1.5px; }
-  }
-</style>
-</head><body>
-
-<div class="label-container">
-  ${isCancelled ? `<div style="background:#991b1b;color:#fff;text-align:center;padding:10px;font-size:14px;font-weight:900;letter-spacing:2px;">⚠ CANCELLED — DO NOT SHIP</div>` : ''}
-  <!-- Top Banner -->
-  <div class="top-banner">
-    <div class="brand-left">
-      <div class="logo-box">B</div>
-      <div class="brand-titles">
-        <h1>BLESSING POWER GUIDE</h1>
-        <p>Premium Educational Books &bull; Chennai</p>
-      </div>
-    </div>
-    <div class="invoice-title-right">
-      <h2>INVOICE / TAX INVOICE</h2>
-      <p>Original for Recipient</p>
-    </div>
-  </div>
-
-  <!-- Meta Grid -->
-  <div class="meta-grid">
-    <div class="meta-item">
-      <div class="lbl">ORDER ID</div>
-      <div class="val">#${o.orderId}</div>
-    </div>
-    <div class="meta-item">
-      <div class="lbl">INVOICE NO.</div>
-      <div class="val-sm">${invoiceNum}</div>
-    </div>
-    <div class="meta-item">
-      <div class="lbl">ORDER DATE</div>
-      <div class="val-sm">${orderDate}</div>
-    </div>
-    <div class="meta-item">
-      <div class="lbl">DISPATCH DATE</div>
-      <div class="val-sm">${orderDate}</div>
-    </div>
-  </div>
-
-  <!-- Shipping Address & AWB Box -->
-  <div class="shipping-row" style="${hasOfficialAwb ? '' : 'grid-template-columns: 1fr;'}">
-    <div>
-      <div class="ship-to-title">SHIP TO</div>
-      <div class="customer-name">${o.customerName || 'Customer'}</div>
-      <div class="customer-address">
-        ${o.address || ''}<br>
-        ${o.city || ''} &mdash; ${o.pincode || ''}<br>
-        TAMIL NADU, INDIA
-      </div>
-      <div class="customer-phone">
-        <span class="phone-badge">☎</span> +91 ${o.customerPhone || ''}${
-          o.customerAltPhone ? ` &nbsp;|&nbsp; Alt +91 ${o.customerAltPhone}` : ''
-        }
-      </div>
-    </div>
-    ${hasOfficialAwb ? `
-    <div class="awb-card">
-      <div class="awb-lbl">AWB / TRACKING NUMBER</div>
-      <div class="awb-val">${o.trackingNumber}</div>
-      <div class="courier-lbl">COURIER</div>
-      <div class="courier-val">${o.courierName || 'ST Courier Express'}</div>
-      <img src="${barcodeUrl}" class="barcode-img" alt="Barcode ${o.trackingNumber}" />
-    </div>` : ''}
-  </div>
-
-  <!-- Payment Bar -->
-  <div class="payment-bar">
-    <div class="${isCancelled ? 'badge-cod' : isCod ? 'badge-cod' : 'badge-prepaid'}" style="${isCancelled ? 'background:#fef2f2;border-color:#991b1b;color:#991b1b;' : ''}">
-      ${isCancelled ? '🚫 CANCELLED — DO NOT COLLECT / DO NOT SHIP' : isCod ? '₹ COLLECT ON DELIVERY' : '✓ PREPAID — DO NOT COLLECT'}
-    </div>
-    <div class="total-amount-display">₹${totalAmount.toLocaleString('en-IN')}</div>
-  </div>
-
-  <!-- Items Table -->
-  <div class="table-section">
-    <div class="table-section-title">PACKAGE DETAILS</div>
-    <table class="pkg-table">
-      <thead>
-        <tr>
-          <th>#</th>
-          <th>ITEM</th>
-          <th>QTY</th>
-          <th>UNIT PRICE</th>
-          <th>AMOUNT</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${itemsHtml}
-      </tbody>
-    </table>
-  </div>
-
-  <!-- Icon Metrics Grid -->
-  <div class="metrics-grid">
-    <div class="metric-box">
-      <div class="metric-icon">📦</div>
-      <div class="metric-val">${totalItems}</div>
-      <div class="metric-lbl">ITEMS</div>
-    </div>
-    <div class="metric-box">
-      <div class="metric-icon">⚖️</div>
-      <div class="metric-val">${estWeight}g</div>
-      <div class="metric-lbl">EST. WEIGHT</div>
-    </div>
-    <div class="metric-box">
-      <div class="metric-icon">💳</div>
-      <div class="metric-val">${isCod ? 'COD' : 'PREPAID'}</div>
-      <div class="metric-lbl">PAYMENT</div>
-    </div>
-    <div class="metric-box">
-      <div class="metric-icon">🚚</div>
-      <div class="metric-val">${o.courierName || 'ST Courier'}</div>
-      <div class="metric-lbl">COURIER</div>
-    </div>
-  </div>
-
-  <!-- Bottom Details Grid -->
-  <div class="bottom-grid">
-    <div class="summary-col">
-      <h3>AMOUNT SUMMARY</h3>
-      <div class="summary-line"><span>Item Total</span><span>₹${totalAmount.toLocaleString('en-IN')}</span></div>
-      <div class="summary-line"><span>Delivery Charges</span><span>₹0</span></div>
-      <div class="summary-line"><span>COD Charges</span><span>₹0</span></div>
-      <div class="summary-line total"><span>Total Amount</span><span>₹${totalAmount.toLocaleString('en-IN')}</span></div>
-      <div class="words-text">Amount in Words: ${numberToWords(totalAmount)}</div>
-    </div>
-    <div class="return-col">
-      <h3>RETURN ADDRESS</h3>
-      <p>
-        <strong>Blessing Power Guide</strong><br>
-        Ayanavaram<br>
-        Chennai 600012<br>
-        Tamil Nadu, India<br>
-        +91 9840418228
-      </p>
-    </div>
-    <div class="qr-col">
-      <img src="${qrUrl}" alt="QR Code" />
-      <div class="qr-lbl">SCAN FOR ORDER</div>
-    </div>
-  </div>
-
-  <!-- Footer Notice & Banner -->
-  <div>
-    <div class="notice-bar">
-      Please do not accept the shipment if the seal is tampered. For any queries, contact us at +91 9840418228
-    </div>
-    <div class="footer-banner">
-      THANK YOU FOR YOUR ORDER <span>Books that Guide. Knowledge that Lasts.</span>
-    </div>
-  </div>
-</div>
-
-<script>window.onload=function(){setTimeout(function(){window.print()},350)}</script>
-</body></html>`);
-    pw.document.close();
+    // Default: 1 sticker on A4 (normal home printer paper).
+    openShippingLabelPrint({
+      orderId: o.orderId,
+      customerName: o.customerName,
+      customerPhone: o.customerPhone,
+      customerAltPhone: o.customerAltPhone,
+      address: o.address,
+      city: o.city,
+      pincode: o.pincode,
+      state: o.state,
+      totalAmount: o.totalAmount,
+      paymentMethod: o.paymentMethod,
+      courierStatus: o.courierStatus,
+      trackingNumber: o.trackingNumber,
+      courierName: o.courierName,
+      createdAt: o.createdAt,
+      items: o.items,
+    }, 'a4');
   };
   const handleUnlinkWhatsApp = async () => {
     if (!confirm('Unlink WhatsApp session?')) return;
@@ -1297,7 +1033,7 @@ export default function AdminPage() {
                             </div>
                           </div>
                           <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
-                            <button onClick={() => handlePrintLabel(o)} className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold text-gray-600 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg transition-colors cursor-pointer"><Download className="w-3 h-3" />Label</button>
+                            <button onClick={() => handlePrintLabel(o)} className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold text-gray-600 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg transition-colors cursor-pointer" title="Print shipping sticker for packet"><Download className="w-3 h-3" />Label</button>
                             <button onClick={() => handleResendWhatsApp(o)} className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold text-white bg-[#25d366] hover:bg-[#1fb855] rounded-lg transition-colors cursor-pointer"><MessageSquare className="w-3 h-3" />WhatsApp</button>
                           </div>
                         </div>
