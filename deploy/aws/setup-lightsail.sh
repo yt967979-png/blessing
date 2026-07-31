@@ -61,12 +61,21 @@ if [[ "$REPO_DIR" != "$APP_DIR" ]]; then
 fi
 chown -R "$APP_USER:$APP_USER" "$APP_DIR"
 
+WA_SESSION_DIR="${WHATSAPP_SESSION_DIR:-/var/lib/blessing/whatsapp_session}"
+echo "==> WhatsApp session dir: $WA_SESSION_DIR"
+mkdir -p "$WA_SESSION_DIR"
+chown -R "$APP_USER:$APP_USER" /var/lib/blessing
+
 if [[ ! -f "$ENV_FILE" ]]; then
   cp "$APP_DIR/deploy/aws/env.example" "$ENV_FILE"
   chmod 600 "$ENV_FILE"
   echo "==> Created $ENV_FILE from env.example — EDIT SECRETS before starting."
 else
   echo "==> Keeping existing $ENV_FILE"
+fi
+# Ensure session dir is set even on older env files
+if ! grep -q '^WHATSAPP_SESSION_DIR=' "$ENV_FILE" 2>/dev/null; then
+  echo "WHATSAPP_SESSION_DIR=$WA_SESSION_DIR" >> "$ENV_FILE"
 fi
 
 echo "==> npm ci && npm run build (as $APP_USER)"

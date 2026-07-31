@@ -6,11 +6,23 @@ const path = require('path');
 const fs = require('fs');
 
 const PORT = process.env.WHATSAPP_PORT || 4000;
-const SESSION_DIR = path.join(__dirname, '../whatsapp_session');
+function resolveWhatsAppSessionDir() {
+  const fromEnv = (process.env.WHATSAPP_SESSION_DIR || '').trim();
+  if (fromEnv) return fromEnv;
+  if (process.env.NODE_ENV === 'production' || process.env.HOSTING === 'aws') {
+    return '/var/lib/blessing/whatsapp_session';
+  }
+  return path.join(__dirname, '../whatsapp_session');
+}
+const SESSION_DIR = resolveWhatsAppSessionDir();
 const PUBLIC_DIR = path.join(__dirname, '../public');
 
-if (!fs.existsSync(SESSION_DIR)) {
-  fs.mkdirSync(SESSION_DIR, { recursive: true });
+try {
+  if (!fs.existsSync(SESSION_DIR)) {
+    fs.mkdirSync(SESSION_DIR, { recursive: true });
+  }
+} catch (_) {
+  // Runtime reconnect paths recreate the dir if needed.
 }
 if (!fs.existsSync(PUBLIC_DIR)) {
   fs.mkdirSync(PUBLIC_DIR, { recursive: true });

@@ -141,6 +141,7 @@ sudo chown root:root /etc/blessing.env
 | `NEXT_PUBLIC_SITE_URL` | `https://<your-domain>` or temporary `https://<STATIC_IP>` if using IP+HTTPS carefully — prefer a domain |
 | `PUBLIC_BASE_URL` | Same as `NEXT_PUBLIC_SITE_URL` (keep-alive / host detection) |
 | `HOSTING` | `aws` |
+| `WHATSAPP_SESSION_DIR` | `/var/lib/blessing/whatsapp_session` (outside the app tree so `next build` / Turbopack does not scan Baileys session files) |
 
 ### Recommended tuning (Lightsail 1–2 GB)
 
@@ -309,7 +310,7 @@ npm ci && npm run build
 sudo systemctl restart blessing
 ```
 
-WhatsApp auth state lives under the app working directory (and any Baileys session paths the app uses). Prefer not wiping `/opt/blessing` without backing up session data.
+WhatsApp auth state lives in `WHATSAPP_SESSION_DIR` (default `/var/lib/blessing/whatsapp_session` on AWS). Prefer not wiping that directory without backing up session data. `setup-lightsail.sh` creates and chowns it for the app user.
 
 ---
 

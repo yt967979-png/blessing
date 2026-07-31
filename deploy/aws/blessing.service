@@ -10,6 +10,7 @@ Group=ubuntu
 WorkingDirectory=/opt/blessing
 EnvironmentFile=/etc/blessing.env
 Environment=NODE_ENV=production
+Environment=WHATSAPP_SESSION_DIR=/var/lib/blessing/whatsapp_session
 ExecStart=/usr/bin/npm start
 Restart=always
 RestartSec=5

@@ -11,11 +11,29 @@ import { getDbClient, releaseDbClient } from '@/lib/db';
 import { isBackgroundLeader } from '@/lib/backgroundLeader';
 import { resolveTunedNumber, shouldRunBackgroundTask } from '@/lib/runtimeProfile';
 
-const SESSION_DIR = path.join(process.cwd(), 'whatsapp_session');
+/**
+ * Baileys session files must live outside the app tree in production.
+ * `path.join(process.cwd(), 'whatsapp_session')` causes Turbopack to trace
+ * tens of thousands of files during `next build` and can hang/slow the build.
+ */
+function resolveWhatsAppSessionDir(): string {
+  const fromEnv = (process.env.WHATSAPP_SESSION_DIR || '').trim();
+  if (fromEnv) return fromEnv;
+  if (process.env.NODE_ENV === 'production' || process.env.HOSTING === 'aws') {
+    return '/var/lib/blessing/whatsapp_session';
+  }
+  return path.join(process.cwd(), 'whatsapp_session');
+}
+
+const SESSION_DIR = resolveWhatsAppSessionDir();
 const PUBLIC_DIR = path.join(process.cwd(), 'public');
 const waLogger = pino({ level: process.env.WHATSAPP_LOG_LEVEL || 'silent' });
 
-if (!fs.existsSync(SESSION_DIR)) fs.mkdirSync(SESSION_DIR, { recursive: true });
+try {
+  if (!fs.existsSync(SESSION_DIR)) fs.mkdirSync(SESSION_DIR, { recursive: true });
+} catch {
+  // Build may lack write access; runtime init recreates the dir when needed.
+}
 if (!fs.existsSync(PUBLIC_DIR)) fs.mkdirSync(PUBLIC_DIR, { recursive: true });
 
 let sock: any = null;
