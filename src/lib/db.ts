@@ -51,15 +51,16 @@ function hostOf(connectionString: string): string {
 function getConnectionCandidates(): string[] {
   const raw: string[] = [];
 
-  // If explicit DATABASE_URL is set (e.g. Neon PostgreSQL), return it directly as primary candidate
-  if (process.env.DATABASE_URL) {
-    const norm = normalizeConnectionString(process.env.DATABASE_URL);
+  // Check explicit environment variables first before Railway PGHOST injection
+  const dbUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+  if (dbUrl) {
+    const norm = normalizeConnectionString(dbUrl);
     if (norm.includes('neon.tech') || norm.includes('supabase.co') || norm.includes('supabase.com')) {
+      console.log(`[db] Using Cloud Managed PostgreSQL (${hostOf(norm)})`);
       return [norm];
     }
     raw.push(norm);
   }
-  if (process.env.POSTGRES_URL) raw.push(normalizeConnectionString(process.env.POSTGRES_URL));
 
   const fromPgEnv = buildUrlFromPgEnv();
   if (fromPgEnv) raw.push(fromPgEnv);
