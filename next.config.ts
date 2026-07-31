@@ -51,9 +51,13 @@ const nextConfig: NextConfig = {
           },
           {
             key: "Content-Security-Policy",
+            // Razorpay checkout.js loads risk detection from cdn.razorpay.com
+            // (not checkout.razorpay.com). Set script-src-elem explicitly so
+            // browsers do not rely on script-src fallback alone.
             value: [
               "default-src 'self'",
               "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://accounts.google.com https://apis.google.com https://checkout.razorpay.com https://cdn.razorpay.com",
+              "script-src-elem 'self' 'unsafe-inline' https://accounts.google.com https://apis.google.com https://checkout.razorpay.com https://cdn.razorpay.com",
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com",
               "font-src 'self' https://fonts.gstatic.com data:",
               "img-src 'self' data: blob: https://res.cloudinary.com https://images.unsplash.com https://*.googleusercontent.com https://*.gstatic.com https://*.razorpay.com",
@@ -63,7 +67,7 @@ const nextConfig: NextConfig = {
               "base-uri 'self'",
               "form-action 'self'",
               "frame-ancestors 'none'",
-            ].join('; '),
+            ].join("; "),
           },
           {
             key: "Permissions-Policy",
