@@ -128,12 +128,16 @@ function sslFor(connectionString: string) {
   }
   // Private Railway mesh — plain TCP (no TLS)
   if (connectionString.includes('railway.internal')) return false;
-  // Public Railway proxy / other hosted Postgres
+  // Cloud PostgreSQL providers (Neon, Supabase, Aiven, Render, Railway Proxy) -> TLS required
   if (
     connectionString.includes('rlwy.net') ||
     connectionString.includes('proxy.rlwy.net') ||
     connectionString.includes('railway.app') ||
-    connectionString.includes('render.com')
+    connectionString.includes('render.com') ||
+    connectionString.includes('neon.tech') ||
+    connectionString.includes('supabase.co') ||
+    connectionString.includes('supabase.com') ||
+    connectionString.includes('aivencloud.com')
   ) {
     return { rejectUnauthorized: false as const };
   }
