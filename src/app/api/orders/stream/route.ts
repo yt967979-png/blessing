@@ -129,6 +129,17 @@ export function startOrderListenBroker() {
     console.log('[order-listen] disabled (DISABLE_ORDER_LISTEN=true)');
     return;
   }
+  const dbUrl = process.env.DATABASE_URL || '';
+  const hasUnpooled = Boolean(
+    process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_DIRECT_URL
+  );
+  // Neon pooled (PgBouncer) cannot LISTEN; without a direct URL, skip instead of reconnect-storm.
+  if (dbUrl.includes('neon.tech') && dbUrl.includes('-pooler.') && !hasUnpooled) {
+    console.log(
+      '[order-listen] skipped — Neon pooler URL has no LISTEN support; set DATABASE_URL_UNPOOLED or DISABLE_ORDER_LISTEN=true'
+    );
+    return;
+  }
   if (!shouldRunBackgroundTask('listen')) {
     console.log('[order-listen] skipped — runtime load/profile');
     return;

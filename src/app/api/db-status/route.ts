@@ -27,12 +27,12 @@ export async function GET() {
         status: 'DISCONNECTED',
         message: err?.message || 'Could not connect to PostgreSQL.',
         hint: err?.message?.includes('ENOTFOUND') || err?.message?.includes('railway.internal')
-          ? 'postgres.railway.internal not found — use the PUBLIC proxy URL, not the private hostname'
+          ? 'Stale Railway private hostname — set DATABASE_URL to your Neon pooled connection string'
           : err?.message?.includes('timeout')
-            ? 'Connection timed out — confirm Postgres service is running and Public Networking is enabled in Railway'
+            ? 'Connection timed out — confirm Neon project is active and DATABASE_URL uses the -pooler host'
             : undefined,
         instruction:
-          'Railway → Web Service → Variables: set DATABASE_URL = ${{Postgres.DATABASE_PUBLIC_URL}} (host should be *.proxy.rlwy.net). Delete any extra Postgres service. Redeploy.',
+          'Railway → blessing → Variables: set DATABASE_URL to Neon “Pooled connection” string (*.neon.tech, sslmode=require). Remove old Railway Postgres URLs. Redeploy.',
         envKeysPresent: Object.keys(process.env).filter(
           (k) => k.includes('DATABASE') || k.includes('POSTGRES') || k.includes('PG')
         ),

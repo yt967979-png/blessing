@@ -981,11 +981,11 @@ export default function AdminPage() {
                   </p>
                 </div>
                 <div className="bg-white border border-amber-200 rounded-lg p-3 max-w-md mx-auto text-left text-[11px] text-gray-600 space-y-1">
-                  <p className="font-bold text-gray-800">💡 How to fix on Railway:</p>
+                  <p className="font-bold text-gray-800">How to fix:</p>
                   <ol className="list-decimal list-inside space-y-0.5 text-gray-600">
-                    <li>Open <strong>Railway Dashboard → Web Service → Variables</strong></li>
-                    <li>Set <code>DATABASE_URL</code> = <code>{'${{Postgres.DATABASE_PUBLIC_URL}}'}</code></li>
-                    <li>Ensure PostgreSQL service in Railway has <strong>Public Networking</strong> enabled.</li>
+                    <li>Open <strong>Railway → blessing → Variables</strong></li>
+                    <li>Set <code>DATABASE_URL</code> to your <strong>Neon pooled</strong> connection string (<code>*.neon.tech</code>)</li>
+                    <li>Remove old Railway <code>postgres.railway.internal</code> / <code>*.rlwy.net</code> URLs, then redeploy</li>
                   </ol>
                 </div>
                 <div className="pt-2 flex items-center justify-center gap-3 flex-wrap">

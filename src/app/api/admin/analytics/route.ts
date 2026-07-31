@@ -43,7 +43,7 @@ export async function GET(request: Request) {
         emptyAnalytics(
           days,
           ping.message ||
-            'Database disconnected. On Railway set DATABASE_URL=${{Postgres.DATABASE_PUBLIC_URL}} and redeploy.'
+            'Database disconnected. Set DATABASE_URL to your Neon pooled connection string and redeploy.'
         ),
         { status: 503 }
       );
@@ -206,7 +206,7 @@ export async function GET(request: Request) {
       emptyAnalytics(
         days,
         isDb
-          ? `${message}. On Railway set DATABASE_URL to Postgres DATABASE_PUBLIC_URL, then redeploy.`
+          ? `${message}. Set DATABASE_URL to your Neon pooled connection string, then redeploy.`
           : message
       ),
       { status: isDb ? 503 : 500 }

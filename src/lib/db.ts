@@ -13,10 +13,12 @@ let poolGeneration = 0;
 let heartbeatFailures = 0;
 let invalidateInFlight: Promise<void> | null = null;
 
-/** Strip sslmode from URL — pg v8 treats sslmode=require as verify-full and breaks Railway proxy. */
+/** Strip sslmode from URL — node-pg uses explicit `ssl` option; leaving sslmode can break Neon/Railway. */
 function normalizeConnectionString(url: string): string {
   let u = url.trim();
+  if (!u) return u;
   u = u.replace(/([?&])sslmode=[^&]*/gi, '$1');
+  u = u.replace(/([?&])channel_binding=[^&]*/gi, '$1');
   u = u.replace(/([?&])uselibpqcompat=[^&]*/gi, '$1');
   u = u.replace(/\?&/g, '?').replace(/[?&]$/g, '');
   return u;
@@ -41,6 +43,30 @@ function isPrivateRailwayUrl(u: string): boolean {
   return u.includes('railway.internal');
 }
 
+function isNeonUrl(u: string): boolean {
+  return u.includes('neon.tech');
+}
+
+function isManagedCloudPg(u: string): boolean {
+  return (
+    isNeonUrl(u) ||
+    u.includes('supabase.co') ||
+    u.includes('supabase.com') ||
+    u.includes('aivencloud.com') ||
+    u.includes('amazonaws.com')
+  );
+}
+
+function isNeonPoolerUrl(u: string): boolean {
+  return isNeonUrl(u) && u.includes('-pooler.');
+}
+
+/** Neon LISTEN needs a direct (non-PgBouncer) endpoint. */
+export function neonDirectUrlFromPooler(u: string): string | null {
+  if (!isNeonPoolerUrl(u)) return null;
+  return u.replace('-pooler.', '.');
+}
+
 function hostOf(connectionString: string): string {
   try {
     return new URL(connectionString.replace(/^postgres(ql)?:\/\//, 'http://')).hostname;
@@ -52,13 +78,21 @@ function hostOf(connectionString: string): string {
 function getConnectionCandidates(): string[] {
   const raw: string[] = [];
 
-  // Check explicit environment variables first (Neon / Supabase / Cloud PG)
-  const dbUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+  const dbUrl = (process.env.DATABASE_URL || process.env.POSTGRES_URL || '').trim();
   if (dbUrl) {
     const norm = normalizeConnectionString(dbUrl);
-    // Cloud managed PostgreSQL (Neon / Supabase) -> ALWAYS Candidate #1
-    if (norm.includes('neon.tech') || norm.includes('supabase.co') || norm.includes('supabase.com')) {
-      return [norm];
+    // Neon / Supabase / managed cloud — never fall back to stale Railway private URLs.
+    if (isManagedCloudPg(norm)) {
+      const extras = [
+        process.env.DATABASE_URL_UNPOOLED,
+        process.env.DATABASE_DIRECT_URL,
+      ]
+        .map((x) => (x || '').trim())
+        .filter(Boolean)
+        .map(normalizeConnectionString)
+        .filter((u) => u && u !== norm);
+      // Prefer pooled app URL first; keep direct as optional later candidate for tools.
+      return [norm, ...extras];
     }
     raw.push(norm);
   }
@@ -66,29 +100,38 @@ function getConnectionCandidates(): string[] {
   const fromPgEnv = buildUrlFromPgEnv();
   if (fromPgEnv) raw.push(fromPgEnv);
 
-  if (process.env.DATABASE_PUBLIC_URL) raw.push(process.env.DATABASE_PUBLIC_URL);
-  if (process.env.DATABASE_PRIVATE_URL) raw.push(process.env.DATABASE_PRIVATE_URL);
+  for (const key of ['DATABASE_PUBLIC_URL', 'DATABASE_PRIVATE_URL'] as const) {
+    const v = (process.env[key] || '').trim();
+    if (v) raw.push(v);
+  }
 
   const onRailway = Boolean(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_SERVICE_ID);
-  let sorted = [...new Set(raw.map(normalizeConnectionString))];
+  let sorted = [...new Set(raw.map(normalizeConnectionString).filter(Boolean))];
+
+  // Never try railway.internal when a managed cloud URL is present.
+  if (sorted.some(isManagedCloudPg)) {
+    sorted = sorted.filter((u) => !isPrivateRailwayUrl(u));
+  }
 
   const preferPrivate =
-    onRailway || String(process.env.DB_TRY_PRIVATE || '').toLowerCase() === 'true';
+    !sorted.some(isManagedCloudPg) &&
+    (onRailway || String(process.env.DB_TRY_PRIVATE || '').toLowerCase() === 'true');
+
   sorted.sort((a, b) => {
     const score = (u: string) => {
+      if (isManagedCloudPg(u)) return 0;
       if (preferPrivate) {
-        if (isPrivateRailwayUrl(u)) return 0;
-        if (isPublicProxyUrl(u)) return 1;
-        return 2;
+        if (isPrivateRailwayUrl(u)) return 1;
+        if (isPublicProxyUrl(u)) return 2;
+        return 3;
       }
-      if (isPublicProxyUrl(u)) return 0;
-      if (isPrivateRailwayUrl(u)) return 1;
-      return 2;
+      if (isPublicProxyUrl(u)) return 1;
+      if (isPrivateRailwayUrl(u)) return 2;
+      return 3;
     };
     return score(a) - score(b);
   });
 
-  // Outside Railway, skip private hostnames that cannot resolve on a laptop.
   if (!preferPrivate && sorted.some(isPublicProxyUrl)) {
     sorted = sorted.filter((u) => !isPrivateRailwayUrl(u));
   }
@@ -115,13 +158,20 @@ export function logDbConnectionConfig() {
     `[db] primary host: ${host} candidates=${candidates.length} (${masked.slice(0, 72)}…)`
   );
 
+  if (isNeonUrl(primary)) {
+    console.log(
+      `[db] provider=Neon pooler=${isNeonPoolerUrl(primary)} ` +
+        `(use pooled URL for app; set DATABASE_URL_UNPOOLED for LISTEN/migrations if needed)`
+    );
+  }
+
   const onRailway = Boolean(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_SERVICE_ID);
   const hasPrivate = candidates.some(isPrivateRailwayUrl);
   const hasPublic = candidates.some(isPublicProxyUrl);
-  if (onRailway && !hasPrivate && hasPublic) {
+  if (onRailway && !hasPrivate && hasPublic && !candidates.some(isManagedCloudPg)) {
     console.warn(
-      '[db] WARN: only public proxy URL present — in-cluster hairpin can time out. ' +
-        'Prefer DATABASE_URL=${{Postgres.DATABASE_URL}} (private) and keep DATABASE_PUBLIC_URL as fallback.'
+      '[db] WARN: only Railway public proxy URL present — in-cluster hairpin can time out. ' +
+        'Prefer Neon DATABASE_URL or Railway private ${{Postgres.DATABASE_URL}}.'
     );
   }
 }
@@ -144,6 +194,10 @@ function sslFor(connectionString: string) {
     connectionString.includes('supabase.com') ||
     connectionString.includes('aivencloud.com')
   ) {
+    return { rejectUnauthorized: false as const };
+  }
+  // Default: require TLS for any remote host (safe for Neon-style URLs)
+  if (connectionString.includes('amazonaws.com') || connectionString.includes('.tech/')) {
     return { rejectUnauthorized: false as const };
   }
   return false;
@@ -240,16 +294,20 @@ function defaultHeartbeatMs(): number {
 
 function createPool(connectionString: string): Pool {
   const normalized = normalizeConnectionString(connectionString);
+  const neon = isNeonUrl(normalized);
+  // Neon pooler: keep idle short so PgBouncer doesn't hold dead sockets; Railway Free pool stays tiny.
+  const idleDefault = neon ? 20_000 : 600_000;
   const p = new Pool({
     connectionString: normalized,
     max: defaultPoolMax(),
-    idleTimeoutMillis: Number(process.env.DB_IDLE_TIMEOUT_MS || 600000),
+    idleTimeoutMillis: Number(process.env.DB_IDLE_TIMEOUT_MS || idleDefault),
     connectionTimeoutMillis: defaultConnectTimeoutMs(),
     // Soft launch: allow slower queries over flaky proxy; avoid killing analytics mid-flight.
     statement_timeout: Number(process.env.DB_STATEMENT_TIMEOUT_MS || 15_000),
     query_timeout: Number(process.env.DB_QUERY_TIMEOUT_MS || 15_000),
     keepAlive: true,
-    keepAliveInitialDelayMillis: 10000,
+    keepAliveInitialDelayMillis: neon ? 5_000 : 10_000,
+    allowExitOnIdle: neon,
     ssl: sslFor(normalized),
   });
 
@@ -349,12 +407,11 @@ export async function shutdownDb() {
 
 async function probeConnection(connStr: string): Promise<void> {
   const normalized = normalizeConnectionString(connStr);
-  // Give Railway private mesh + public TCP proxy enough time, but keep probes short
-  // enough that fallback + retries don't hang HTTP for a minute.
+  // Neon (esp. cross-region) + Railway mesh need headroom; keep probes under ~20s.
   const base = defaultConnectTimeoutMs();
   const timeoutMs = isPrivateRailwayUrl(normalized)
     ? Math.min(Math.max(base, 8_000), 12_000)
-    : Math.min(Math.max(base, 8_000), 15_000);
+    : Math.min(Math.max(base, isNeonUrl(normalized) ? 12_000 : 8_000), 20_000);
   const client = new Client({
     connectionString: normalized,
     ssl: sslFor(normalized),
@@ -378,9 +435,18 @@ async function probeConnection(connStr: string): Promise<void> {
 
 /** Config for long-lived dedicated pg Clients (LISTEN / NOTIFY helpers). */
 export function getDbConnectionConfig() {
-  const connectionString = normalizeConnectionString(
-    activeConnectionString || getConnectionCandidates()[0]
-  );
+  const pooled =
+    activeConnectionString ||
+    getConnectionCandidates()[0] ||
+    '';
+  // Neon PgBouncer pooler does not support LISTEN — prefer unpooled/direct.
+  const unpooled = (
+    process.env.DATABASE_URL_UNPOOLED ||
+    process.env.DATABASE_DIRECT_URL ||
+    neonDirectUrlFromPooler(pooled) ||
+    pooled
+  ).trim();
+  const connectionString = normalizeConnectionString(unpooled || pooled);
   return {
     connectionString,
     ssl: sslFor(connectionString),
