@@ -46,9 +46,9 @@ function baseTuningForTier(t: RuntimeTier): RuntimeTuning {
       return {
         tier: t,
         load: 'normal',
-        dbPoolMax: 2,
-        dbHeartbeatMs: 45_000,
-        dbConnectTimeoutMs: 20_000,
+        dbPoolMax: 3,
+        dbHeartbeatMs: 60_000,
+        dbConnectTimeoutMs: 15_000,
         courierCronEnabled: true,
         courierCronIntervalMs: 20 * 60 * 1000,
         courierCronStartDelayMs: 120_000,
