@@ -31,10 +31,10 @@ const nextConfig: NextConfig = {
           { key: "X-Frame-Options", value: "DENY" },
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-          // Needed for Google Sign-In popup/iframe postMessage (avoids COOP console errors)
+          // Needed for Google Sign-In popup/iframe postMessage (avoids COOP console errors & sluggish Google auth)
           {
             key: "Cross-Origin-Opener-Policy",
-            value: "same-origin-allow-popups",
+            value: "unsafe-none",
           },
           {
             key: "Permissions-Policy",
