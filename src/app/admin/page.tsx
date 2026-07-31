@@ -218,10 +218,31 @@ export default function AdminPage() {
         setAnalytics(data);
       } else {
         const errData = await res.json().catch(() => ({}));
-        setAnalyticsError(errData.error || errData.message || `Database not connected (Status ${res.status})`);
+        setAnalyticsError(errData.error || errData.message || `Status ${res.status}`);
+        // Fallback default empty analytics structure so admin dashboard displays clean zeroes instead of infinite spinner
+        setAnalytics({
+          summary: { totalOrders: 0, totalRevenue: 0, avgOrderValue: 0, paidOrders: 0, codOrders: 0, todayOrders: 0, todayRevenue: 0 },
+          daily: [],
+          paymentMethods: [],
+          orderStatuses: [],
+          paymentStatuses: [],
+          topProducts: [],
+          monthlyTrend: [],
+          range: analyticsRange,
+        });
       }
     } catch (e: any) {
-      setAnalyticsError(e?.message || 'Network error connecting to database');
+      setAnalyticsError(e?.message || 'Network error');
+      setAnalytics({
+        summary: { totalOrders: 0, totalRevenue: 0, avgOrderValue: 0, paidOrders: 0, codOrders: 0, todayOrders: 0, todayRevenue: 0 },
+        daily: [],
+        paymentMethods: [],
+        orderStatuses: [],
+        paymentStatuses: [],
+        topProducts: [],
+        monthlyTrend: [],
+        range: analyticsRange,
+      });
     } finally { setAnalyticsLoading(false); }
   }, [user, analyticsRange]);
 

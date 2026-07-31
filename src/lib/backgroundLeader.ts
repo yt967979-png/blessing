@@ -35,7 +35,17 @@ function forceLeader(): boolean {
 export function isBackgroundLeader(): boolean {
   if (backgroundJobsDisabled()) return false;
   if (forceLeader()) return true;
-  return isLeader;
+  if (isLeader) return true;
+
+  // Single soft/Free instance (testing or 1 Railway replica): always allow WhatsApp QR.
+  // Avoids Next.js module-split / lock races that leave Admin stuck on "Reconnecting".
+  const replicas = Number(process.env.APP_REPLICA_COUNT || process.env.RAILWAY_NUM_REPLICAS || '1');
+  if (replicas <= 1) {
+    if (process.env.ALLOW_WHATSAPP_WITHOUT_LEADER === 'false') return false;
+    return true;
+  }
+
+  return false;
 }
 
 function stopLockPing() {

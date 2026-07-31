@@ -1,13 +1,19 @@
-import makeWASocket, { useMultiFileAuthState, DisconnectReason } from '@whiskeysockets/baileys';
+import makeWASocket, {
+  useMultiFileAuthState,
+  DisconnectReason,
+  fetchLatestBaileysVersion,
+} from '@whiskeysockets/baileys';
 import QRCode from 'qrcode';
 import path from 'path';
 import fs from 'fs';
+import pino from 'pino';
 import { getDbClient, releaseDbClient } from '@/lib/db';
 import { isBackgroundLeader } from '@/lib/backgroundLeader';
 import { resolveTunedNumber, shouldRunBackgroundTask } from '@/lib/runtimeProfile';
 
 const SESSION_DIR = path.join(process.cwd(), 'whatsapp_session');
 const PUBLIC_DIR = path.join(process.cwd(), 'public');
+const waLogger = pino({ level: process.env.WHATSAPP_LOG_LEVEL || 'silent' });
 
 if (!fs.existsSync(SESSION_DIR)) fs.mkdirSync(SESSION_DIR, { recursive: true });
 if (!fs.existsSync(PUBLIC_DIR)) fs.mkdirSync(PUBLIC_DIR, { recursive: true });
@@ -198,6 +204,7 @@ async function restoreSessionFromDb() {
 export async function initWhatsAppInProcess(opts?: { requireLeader?: boolean }) {
   const requireLeader = opts?.requireLeader !== false;
   if (requireLeader && !isBackgroundLeader()) {
+    console.warn('[whatsapp] init skipped — not background leader (set FORCE_BACKGROUND_LEADER=true if testing)');
     return null;
   }
   // Already have a live socket (connected or waiting for QR scan)
@@ -209,14 +216,25 @@ export async function initWhatsAppInProcess(opts?: { requireLeader?: boolean }) 
     await restoreSessionFromDb();
     const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
 
+    let version: [number, number, number] | undefined;
+    try {
+      const latest = await fetchLatestBaileysVersion();
+      version = latest.version;
+      console.log('[whatsapp] using WA version', version?.join('.'));
+    } catch (e: any) {
+      console.warn('[whatsapp] fetchLatestBaileysVersion failed, using default:', e?.message || e);
+    }
+
     sock = makeWASocket({
       auth: state,
+      version,
+      logger: waLogger,
       printQRInTerminal: false,
-      browser: ['Blessing Power Guide', 'Chrome', '1.0.0'],
-      // Free: skip heavy history sync / presence (same process as Next)
+      browser: ['Ubuntu', 'Chrome', '22.04.4'],
       syncFullHistory: false,
       markOnlineOnConnect: false,
       generateHighQualityLinkPreview: false,
+      getMessage: async () => undefined,
     });
 
     // Unlock so status polls can use this sock while QR arrives
@@ -391,13 +409,10 @@ export async function ensureWhatsAppQr(opts?: { forceFresh?: boolean }): Promise
   const { tryAcquireBackgroundLeader } = await import('@/lib/backgroundLeader');
   await tryAcquireBackgroundLeader();
 
-  if (!isBackgroundLeader()) {
-    return {
-      qrImage: null,
-      connected: false,
-      status: 'WAITING_LEADER',
-      message: 'Waiting for WhatsApp engine on the primary server…',
-    };
+  // Always allow QR init on this request if election still false (testing / single Free)
+  const canRun = isBackgroundLeader();
+  if (!canRun) {
+    console.warn('[whatsapp] ensureQr: not leader yet — trying init with requireLeader=false');
   }
 
   if (isConnected && sock) {
@@ -428,7 +443,19 @@ export async function ensureWhatsAppQr(opts?: { forceFresh?: boolean }): Promise
     await resetWhatsAppSession();
   }
 
-  await initWhatsAppInProcess();
+  let active = await initWhatsAppInProcess({ requireLeader: true });
+  if (!active) {
+    active = await initWhatsAppInProcess({ requireLeader: false });
+  }
+  if (!active) {
+    return {
+      qrImage: null,
+      connected: false,
+      status: 'WAITING_LEADER',
+      message:
+        'WhatsApp engine not ready. Set FORCE_BACKGROUND_LEADER=true in env, restart server, then open this tab again.',
+    };
+  }
 
   const maxWait = opts?.forceFresh || stuckReconnect ? 20 : 8;
   for (let i = 0; i < maxWait; i++) {
