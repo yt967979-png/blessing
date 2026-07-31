@@ -13,6 +13,12 @@ export async function register() {
     const { logDbConnectionConfig, warmDbConnection, shutdownDb } = await import('@/lib/db');
     logDbConnectionConfig();
 
+    if (process.env.RENDER) {
+      console.log(
+        `[render] service=${process.env.RENDER_SERVICE_NAME || 'unknown'} ` +
+          `url=${process.env.RENDER_EXTERNAL_URL || '(pending)'}`
+      );
+    }
     if (process.env.RAILWAY_REPLICA_ID) {
       console.log(`[railway] replica: ${process.env.RAILWAY_REPLICA_ID}`);
     }
@@ -28,8 +34,9 @@ export async function register() {
       const base =
         process.env.KEEP_ALIVE_URL ||
         process.env.NEXT_PUBLIC_SITE_URL ||
+        process.env.RENDER_EXTERNAL_URL ||
         (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : '') ||
-        'https://blessing-production.up.railway.app';
+        '';
       setInterval(() => {
         void (async () => {
           try {

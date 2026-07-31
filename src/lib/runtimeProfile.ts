@@ -23,12 +23,22 @@ let tier: RuntimeTier = 'local';
 let load: LoadLevel = 'normal';
 let monitorStarted = false;
 
+function isHostedRuntime(): boolean {
+  return Boolean(
+    process.env.RAILWAY_ENVIRONMENT ||
+      process.env.RAILWAY_SERVICE_ID ||
+      process.env.RENDER ||
+      process.env.RENDER_SERVICE_ID ||
+      process.env.VERCEL
+  );
+}
+
 function resolveTier(): RuntimeTier {
   const forced = String(process.env.RAILWAY_PLAN_TIER || process.env.RUNTIME_TIER || '').toLowerCase();
   if (forced === 'free' || forced === 'hobby' || forced === 'pro' || forced === 'local') {
     return forced;
   }
-  if (!process.env.RAILWAY_ENVIRONMENT && !process.env.RAILWAY_SERVICE_ID) {
+  if (!isHostedRuntime()) {
     return 'local';
   }
 
@@ -128,10 +138,13 @@ function measureLoadLevel(): LoadLevel {
   // Railway Free/shared hosts expose host-wide cpus/mem/loadavg (e.g. 48 CPUs /
   // 300GB). That falsely flips "critical" and thrashes DB workers. Soft/free
   // always uses this process only, and never escalates to critical.
+  // Soft launch / shared hosts (Railway Free, Render Starter): never escalate to critical
+  // from host-wide metrics — that falsely thrashs DB workers.
   const soft =
     tier === 'free' ||
     tier === 'hobby' ||
     String(process.env.LAUNCH_SCALE || 'soft').toLowerCase() !== 'peak' ||
+    Boolean(process.env.RENDER) ||
     String(process.env.RUNTIME_TIER || process.env.RAILWAY_PLAN_TIER || '')
       .toLowerCase() === 'free' ||
     String(process.env.RUNTIME_TIER || '').toLowerCase() === 'hobby';
@@ -163,7 +176,12 @@ export function initRuntimeProfile(): RuntimeTuning {
   tier = resolveTier();
   load = measureLoadLevel();
   const tuning = getRuntimeTuning();
-  const replica = process.env.RAILWAY_REPLICA_ID ? ` replica ${process.env.RAILWAY_REPLICA_ID.slice(0, 8)}` : '';
+  const replica =
+    process.env.RAILWAY_REPLICA_ID
+      ? ` replica ${process.env.RAILWAY_REPLICA_ID.slice(0, 8)}`
+      : process.env.RENDER
+        ? ' render'
+        : '';
   console.log(
     `[runtime] tier=${tuning.tier} load=${tuning.load} cpus=${os.cpus().length} mem=${(os.totalmem() / 1024 ** 3).toFixed(2)}GB pool=${resolveDbPoolMaxPerReplica(tuning.dbPoolMax)}${replica}`
   );

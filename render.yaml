@@ -1,0 +1,75 @@
+# Blessing Power Guide — Render Blueprint
+# https://render.com/docs/blueprint-spec
+#
+# Neon Postgres stays external (DATABASE_URL). Use Starter (not Free) so
+# Baileys WhatsApp does not die when the free tier sleeps.
+#
+# After first deploy: set sync:false env vars in the Render Dashboard,
+# add the onrender.com URL to Google OAuth authorized origins, then
+# point blessingpowerguide.in DNS when ready.
+
+services:
+  - type: web
+    name: blessing
+    runtime: node
+    plan: starter
+    region: singapore
+    branch: main
+    numInstances: 1
+    healthCheckPath: /api/health
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: "20.18.0"
+      - key: NODE_ENV
+        value: production
+      - key: RUNTIME_TIER
+        value: hobby
+      - key: APP_REPLICA_COUNT
+        value: "1"
+      - key: DB_POOL_MAX
+        value: "5"
+      - key: DB_IDLE_TIMEOUT_MS
+        value: "8000"
+      - key: DB_CONNECT_TIMEOUT_MS
+        value: "15000"
+      - key: DB_ACQUIRE_RETRIES
+        value: "4"
+      - key: DB_CONNECT_ROUNDS
+        value: "3"
+      - key: DB_PING_RETRIES
+        value: "3"
+      - key: DB_TRY_PRIVATE
+        value: "false"
+      - key: DISABLE_ORDER_LISTEN
+        value: "true"
+      - key: KEEP_ALIVE_MS
+        value: "240000"
+      # Secrets — paste from Railway / Neon (never commit values)
+      - key: DATABASE_URL
+        sync: false
+      - key: SESSION_SECRET
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: ADMIN_PHONE
+        sync: false
+      - key: NEXT_PUBLIC_GOOGLE_CLIENT_ID
+        sync: false
+      - key: NEXT_PUBLIC_SITE_URL
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_UPLOAD_PRESET
+        sync: false
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
