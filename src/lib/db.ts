@@ -51,25 +51,28 @@ function hostOf(connectionString: string): string {
 function getConnectionCandidates(): string[] {
   const raw: string[] = [];
 
+  // 1. Explicit DATABASE_URL / POSTGRES_URL always gets #1 top priority
+  if (process.env.DATABASE_URL) raw.push(process.env.DATABASE_URL);
+  if (process.env.POSTGRES_URL) raw.push(process.env.POSTGRES_URL);
+
   const fromPgEnv = buildUrlFromPgEnv();
   if (fromPgEnv) raw.push(fromPgEnv);
 
-  raw.push(
-    ...( [
-      process.env.DATABASE_URL,
-      process.env.DATABASE_PUBLIC_URL,
-      process.env.POSTGRES_URL,
-      process.env.DATABASE_PRIVATE_URL,
-    ].filter(Boolean) as string[])
-  );
+  if (process.env.DATABASE_PUBLIC_URL) raw.push(process.env.DATABASE_PUBLIC_URL);
+  if (process.env.DATABASE_PRIVATE_URL) raw.push(process.env.DATABASE_PRIVATE_URL);
 
   const onRailway = Boolean(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_SERVICE_ID);
-  // On Railway: prefer private mesh first (public TCP proxy often hairpins / times out
-  // from inside the same project). Fall back to *.proxy.rlwy.net for local tools / when
-  // private DNS is unavailable. Outside Railway, prefer public proxy.
+  
+  // If explicitly configured with a Cloud DB (Neon / Supabase), put it at index 0 immediately
+  let sorted = [...new Set(raw.map(normalizeConnectionString))];
+  const cloudDb = sorted.find(u => u.includes('neon.tech') || u.includes('supabase.co') || u.includes('supabase.com'));
+  if (cloudDb) {
+    return [cloudDb, ...sorted.filter(u => u !== cloudDb)];
+  }
+
   const preferPrivate =
     onRailway || String(process.env.DB_TRY_PRIVATE || '').toLowerCase() === 'true';
-  let sorted = [...new Set(raw.map(normalizeConnectionString))].sort((a, b) => {
+  sorted.sort((a, b) => {
     const score = (u: string) => {
       if (preferPrivate) {
         if (isPrivateRailwayUrl(u)) return 0;
