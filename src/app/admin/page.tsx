@@ -218,31 +218,10 @@ export default function AdminPage() {
         setAnalytics(data);
       } else {
         const errData = await res.json().catch(() => ({}));
-        setAnalyticsError(errData.error || errData.message || `Status ${res.status}`);
-        // Fallback default empty analytics structure so admin dashboard displays clean zeroes instead of infinite spinner
-        setAnalytics({
-          summary: { totalOrders: 0, totalRevenue: 0, avgOrderValue: 0, paidOrders: 0, codOrders: 0, todayOrders: 0, todayRevenue: 0 },
-          daily: [],
-          paymentMethods: [],
-          orderStatuses: [],
-          paymentStatuses: [],
-          topProducts: [],
-          monthlyTrend: [],
-          range: analyticsRange,
-        });
+        setAnalyticsError(errData.error || errData.message || `Database not connected (Status ${res.status})`);
       }
     } catch (e: any) {
-      setAnalyticsError(e?.message || 'Network error');
-      setAnalytics({
-        summary: { totalOrders: 0, totalRevenue: 0, avgOrderValue: 0, paidOrders: 0, codOrders: 0, todayOrders: 0, todayRevenue: 0 },
-        daily: [],
-        paymentMethods: [],
-        orderStatuses: [],
-        paymentStatuses: [],
-        topProducts: [],
-        monthlyTrend: [],
-        range: analyticsRange,
-      });
+      setAnalyticsError(e?.message || 'Network error connecting to database');
     } finally { setAnalyticsLoading(false); }
   }, [user, analyticsRange]);
 
@@ -820,6 +799,13 @@ export default function AdminPage() {
                 <button onClick={loadAnalytics} className="p-1.5 text-gray-400 hover:text-[#2874f0] hover:bg-blue-50 rounded-lg transition-colors cursor-pointer" title="Refresh"><RefreshCw className={`w-4 h-4 ${analyticsLoading ? 'animate-spin' : ''}`} /></button>
               </div>
             </div>
+
+            {analyticsError && (
+              <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl text-sm flex items-center justify-between">
+                <span>{analyticsError}</span>
+                <button onClick={loadAnalytics} className="px-3 py-1 bg-red-600 text-white text-xs font-semibold rounded-lg hover:bg-red-700">Retry</button>
+              </div>
+            )}
 
             {analyticsLoading && !analytics ? (
               <div className="bg-white rounded-xl border border-gray-200 p-16 text-center">
