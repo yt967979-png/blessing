@@ -74,7 +74,6 @@ export async function GET(request: Request) {
     return unauthorizedResponse('Please login to view orders.');
   }
 
-  const client = await getDbClient();
   try {
     const { searchParams } = new URL(request.url);
     const orderNumberParam = searchParams.get('orderId');
@@ -121,13 +120,12 @@ export async function GET(request: Request) {
     }
 
     query += ` GROUP BY o.id ORDER BY o.ordered_at DESC`;
-    const res = await client.query(query, params);
+    const { queryDb } = await import('@/lib/db');
+    const res = await queryDb(query, params);
     return NextResponse.json(res.rows.map(mapOrderRow));
   } catch (err: any) {
     console.error('Error fetching orders from DB:', err.message);
     return NextResponse.json({ error: 'Could not load orders' }, { status: 500 });
-  } finally {
-    if (client) await client.end();
   }
 }
 
