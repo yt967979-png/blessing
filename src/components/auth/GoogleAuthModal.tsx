@@ -55,15 +55,18 @@ export function GoogleAuthModal({
     async (credential: string) => {
       setIsSubmitting(true);
       setAuthError(null);
+      const controller = new AbortController();
+      const timer = window.setTimeout(() => controller.abort(), 25_000);
       try {
         const res = await fetch('/api/auth/google', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ credential }),
+          signal: controller.signal,
         });
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
         if (!res.ok || data.error) {
-          setAuthError(data.error || 'Google sign-in failed.');
+          setAuthError(data.error || 'Google sign-in failed. Please try again.');
           return;
         }
 
@@ -79,9 +82,14 @@ export function GoogleAuthModal({
         loginUser(data.user, data.cart || [], data.wishlist || [], data.addresses || []);
         onClose();
         if (data.user?.role === 'admin') router.push('/admin');
-      } catch {
-        setAuthError('Connection error. Please try again.');
+      } catch (err: any) {
+        if (err?.name === 'AbortError') {
+          setAuthError('Sign-in is taking too long. Please try again in a moment.');
+        } else {
+          setAuthError('Connection error. Please try again.');
+        }
       } finally {
+        window.clearTimeout(timer);
         setIsSubmitting(false);
       }
     },

@@ -295,18 +295,18 @@ function defaultHeartbeatMs(): number {
 function createPool(connectionString: string): Pool {
   const normalized = normalizeConnectionString(connectionString);
   const neon = isNeonUrl(normalized);
-  // Neon pooler: keep idle short so PgBouncer doesn't hold dead sockets; Railway Free pool stays tiny.
-  const idleDefault = neon ? 20_000 : 600_000;
+  // Neon/PgBouncer closes idle sockets; holding them in node-pg causes "timeout exceeded"
+  // on the next checkout (Google sign-in hangs on "Signing in…"). Keep idle very short.
+  const idleDefault = neon ? 8_000 : 600_000;
   const p = new Pool({
     connectionString: normalized,
-    max: defaultPoolMax(),
+    max: neon ? Math.min(defaultPoolMax(), 5) : defaultPoolMax(),
     idleTimeoutMillis: Number(process.env.DB_IDLE_TIMEOUT_MS || idleDefault),
     connectionTimeoutMillis: defaultConnectTimeoutMs(),
-    // Soft launch: allow slower queries over flaky proxy; avoid killing analytics mid-flight.
     statement_timeout: Number(process.env.DB_STATEMENT_TIMEOUT_MS || 15_000),
     query_timeout: Number(process.env.DB_QUERY_TIMEOUT_MS || 15_000),
-    keepAlive: true,
-    keepAliveInitialDelayMillis: neon ? 5_000 : 10_000,
+    keepAlive: !neon,
+    keepAliveInitialDelayMillis: neon ? 0 : 10_000,
     allowExitOnIdle: neon,
     ssl: sslFor(normalized),
   });
@@ -606,7 +606,9 @@ export async function getDbClient() {
   // Keep request latency bounded — long retries caused Admin 499/502 hangs.
   const retries = Number(process.env.DB_ACQUIRE_RETRIES || 4);
   let lastErr: Error | null = null;
-  let consecutiveTimeouts = 0;
+  const neon =
+    isNeonUrl(process.env.DATABASE_URL || '') ||
+    isNeonUrl(activeConnectionString || '');
 
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
@@ -617,7 +619,6 @@ export async function getDbClient() {
       }
       const client: any = await activePool.connect();
       wrapPoolClient(client);
-      consecutiveTimeouts = 0;
       return client;
     } catch (err: any) {
       lastErr = err;
@@ -625,15 +626,11 @@ export async function getDbClient() {
       if (!isRecoverablePgError(err)) throw err;
 
       const msg = String(err?.message || err);
-      const isTimeout = msg.includes('timeout exceeded') || msg.includes('ETIMEDOUT');
-      if (isTimeout) consecutiveTimeouts++;
-
-      // Don't tear the pool down on the first blip — that causes reconnect storms.
-      if (consecutiveTimeouts >= 2 || msg.includes('starting up') || msg.includes('terminated')) {
+      // Neon: drop poisoned pool immediately — stale pooler sockets hang Google auth.
+      if (neon || msg.includes('starting up') || msg.includes('terminated') || msg.includes('timeout')) {
         await invalidatePool('client acquire failed');
-        consecutiveTimeouts = 0;
       }
-      await sleep(Math.min(3_000, 400 * (attempt + 1)));
+      await sleep(Math.min(2_000, 300 * (attempt + 1)));
     }
   }
 

@@ -1,22 +1,14 @@
 import crypto from 'crypto';
 import { NextResponse } from 'next/server';
-import { getDbClient } from '@/lib/db';
+import { getDbClient, releaseDbClient } from '@/lib/db';
 import { createSessionToken, hashPassword, sessionCookieOptions } from '@/lib/auth';
 import { applyRateLimitAsync, clientIp } from '@/lib/serverSecurity';
 import { verifyGoogleIdToken } from '@/lib/googleAuth';
 import { userNeedsProfile } from '@/lib/userProfile';
-import { isValidMobileNumber, normalizeMobileDigits } from '@/lib/authValidation';
 
 function setSessionCookie(response: NextResponse, token: string) {
   response.cookies.set('bpg_session', token, sessionCookieOptions());
   return response;
-}
-
-async function ensureGoogleUserColumns(client: any) {
-  /* columns added at DB startup init */
-  try {
-    await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_id ON users (google_id) WHERE google_id IS NOT NULL`);
-  } catch (_) {}
 }
 
 async function loadUserSessionData(client: any, userId: string) {
@@ -160,7 +152,8 @@ export async function POST(request: Request) {
         profile_completed: false,
       };
     } else if (dbUser.status === 'banned') {
-      await client.end();
+      releaseDbClient(client);
+      client = null;
       return NextResponse.json({ error: 'This account is disabled. Contact support.' }, { status: 403 });
     } else {
       await client.query(
@@ -181,7 +174,7 @@ export async function POST(request: Request) {
       ? { cart: [], wishlist: [], addresses: [] }
       : await loadUserSessionData(client, dbUser.id);
 
-    await client.end();
+    releaseDbClient(client);
     client = null;
 
     const response = NextResponse.json({
@@ -193,9 +186,20 @@ export async function POST(request: Request) {
     console.error('[auth/google]', err?.message || err);
     if (client) {
       try {
-        await client.end();
+        releaseDbClient(client);
       } catch (_) {}
+      client = null;
     }
-    return NextResponse.json({ error: 'Google sign-in failed. Please try again.' }, { status: 500 });
+    const msg = String(err?.message || err);
+    const dbBusy =
+      msg.includes('timeout') || msg.includes('Could not acquire') || msg.includes('unreachable');
+    return NextResponse.json(
+      {
+        error: dbBusy
+          ? 'Server is busy connecting to the database. Please try again in a few seconds.'
+          : 'Google sign-in failed. Please try again.',
+      },
+      { status: dbBusy ? 503 : 500 }
+    );
   }
 }
