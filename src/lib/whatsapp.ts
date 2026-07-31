@@ -26,12 +26,24 @@ let sessionBackupTimer: ReturnType<typeof setTimeout> | null = null;
 let ignoreNextClose = false;
 let reconnectAttempts = 0;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+/** In-memory QR so Admin works even when Postgres is slow/down. */
+let latestQrMemory: string | null = null;
+let latestWaStatusMemory: {
+  status: string;
+  connected: boolean;
+  message: string;
+  pairingCode?: string | null;
+} | null = null;
 
 function clearReconnectTimer() {
   if (reconnectTimer) {
     clearTimeout(reconnectTimer);
     reconnectTimer = null;
   }
+}
+
+export function getLatestQrMemory() {
+  return latestQrMemory;
 }
 
 /** Debounce DB session writes — Baileys can fire creds.update often. */
@@ -51,13 +63,34 @@ async function updateSessionStatus(data: {
   pairingCode?: string | null;
   linkedPhone?: string | null;
 }) {
+  if (data.qrImage) latestQrMemory = data.qrImage;
+  if (data.qrImage === null) latestQrMemory = null;
+  latestWaStatusMemory = {
+    status: data.status,
+    connected: data.connected,
+    message: data.message,
+    pairingCode: data.pairingCode ?? null,
+  };
+
+  // File first — never block QR on Postgres
   try {
     fs.writeFileSync(
       path.join(PUBLIC_DIR, 'whatsapp_status.json'),
       JSON.stringify({ ...data, timestamp: Date.now() }, null, 2)
     );
-    const client = await getDbClient();
-    if (client) {
+  } catch (e: any) {
+    console.warn('[whatsapp] status file write failed:', e?.message || e);
+  }
+
+  // DB best-effort (do not await in hot path callers via void)
+  try {
+    const { tryGetDbClient } = await import('@/lib/db');
+    const client = await Promise.race([
+      tryGetDbClient(),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 2500)),
+    ]);
+    if (!client) return;
+    try {
       if (data.pairingCode !== undefined) {
         await client.query(
           `INSERT INTO whatsapp_sessions (id, status, connected, qr_image, message, pairing_code, updated_at)
@@ -84,9 +117,12 @@ async function updateSessionStatus(data: {
           [data.status, data.connected, data.qrImage ?? null, data.message]
         );
       }
+    } finally {
       releaseDbClient(client);
     }
-  } catch (_) {}
+  } catch (e: any) {
+    console.warn('[whatsapp] status DB write skipped:', e?.message || e);
+  }
 }
 
 function clearLocalAuthFiles() {
@@ -119,21 +155,30 @@ export async function resetWhatsAppSession() {
   isConnected = false;
   isInitializing = false;
   clearLocalAuthFiles();
+  latestQrMemory = null;
+  // Soft DB clear — never block QR wipe on Postgres timeouts
   try {
-    const client = await getDbClient();
+    const { tryGetDbClient } = await import('@/lib/db');
+    const client = await Promise.race([
+      tryGetDbClient(),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000)),
+    ]);
     if (client) {
-      await client.query(
-        `UPDATE whatsapp_sessions
-         SET status = 'DISCONNECTED',
-             connected = false,
-             qr_image = NULL,
-             session_data = NULL,
-             pairing_code = NULL,
-             message = 'Session cleared — generating new QR…',
-             updated_at = NOW()
-         WHERE id = 'default'`
-      );
-      releaseDbClient(client);
+      try {
+        await client.query(
+          `UPDATE whatsapp_sessions
+           SET status = 'DISCONNECTED',
+               connected = false,
+               qr_image = NULL,
+               session_data = NULL,
+               pairing_code = NULL,
+               message = 'Session cleared — generating new QR…',
+               updated_at = NOW()
+           WHERE id = 'default'`
+        );
+      } finally {
+        releaseDbClient(client);
+      }
     }
   } catch (_) {}
   await updateSessionStatus({
@@ -213,7 +258,11 @@ export async function initWhatsAppInProcess(opts?: { requireLeader?: boolean }) 
   isInitializing = true;
 
   try {
-    await restoreSessionFromDb();
+    // Don't block QR forever if Postgres is timing out
+    await Promise.race([
+      restoreSessionFromDb(),
+      new Promise<void>((resolve) => setTimeout(resolve, 2500)),
+    ]);
     const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
 
     let version: [number, number, number] | undefined;
@@ -225,9 +274,8 @@ export async function initWhatsAppInProcess(opts?: { requireLeader?: boolean }) 
       console.warn('[whatsapp] fetchLatestBaileysVersion failed, using default:', e?.message || e);
     }
 
-    sock = makeWASocket({
+    const socketOpts: any = {
       auth: state,
-      version,
       logger: waLogger,
       printQRInTerminal: false,
       browser: ['Ubuntu', 'Chrome', '22.04.4'],
@@ -235,7 +283,10 @@ export async function initWhatsAppInProcess(opts?: { requireLeader?: boolean }) 
       markOnlineOnConnect: false,
       generateHighQualityLinkPreview: false,
       getMessage: async () => undefined,
-    });
+    };
+    if (version) socketOpts.version = version;
+
+    sock = makeWASocket(socketOpts);
 
     // Unlock so status polls can use this sock while QR arrives
     isInitializing = false;
@@ -406,8 +457,16 @@ export async function ensureWhatsAppQr(opts?: { forceFresh?: boolean }): Promise
   status: string;
   message: string;
 }> {
-  const { tryAcquireBackgroundLeader } = await import('@/lib/backgroundLeader');
-  await tryAcquireBackgroundLeader();
+  // Soft-fail leader acquire when Postgres is down (single replica still runs WA)
+  try {
+    const { tryAcquireBackgroundLeader } = await import('@/lib/backgroundLeader');
+    await Promise.race([
+      tryAcquireBackgroundLeader(),
+      new Promise((resolve) => setTimeout(resolve, 2500)),
+    ]);
+  } catch (_) {
+    /* ignore */
+  }
 
   // Always allow QR init on this request if election still false (testing / single Free)
   const canRun = isBackgroundLeader();
@@ -462,11 +521,20 @@ export async function ensureWhatsAppQr(opts?: { forceFresh?: boolean }): Promise
     if (isConnected) {
       return { qrImage: null, connected: true, status: 'CONNECTED', message: 'Linked' };
     }
+    if (latestQrMemory) {
+      return {
+        qrImage: latestQrMemory,
+        connected: false,
+        status: latestWaStatusMemory?.status || 'QR_READY',
+        message: latestWaStatusMemory?.message || 'Scan QR Code with WhatsApp phone to link',
+      };
+    }
     try {
       const statusPath = path.join(PUBLIC_DIR, 'whatsapp_status.json');
       if (fs.existsSync(statusPath)) {
         const st = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
         if (st?.qrImage) {
+          latestQrMemory = st.qrImage;
           return {
             qrImage: st.qrImage,
             connected: false,

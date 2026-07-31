@@ -27,8 +27,12 @@ export async function GET(request: Request) {
   const phone = searchParams.get('phone');
   const refresh = searchParams.get('refresh') === '1';
 
-  // Ensure this process can run Baileys (Free = single replica)
-  await tryAcquireBackgroundLeader();
+  // Ensure this process can run Baileys (Free = single replica).
+  // Cap wait — Postgres timeout must not stall QR for 20–30s.
+  await Promise.race([
+    tryAcquireBackgroundLeader(),
+    new Promise((resolve) => setTimeout(resolve, 2500)),
+  ]);
 
   // Pairing code path — must NOT fall through to DB phone leftover
   if (phone) {
@@ -118,29 +122,49 @@ export async function GET(request: Request) {
     });
   }
 
+  // Memory / file first (works when Postgres is timing out)
+  const { getLatestQrMemory } = await import('@/lib/whatsapp');
+  const memQr = getLatestQrMemory();
+  if (memQr) {
+    return NextResponse.json({
+      status: 'QR_READY',
+      connected: false,
+      qrImage: memQr,
+      pairingCode: null,
+      message: 'Scan QR Code with WhatsApp phone to link',
+      leader: isBackgroundLeader(),
+    });
+  }
+
   // Fall back to DB / file status (QR may have landed a moment later)
   try {
     const db = await import('@/lib/db');
-    const client = await db.getDbClient();
+    const client = await Promise.race([
+      db.tryGetDbClient(),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000)),
+    ]);
     if (client) {
-      const res = await client.query(
-        `SELECT status, connected, qr_image, pairing_code, message FROM whatsapp_sessions WHERE id = 'default' LIMIT 1`
-      );
-      db.releaseDbClient(client);
-      if (res.rows.length > 0) {
-        const row = res.rows[0];
-        const rawPair = row.pairing_code;
-        const pairingCode = looksLikePairingCode(rawPair) ? rawPair : null;
-        const linkedFromMsg = String(row.message || '').match(/\+(\d{10,15})/);
-        return NextResponse.json({
-          status: row.status || ensured.status,
-          connected: row.connected,
-          qrImage: row.qr_image || ensured.qrImage,
-          pairingCode,
-          linkedPhone: row.connected && linkedFromMsg ? linkedFromMsg[1] : null,
-          message: row.message || ensured.message,
-          leader: isBackgroundLeader(),
-        });
+      try {
+        const res = await client.query(
+          `SELECT status, connected, qr_image, pairing_code, message FROM whatsapp_sessions WHERE id = 'default' LIMIT 1`
+        );
+        if (res.rows.length > 0) {
+          const row = res.rows[0];
+          const rawPair = row.pairing_code;
+          const pairingCode = looksLikePairingCode(rawPair) ? rawPair : null;
+          const linkedFromMsg = String(row.message || '').match(/\+(\d{10,15})/);
+          return NextResponse.json({
+            status: row.status || ensured.status,
+            connected: row.connected,
+            qrImage: row.qr_image || ensured.qrImage,
+            pairingCode,
+            linkedPhone: row.connected && linkedFromMsg ? linkedFromMsg[1] : null,
+            message: row.message || ensured.message,
+            leader: isBackgroundLeader(),
+          });
+        }
+      } finally {
+        db.releaseDbClient(client);
       }
     }
   } catch (_) {}
