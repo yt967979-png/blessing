@@ -58,6 +58,19 @@ interface Analytics {
   orderStatuses: StatusBreakdown[]; paymentStatuses: StatusBreakdown[];
   topProducts: TopProduct[]; monthlyTrend: { month: string; orders: number; revenue: number }[];
   range: number;
+  error?: string;
+  dbDisconnected?: boolean;
+}
+
+function emptyAnalytics(days: number): Analytics {
+  return {
+    summary: {
+      totalOrders: 0, totalRevenue: 0, avgOrderValue: 0,
+      paidOrders: 0, codOrders: 0, todayOrders: 0, todayRevenue: 0,
+    },
+    daily: [], paymentMethods: [], orderStatuses: [], paymentStatuses: [],
+    topProducts: [], monthlyTrend: [], range: days,
+  };
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -221,23 +234,43 @@ export default function AdminPage() {
 
   const loadAnalytics = useCallback(async () => {
     if (!user?.id) return;
+    // Urgent — do not wrap in startTransition (same race as orders: loading=true deferred, false applies first).
     setAnalyticsLoading(true);
     setAnalyticsError(null);
     try {
       const res = await fetch(`/api/admin/analytics?range=${analyticsRange}`, {
         headers: authHeaders(user),
         credentials: 'include',
+        signal: AbortSignal.timeout(28_000),
       });
-      if (res.ok) {
-        const data = await res.json();
-        setAnalytics(data);
+      const data = await res.json().catch(() => null);
+      // Always clear skeleton: accept empty/503 payload so charts show zeros + error banner.
+      if (data && typeof data === 'object' && data.summary) {
+        setAnalytics(data as Analytics);
+        if (!res.ok || data.dbDisconnected || data.error) {
+          setAnalyticsError(
+            data.error || data.message || `Database not connected (Status ${res.status})`
+          );
+        }
+      } else if (!res.ok) {
+        setAnalytics(emptyAnalytics(analyticsRange));
+        setAnalyticsError(
+          (data && (data.error || data.message)) || `Database not connected (Status ${res.status})`
+        );
       } else {
-        const errData = await res.json().catch(() => ({}));
-        setAnalyticsError(errData.error || errData.message || `Database not connected (Status ${res.status})`);
+        setAnalytics(emptyAnalytics(analyticsRange));
       }
     } catch (e: any) {
-      setAnalyticsError(e?.message || 'Network error connecting to database');
-    } finally { setAnalyticsLoading(false); }
+      const timedOut = e?.name === 'TimeoutError' || /abort|timeout/i.test(String(e?.message || ''));
+      setAnalytics(emptyAnalytics(analyticsRange));
+      setAnalyticsError(
+        timedOut
+          ? 'Analytics request timed out — database pool may be stuck. On the server: sudo systemctl restart blessing'
+          : (e?.message || 'Network error connecting to database')
+      );
+    } finally {
+      setAnalyticsLoading(false);
+    }
   }, [user, analyticsRange]);
 
   // ── Initial load + SSE stream
@@ -1018,11 +1051,11 @@ export default function AdminPage() {
                   </p>
                 </div>
                 <div className="bg-white border border-amber-200 rounded-lg p-3 max-w-md mx-auto text-left text-[11px] text-gray-600 space-y-1">
-                  <p className="font-bold text-gray-800">How to fix:</p>
+                  <p className="font-bold text-gray-800">How to fix (Lightsail / HOSTING=aws):</p>
                   <ol className="list-decimal list-inside space-y-0.5 text-gray-600">
-                    <li>Open <strong>Railway → blessing → Variables</strong></li>
-                    <li>Set <code>DATABASE_URL</code> to your <strong>Neon pooled</strong> connection string (<code>*.neon.tech</code>)</li>
-                    <li>Remove old Railway <code>postgres.railway.internal</code> / <code>*.rlwy.net</code> URLs, then redeploy</li>
+                    <li>SSH in and edit <code>/etc/blessing.env</code> — set <code>DATABASE_URL</code> to the Neon <strong>pooled</strong> URL (<code>*-pooler*.neon.tech</code>)</li>
+                    <li>Optional: <code>DB_CONNECT_TIMEOUT_MS=20000</code> and <code>DB_IDLE_TIMEOUT_MS=8000</code></li>
+                    <li>Then: <code>sudo systemctl restart blessing</code> and check <code>curl -sS https://YOUR_HOST/api/ready</code></li>
                   </ol>
                 </div>
                 <div className="pt-2 flex items-center justify-center gap-3 flex-wrap">

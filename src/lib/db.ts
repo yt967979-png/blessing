@@ -210,6 +210,24 @@ function sslFor(connectionString: string) {
   return false;
 }
 
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(Object.assign(new Error(`${label}: timeout exceeded after ${ms}ms`), { code: 'ETIMEDOUT' }));
+    }, ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      }
+    );
+  });
+}
+
 async function destroyPool(keepSchema = false) {
   stopPoolHeartbeat();
   poolReadyPromise = null;
@@ -220,7 +238,8 @@ async function destroyPool(keepSchema = false) {
   heartbeatFailures = 0;
   if (oldPool) {
     try {
-      await oldPool.end();
+      // Stuck clients can make pool.end() hang — never block invalidate forever.
+      await withTimeout(oldPool.end(), 3_000, 'pool.end');
     } catch (_) {}
   }
   if (!keepSchema) {
@@ -369,8 +388,22 @@ export async function getDbPool(): Promise<Pool> {
 
 /** Cheap read path — uses pool.query (auto-checkout) instead of a held client. */
 export async function queryDb(text: string, params?: any[]) {
-  const activePool = await ensurePoolReady();
-  return activePool.query(text, params);
+  const queryMs = Number(process.env.DB_QUERY_TIMEOUT_MS || 15_000);
+  const connectMs = defaultConnectTimeoutMs();
+  try {
+    const activePool = await ensurePoolReady();
+    return await withTimeout(
+      activePool.query(text, params),
+      queryMs + connectMs,
+      'queryDb'
+    );
+  } catch (err: any) {
+    const msg = String(err?.message || err);
+    if (/timeout|terminat|ECONNRESET|not queryable/i.test(msg)) {
+      await invalidatePool('queryDb timeout/reset');
+    }
+    throw err;
+  }
 }
 
 /** Boot-time warmup — call from instrumentation before crons. */
@@ -386,21 +419,25 @@ export async function warmDbConnection(): Promise<boolean> {
   }
 }
 
-/** Readiness probe for Railway / monitoring. Uses warm pool (no held client). */
+/** Readiness probe for monitoring / Caddy. Uses warm pool (no held client). Bounded total time. */
 export async function pingDb(): Promise<{ ok: boolean; host?: string; message?: string }> {
-  const retries = Number(process.env.DB_PING_RETRIES || 5);
+  const retries = Number(process.env.DB_PING_RETRIES || 2);
+  const perAttemptMs = Number(process.env.DB_PING_TIMEOUT_MS || 8_000);
   let lastMsg = 'Database unreachable';
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
-      await queryDb('SELECT 1');
+      await withTimeout(queryDb('SELECT 1'), perAttemptMs, 'pingDb');
       const host = activeConnectionString
         ? new URL(activeConnectionString.replace(/^postgres(ql)?:\/\//, 'http://')).hostname
         : undefined;
       return { ok: true, host };
     } catch (err: any) {
       lastMsg = err?.message || 'Database unreachable';
+      if (/timeout/i.test(lastMsg)) {
+        await invalidatePool('pingDb timeout');
+      }
       if (!isRecoverablePgError(err) || attempt === retries - 1) break;
-      await sleep(500 * (attempt + 1));
+      await sleep(300 * (attempt + 1));
     }
   }
   return { ok: false, message: lastMsg };
@@ -522,33 +559,51 @@ async function ensureSchemaReady(activePool: Pool) {
   await schemaInitPromise;
 }
 
+/** Age after which a previously-good pool must be re-verified (Neon idle kill). */
+function poolStaleMs(): number {
+  const hb = defaultHeartbeatMs();
+  return Math.max(hb * 2, Number(process.env.DB_POOL_STALE_MS || 120_000));
+}
+
 /** Single-flight pool setup — keeps pool alive 24/7, only reconnects on real failure. */
 async function ensurePoolReady(): Promise<Pool> {
-  // Fast path: pool is alive and heartbeat confirmed it recently → instant return
-  if (isPoolUsable(pool) && isSchemaInitialized && lastPoolPingAt > 0) {
+  const connectMs = defaultConnectTimeoutMs();
+  // Fast path: recent heartbeat → instant return (Neon sockets die when idle; do not trust old pings)
+  if (
+    isPoolUsable(pool) &&
+    isSchemaInitialized &&
+    lastPoolPingAt > 0 &&
+    Date.now() - lastPoolPingAt < poolStaleMs()
+  ) {
     return pool;
   }
   if (poolReadyPromise) return poolReadyPromise;
 
   const myGeneration = poolGeneration;
   poolReadyPromise = (async () => {
-    // If pool exists and is usable, just verify with a quick query (no full probe)
+    // If pool exists and is usable, verify with a bounded checkout (never hang forever)
     if (isPoolUsable(pool) && activeConnectionString) {
+      let testClient: any = null;
       try {
-        const testClient = await pool!.connect();
-        await testClient.query('SELECT 1');
+        testClient = await withTimeout(pool!.connect(), connectMs, 'pool.verify connect');
+        await withTimeout(testClient.query('SELECT 1'), Math.min(connectMs, 8_000), 'pool.verify query');
         testClient.release();
+        testClient = null;
         await ensureSchemaReady(pool!);
         lastPoolPingAt = Date.now();
         return pool!;
       } catch {
-        // Pool is broken, fall through to full reconnect
+        try {
+          if (testClient) testClient.release(true);
+        } catch (_) {}
+        // Pool is broken / hung — fall through to full reconnect
         await destroyPool(isSchemaInitialized);
       }
     }
 
     const candidates = getConnectionCandidates();
-    const rounds = Number(process.env.DB_CONNECT_ROUNDS || 3);
+    // Lightsail/Neon: keep reconnect budget tight so /api/ready returns instead of proxy 0-byte hang
+    const rounds = Number(process.env.DB_CONNECT_ROUNDS || 2);
     let lastErr: Error | null = null;
 
     for (let round = 0; round < rounds; round++) {
@@ -590,7 +645,7 @@ async function ensurePoolReady(): Promise<Pool> {
       }
 
       if (round < rounds - 1 && lastErr && isRecoverablePgError(lastErr)) {
-        const waitMs = Math.min(8_000, 750 * (round + 1));
+        const waitMs = Math.min(3_000, 500 * (round + 1));
         console.warn(`[db] retrying all candidates (round ${round + 2}/${rounds}) in ${waitMs}ms…`);
         await sleep(waitMs);
         continue;
@@ -602,16 +657,22 @@ async function ensurePoolReady(): Promise<Pool> {
   })();
 
   try {
-    return await poolReadyPromise;
+    // Bound total setup so readiness/analytics never wait on a stuck single-flight forever
+    const budget = Number(process.env.DB_ENSURE_TIMEOUT_MS || Math.min(connectMs * 2 + 5_000, 25_000));
+    return await withTimeout(poolReadyPromise, budget, 'ensurePoolReady');
   } catch (err) {
-    poolReadyPromise = null;
+    void invalidatePool('ensurePoolReady failed');
     throw err;
+  } finally {
+    // Always clear so a stale lastPoolPingAt can re-enter verify (do not cache resolved forever)
+    poolReadyPromise = null;
   }
 }
 
 export async function getDbClient() {
   // Keep request latency bounded — long retries caused Admin 499/502 hangs.
-  const retries = Number(process.env.DB_ACQUIRE_RETRIES || 4);
+  const retries = Number(process.env.DB_ACQUIRE_RETRIES || 3);
+  const connectMs = defaultConnectTimeoutMs();
   let lastErr: Error | null = null;
   const neon =
     isNeonUrl(process.env.DATABASE_URL || '') ||
@@ -624,7 +685,12 @@ export async function getDbClient() {
         await invalidatePool('pool not usable after ensure');
         continue;
       }
-      const client: any = await activePool.connect();
+      // Exhausted/hung pool checkout can wait forever — always bound acquire.
+      const client: any = await withTimeout(
+        activePool.connect(),
+        connectMs,
+        'pool.connect'
+      );
       wrapPoolClient(client);
       return client;
     } catch (err: any) {
@@ -633,11 +699,11 @@ export async function getDbClient() {
       if (!isRecoverablePgError(err)) throw err;
 
       const msg = String(err?.message || err);
-      // Neon: drop poisoned pool immediately — stale pooler sockets hang Google auth.
+      // Neon: drop poisoned pool immediately — stale pooler sockets hang Google auth / ready.
       if (neon || msg.includes('starting up') || msg.includes('terminated') || msg.includes('timeout')) {
         await invalidatePool('client acquire failed');
       }
-      await sleep(Math.min(2_000, 300 * (attempt + 1)));
+      await sleep(Math.min(1_500, 250 * (attempt + 1)));
     }
   }
 

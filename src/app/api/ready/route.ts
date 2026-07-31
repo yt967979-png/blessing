@@ -1,25 +1,50 @@
 import { NextResponse } from 'next/server';
 import { pingDb } from '@/lib/db';
 
-/** Readiness probe — DB must respond (Railway healthcheck). */
+/** Overall budget so Caddy/proxies get a 503 JSON body instead of a 0-byte hang. */
+const READY_BUDGET_MS = Number(process.env.DB_READY_TIMEOUT_MS || 12_000);
+
+/** Readiness probe — DB must respond (healthchecks / deploy gates). */
 export async function GET() {
-  const result = await pingDb();
-  if (!result.ok) {
+  try {
+    const result = await Promise.race([
+      pingDb(),
+      new Promise<{ ok: false; message: string }>((resolve) => {
+        setTimeout(
+          () => resolve({ ok: false, message: `Database ping timed out after ${READY_BUDGET_MS}ms` }),
+          READY_BUDGET_MS
+        );
+      }),
+    ]);
+
+    if (!result.ok) {
+      return NextResponse.json(
+        {
+          status: 'not_ready',
+          database: 'disconnected',
+          message: result.message,
+          timestamp: Date.now(),
+        },
+        { status: 503 }
+      );
+    }
+
+    return NextResponse.json({
+      status: 'ready',
+      database: 'connected',
+      host: 'host' in result ? result.host : undefined,
+      timestamp: Date.now(),
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown readiness error';
     return NextResponse.json(
       {
         status: 'not_ready',
         database: 'disconnected',
-        message: result.message,
+        message,
         timestamp: Date.now(),
       },
       { status: 503 }
     );
   }
-
-  return NextResponse.json({
-    status: 'ready',
-    database: 'connected',
-    host: result.host,
-    timestamp: Date.now(),
-  });
 }

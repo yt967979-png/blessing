@@ -43,7 +43,7 @@ export async function GET(request: Request) {
         emptyAnalytics(
           days,
           ping.message ||
-            'Database disconnected. Set DATABASE_URL to your Neon pooled connection string and redeploy.'
+            'Database disconnected. On Lightsail set DATABASE_URL (Neon pooler) in /etc/blessing.env, then: sudo systemctl restart blessing'
         ),
         { status: 503 }
       );
@@ -206,7 +206,7 @@ export async function GET(request: Request) {
       emptyAnalytics(
         days,
         isDb
-          ? `${message}. Set DATABASE_URL to your Neon pooled connection string, then redeploy.`
+          ? `${message}. On Lightsail: fix DATABASE_URL in /etc/blessing.env (Neon *-pooler*.neon.tech), then sudo systemctl restart blessing.`
           : message
       ),
       { status: isDb ? 503 : 500 }
