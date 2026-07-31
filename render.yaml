@@ -5,8 +5,8 @@
 # Baileys WhatsApp does not die when the free tier sleeps.
 #
 # After first deploy: set sync:false env vars in the Render Dashboard,
-# add the onrender.com URL to Google OAuth authorized origins, then
-# point blessingpowerguide.in DNS when ready.
+# add the onrender.com URL to Google Authorized JavaScript origins
+# (GIS button — see RENDER.md), then point blessingpowerguide.in DNS when ready.
 
 services:
   - type: web
