@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import {
   Star,
@@ -22,10 +23,48 @@ import { getSTCourierDeliveryEstimate } from '@/lib/deliveryEstimator';
 import { pincodeDeliveryMessage } from '@/lib/pincode';
 import { authHeaders } from '@/lib/clientAuth';
 
+function imageNeedsUnoptimized(src: string) {
+  if (!src || src.startsWith('/')) return false;
+  try {
+    const host = new URL(src).hostname;
+    return !host.includes('cloudinary.com') && !host.includes('unsplash.com');
+  } catch {
+    return true;
+  }
+}
+
+function applyReviewsPayload(
+  data: any,
+  setters: {
+    setReviewStats: (v: { count: number; avgRating: number }) => void;
+    setDbReviews: (v: any[]) => void;
+    setCanReview: (v: boolean) => void;
+    setUserReview: (v: any) => void;
+    setReviewRating: (v: number) => void;
+    setReviewText: (v: string) => void;
+    setReviewImages: (v: string[]) => void;
+  }
+) {
+  if (data?.stats) {
+    setters.setReviewStats(data.stats);
+    setters.setDbReviews(Array.isArray(data.reviews) ? data.reviews : []);
+    setters.setCanReview(!!data.canReview);
+    setters.setUserReview(data.userReview || null);
+    if (data.userReview) {
+      setters.setReviewRating(data.userReview.rating);
+      setters.setReviewText(data.userReview.comment);
+      setters.setReviewImages(data.userReview.images || []);
+    }
+  } else if (Array.isArray(data)) {
+    setters.setDbReviews(data);
+  }
+}
+
 export default function ProductDetailClient({ slug }: { slug: string }) {
   const router = useRouter();
-  const { products, addToCart, toggleWishlist, wishlist, user, setIsAuthOpen, setIsCheckoutOpen } = useStore();
+  const { products, productsLoading, addToCart, toggleWishlist, wishlist, user, setIsAuthOpen, setIsCheckoutOpen } = useStore();
   const [dbProduct, setDbProduct] = useState<any>(null);
+  const [productFetchDone, setProductFetchDone] = useState(false);
   const [dbReviews, setDbReviews] = useState<any[]>([]);
   const [reviewStats, setReviewStats] = useState({ count: 0, avgRating: 0 });
   const [canReview, setCanReview] = useState(false);
@@ -33,60 +72,6 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
   const [isEditingReview, setIsEditingReview] = useState(false);
   const [reviewImages, setReviewImages] = useState<string[]>([]);
   const [uploadingImage, setUploadingImage] = useState(false);
-
-  useEffect(() => {
-    async function fetchProduct() {
-      try {
-        const res = await fetch(`/api/products?slug=${encodeURIComponent(slug)}`);
-        if (res.ok) {
-          const list = await res.json();
-          if (Array.isArray(list) && list.length > 0) {
-            setDbProduct(list[0]);
-          } else {
-            setDbProduct(null);
-          }
-        }
-      } catch (err) {}
-    }
-    fetchProduct();
-  }, [slug]);
-
-  const product = dbProduct || products.find((p: any) => p.slug === slug || p.id === slug) || null;
-  const [activeImg, setActiveImg] = useState('');
-
-  useEffect(() => {
-    if (product?.image) {
-      setActiveImg(product.image);
-    }
-  }, [product?.image]);
-
-  useEffect(() => {
-    async function loadReviews() {
-      if (!product?.id) return;
-      try {
-        const res = await fetch(`/api/reviews?bookId=${product.id}&stats=1`, {
-          headers: user?.token ? { Authorization: `Bearer ${user.token}` } : {},
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.stats) {
-            setReviewStats(data.stats);
-            setDbReviews(Array.isArray(data.reviews) ? data.reviews : []);
-            setCanReview(!!data.canReview);
-            setUserReview(data.userReview || null);
-            if (data.userReview) {
-              setReviewRating(data.userReview.rating);
-              setReviewText(data.userReview.comment);
-              setReviewImages(data.userReview.images || []);
-            }
-          } else if (Array.isArray(data)) {
-            setDbReviews(data);
-          }
-        }
-      } catch (err) {}
-    }
-    loadReviews();
-  }, [product?.id, user?.token]);
   const [pincode, setPincode] = useState('600012');
   const [pincodeMsg, setPincodeMsg] = useState('✓ Deliverable via ST Courier — usually 2–3 days in Tamil Nadu.');
   const [pincodeOk, setPincodeOk] = useState(true);
@@ -94,6 +79,85 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewText, setReviewText] = useState('');
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+
+  const storeProduct = products.find((p: any) => p.slug === slug || p.id === slug) || null;
+  const product = dbProduct || storeProduct;
+  const [activeImg, setActiveImg] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    setProductFetchDone(false);
+    setDbProduct(null);
+
+    async function loadProductAndReviews() {
+      const reviewHeaders: HeadersInit = user?.token
+        ? { Authorization: `Bearer ${user.token}` }
+        : {};
+      const reviewSetters = {
+        setReviewStats,
+        setDbReviews,
+        setCanReview,
+        setUserReview,
+        setReviewRating,
+        setReviewText,
+        setReviewImages,
+      };
+
+      // Catalog snapshot at request start — enables parallel reviews when already warm
+      const knownId = products.find((p: any) => p.slug === slug || p.id === slug)?.id;
+
+      const productPromise = fetch(`/api/products?slug=${encodeURIComponent(slug)}`)
+        .then(async (res) => {
+          if (!res.ok) return null;
+          const list = await res.json();
+          return Array.isArray(list) && list.length > 0 ? list[0] : null;
+        })
+        .catch(() => null);
+
+      const reviewsPromise = knownId
+        ? fetch(`/api/reviews?bookId=${knownId}&stats=1`, { headers: reviewHeaders })
+            .then((res) => (res.ok ? res.json() : null))
+            .catch(() => null)
+        : Promise.resolve(null);
+
+      const [found, earlyReviews] = await Promise.all([productPromise, reviewsPromise]);
+      if (cancelled) return;
+
+      setDbProduct(found);
+      setProductFetchDone(true);
+
+      if (earlyReviews) {
+        applyReviewsPayload(earlyReviews, reviewSetters);
+      } else {
+        const id = found?.id;
+        if (id) {
+          try {
+            const res = await fetch(`/api/reviews?bookId=${id}&stats=1`, { headers: reviewHeaders });
+            if (!cancelled && res.ok) {
+              applyReviewsPayload(await res.json(), reviewSetters);
+            }
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+    }
+
+    void loadProductAndReviews();
+    return () => {
+      cancelled = true;
+    };
+    // products omitted on purpose — snapshot only at slug/auth change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slug, user?.token]);
+
+  useEffect(() => {
+    if (product?.image) {
+      setActiveImg(product.image);
+    }
+  }, [product?.image]);
+
+  const stillLoading = !product && (!productFetchDone || productsLoading);
 
   const displayCount = reviewStats.count > 0 ? reviewStats.count : dbReviews.length;
   const calculatedAvg =
@@ -162,6 +226,39 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
       setIsSubmittingReview(false);
     }
   };
+
+  if (stillLoading) {
+    return (
+      <main className="min-h-screen bg-slate-50 flex flex-col pb-36 md:pb-0">
+        <AnnouncementBar />
+        <Header />
+        <NavBar />
+        <div className="max-w-7xl mx-auto px-4 py-8 flex-1 w-full">
+          <div className="h-4 w-64 bg-slate-200 rounded animate-pulse mb-6" />
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 md:p-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
+            <div className="lg:col-span-5 space-y-4">
+              <div className="w-full h-80 bg-slate-100 rounded-xl animate-pulse" />
+              <div className="flex gap-3">
+                <div className="w-16 h-16 bg-slate-100 rounded-lg animate-pulse" />
+                <div className="w-16 h-16 bg-slate-100 rounded-lg animate-pulse" />
+              </div>
+            </div>
+            <div className="lg:col-span-7 space-y-4">
+              <div className="h-3 w-32 bg-slate-100 rounded animate-pulse" />
+              <div className="h-8 w-3/4 bg-slate-200 rounded animate-pulse" />
+              <div className="h-4 w-24 bg-slate-100 rounded animate-pulse" />
+              <div className="h-10 w-40 bg-slate-200 rounded animate-pulse mt-4" />
+              <div className="grid grid-cols-2 gap-3 mt-6">
+                <div className="h-12 bg-slate-200 rounded-xl animate-pulse" />
+                <div className="h-12 bg-slate-200 rounded-xl animate-pulse" />
+              </div>
+            </div>
+          </div>
+        </div>
+        <Footer />
+      </main>
+    );
+  }
 
   if (!product) {
     return (
@@ -287,10 +384,19 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
           {/* Gallery */}
           <div className="lg:col-span-5 flex flex-col items-center">
             <div className="w-full h-80 bg-slate-50 border border-slate-200 rounded-xl p-4 flex items-center justify-center relative overflow-hidden mb-4">
-              <img
-                src={activeImg || product.image}
+              <Image
+                src={
+                  activeImg ||
+                  product.image ||
+                  'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=600&q=80'
+                }
                 alt={product.title}
+                width={480}
+                height={480}
+                priority
                 className="max-h-full max-w-full object-contain transition-transform duration-300 hover:scale-105"
+                sizes="(max-width: 1024px) 90vw, 480px"
+                unoptimized={imageNeedsUnoptimized(activeImg || product.image || '')}
               />
               {product.badge ? (
                 <span className={`absolute top-3 left-3 text-[10px] font-extrabold text-white px-2.5 py-1 rounded shadow-xs uppercase tracking-wider ${product.badgeColor || 'bg-blue-600'}`}>
@@ -303,12 +409,20 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
               {[product.image, product.hoverImage || product.image].map((img, i) => (
                 <button
                   key={i}
+                  type="button"
                   onClick={() => setActiveImg(img)}
-                  className={`w-16 h-16 rounded-lg border-2 p-1 bg-slate-50 overflow-hidden ${
+                  className={`w-16 h-16 rounded-lg border-2 p-1 bg-slate-50 overflow-hidden relative ${
                     activeImg === img ? 'border-blue-600' : 'border-slate-200'
                   }`}
                 >
-                  <img src={img} alt="Thumb" className="w-full h-full object-contain" />
+                  <Image
+                    src={img || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=80&q=80'}
+                    alt=""
+                    width={64}
+                    height={64}
+                    className="w-full h-full object-contain"
+                    unoptimized={imageNeedsUnoptimized(img || '')}
+                  />
                 </button>
               ))}
             </div>

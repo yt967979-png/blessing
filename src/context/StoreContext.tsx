@@ -189,15 +189,23 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setTimeout(() => setToast(null), 3000);
   }, []);
 
+  const productsRef = useRef<Product[]>([]);
+  productsRef.current = products;
+
   const refreshProducts = (forceFresh = false) => {
-    setProductsLoading(true);
+    // Keep previous catalog on screen — only skeleton when we have nothing yet
+    if (productsRef.current.length === 0) {
+      setProductsLoading(true);
+    }
     const url = forceFresh ? '/api/products?fresh=1' : '/api/products';
     fetch(url, forceFresh ? { cache: 'no-store' } : undefined)
       .then((res) => res.json())
       .then((data) => {
         if (Array.isArray(data)) setProducts(data);
       })
-      .catch(() => setProducts([]))
+      .catch(() => {
+        if (productsRef.current.length === 0) setProducts([]);
+      })
       .finally(() => setProductsLoading(false));
   };
 

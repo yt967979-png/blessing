@@ -2,10 +2,22 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { Search, Heart, ShoppingBag, User, ShieldCheck } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { BrandLogo } from '@/components/ui/BrandLogo';
+import { useCartBadgeBump } from '@/hooks/useCartBadgeBump';
+
+function imageNeedsUnoptimized(src: string) {
+  if (!src || src.startsWith('/')) return false;
+  try {
+    const host = new URL(src).hostname;
+    return !host.includes('cloudinary.com') && !host.includes('unsplash.com');
+  } catch {
+    return true;
+  }
+}
 
 export const Header = () => {
   const router = useRouter();
@@ -22,6 +34,7 @@ export const Header = () => {
   } = useStore();
 
   const [showSearchDropdown, setShowSearchDropdown] = useState(false);
+  const cartBump = useCartBadgeBump(cartCount);
 
   const queryText = (searchQuery || '').trim();
   const filteredSearch = queryText
@@ -40,6 +53,10 @@ export const Header = () => {
     if (!searchQuery.trim()) return;
     router.push(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
     setShowSearchDropdown(false);
+  };
+
+  const prefetchProduct = (slug: string) => {
+    router.prefetch(`/products/${slug}`);
   };
 
   return (
@@ -109,16 +126,23 @@ export const Header = () => {
                     <button
                       type="button"
                       key={p.id}
+                      onPointerEnter={() => prefetchProduct(p.slug)}
                       onClick={() => {
                         router.push(`/products/${p.slug}`);
                         setShowSearchDropdown(false);
                       }}
                       className="w-full p-3 hover:bg-blue-50/60 cursor-pointer flex items-center gap-3 text-left"
                     >
-                      <img
-                        src={p.image}
+                      <Image
+                        src={
+                          p.image ||
+                          'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=80&q=80'
+                        }
                         alt=""
+                        width={32}
+                        height={32}
                         className="w-8 h-8 object-contain rounded bg-slate-100 p-0.5"
+                        unoptimized={imageNeedsUnoptimized(p.image || '')}
                       />
                       <div className="flex-1 min-w-0">
                         <div className="font-bold text-[#001B3A] truncate">{p.title}</div>
@@ -181,12 +205,17 @@ export const Header = () => {
 
           <Link
             href="/cart"
+            onPointerEnter={() => router.prefetch('/cart')}
             className="relative hidden sm:flex p-2.5 rounded-xl text-slate-700 hover:bg-slate-100 min-h-11 min-w-11 items-center justify-center"
             aria-label="Cart"
           >
             <ShoppingBag className="w-5 h-5" />
             {cartCount > 0 && (
-              <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 text-white text-[10px] font-extrabold rounded-full flex items-center justify-center">
+              <span
+                className={`absolute top-1 right-1 w-4 h-4 bg-red-500 text-white text-[10px] font-extrabold rounded-full flex items-center justify-center ${
+                  cartBump ? 'cart-badge-bump' : ''
+                }`}
+              >
                 {cartCount}
               </span>
             )}
@@ -232,16 +261,23 @@ export const Header = () => {
                     <button
                       type="button"
                       key={p.id}
+                      onPointerEnter={() => prefetchProduct(p.slug)}
                       onClick={() => {
                         router.push(`/products/${p.slug}`);
                         setShowSearchDropdown(false);
                       }}
                       className="w-full p-3 active:bg-blue-50 flex items-center gap-3 text-left touch-manipulation"
                     >
-                      <img
-                        src={p.image}
+                      <Image
+                        src={
+                          p.image ||
+                          'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=80&q=80'
+                        }
                         alt=""
+                        width={36}
+                        height={36}
                         className="w-9 h-9 object-contain rounded bg-slate-100 p-0.5"
+                        unoptimized={imageNeedsUnoptimized(p.image || '')}
                       />
                       <div className="flex-1 min-w-0">
                         <div className="font-bold text-[#001B3A] truncate">{p.title}</div>

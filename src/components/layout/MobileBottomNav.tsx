@@ -5,11 +5,13 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Home, BookOpen, ShoppingBag, User, ShieldCheck } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
+import { useCartBadgeBump } from '@/hooks/useCartBadgeBump';
 
 export const MobileBottomNav = () => {
   const pathname = usePathname() || '';
   const router = useRouter();
   const { cartCount, user, setIsAuthOpen, isCheckoutOpen, isAuthOpen } = useStore();
+  const cartBump = useCartBadgeBump(cartCount);
 
   if (pathname.startsWith('/admin')) return null;
   if (isCheckoutOpen || isAuthOpen) return null;
@@ -30,11 +32,47 @@ export const MobileBottomNav = () => {
     }
   };
 
-  const items = [
-    { key: 'home', label: 'Home', href: '/', active: isHome, icon: Home, onClick: undefined as (() => void) | undefined },
-    { key: 'guides', label: 'Guides', href: '/search', active: isGuides, icon: BookOpen, onClick: undefined },
-    { key: 'cart', label: 'Cart', href: '/cart', active: isCart, icon: ShoppingBag, onClick: undefined, badge: cartCount },
-    { key: 'account', label: user ? 'Profile' : 'Login', href: undefined, active: isAccount, icon: User, onClick: handleAccountClick },
+  const prefetchShopRoutes = () => {
+    router.prefetch('/cart');
+    router.prefetch('/search');
+    router.prefetch('/orders');
+    router.prefetch('/profile');
+  };
+
+  type NavItem = {
+    key: string;
+    label: string;
+    href?: string;
+    active: boolean;
+    icon: typeof Home;
+    onClick?: () => void;
+    badge?: number;
+    onEnter?: () => void;
+  };
+
+  const items: NavItem[] = [
+    { key: 'home', label: 'Home', href: '/', active: isHome, icon: Home, onEnter: () => router.prefetch('/') },
+    { key: 'guides', label: 'Guides', href: '/search', active: isGuides, icon: BookOpen, onEnter: () => router.prefetch('/search') },
+    {
+      key: 'cart',
+      label: 'Cart',
+      href: '/cart',
+      active: isCart,
+      icon: ShoppingBag,
+      badge: cartCount,
+      onEnter: () => router.prefetch('/cart'),
+    },
+    {
+      key: 'account',
+      label: user ? 'Profile' : 'Login',
+      active: isAccount,
+      icon: User,
+      onClick: handleAccountClick,
+      onEnter: () => {
+        router.prefetch('/profile');
+        router.prefetch('/orders');
+      },
+    },
   ];
 
   if (user?.role === 'admin') {
@@ -44,7 +82,7 @@ export const MobileBottomNav = () => {
       href: '/admin',
       active: false,
       icon: ShieldCheck,
-      onClick: undefined,
+      onEnter: () => router.prefetch('/admin'),
     });
   }
 
@@ -53,6 +91,7 @@ export const MobileBottomNav = () => {
       className="md:hidden fixed bottom-0 inset-x-0 z-[55] border-t border-slate-200 bg-white shadow-[0_-4px_20px_rgba(0,27,58,0.08)] mobile-no-blur"
       style={{ paddingBottom: 'max(6px, env(safe-area-inset-bottom))' }}
       aria-label="Mobile navigation"
+      onPointerEnter={prefetchShopRoutes}
     >
       <div className="flex items-stretch justify-around px-1 pt-1 w-full max-w-lg mx-auto">
         {items.map((item) => {
@@ -65,8 +104,12 @@ export const MobileBottomNav = () => {
                 }`}
               >
                 <Icon className="w-5 h-5" strokeWidth={item.active ? 2.5 : 2} />
-                {'badge' in item && item.badge != null && item.badge > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-red-500 text-white font-black text-[9px] min-w-[16px] h-[16px] rounded-full flex items-center justify-center px-0.5 border-2 border-white">
+                {item.badge != null && item.badge > 0 && (
+                  <span
+                    className={`absolute -top-1 -right-1 bg-red-500 text-white font-black text-[9px] min-w-[16px] h-[16px] rounded-full flex items-center justify-center px-0.5 border-2 border-white ${
+                      cartBump ? 'cart-badge-bump' : ''
+                    }`}
+                  >
                     {item.badge > 99 ? '99+' : item.badge}
                   </span>
                 )}
@@ -90,6 +133,7 @@ export const MobileBottomNav = () => {
                 key={item.key}
                 type="button"
                 onClick={item.onClick}
+                onPointerEnter={item.onEnter}
                 className={className}
                 aria-current={item.active ? 'page' : undefined}
               >
@@ -102,6 +146,7 @@ export const MobileBottomNav = () => {
             <Link
               key={item.key}
               href={item.href!}
+              onPointerEnter={item.onEnter}
               className={className}
               aria-current={item.active ? 'page' : undefined}
             >

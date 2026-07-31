@@ -32,9 +32,16 @@ export const ProductCard = ({ product }: { product: Product }) => {
   const isWishlisted = wishlist.includes(product.id);
   const rupeesSaved = product.mrp - product.price;
   const imgSrc = product.image;
+  const productHref = `/products/${product.slug}`;
+  const prefetchProduct = () => {
+    router.prefetch(productHref);
+  };
 
   return (
-    <article className="product-card-shell bg-white border border-slate-200/90 rounded-2xl p-2.5 sm:p-4 flex flex-col relative h-full shadow-sm md:hover:shadow-lg md:hover:border-blue-200 transition-shadow duration-200">
+    <article
+      className="product-card-shell bg-white border border-slate-200/90 rounded-2xl p-2.5 sm:p-4 flex flex-col relative h-full shadow-sm md:hover:shadow-lg md:hover:border-blue-200 transition-shadow duration-200"
+      onPointerEnter={prefetchProduct}
+    >
       <div className="absolute top-2 left-2 z-10 flex flex-col gap-1">
         {product.inStock === false ? (
           <span className="text-[9px] font-black text-white px-2 py-0.5 rounded-md bg-slate-700">
@@ -72,7 +79,7 @@ export const ProductCard = ({ product }: { product: Product }) => {
       </button>
 
       <Link
-        href={`/products/${product.slug}`}
+        href={productHref}
         className="relative h-36 sm:h-52 bg-slate-50 rounded-xl flex items-center justify-center mb-2.5 overflow-hidden mt-1 border border-slate-100"
       >
         <Image
@@ -102,7 +109,7 @@ export const ProductCard = ({ product }: { product: Product }) => {
       </div>
 
       <Link
-        href={`/products/${product.slug}`}
+        href={productHref}
         className="font-heading font-black text-xs sm:text-sm text-[#001226] leading-snug mb-1.5 line-clamp-2 min-h-[2.5rem] active:text-blue-600"
       >
         {product.title}

@@ -8,6 +8,7 @@ import { NavBar } from '@/components/layout/NavBar';
 import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
 import { Footer } from '@/components/layout/Footer';
 import { ProductCard } from '@/components/ui/ProductCard';
+import { ProductCardSkeletonGrid } from '@/components/ui/ProductCardSkeleton';
 import { useStore } from '@/context/StoreContext';
 
 function SearchContent() {
@@ -282,7 +283,16 @@ function SearchContent() {
 
 export default function SearchPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-[#f8fafc] flex items-center justify-center text-sm font-semibold text-slate-500">Loading search catalog...</div>}>
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#f8fafc] page-mobile-nav">
+          <div className="max-w-7xl mx-auto px-3 sm:px-4 py-6">
+            <div className="h-8 w-48 bg-slate-200 rounded-lg animate-pulse mb-4" />
+            <ProductCardSkeletonGrid count={8} />
+          </div>
+        </div>
+      }
+    >
       <SearchContent />
     </Suspense>
   );

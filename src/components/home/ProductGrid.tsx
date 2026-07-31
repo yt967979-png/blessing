@@ -4,6 +4,7 @@ import React, { useMemo } from 'react';
 import Link from 'next/link';
 import { ArrowRight, BookOpen, Sparkles, Filter } from 'lucide-react';
 import { ProductCard } from '@/components/ui/ProductCard';
+import { ProductCardSkeletonGrid } from '@/components/ui/ProductCardSkeleton';
 import { useStore } from '@/context/StoreContext';
 
 export const ProductGrid = () => {
@@ -102,18 +103,9 @@ export const ProductGrid = () => {
           </div>
         </div>
 
-        {/* Grid or Clean Empty State */}
-        {productsLoading ? (
-          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-4 md:gap-6">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="rounded-2xl border border-slate-200 bg-white p-3 h-72 animate-pulse">
-                <div className="h-40 bg-slate-100 rounded-xl mb-3" />
-                <div className="h-3 bg-slate-100 rounded w-2/3 mb-2" />
-                <div className="h-3 bg-slate-100 rounded w-1/2 mb-4" />
-                <div className="h-10 bg-slate-100 rounded-xl" />
-              </div>
-            ))}
-          </div>
+        {/* Grid or Clean Empty State — keep previous catalog visible while refetching */}
+        {productsLoading && products.length === 0 ? (
+          <ProductCardSkeletonGrid count={8} />
         ) : filteredProducts.length === 0 ? (
           <div className="py-16 text-center bg-slate-50/70 border border-dashed border-slate-300 rounded-2xl p-8 max-w-2xl mx-auto">
             <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-200">
