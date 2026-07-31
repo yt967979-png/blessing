@@ -64,22 +64,27 @@ function getConnectionCandidates(): string[] {
   );
 
   const onRailway = Boolean(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_SERVICE_ID);
-  // Prefer public proxy first — private hostname often times out when Private Networking
-  // is off / broken, which makes Admin analytics + QR look "broken".
+  // On Railway: prefer private mesh first (public TCP proxy often hairpins / times out
+  // from inside the same project). Fall back to *.proxy.rlwy.net for local tools / when
+  // private DNS is unavailable. Outside Railway, prefer public proxy.
+  const preferPrivate =
+    onRailway || String(process.env.DB_TRY_PRIVATE || '').toLowerCase() === 'true';
   let sorted = [...new Set(raw.map(normalizeConnectionString))].sort((a, b) => {
     const score = (u: string) => {
+      if (preferPrivate) {
+        if (isPrivateRailwayUrl(u)) return 0;
+        if (isPublicProxyUrl(u)) return 1;
+        return 2;
+      }
       if (isPublicProxyUrl(u)) return 0;
-      if (onRailway && isPrivateRailwayUrl(u)) return 1;
-      if (isPrivateRailwayUrl(u)) return 2;
-      return 3;
+      if (isPrivateRailwayUrl(u)) return 1;
+      return 2;
     };
     return score(a) - score(b);
   });
 
-  // Soft launch default: if a public proxy URL exists, do not burn connect timeouts on
-  // private hostnames unless explicitly opted in (DB_TRY_PRIVATE=true).
-  const tryPrivate = String(process.env.DB_TRY_PRIVATE || '').toLowerCase() === 'true';
-  if (!tryPrivate && sorted.some(isPublicProxyUrl)) {
+  // Outside Railway, skip private hostnames that cannot resolve on a laptop.
+  if (!preferPrivate && sorted.some(isPublicProxyUrl)) {
     sorted = sorted.filter((u) => !isPrivateRailwayUrl(u));
   }
 
@@ -105,13 +110,13 @@ export function logDbConnectionConfig() {
     `[db] primary host: ${host} candidates=${candidates.length} (${masked.slice(0, 72)}…)`
   );
 
-  const dbUrl = process.env.DATABASE_URL || '';
+  const onRailway = Boolean(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_SERVICE_ID);
+  const hasPrivate = candidates.some(isPrivateRailwayUrl);
   const hasPublic = candidates.some(isPublicProxyUrl);
-  if (dbUrl.includes('railway.internal') && !hasPublic) {
-    console.error(
-      '[db] FIX: DATABASE_URL points at postgres.railway.internal but that hostname is not resolving. ' +
-        'On Railway → Web Service → Variables, replace DATABASE_URL with: DATABASE_URL=${{Postgres.DATABASE_PUBLIC_URL}} ' +
-        '(or add DATABASE_PUBLIC_URL=${{Postgres.DATABASE_PUBLIC_URL}} and redeploy).'
+  if (onRailway && !hasPrivate && hasPublic) {
+    console.warn(
+      '[db] WARN: only public proxy URL present — in-cluster hairpin can time out. ' +
+        'Prefer DATABASE_URL=${{Postgres.DATABASE_URL}} (private) and keep DATABASE_PUBLIC_URL as fallback.'
     );
   }
 }
