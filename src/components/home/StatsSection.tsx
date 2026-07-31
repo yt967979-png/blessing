@@ -20,21 +20,23 @@ export const StatsSection = () => {
   const [stats, setStats] = useState<LiveStats | null>(null);
 
   useEffect(() => {
-    // Fetch live counts from DB status + reviews endpoints in parallel
+    // Public endpoints only — /api/db-status is admin-only (security).
     Promise.all([
-      fetch('/api/db-status').then((r) => r.json()).catch(() => null),
-      fetch('/api/reviews').then((r) => r.json()).catch(() => []),
-    ]).then(([dbData, reviews]) => {
-      const counts = dbData?.tableRowCounts || {};
-      const ratingList: number[] = Array.isArray(reviews) ? reviews.map((r: { rating?: number }) => Number(r.rating || 5)) : [];
-      const avgRating = ratingList.length > 0
-        ? ratingList.reduce((a, b) => a + b, 0) / ratingList.length
-        : 5.0;
+      fetch('/api/products').then((r) => (r.ok ? r.json() : [])).catch(() => []),
+      fetch('/api/reviews').then((r) => (r.ok ? r.json() : [])).catch(() => []),
+    ]).then(([products, reviews]) => {
+      const ratingList: number[] = Array.isArray(reviews)
+        ? reviews.map((r: { rating?: number }) => Number(r.rating || 5))
+        : [];
+      const avgRating =
+        ratingList.length > 0
+          ? ratingList.reduce((a, b) => a + b, 0) / ratingList.length
+          : 5.0;
 
       setStats({
-        students: Number(counts.users  || 0),
-        books:    Number(counts.books  || 0),
-        orders:   Number(counts.orders || 0),
+        students: 0,
+        books: Array.isArray(products) ? products.length : 0,
+        orders: 0,
         avgRating: Math.min(5, Number(avgRating.toFixed(1))),
       });
     });

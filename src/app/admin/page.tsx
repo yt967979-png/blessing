@@ -259,7 +259,7 @@ export default function AdminPage() {
     };
     runCourierSync();
     const courierSync = setInterval(runCourierSync, 45000);
-    fetch('/api/db-status').then((r) => r.json()).then((d: { tableRowCounts?: { users?: number; books?: number } }) => {
+    fetch('/api/db-status', { headers: authHeaders(user) }).then((r) => r.json()).then((d: { tableRowCounts?: { users?: number; books?: number } }) => {
       if (d.tableRowCounts) {
         const u = d.tableRowCounts.users || 0;
         const b = d.tableRowCounts.books || 0;

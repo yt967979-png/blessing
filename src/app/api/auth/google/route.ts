@@ -121,8 +121,9 @@ export async function POST(request: Request) {
     if (!dbUser) {
       const userId = `usr-g-${Date.now()}`;
       const passHash = hashPassword(crypto.randomBytes(32).toString('hex'));
-      const adminEmail = String(process.env.ADMIN_EMAIL || 'admin@blessingpowerguide.com').toLowerCase();
-      const role = googleUser.email === adminEmail ? 'admin' : 'customer';
+      const adminEmail = String(process.env.ADMIN_EMAIL || '').toLowerCase().trim();
+      const role =
+        adminEmail && googleUser.email === adminEmail ? 'admin' : 'customer';
 
       await client.query(
         `INSERT INTO users (id, name, email, phone, password_hash, google_id, profile_image, profile_completed, role, status)

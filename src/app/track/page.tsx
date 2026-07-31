@@ -74,7 +74,7 @@ function TrackForm() {
         </div>
         <h1 className="font-heading font-black text-2xl md:text-3xl text-[#001B3A]">Track your order</h1>
         <p className="text-sm text-slate-500">
-          No login needed — enter Order ID + mobile number from checkout (or last 4 digits).
+          No login needed — enter Order ID + the full 10-digit mobile number from checkout.
         </p>
       </div>
 
@@ -100,7 +100,7 @@ function TrackForm() {
           <input
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
-            placeholder="10-digit or last 4 digits"
+            placeholder="10-digit mobile from checkout"
             inputMode="tel"
             className="mt-1 w-full px-3 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-blue-600 min-h-12"
             required

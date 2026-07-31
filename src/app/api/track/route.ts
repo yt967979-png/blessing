@@ -54,18 +54,19 @@ function maskName(name: string): string {
 
 /**
  * Public Flipkart-style tracking.
- * POST/GET: orderId + phone (full or last 4 digits)
+ * POST/GET: orderId + full 10-digit checkout phone
  */
 async function handleTrack(orderIdRaw: string, phoneRaw: string) {
   const orderId = String(orderIdRaw || '').trim().toUpperCase();
   const phone = String(phoneRaw || '').trim();
+  const phoneDigits = normalizePhone(phone);
 
   if (!orderId || orderId.length < 4) {
     return NextResponse.json({ error: 'Enter a valid Order ID (e.g. BPG-1234).' }, { status: 400 });
   }
-  if (!phone || normalizePhone(phone).length < 4) {
+  if (phoneDigits.length < 10) {
     return NextResponse.json(
-      { error: 'Enter the mobile number used at checkout (full number or last 4 digits).' },
+      { error: 'Enter the full 10-digit mobile number used at checkout.' },
       { status: 400 }
     );
   }
@@ -98,9 +99,15 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string) {
       [orderId]
     );
 
+    const deny = () =>
+      NextResponse.json(
+        { error: 'Order not found. Check Order ID and the mobile number from checkout.' },
+        { status: 404 }
+      );
+
     if (res.rows.length === 0) {
       releaseDbClient(client);
-      return NextResponse.json({ error: 'Order not found. Check the Order ID from WhatsApp / invoice.' }, { status: 404 });
+      return deny();
     }
 
     const o = res.rows[0];
@@ -114,10 +121,7 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string) {
       !phonesMatch(phone, addr.alternatePhone || addr.alternate_phone || '')
     ) {
       releaseDbClient(client);
-      return NextResponse.json(
-        { error: 'Phone number does not match this order. Use the mobile number from checkout.' },
-        { status: 403 }
-      );
+      return deny();
     }
 
     // Timeline events

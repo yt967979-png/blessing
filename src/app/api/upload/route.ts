@@ -1,11 +1,18 @@
 import { NextResponse } from 'next/server';
 import {
+  applyRateLimitAsync,
+  clientIp,
   getAuthenticatedUser,
   unauthorizedResponse,
   verifyAdminRequest,
 } from '@/lib/serverSecurity';
 
 export async function POST(request: Request) {
+  const rl = await applyRateLimitAsync(`upload:${clientIp(request)}`, 20, 60000);
+  if (!rl.allowed) {
+    return NextResponse.json({ error: 'Too many uploads. Please wait a minute.' }, { status: 429 });
+  }
+
   const session = await getAuthenticatedUser(request);
   const admin = session ? await verifyAdminRequest(request) : null;
 

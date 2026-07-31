@@ -185,21 +185,11 @@ function OrdersContent() {
 
     fetchOrders();
 
-    let eventSource: EventSource | null = null;
-    try {
-      eventSource = new EventSource('/api/orders/stream');
-      eventSource.onmessage = (event) => {
-        try {
-          const payload = JSON.parse(event.data);
-          if (payload.type === 'ORDER_UPDATED') {
-            fetchOrders();
-          }
-        } catch (_) {}
-      };
-    } catch (_) {}
+    // Poll for updates (SSE is admin-only — do not open global order stream as a customer)
+    const interval = setInterval(fetchOrders, 45000);
 
     return () => {
-      if (eventSource) eventSource.close();
+      clearInterval(interval);
     };
   }, [user, queryOrderId]);
 

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDbClient, releaseDbClient } from '@/lib/db';
-import { getAuthenticatedUser } from '@/lib/serverSecurity';
+import { applyRateLimitAsync, clientIp, getAuthenticatedUser } from '@/lib/serverSecurity';
 import { priceCartItems } from '@/lib/orderPricing';
 import {
   checkCouponEligibility,
@@ -15,6 +15,11 @@ import {
 
 /** Validate coupon against cart — used at checkout before placing order */
 export async function POST(request: NextRequest) {
+  const rl = await applyRateLimitAsync(`coupon:${clientIp(request)}`, 30, 60000);
+  if (!rl.allowed) {
+    return NextResponse.json({ valid: false, error: 'Too many attempts. Please wait.' }, { status: 429 });
+  }
+
   let client: any = null;
   try {
     const body = await request.json();
