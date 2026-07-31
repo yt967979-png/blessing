@@ -8,10 +8,13 @@ Type=simple
 User=ubuntu
 Group=ubuntu
 WorkingDirectory=/opt/blessing
-EnvironmentFile=/etc/blessing.env
+# Leading "-" = unit still starts if the file is missing (fail loud in journal via Next).
+# File MUST be KEY=value (no "export "), Unix LF line endings (not Windows CRLF).
+EnvironmentFile=-/etc/blessing.env
 Environment=NODE_ENV=production
 Environment=WHATSAPP_SESSION_DIR=/var/lib/blessing/whatsapp_session
-ExecStart=/usr/bin/npm start
+# Prefer direct next binary over `npm start` (avoids npm wrapper / PATH quirks).
+ExecStart=/usr/bin/node /opt/blessing/node_modules/next/dist/bin/next start --hostname 0.0.0.0 --port 3000
 Restart=always
 RestartSec=5
 TimeoutStopSec=30

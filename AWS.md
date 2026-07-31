@@ -124,8 +124,18 @@ Same keys as Render. Full values: Railway Dashboard (script only masks).
 ```bash
 sudo cp /opt/blessing/deploy/aws/env.example /etc/blessing.env
 sudo nano /etc/blessing.env   # paste real values
+# Strip Windows CRLF if you pasted from a PC (systemd otherwise shows empty "" env vars / crash-loop)
+sudo sed -i 's/\r$//' /etc/blessing.env
 sudo chmod 600 /etc/blessing.env
 sudo chown root:root /etc/blessing.env
+```
+
+**systemd `EnvironmentFile` rules:** use `KEY=value` only — **no** `export KEY=...`, no blank lines that are only `\r`, no quotes around the whole file. After any paste from Windows:
+
+```bash
+sudo sed -i 's/\r$//' /etc/blessing.env
+sudo systemctl daemon-reload
+sudo systemctl restart blessing
 ```
 
 ### Required
@@ -319,14 +329,47 @@ Do **not** pause Railway from scripts or agents — only after §6 passes on AWS
 
 ## 8. Updates after go-live
 
+If `/opt/blessing` is a bare rsync tree (no `.git`), pull in the clone then sync:
+
+```bash
+cd ~/blessing/blessing
+git pull origin main
+rsync -a --delete \
+  --exclude node_modules --exclude .next --exclude .git \
+  --exclude whatsapp_session --exclude 'whatsapp_session_*' \
+  ~/blessing/blessing/ /opt/blessing/
+cd /opt/blessing
+set -a; source /etc/blessing.env; set +a
+npm ci && npm run build
+sudo cp deploy/aws/blessing.service /etc/systemd/system/blessing.service
+sudo systemctl daemon-reload
+sudo systemctl restart blessing
+```
+
+If `/opt/blessing` is itself a git clone:
+
 ```bash
 cd /opt/blessing
 git pull origin main
+set -a; source /etc/blessing.env; set +a
 npm ci && npm run build
 sudo systemctl restart blessing
 ```
 
 WhatsApp auth state lives in `WHATSAPP_SESSION_DIR` (default `/var/lib/blessing/whatsapp_session` on AWS). Prefer not wiping that directory without backing up session data. `setup-lightsail.sh` creates and chowns it for the app user.
+
+### Connection refused on `:3000` while `blessing` is “active”
+
+`active (running)` with uptime of a few hundred ms usually means **crash-loop** (systemd restarts faster than you notice). Check:
+
+```bash
+systemctl status blessing --no-pager
+journalctl -u blessing -n 80 --no-pager
+ss -lntp | grep 3000 || true
+# CRLF / bad EnvironmentFile → many empty "" in cgroup / failed start:
+sudo sed -i 's/\r$//' /etc/blessing.env
+file /etc/blessing.env   # should say "ASCII text", not "with CRLF"
+```
 
 ---
 

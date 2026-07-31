@@ -77,6 +77,8 @@ fi
 if ! grep -q '^WHATSAPP_SESSION_DIR=' "$ENV_FILE" 2>/dev/null; then
   echo "WHATSAPP_SESSION_DIR=$WA_SESSION_DIR" >> "$ENV_FILE"
 fi
+# systemd EnvironmentFile breaks on Windows CRLF (empty "" env vars / crash-loop)
+sed -i 's/\r$//' "$ENV_FILE"
 
 echo "==> npm ci && npm run build (as $APP_USER)"
 sudo -u "$APP_USER" bash -lc "cd '$APP_DIR' && npm ci && npm run build"
