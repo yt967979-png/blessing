@@ -279,9 +279,12 @@ export default function AdminPage() {
   // WhatsApp polling — only while WhatsApp tab is open
   useEffect(() => {
     if (activeTab !== 'whatsapp') return;
+    let first = true;
     const fetchWa = async () => {
       try {
-        const r = await fetch('/api/whatsapp/qr', { headers: authHeaders(user) });
+        const q = first ? '?refresh=1' : '';
+        first = false;
+        const r = await fetch(`/api/whatsapp/qr${q}`, { headers: authHeaders(user) });
         if (r.ok) {
           const data = await r.json();
           setWaStatus(data);
@@ -290,11 +293,11 @@ export default function AdminPage() {
           }
         }
       } catch {
-        setWaStatus({ status: 'INITIALIZING' });
+        setWaStatus({ status: 'INITIALIZING', message: 'Starting WhatsApp…' });
       }
     };
-    fetchWa();
-    const iv = setInterval(fetchWa, 4000);
+    void fetchWa();
+    const iv = setInterval(() => void fetchWa(), 3000);
     return () => clearInterval(iv);
   }, [activeTab, user]);
 
@@ -1451,7 +1454,7 @@ export default function AdminPage() {
             onUnlink={handleUnlinkWhatsApp}
             onRequestPairing={handleRequestPairingCode}
             onRefreshQr={handleRefreshWhatsAppQr}
-            authHeaders={authHeaders(user)}
+            authToken={user?.token || null}
           />
         )}
 

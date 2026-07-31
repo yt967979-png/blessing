@@ -33,31 +33,36 @@ function parseAddr(raw: unknown): { phone: string; name: string; city?: string }
   }
 }
 
-/** Phones that get "order confirmed" WhatsApp (settings + ADMIN_PHONE). */
-export async function getAdminAlertPhones(): Promise<string[]> {
-  const phones: string[] = [];
-  const envPhone = last10(process.env.ADMIN_PHONE || '9840418228');
-  if (envPhone.length === 10) phones.push(envPhone);
-
+/** Phones saved in Admin UI (settings.admin_alert_phones only). */
+export async function getStoredAdminAlertPhones(): Promise<string[]> {
   try {
     const res = await queryDb(
-      `SELECT admin_alert_phones, support_phone FROM settings WHERE id = 'main' LIMIT 1`
+      `SELECT admin_alert_phones FROM settings WHERE id = 'main' LIMIT 1`
     );
-    const row = res.rows[0];
-    if (row?.admin_alert_phones) {
-      String(row.admin_alert_phones)
-        .split(/[,;\s]+/)
-        .map(last10)
-        .filter((p) => p.length === 10)
-        .forEach((p) => phones.push(p));
-    }
-    const support = last10(row?.support_phone || '');
-    if (support.length === 10) phones.push(support);
+    const raw = String(res.rows[0]?.admin_alert_phones || '');
+    return [
+      ...new Set(
+        raw
+          .split(/[,;\s]+/)
+          .map(last10)
+          .filter((p) => p.length === 10)
+      ),
+    ];
   } catch {
-    /* column may not exist yet */
+    return [];
   }
+}
 
-  return [...new Set(phones)];
+/**
+ * Phones that get "order confirmed" WhatsApp.
+ * Uses saved alert phones; if none saved, falls back to ADMIN_PHONE.
+ */
+export async function getAdminAlertPhones(): Promise<string[]> {
+  const stored = await getStoredAdminAlertPhones();
+  if (stored.length > 0) return stored;
+
+  const envPhone = last10(process.env.ADMIN_PHONE || '9840418228');
+  return envPhone.length === 10 ? [envPhone] : [];
 }
 
 export async function setAdminAlertPhones(raw: string): Promise<string[]> {

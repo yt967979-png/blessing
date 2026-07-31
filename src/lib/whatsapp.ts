@@ -181,7 +181,8 @@ export async function initWhatsAppInProcess(opts?: { requireLeader?: boolean }) 
   if (requireLeader && !isBackgroundLeader()) {
     return null;
   }
-  if (sock && isConnected) return sock;
+  // Already have a live socket (connected or waiting for QR scan)
+  if (sock) return sock;
   if (isInitializing) return null;
   isInitializing = true;
 
@@ -199,6 +200,8 @@ export async function initWhatsAppInProcess(opts?: { requireLeader?: boolean }) 
       generateHighQualityLinkPreview: false,
     });
 
+    // Unlock so status polls can use this sock while QR arrives
+    isInitializing = false;
     sock.ev.on('creds.update', async () => {
       await saveCreds();
       scheduleSessionBackup();
@@ -241,9 +244,13 @@ export async function initWhatsAppInProcess(opts?: { requireLeader?: boolean }) 
             status: 'QR_READY',
             connected: false,
             qrImage: qrDataUrl,
+            pairingCode: null,
             message: 'Scan QR Code with WhatsApp phone to link',
           });
-        } catch (_) {}
+          console.log('[whatsapp] QR ready — scan from Admin → WhatsApp');
+        } catch (e: any) {
+          console.warn('[whatsapp] QR encode failed:', e?.message || e);
+        }
       }
 
       if (connection === 'close') {
@@ -311,9 +318,95 @@ export async function initWhatsAppInProcess(opts?: { requireLeader?: boolean }) 
     return sock;
   } catch (err: any) {
     isInitializing = false;
+    sock = null;
     console.error('Error starting in-process WhatsApp socket:', err.message);
     return null;
   }
+}
+
+/** Kick Baileys and wait briefly for a QR (admin WhatsApp tab). */
+export async function ensureWhatsAppQr(opts?: { forceFresh?: boolean }): Promise<{
+  qrImage: string | null;
+  connected: boolean;
+  status: string;
+  message: string;
+}> {
+  const { tryAcquireBackgroundLeader } = await import('@/lib/backgroundLeader');
+  await tryAcquireBackgroundLeader();
+
+  if (!isBackgroundLeader()) {
+    return {
+      qrImage: null,
+      connected: false,
+      status: 'WAITING_LEADER',
+      message: 'Waiting for WhatsApp engine on the primary server…',
+    };
+  }
+
+  if (isConnected && sock) {
+    return {
+      qrImage: null,
+      connected: true,
+      status: 'CONNECTED',
+      message: 'Already linked',
+    };
+  }
+
+  if (opts?.forceFresh) {
+    await resetWhatsAppSession();
+  } else if (!isConnected) {
+    // Stale auth with no QR: wipe once so Baileys emits a new QR
+    try {
+      const hasCreds =
+        fs.existsSync(SESSION_DIR) &&
+        fs.readdirSync(SESSION_DIR).some((f) => f.includes('creds'));
+      const statusPath = path.join(PUBLIC_DIR, 'whatsapp_status.json');
+      let hasQrFile = false;
+      if (fs.existsSync(statusPath)) {
+        const st = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
+        hasQrFile = Boolean(st?.qrImage);
+      }
+      if (hasCreds && !hasQrFile && !sock) {
+        console.log('[whatsapp] stale session without QR — resetting for fresh QR');
+        await resetWhatsAppSession();
+      }
+    } catch (_) {
+      /* ignore */
+    }
+  }
+
+  await initWhatsAppInProcess();
+
+  const maxWait = opts?.forceFresh ? 16 : 6;
+  for (let i = 0; i < maxWait; i++) {
+    if (isConnected) {
+      return { qrImage: null, connected: true, status: 'CONNECTED', message: 'Linked' };
+    }
+    try {
+      const statusPath = path.join(PUBLIC_DIR, 'whatsapp_status.json');
+      if (fs.existsSync(statusPath)) {
+        const st = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
+        if (st?.qrImage) {
+          return {
+            qrImage: st.qrImage,
+            connected: false,
+            status: st.status || 'QR_READY',
+            message: st.message || 'Scan QR Code with WhatsApp phone to link',
+          };
+        }
+      }
+    } catch (_) {
+      /* ignore */
+    }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+
+  return {
+    qrImage: null,
+    connected: false,
+    status: 'INITIALIZING',
+    message: 'Generating WhatsApp QR… keep this tab open and tap Show new QR if needed.',
+  };
 }
 
 let sendQueue: Promise<any> = Promise.resolve();

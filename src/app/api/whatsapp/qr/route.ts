@@ -1,8 +1,13 @@
 import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
-import { initWhatsAppInProcess, resetWhatsAppSession } from '@/lib/whatsapp';
-import { isBackgroundLeader } from '@/lib/backgroundLeader';
+import {
+  initWhatsAppInProcess,
+  resetWhatsAppSession,
+  ensureWhatsAppQr,
+  getWhatsAppConnectionState,
+} from '@/lib/whatsapp';
+import { isBackgroundLeader, tryAcquireBackgroundLeader } from '@/lib/backgroundLeader';
 import { verifyAdminRequest, forbiddenResponse } from '@/lib/serverSecurity';
 
 function looksLikePairingCode(code: string | null | undefined): boolean {
@@ -22,18 +27,8 @@ export async function GET(request: Request) {
   const phone = searchParams.get('phone');
   const refresh = searchParams.get('refresh') === '1';
 
-  if (refresh && isBackgroundLeader()) {
-    await resetWhatsAppSession();
-  }
-
-  let activeSock: any = null;
-  if (isBackgroundLeader()) {
-    try {
-      activeSock = await initWhatsAppInProcess();
-    } catch (err) {
-      console.error('Failed in-process init in QR route:', err);
-    }
-  }
+  // Ensure this process can run Baileys (Free = single replica)
+  await tryAcquireBackgroundLeader();
 
   // Pairing code path — must NOT fall through to DB phone leftover
   if (phone) {
@@ -46,6 +41,12 @@ export async function GET(request: Request) {
         { status: 503 }
       );
     }
+    let activeSock: any = null;
+    try {
+      activeSock = await initWhatsAppInProcess();
+    } catch (err) {
+      console.error('Failed in-process init in QR route:', err);
+    }
     if (!activeSock) {
       return NextResponse.json(
         { error: 'WhatsApp engine starting… wait 5 seconds, then click Get Code again.' },
@@ -56,7 +57,10 @@ export async function GET(request: Request) {
       let cleanPhone = phone.replace(/\D/g, '');
       if (cleanPhone.length === 10) cleanPhone = `91${cleanPhone}`;
       if (cleanPhone.length < 11) {
-        return NextResponse.json({ error: 'Enter full WhatsApp number with country code (e.g. 91XXXXXXXXXX)' }, { status: 400 });
+        return NextResponse.json(
+          { error: 'Enter full WhatsApp number with country code (e.g. 91XXXXXXXXXX)' },
+          { status: 400 }
+        );
       }
       const code = await activeSock.requestPairingCode(cleanPhone);
       const formattedCode = code?.match(/.{1,4}/g)?.join('-') || code;
@@ -91,7 +95,7 @@ export async function GET(request: Request) {
             `UPDATE whatsapp_sessions SET pairing_code = $1, status = 'PAIRING_CODE_READY', message = $2, updated_at = NOW() WHERE id = 'default'`,
             [formattedCode, `Pairing code ready for +${cleanPhone}`]
           );
-          await client.end();
+          db.releaseDbClient(client);
         }
       } catch (_) {}
 
@@ -101,7 +105,20 @@ export async function GET(request: Request) {
     }
   }
 
-  // Status / QR poll
+  // Kick / wait for QR (forceFresh on refresh=1)
+  const ensured = await ensureWhatsAppQr({ forceFresh: refresh });
+  if (ensured.qrImage || ensured.connected) {
+    return NextResponse.json({
+      status: ensured.status,
+      connected: ensured.connected,
+      qrImage: ensured.qrImage,
+      pairingCode: null,
+      message: ensured.message,
+      leader: isBackgroundLeader(),
+    });
+  }
+
+  // Fall back to DB / file status (QR may have landed a moment later)
   try {
     const db = await import('@/lib/db');
     const client = await db.getDbClient();
@@ -109,19 +126,19 @@ export async function GET(request: Request) {
       const res = await client.query(
         `SELECT status, connected, qr_image, pairing_code, message FROM whatsapp_sessions WHERE id = 'default' LIMIT 1`
       );
-      await client.end();
+      db.releaseDbClient(client);
       if (res.rows.length > 0) {
         const row = res.rows[0];
         const rawPair = row.pairing_code;
         const pairingCode = looksLikePairingCode(rawPair) ? rawPair : null;
         const linkedFromMsg = String(row.message || '').match(/\+(\d{10,15})/);
         return NextResponse.json({
-          status: row.status,
+          status: row.status || ensured.status,
           connected: row.connected,
-          qrImage: row.qr_image,
+          qrImage: row.qr_image || ensured.qrImage,
           pairingCode,
           linkedPhone: row.connected && linkedFromMsg ? linkedFromMsg[1] : null,
-          message: row.message,
+          message: row.message || ensured.message,
           leader: isBackgroundLeader(),
         });
       }
@@ -140,14 +157,13 @@ export async function GET(request: Request) {
     }
   }
 
+  const live = getWhatsAppConnectionState();
   return NextResponse.json({
-    status: 'INITIALIZING',
-    connected: false,
+    status: ensured.status || 'INITIALIZING',
+    connected: live.connected,
     qrImage: null,
     pairingCode: null,
-    message: isBackgroundLeader()
-      ? 'Generating WhatsApp QR Code… keep this tab open.'
-      : 'Waiting for WhatsApp engine on the primary server…',
+    message: ensured.message,
     leader: isBackgroundLeader(),
   });
 }
@@ -156,13 +172,14 @@ export async function DELETE(request: Request) {
   const auth = await verifyAdminRequest(request);
   if (!auth.isAdmin) return forbiddenResponse(auth.error);
 
+  await tryAcquireBackgroundLeader();
   await resetWhatsAppSession();
 
   // Kick a fresh QR on the leader
   if (isBackgroundLeader()) {
     setTimeout(() => {
-      void initWhatsAppInProcess();
-    }, 800);
+      void ensureWhatsAppQr({ forceFresh: true });
+    }, 500);
   }
 
   return NextResponse.json({

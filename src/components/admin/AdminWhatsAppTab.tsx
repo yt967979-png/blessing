@@ -28,7 +28,7 @@ export default function AdminWhatsAppTab({
   onUnlink,
   onRequestPairing,
   onRefreshQr,
-  authHeaders,
+  authToken,
 }: {
   waStatus: WaStatus;
   waPhoneInput: string;
@@ -37,34 +37,48 @@ export default function AdminWhatsAppTab({
   onUnlink: () => void;
   onRequestPairing: (e: FormEvent) => void;
   onRefreshQr?: () => void;
-  authHeaders?: HeadersInit;
+  /** Stable bearer token — avoid passing a new headers object each render. */
+  authToken?: string | null;
 }) {
   const showCode = isRealPairingCode(waPairingCode);
   const [alertPhones, setAlertPhones] = useState('');
+  const [alertLoaded, setAlertLoaded] = useState(false);
   const [alertSaving, setAlertSaving] = useState(false);
   const [alertMsg, setAlertMsg] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!authHeaders) return;
+    if (!authToken || alertLoaded) return;
+    let cancelled = false;
     void (async () => {
       try {
-        const r = await fetch('/api/admin/alert-phones', { headers: authHeaders });
+        const r = await fetch('/api/admin/alert-phones', {
+          headers: { Authorization: `Bearer ${authToken}` },
+        });
         const d = await r.json();
-        if (r.ok) setAlertPhones(String(d.raw || d.phones?.join(', ') || ''));
+        if (!cancelled && r.ok) {
+          setAlertPhones(String(d.raw || d.phones?.join(', ') || ''));
+          setAlertLoaded(true);
+        }
       } catch {
         /* ignore */
       }
     })();
-  }, [authHeaders]);
+    return () => {
+      cancelled = true;
+    };
+  }, [authToken, alertLoaded]);
 
   const saveAlertPhones = async () => {
-    if (!authHeaders) return;
+    if (!authToken) return;
     setAlertSaving(true);
     setAlertMsg(null);
     try {
       const r = await fetch('/api/admin/alert-phones', {
         method: 'PATCH',
-        headers: { ...authHeaders, 'Content-Type': 'application/json' },
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({ phones: alertPhones }),
       });
       const d = await r.json();
@@ -106,6 +120,14 @@ export default function AdminWhatsAppTab({
         </p>
         <input
           type="text"
+          name="bpg_order_alert_mobiles"
+          inputMode="numeric"
+          autoComplete="off"
+          autoCorrect="off"
+          spellCheck={false}
+          data-1p-ignore
+          data-lpignore="true"
+          data-form-type="other"
           value={alertPhones}
           onChange={(e) => setAlertPhones(e.target.value)}
           placeholder="9840418228, 98XXXXXXXX"
@@ -113,7 +135,7 @@ export default function AdminWhatsAppTab({
         />
         <button
           type="button"
-          disabled={alertSaving || !authHeaders}
+          disabled={alertSaving || !authToken}
           onClick={() => void saveAlertPhones()}
           className="px-3 py-2 text-xs font-semibold text-white bg-[#2874f0] hover:bg-[#1a5dc8] disabled:opacity-50 rounded-lg cursor-pointer"
         >
@@ -218,6 +240,10 @@ export default function AdminWhatsAppTab({
             <form onSubmit={onRequestPairing} className="flex gap-2">
               <input
                 type="tel"
+                name="bpg_wa_link_device"
+                autoComplete="off"
+                data-1p-ignore
+                data-lpignore="true"
                 placeholder="91XXXXXXXXXX (your WhatsApp)"
                 value={waPhoneInput}
                 onChange={(e) => setWaPhoneInput(e.target.value)}
