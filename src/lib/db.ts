@@ -183,11 +183,25 @@ function isRecoverablePgError(err: any): boolean {
   const code = String(err?.code || '');
   return (
     code === '57P01' ||
+    code === '57P03' || // cannot_connect_now (starting up)
+    code === 'ECONNRESET' ||
+    code === 'ETIMEDOUT' ||
+    code === 'ECONNREFUSED' ||
     msg.includes('postmaster') ||
     msg.includes('Connection terminated') ||
     msg.includes('calling end on the pool') ||
-    msg.includes('timeout exceeded')
+    msg.includes('timeout exceeded') ||
+    msg.includes('the database system is starting up') ||
+    msg.includes('ECONNRESET') ||
+    msg.includes('ECONNREFUSED') ||
+    msg.includes('ETIMEDOUT') ||
+    msg.includes('read ECONNRESET') ||
+    msg.includes('connect ETIMEDOUT')
   );
+}
+
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms));
 }
 
 function defaultPoolMax(): number {
@@ -222,8 +236,9 @@ function createPool(connectionString: string): Pool {
     max: defaultPoolMax(),
     idleTimeoutMillis: Number(process.env.DB_IDLE_TIMEOUT_MS || 600000),
     connectionTimeoutMillis: defaultConnectTimeoutMs(),
-    statement_timeout: 5000,
-    query_timeout: 5000,
+    // Soft launch: allow slower queries over flaky proxy; avoid killing analytics mid-flight.
+    statement_timeout: Number(process.env.DB_STATEMENT_TIMEOUT_MS || 15_000),
+    query_timeout: Number(process.env.DB_QUERY_TIMEOUT_MS || 15_000),
     keepAlive: true,
     keepAliveInitialDelayMillis: 10000,
     ssl: sslFor(normalized),
@@ -264,8 +279,9 @@ function startPoolHeartbeat(activePool: Pool) {
       }
     } catch (err: any) {
       heartbeatFailures++;
-      console.warn(`[db] heartbeat failed (${heartbeatFailures}/3):`, err?.message || err);
-      if (heartbeatFailures >= 3) {
+      console.warn(`[db] heartbeat failed (${heartbeatFailures}/5):`, err?.message || err);
+      // Free-tier blips are common — require sustained failure before tearing the pool down.
+      if (heartbeatFailures >= 5) {
         heartbeatFailures = 0;
         void invalidatePool('heartbeat failed');
       }
@@ -298,15 +314,22 @@ export async function warmDbConnection(): Promise<boolean> {
 
 /** Readiness probe for Railway / monitoring. Uses warm pool (no held client). */
 export async function pingDb(): Promise<{ ok: boolean; host?: string; message?: string }> {
-  try {
-    await queryDb('SELECT 1');
-    const host = activeConnectionString
-      ? new URL(activeConnectionString.replace(/^postgres(ql)?:\/\//, 'http://')).hostname
-      : undefined;
-    return { ok: true, host };
-  } catch (err: any) {
-    return { ok: false, message: err?.message || 'Database unreachable' };
+  const retries = Number(process.env.DB_PING_RETRIES || 5);
+  let lastMsg = 'Database unreachable';
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      await queryDb('SELECT 1');
+      const host = activeConnectionString
+        ? new URL(activeConnectionString.replace(/^postgres(ql)?:\/\//, 'http://')).hostname
+        : undefined;
+      return { ok: true, host };
+    } catch (err: any) {
+      lastMsg = err?.message || 'Database unreachable';
+      if (!isRecoverablePgError(err) || attempt === retries - 1) break;
+      await sleep(500 * (attempt + 1));
+    }
   }
+  return { ok: false, message: lastMsg };
 }
 
 /** Graceful shutdown on SIGTERM (Railway deploy rollover). */
@@ -317,8 +340,11 @@ export async function shutdownDb() {
 
 async function probeConnection(connStr: string): Promise<void> {
   const normalized = normalizeConnectionString(connStr);
-  // Fail private hosts faster so public proxy can take over without multi-second stalls.
-  const timeoutMs = isPrivateRailwayUrl(normalized) ? 2500 : 4000;
+  // Give Railway private mesh + public TCP proxy enough time; short probes caused false "timeout".
+  const base = defaultConnectTimeoutMs();
+  const timeoutMs = isPrivateRailwayUrl(normalized)
+    ? Math.max(base, 12_000)
+    : Math.max(base, 15_000);
   const client = new Client({
     connectionString: normalized,
     ssl: sslFor(normalized),
@@ -439,46 +465,54 @@ async function ensurePoolReady(): Promise<Pool> {
     }
 
     const candidates = getConnectionCandidates();
+    const rounds = Number(process.env.DB_CONNECT_ROUNDS || 6);
     let lastErr: Error | null = null;
 
-    for (const connStr of candidates) {
-      try {
-        const normalized = normalizeConnectionString(connStr);
-        await probeConnection(normalized);
+    for (let round = 0; round < rounds; round++) {
+      for (const connStr of candidates) {
+        try {
+          const normalized = normalizeConnectionString(connStr);
+          await probeConnection(normalized);
 
-        if (myGeneration !== poolGeneration) {
-          throw new Error('pool setup superseded by invalidation');
-        }
+          if (myGeneration !== poolGeneration) {
+            throw new Error('pool setup superseded by invalidation');
+          }
 
-        if (!isPoolUsable(pool) || activeConnectionString !== normalized) {
+          if (!isPoolUsable(pool) || activeConnectionString !== normalized) {
+            await destroyPool(isSchemaInitialized);
+            activeConnectionString = normalized;
+            pool = createPool(normalized);
+            console.log(`[db] connected via ${hostOf(normalized)}`);
+          }
+
+          await ensureSchemaReady(pool!);
+          lastPoolPingAt = Date.now();
+          heartbeatFailures = 0;
+          startPoolHeartbeat(pool!);
+          return pool!;
+        } catch (err: any) {
+          lastErr = err;
+          const msg = String(err?.message || err);
+          if (msg.includes('superseded by invalidation')) {
+            poolReadyPromise = null;
+            return ensurePoolReady();
+          }
+          console.error(`[db] connect failed (${hostOf(connStr)}):`, msg);
           await destroyPool(isSchemaInitialized);
-          activeConnectionString = normalized;
-          pool = createPool(normalized);
-          console.log(`[db] connected via ${hostOf(normalized)}`);
-        }
 
-        await ensureSchemaReady(pool!);
-        lastPoolPingAt = Date.now();
-        heartbeatFailures = 0;
-        startPoolHeartbeat(pool!);
-        return pool!;
-      } catch (err: any) {
-        lastErr = err;
-        const msg = String(err?.message || err);
-        if (msg.includes('superseded by invalidation')) {
-          poolReadyPromise = null;
-          return ensurePoolReady();
+          if (isPrivateRailwayUrl(connStr)) {
+            console.warn('[db] private host failed — trying public proxy fallback…');
+          }
         }
-        console.error(`[db] connect failed (${hostOf(connStr)}):`, msg);
-        await destroyPool(isSchemaInitialized);
-
-        if (isPrivateRailwayUrl(connStr)) {
-          console.warn(
-            '[db] private Railway host failed — trying next candidate (prefer DATABASE_URL=*.proxy.rlwy.net)…'
-          );
-        }
-        if (candidates.indexOf(connStr) < candidates.length - 1) continue;
       }
+
+      if (round < rounds - 1 && lastErr && isRecoverablePgError(lastErr)) {
+        const waitMs = Math.min(8_000, 750 * (round + 1));
+        console.warn(`[db] retrying all candidates (round ${round + 2}/${rounds}) in ${waitMs}ms…`);
+        await sleep(waitMs);
+        continue;
+      }
+      break;
     }
 
     throw lastErr || new Error('Could not connect to PostgreSQL');
@@ -493,7 +527,7 @@ async function ensurePoolReady(): Promise<Pool> {
 }
 
 export async function getDbClient() {
-  const retries = Number(process.env.DB_ACQUIRE_RETRIES || 3);
+  const retries = Number(process.env.DB_ACQUIRE_RETRIES || 8);
   let lastErr: Error | null = null;
 
   for (let attempt = 0; attempt < retries; attempt++) {
@@ -511,7 +545,7 @@ export async function getDbClient() {
       console.warn(`[db] acquire attempt ${attempt + 1}/${retries}:`, err?.message || err);
       if (isRecoverablePgError(err)) {
         await invalidatePool('client acquire failed');
-        await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+        await sleep(Math.min(8_000, 800 * (attempt + 1)));
         continue;
       }
       throw err;
