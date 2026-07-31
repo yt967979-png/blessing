@@ -1,9 +1,32 @@
 import { NextResponse } from 'next/server';
-import { queryDb } from '@/lib/db';
+import { pingDb, queryDb } from '@/lib/db';
 import { verifyAdminRequest, forbiddenResponse } from '@/lib/serverSecurity';
 
 /** Active (non-cancelled) orders only — cancelled sales do not count toward revenue. */
 const ACTIVE = `COALESCE(order_status, '') NOT ILIKE '%cancel%'`;
+
+function emptyAnalytics(days: number, error?: string) {
+  return {
+    summary: {
+      totalOrders: 0,
+      totalRevenue: 0,
+      avgOrderValue: 0,
+      paidOrders: 0,
+      codOrders: 0,
+      todayOrders: 0,
+      todayRevenue: 0,
+    },
+    daily: [],
+    paymentMethods: [],
+    orderStatuses: [],
+    paymentStatuses: [],
+    topProducts: [],
+    hourly: [],
+    monthlyTrend: [],
+    range: days,
+    ...(error ? { error, dbDisconnected: true } : {}),
+  };
+}
 
 export async function GET(request: Request) {
   const auth = await verifyAdminRequest(request);
@@ -14,18 +37,20 @@ export async function GET(request: Request) {
   const days = Math.min(Math.max(Number(range) || 30, 1), 365);
 
   try {
-    // Execute analytics queries in parallel on the warm pool (faster than sequential getDbClient)
-    const [
-      summaryRes,
-      dailyRes,
-      paymentMethodRes,
-      statusRes,
-      payStatusRes,
-      topProductsRes,
-      hourlyRes,
-      momRes,
-    ] = await Promise.all([
-      // 1. Overall summary
+    const ping = await pingDb();
+    if (!ping.ok) {
+      return NextResponse.json(
+        emptyAnalytics(
+          days,
+          ping.message ||
+            'Database disconnected. On Railway set DATABASE_URL=${{Postgres.DATABASE_PUBLIC_URL}} and redeploy.'
+        ),
+        { status: 503 }
+      );
+    }
+
+    // Keep concurrency low (Free pool is tiny) — 2 batches instead of 8 parallel
+    const [summaryRes, dailyRes, paymentMethodRes, statusRes] = await Promise.all([
       queryDb(`
         SELECT
           COUNT(*) FILTER (WHERE ${ACTIVE})::int                                        AS total_orders,
@@ -37,9 +62,8 @@ export async function GET(request: Request) {
           COALESCE(SUM(total_amount) FILTER (WHERE ${ACTIVE} AND ordered_at >= NOW() - INTERVAL '1 day'), 0)::numeric AS today_revenue
         FROM orders
       `),
-
-      // 2. Daily revenue for last N days
-      queryDb(`
+      queryDb(
+        `
         SELECT
           DATE(ordered_at AT TIME ZONE 'Asia/Kolkata') AS day,
           COUNT(*)::int                                AS orders,
@@ -47,13 +71,13 @@ export async function GET(request: Request) {
           COALESCE(SUM(total_amount) FILTER (WHERE payment_method NOT ILIKE '%cod%'), 0)::numeric AS online_revenue,
           COALESCE(SUM(total_amount) FILTER (WHERE payment_method ILIKE '%cod%'), 0)::numeric     AS cod_revenue
         FROM orders
-        WHERE ordered_at >= NOW() - ($1 || ' days')::INTERVAL
+        WHERE ordered_at >= NOW() - ($1::int * INTERVAL '1 day')
           AND ${ACTIVE}
         GROUP BY day
         ORDER BY day ASC
-      `, [days]),
-
-      // 3. Payment method breakdown
+      `,
+        [days]
+      ),
       queryDb(`
         SELECT
           payment_method,
@@ -64,8 +88,6 @@ export async function GET(request: Request) {
         GROUP BY payment_method
         ORDER BY revenue DESC
       `),
-
-      // 4. Order status breakdown
       queryDb(`
         SELECT
           order_status                            AS status,
@@ -75,8 +97,9 @@ export async function GET(request: Request) {
         GROUP BY order_status
         ORDER BY count DESC
       `),
+    ]);
 
-      // 5. Payment status breakdown
+    const [payStatusRes, topProductsRes, hourlyRes, momRes] = await Promise.all([
       queryDb(`
         SELECT
           payment_status,
@@ -87,8 +110,6 @@ export async function GET(request: Request) {
         GROUP BY payment_status
         ORDER BY count DESC
       `),
-
-      // 6. Top selling products
       queryDb(`
         SELECT
           oi.book_title                            AS title,
@@ -102,8 +123,6 @@ export async function GET(request: Request) {
         ORDER BY total_qty DESC
         LIMIT 10
       `),
-
-      // 7. Recent 7-day hourly heatmap
       queryDb(`
         SELECT
           EXTRACT(HOUR FROM ordered_at AT TIME ZONE 'Asia/Kolkata')::int AS hour,
@@ -114,8 +133,6 @@ export async function GET(request: Request) {
         GROUP BY hour
         ORDER BY hour ASC
       `),
-
-      // 8. Month-over-month comparison
       queryDb(`
         SELECT
           TO_CHAR(DATE_TRUNC('month', ordered_at AT TIME ZONE 'Asia/Kolkata'), 'Mon YYYY') AS month,
@@ -133,49 +150,49 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       summary: {
-        totalOrders:    Number(summary.total_orders   || 0),
-        totalRevenue:   Number(summary.total_revenue  || 0),
-        avgOrderValue:  Math.round(Number(summary.avg_order_value || 0)),
-        paidOrders:     Number(summary.paid_orders    || 0),
-        codOrders:      Number(summary.cod_orders     || 0),
-        todayOrders:    Number(summary.today_orders   || 0),
-        todayRevenue:   Number(summary.today_revenue  || 0),
+        totalOrders: Number(summary.total_orders || 0),
+        totalRevenue: Number(summary.total_revenue || 0),
+        avgOrderValue: Math.round(Number(summary.avg_order_value || 0)),
+        paidOrders: Number(summary.paid_orders || 0),
+        codOrders: Number(summary.cod_orders || 0),
+        todayOrders: Number(summary.today_orders || 0),
+        todayRevenue: Number(summary.today_revenue || 0),
       },
       daily: dailyRes.rows.map((r: any) => ({
-        day:           r.day,
-        orders:        Number(r.orders),
-        revenue:       Number(r.revenue),
+        day: r.day,
+        orders: Number(r.orders),
+        revenue: Number(r.revenue),
         onlineRevenue: Number(r.online_revenue),
-        codRevenue:    Number(r.cod_revenue),
+        codRevenue: Number(r.cod_revenue),
       })),
       paymentMethods: paymentMethodRes.rows.map((r: any) => ({
-        method:  r.payment_method || 'Unknown',
-        count:   Number(r.count),
+        method: r.payment_method || 'Unknown',
+        count: Number(r.count),
         revenue: Number(r.revenue),
       })),
       orderStatuses: statusRes.rows.map((r: any) => ({
-        status:  r.status || 'Unknown',
-        count:   Number(r.count),
+        status: r.status || 'Unknown',
+        count: Number(r.count),
         revenue: Number(r.revenue),
       })),
       paymentStatuses: payStatusRes.rows.map((r: any) => ({
-        status:  r.payment_status || 'Unknown',
-        count:   Number(r.count),
+        status: r.payment_status || 'Unknown',
+        count: Number(r.count),
         revenue: Number(r.revenue),
       })),
       topProducts: topProductsRes.rows.map((r: any) => ({
-        title:        r.title,
-        totalQty:     Number(r.total_qty),
+        title: r.title,
+        totalQty: Number(r.total_qty),
         totalRevenue: Number(r.total_revenue),
-        orderCount:   Number(r.order_count),
+        orderCount: Number(r.order_count),
       })),
       hourly: hourlyRes.rows.map((r: any) => ({
-        hour:   Number(r.hour),
+        hour: Number(r.hour),
         orders: Number(r.orders),
       })),
       monthlyTrend: momRes.rows.map((r: any) => ({
-        month:   r.month,
-        orders:  Number(r.orders),
+        month: r.month,
+        orders: Number(r.orders),
         revenue: Number(r.revenue),
       })),
       range: days,
@@ -183,6 +200,16 @@ export async function GET(request: Request) {
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     console.error('Analytics error:', message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    const isDb =
+      /timeout|connect|ECONNREFUSED|ENOTFOUND|database|pool/i.test(message);
+    return NextResponse.json(
+      emptyAnalytics(
+        days,
+        isDb
+          ? `${message}. On Railway set DATABASE_URL to Postgres DATABASE_PUBLIC_URL, then redeploy.`
+          : message
+      ),
+      { status: isDb ? 503 : 500 }
+    );
   }
 }

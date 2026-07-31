@@ -136,13 +136,22 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string) {
       }));
     } catch (_) {}
 
-    // Courier scan history if any
+    // Courier scan history if any (supports event-row schema + legacy columns)
     let scans: any[] = [];
     try {
       const ct = await client.query(
-        `SELECT status, location, remarks, event_time, created_at
-         FROM courier_tracking WHERE order_id = $1 OR awb_number = $2
-         ORDER BY COALESCE(event_time, created_at) DESC LIMIT 15`,
+        `SELECT
+           COALESCE(status, current_status) AS status,
+           location,
+           remarks,
+           event_time,
+           created_at
+         FROM courier_tracking
+         WHERE order_id = $1
+            OR awb_number = $2
+            OR docket_number = $2
+         ORDER BY COALESCE(event_time, created_at, updated_at) DESC NULLS LAST
+         LIMIT 15`,
         [o.id, o.awb_number || '']
       );
       scans = ct.rows.map((r: any) => ({

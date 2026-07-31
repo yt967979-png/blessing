@@ -292,19 +292,24 @@ export async function PATCH(request: Request) {
       finalStatus = qty > 0 ? 'published' : 'out_of_stock';
     }
 
-    if (finalStatus !== undefined) {
-      fields.push(`status = $${idx++}`);
-      values.push(finalStatus);
+    // Assign each column once (avoids "multiple assignments to same column")
+    const setCols = new Map<string, unknown>();
+    for (let i = 0; i < fields.length; i++) {
+      const col = fields[i].split('=')[0].trim();
+      setCols.set(col, values[i]);
     }
-    if (finalStock !== undefined) {
-      fields.push(`stock = $${idx++}`);
-      values.push(finalStock);
-    }
+    if (finalStatus !== undefined) setCols.set('status', finalStatus);
+    if (finalStock !== undefined) setCols.set('stock', finalStock);
 
-    if (fields.length > 0) {
-      fields.push(`updated_at = NOW()`);
-      values.push(id);
-      await client.query(`UPDATE books SET ${fields.join(', ')} WHERE id = $${idx}`, values);
+    if (setCols.size > 0) {
+      const cols = [...setCols.keys()];
+      const params = [...setCols.values(), id];
+      const assignments = cols.map((c, i) => `${c} = $${i + 1}`);
+      assignments.push('updated_at = NOW()');
+      await client.query(
+        `UPDATE books SET ${assignments.join(', ')} WHERE id = $${params.length}`,
+        params
+      );
       invalidateProductsCache();
     }
 

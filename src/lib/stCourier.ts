@@ -236,18 +236,34 @@ async function persistCourierEvents(
         id VARCHAR(255) PRIMARY KEY,
         order_id VARCHAR(255),
         awb_number VARCHAR(255),
+        docket_number VARCHAR(255),
         status VARCHAR(255),
+        current_status VARCHAR(255),
         location VARCHAR(255),
         remarks TEXT,
         event_time TIMESTAMP,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    for (const col of [
+      `ALTER TABLE courier_tracking ADD COLUMN IF NOT EXISTS awb_number VARCHAR(255)`,
+      `ALTER TABLE courier_tracking ADD COLUMN IF NOT EXISTS status VARCHAR(255)`,
+      `ALTER TABLE courier_tracking ADD COLUMN IF NOT EXISTS location VARCHAR(255)`,
+      `ALTER TABLE courier_tracking ADD COLUMN IF NOT EXISTS remarks TEXT`,
+      `ALTER TABLE courier_tracking ADD COLUMN IF NOT EXISTS event_time TIMESTAMP`,
+      `ALTER TABLE courier_tracking ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`,
+      `ALTER TABLE courier_tracking ADD COLUMN IF NOT EXISTS docket_number VARCHAR(255)`,
+    ]) {
+      try {
+        await client.query(col);
+      } catch (_) {}
+    }
     for (const ev of events.slice(0, 10)) {
       const id = `ct-${docket}-${Buffer.from(`${ev.time}|${ev.activity}`).toString('base64url').slice(0, 24)}`;
       await client.query(
-        `INSERT INTO courier_tracking (id, order_id, awb_number, status, location, remarks, event_time)
-         VALUES ($1, $2, $3, $4, $5, $6, NOW())
+        `INSERT INTO courier_tracking (id, order_id, awb_number, docket_number, status, location, remarks, event_time)
+         VALUES ($1, $2, $3, $3, $4, $5, $6, NOW())
          ON CONFLICT (id) DO NOTHING`,
         [id, orderId, docket, ev.activity, ev.location || null, ev.time || null]
       );

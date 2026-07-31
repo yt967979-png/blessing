@@ -48,12 +48,14 @@ function getConnectionCandidates(): string[] {
   );
 
   const onRailway = Boolean(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_SERVICE_ID);
+  // Prefer public proxy first — private hostname often times out when Private Networking
+  // is off / broken, which makes Admin analytics + QR look "broken".
   const sorted = [...new Set(raw.map(normalizeConnectionString))].sort((a, b) => {
     const score = (u: string) => {
-      if (onRailway && u.includes('railway.internal')) return 0;
-      if (u.includes('railway.internal')) return 1;
-      if (u.includes('rlwy.net') || u.includes('proxy.rlwy.net')) return 3;
-      return 2;
+      if (u.includes('rlwy.net') || u.includes('proxy.rlwy.net')) return 0;
+      if (onRailway && u.includes('railway.internal')) return 1;
+      if (u.includes('railway.internal')) return 2;
+      return 3;
     };
     return score(a) - score(b);
   });
@@ -433,11 +435,11 @@ async function ensurePoolReady(): Promise<Pool> {
         console.error('[db] connect failed:', msg);
         await destroyPool(isSchemaInitialized);
 
-        const isPrivateDnsFail =
-          msg.includes('ENOTFOUND') && connStr.includes('railway.internal');
-        if (isPrivateDnsFail) {
-          console.warn('[db] postgres.railway.internal not found — trying public URL next…');
-          continue;
+        const isPrivateFail = connStr.includes('railway.internal');
+        if (isPrivateFail) {
+          console.warn(
+            '[db] private Railway host failed — trying next candidate (set DATABASE_PUBLIC_URL if missing)…'
+          );
         }
         if (candidates.indexOf(connStr) < candidates.length - 1) continue;
       }
@@ -695,14 +697,20 @@ async function runSchemaInit(client: any) {
 
         CREATE TABLE IF NOT EXISTS courier_tracking (
           id VARCHAR(255) PRIMARY KEY,
-          order_id VARCHAR(255) REFERENCES orders(id) ON DELETE CASCADE,
-          docket_number VARCHAR(255) NOT NULL,
-          courier_name VARCHAR(100) DEFAULT 'ST Courier Express',
+          order_id VARCHAR(255),
+          awb_number VARCHAR(255),
+          docket_number VARCHAR(255),
+          status VARCHAR(255),
           current_status VARCHAR(255),
+          location VARCHAR(255),
+          remarks TEXT,
+          event_time TIMESTAMP,
+          courier_name VARCHAR(100) DEFAULT 'ST Courier Express',
           origin_hub VARCHAR(255),
           destination_hub VARCHAR(255),
           estimated_delivery VARCHAR(255),
           scraped_events JSONB,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
@@ -833,6 +841,17 @@ async function runSchemaInit(client: any) {
         ALTER TABLE order_timeline ADD COLUMN IF NOT EXISTS awb_number VARCHAR(255);
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS idempotency_key VARCHAR(80);
 
+        -- courier_tracking: old summary schema → event-row columns used by track/ST sync
+        ALTER TABLE courier_tracking ADD COLUMN IF NOT EXISTS awb_number VARCHAR(255);
+        ALTER TABLE courier_tracking ADD COLUMN IF NOT EXISTS status VARCHAR(255);
+        ALTER TABLE courier_tracking ADD COLUMN IF NOT EXISTS location VARCHAR(255);
+        ALTER TABLE courier_tracking ADD COLUMN IF NOT EXISTS remarks TEXT;
+        ALTER TABLE courier_tracking ADD COLUMN IF NOT EXISTS event_time TIMESTAMP;
+        ALTER TABLE courier_tracking ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+        ALTER TABLE courier_tracking ADD COLUMN IF NOT EXISTS docket_number VARCHAR(255);
+        ALTER TABLE courier_tracking ADD COLUMN IF NOT EXISTS current_status VARCHAR(255);
+        ALTER TABLE courier_tracking ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+
         CREATE TABLE IF NOT EXISTS coupon_redemptions (
           id VARCHAR(255) PRIMARY KEY,
           coupon_id VARCHAR(255) REFERENCES coupons(id) ON DELETE SET NULL,
@@ -845,6 +864,35 @@ async function runSchemaInit(client: any) {
       `);
     } catch (e) {
       /* schema already exists or partial — safe to continue */
+    }
+
+    // Critical column heals — run separately so one failure cannot skip the rest
+    const heals = [
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`,
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS ordered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`,
+      `ALTER TABLE order_timeline ADD COLUMN IF NOT EXISTS hub_city VARCHAR(255)`,
+      `ALTER TABLE order_timeline ADD COLUMN IF NOT EXISTS awb_number VARCHAR(255)`,
+      `ALTER TABLE courier_tracking ADD COLUMN IF NOT EXISTS awb_number VARCHAR(255)`,
+      `ALTER TABLE courier_tracking ADD COLUMN IF NOT EXISTS status VARCHAR(255)`,
+      `ALTER TABLE courier_tracking ADD COLUMN IF NOT EXISTS location VARCHAR(255)`,
+      `ALTER TABLE courier_tracking ADD COLUMN IF NOT EXISTS remarks TEXT`,
+      `ALTER TABLE courier_tracking ADD COLUMN IF NOT EXISTS event_time TIMESTAMP`,
+      `ALTER TABLE courier_tracking ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`,
+      `ALTER TABLE courier_tracking ADD COLUMN IF NOT EXISTS docket_number VARCHAR(255)`,
+      `ALTER TABLE books ADD COLUMN IF NOT EXISTS badge VARCHAR(100) DEFAULT ''`,
+      `ALTER TABLE books ADD COLUMN IF NOT EXISTS stock INT DEFAULT 50`,
+      `ALTER TABLE books ADD COLUMN IF NOT EXISTS discount_price NUMERIC`,
+      `UPDATE courier_tracking SET awb_number = COALESCE(NULLIF(awb_number, ''), docket_number) WHERE awb_number IS NULL OR awb_number = ''`,
+      `UPDATE courier_tracking SET status = COALESCE(NULLIF(status, ''), current_status) WHERE status IS NULL OR status = ''`,
+      `UPDATE orders SET ordered_at = COALESCE(ordered_at, created_at, updated_at, NOW()) WHERE ordered_at IS NULL`,
+      `UPDATE orders SET created_at = COALESCE(created_at, ordered_at, updated_at, NOW()) WHERE created_at IS NULL`,
+    ];
+    for (const sql of heals) {
+      try {
+        await client.query(sql);
+      } catch (e: any) {
+        console.warn('[db] heal skipped:', e?.message || e);
+      }
     }
 
     // Heal: cancelled orders must not look like collectible COD / paid sales

@@ -95,10 +95,10 @@ export async function findAwaitingOrderByPhone(phone: string) {
   if (dig.length !== 10) return null;
 
   const res = await queryDb(
-    `SELECT id, order_number, order_status, total_amount, shipping_address, created_at
+    `SELECT id, order_number, order_status, total_amount, shipping_address, ordered_at
      FROM orders
      WHERE order_status ILIKE '%Awaiting Confirmation%'
-     ORDER BY created_at DESC
+     ORDER BY ordered_at DESC NULLS LAST
      LIMIT 40`
   );
   for (const row of res.rows) {
@@ -226,9 +226,10 @@ export async function expireAwaitingConfirmations(maxAgeHours = 24) {
     const res = await queryDb(
       `SELECT order_number FROM orders
        WHERE order_status ILIKE '%Awaiting Confirmation%'
-         AND created_at < NOW() - INTERVAL '24 hours'
-       ORDER BY created_at ASC
-       LIMIT 20`
+         AND COALESCE(ordered_at, updated_at, NOW()) < NOW() - ($1::int * INTERVAL '1 hour')
+       ORDER BY COALESCE(ordered_at, updated_at) ASC
+       LIMIT 20`,
+      [maxAgeHours]
     );
     for (const row of res.rows) {
       const r = await executeOrderCancel({
