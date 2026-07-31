@@ -52,12 +52,12 @@ function hostOf(connectionString: string): string {
 function getConnectionCandidates(): string[] {
   const raw: string[] = [];
 
-  // Check explicit environment variables first before Railway PGHOST injection
+  // Check explicit environment variables first (Neon / Supabase / Cloud PG)
   const dbUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL;
   if (dbUrl) {
     const norm = normalizeConnectionString(dbUrl);
+    // Cloud managed PostgreSQL (Neon / Supabase) -> ALWAYS Candidate #1
     if (norm.includes('neon.tech') || norm.includes('supabase.co') || norm.includes('supabase.com')) {
-      console.log(`[db] Using Cloud Managed PostgreSQL (${hostOf(norm)})`);
       return [norm];
     }
     raw.push(norm);
@@ -70,13 +70,7 @@ function getConnectionCandidates(): string[] {
   if (process.env.DATABASE_PRIVATE_URL) raw.push(process.env.DATABASE_PRIVATE_URL);
 
   const onRailway = Boolean(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_SERVICE_ID);
-  
-  // If explicitly configured with a Cloud DB (Neon / Supabase), put it at index 0 immediately
   let sorted = [...new Set(raw.map(normalizeConnectionString))];
-  const cloudDb = sorted.find(u => u.includes('neon.tech') || u.includes('supabase.co') || u.includes('supabase.com'));
-  if (cloudDb) {
-    return [cloudDb, ...sorted.filter(u => u !== cloudDb)];
-  }
 
   const preferPrivate =
     onRailway || String(process.env.DB_TRY_PRIVATE || '').toLowerCase() === 'true';
