@@ -22,6 +22,35 @@ export async function register() {
 
     await warmDbConnection();
 
+    // Self keep-alive while process is up (does NOT wake a slept Free dyno — use UptimeRobot for that)
+    const keepAliveMs = Number(process.env.KEEP_ALIVE_MS || 4 * 60 * 1000);
+    if (keepAliveMs > 0) {
+      const base =
+        process.env.KEEP_ALIVE_URL ||
+        process.env.NEXT_PUBLIC_SITE_URL ||
+        (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : '') ||
+        'https://blessing-production.up.railway.app';
+      setInterval(() => {
+        void (async () => {
+          try {
+            const { pingDb } = await import('@/lib/db');
+            await pingDb();
+            if (base) {
+              await fetch(`${base.replace(/\/$/, '')}/api/health`, {
+                signal: AbortSignal.timeout(8000),
+              }).catch(() => {});
+            }
+          } catch (e: any) {
+            console.warn('[keepalive]', e?.message || e);
+          }
+        })();
+      }, keepAliveMs);
+      console.log(
+        `[keepalive] DB ping every ${Math.round(keepAliveMs / 1000)}s` +
+          (base ? ` + HTTP ${base}/api/health` : ' (set NEXT_PUBLIC_SITE_URL for HTTP self-ping)')
+      );
+    }
+
     const {
       startSharedBackgroundServices,
       startLeaderBackgroundServices,

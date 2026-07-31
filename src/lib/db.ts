@@ -256,12 +256,10 @@ export async function warmDbConnection(): Promise<boolean> {
   }
 }
 
-/** Readiness probe for Railway / monitoring. */
+/** Readiness probe for Railway / monitoring. Uses warm pool (no held client). */
 export async function pingDb(): Promise<{ ok: boolean; host?: string; message?: string }> {
   try {
-    const client = await getDbClient();
-    await client.query('SELECT 1');
-    releaseDbClient(client);
+    await queryDb('SELECT 1');
     const host = activeConnectionString
       ? new URL(activeConnectionString.replace(/^postgres(ql)?:\/\//, 'http://')).hostname
       : undefined;

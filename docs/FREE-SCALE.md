@@ -36,6 +36,19 @@ Without `RUNTIME_TIER=free`, auto-detect may treat a larger free container as `h
 - WhatsApp in the **same** web service (lazy connect — no second service)
 - Catalog uploads require Cloudinary Free (URLs, not base64)
 
+## 24/7 awake (no long “loading” after idle)
+
+While the app process is running, the DB pool heartbeats and a keep-alive pings `/api/health` every ~4 minutes.
+
+**If Railway Free sleeps the whole container**, only an **external** ping wakes it (UptimeRobot / cron):
+
+- URL: `https://YOUR-DOMAIN/api/health` every 5 minutes  
+- Also useful: `https://YOUR-DOMAIN/api/ready` (checks Postgres)
+
+First request after a real sleep can still take a few seconds (cold start). That is platform sleep, not slow SQL.
+
+Analytics already runs **8 queries in parallel** via `queryDb` (warm pool). Expect tens–hundreds of ms over the internet — not literal “&lt;5ms” from India to Railway.
+
 ## Env checklist (Free)
 
 | Variable | Suggested |

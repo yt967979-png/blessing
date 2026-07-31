@@ -14,7 +14,7 @@ export async function GET(request: Request) {
   const days = Math.min(Math.max(Number(range) || 30, 1), 365);
 
   try {
-    // Execute all 8 analytics queries concurrently in parallel using Promise.all on warm pool for sub-5ms response
+    // Execute analytics queries in parallel on the warm pool (faster than sequential getDbClient)
     const [
       summaryRes,
       dailyRes,
