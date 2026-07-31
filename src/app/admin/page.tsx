@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo, startTransition } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import {
@@ -123,6 +123,7 @@ export default function AdminPage() {
   // ── Orders state
   const [orders, setOrders] = useState<Order[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
+  const [ordersError, setOrdersError] = useState<string | null>(null);
   const [shiprocketAwbInput, setShiprocketAwbInput] = useState<Record<string, string>>({});
   const [dispatchingOrderIds, setDispatchingOrderIds] = useState<Record<string, boolean>>({});
   const [dbStats, setDbStats] = useState({ users: 0, books: 0 });
@@ -179,23 +180,36 @@ export default function AdminPage() {
   }, [user]);
 
   // ── Data loaders
+  // Do NOT call these inside startTransition: setOrdersLoading(true) would be deferred
+  // while finally(false) is urgent — a fast empty DB response can leave loading stuck true.
   const loadLiveOrders = useCallback(async () => {
     if (!user?.id) return;
     setOrdersLoading(true);
+    setOrdersError(null);
     try {
       const res = await fetch(`/api/orders`, {
         headers: authHeaders(user),
+        credentials: 'include',
       });
-      if (res.ok) { const data = await res.json(); if (Array.isArray(data)) setOrders(data); }
-    } catch {
-      // network error — silently ignore
-    } finally { setOrdersLoading(false); }
+      if (res.ok) {
+        const data = await res.json();
+        setOrders(Array.isArray(data) ? data : []);
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        setOrdersError(errData.error || errData.message || `Could not load orders (${res.status})`);
+        setOrders([]);
+      }
+    } catch (e: any) {
+      setOrdersError(e?.message || 'Network error loading orders');
+    } finally {
+      setOrdersLoading(false);
+    }
   }, [user]);
 
   const loadLowStock = useCallback(async () => {
     if (!user?.id) return;
     try {
-      const r = await fetch('/api/admin/users?view=low_stock', { headers: authHeaders(user) });
+      const r = await fetch('/api/admin/users?view=low_stock', { headers: authHeaders(user), credentials: 'include' });
       if (r.ok) {
         const d = await r.json();
         if (Array.isArray(d.alerts)) setLowStockAlerts(d.alerts);
@@ -212,6 +226,7 @@ export default function AdminPage() {
     try {
       const res = await fetch(`/api/admin/analytics?range=${analyticsRange}`, {
         headers: authHeaders(user),
+        credentials: 'include',
       });
       if (res.ok) {
         const data = await res.json();
@@ -227,15 +242,21 @@ export default function AdminPage() {
 
   // ── Initial load + SSE stream
   useEffect(() => {
-    startTransition(() => { void loadLiveOrders(); void loadAnalytics(); void loadLowStock(); });
-    if (activeTab === 'content') startTransition(() => { void loadContent(); });
+    if (!user?.id || user.role !== 'admin') return;
+    void loadLiveOrders();
+    void loadAnalytics();
+    void loadLowStock();
+    if (activeTab === 'content') void loadContent();
     let es: EventSource | null = null;
     try {
       es = new EventSource('/api/orders/stream');
       es.onmessage = (e) => {
         try {
           const p = JSON.parse(e.data) as { type: string };
-          if (p.type === 'ORDER_UPDATED') { startTransition(() => { void loadLiveOrders(); void loadAnalytics(); }); }
+          if (p.type === 'ORDER_UPDATED') {
+            void loadLiveOrders();
+            void loadAnalytics();
+          }
         } catch { /* ignore parse errors */ }
       };
     } catch { /* SSE not supported */ }
@@ -246,6 +267,7 @@ export default function AdminPage() {
       fetch('/api/courier/sync', {
         method: 'POST',
         headers: authHeaders(user),
+        credentials: 'include',
         body: JSON.stringify({}),
       })
         .then((r) => r.json())
@@ -259,7 +281,7 @@ export default function AdminPage() {
     };
     runCourierSync();
     const courierSync = setInterval(runCourierSync, 45000);
-    fetch('/api/db-status', { headers: authHeaders(user) }).then((r) => r.json()).then((d: { tableRowCounts?: { users?: number; books?: number } }) => {
+    fetch('/api/db-status', { headers: authHeaders(user), credentials: 'include' }).then((r) => r.json()).then((d: { tableRowCounts?: { users?: number; books?: number } }) => {
       if (d.tableRowCounts) {
         const u = d.tableRowCounts.users || 0;
         const b = d.tableRowCounts.books || 0;
@@ -267,13 +289,14 @@ export default function AdminPage() {
       }
     }).catch(() => { });
     return () => { clearInterval(interval); clearInterval(courierSync); if (es) es.close(); };
-  }, [loadLiveOrders, loadAnalytics, user]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-bind when admin session identity changes
+  }, [loadLiveOrders, loadAnalytics, loadLowStock, user?.id, user?.token, user?.role]);
 
   // Reload analytics when range changes
-  useEffect(() => { if (activeTab === 'analytics') startTransition(() => { void loadAnalytics(); }); }, [analyticsRange, activeTab, loadAnalytics]);
+  useEffect(() => { if (activeTab === 'analytics') void loadAnalytics(); }, [analyticsRange, activeTab, loadAnalytics]);
 
   useEffect(() => {
-    if (activeTab === 'content') startTransition(() => { void loadContent(); });
+    if (activeTab === 'content') void loadContent();
   }, [activeTab, loadContent]);
 
   // WhatsApp polling — only while WhatsApp tab is open.
@@ -1058,6 +1081,13 @@ export default function AdminPage() {
             {ordersLoading && orders.length === 0 ? (
               <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
                 <RefreshCw className="w-8 h-8 animate-spin text-[#2874f0] mx-auto mb-3" /><p className="text-sm text-gray-400">Loading orders...</p>
+              </div>
+            ) : ordersError && orders.length === 0 ? (
+              <div className="bg-white rounded-xl border border-red-200 p-12 text-center">
+                <AlertCircle className="w-10 h-10 mx-auto mb-3 text-red-400" />
+                <p className="text-sm font-semibold text-gray-700">Could not load orders</p>
+                <p className="text-xs text-gray-500 mt-1">{ordersError}</p>
+                <button onClick={() => void loadLiveOrders()} className="mt-4 px-4 py-2 text-xs font-semibold text-white bg-[#2874f0] hover:bg-[#1a5dc8] rounded-lg cursor-pointer">Retry</button>
               </div>
             ) : filteredOrders.length === 0 ? (
               <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
