@@ -23,6 +23,7 @@ function normalizeConnectionString(url: string): string {
 }
 
 function buildUrlFromPgEnv(): string | null {
+  if (process.env.DATABASE_URL) return null;
   if (!process.env.PGHOST || !process.env.PGUSER || !process.env.PGPASSWORD) return null;
   const user = encodeURIComponent(process.env.PGUSER);
   const pass = encodeURIComponent(process.env.PGPASSWORD);
