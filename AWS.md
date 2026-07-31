@@ -179,15 +179,10 @@ Do **not** copy `RAILWAY_*` or `RENDER_*` variables.
 
 See [`deploy/aws/env.example`](deploy/aws/env.example).
 
-After editing env (rebuild so `NEXT_PUBLIC_*` bake in):
+After editing env (rebuild so `NEXT_PUBLIC_*` bake in), use the safe redeploy from your clone:
 
 ```bash
-cd /opt/blessing
-# Do NOT source blessing.env before npm ci
-npm ci --include=dev
-set -a; source /etc/blessing.env; set +a
-npm run build
-sudo systemctl restart blessing
+sudo bash /path/to/clone/deploy/aws/redeploy.sh /path/to/clone
 ```
 
 ---
@@ -388,38 +383,16 @@ Do **not** pause Railway from scripts or agents — only after §6 passes on AWS
 
 ## 8. Updates after go-live
 
-If `/opt/blessing` is a bare rsync tree (no `.git`), pull in the clone then sync:
+**Use [`deploy/aws/redeploy.sh`](deploy/aws/redeploy.sh) only** — do not hand-roll rsync/`npm ci`/`restart` mid-build (that is the #1 cause of mass 502s).
 
 ```bash
-cd ~/blessing/blessing
+# Pull latest, then one safe redeploy (stops → rsync → npm ci WITHOUT env → build WITH env → start → curl health/ready)
+cd ~/blessing-src   # or ~/blessing/blessing — your git clone
 git pull origin main
-rsync -a --delete \
-  --exclude node_modules --exclude .next --exclude .git \
-  --exclude whatsapp_session --exclude 'whatsapp_session_*' \
-  ~/blessing/blessing/ /opt/blessing/
-# Remove accidental nested clone from a bad rsync source path
-rm -rf /opt/blessing/blessing
-cd /opt/blessing
-# NEVER source blessing.env before npm ci (NODE_ENV=production drops @tailwindcss/postcss)
-npm ci --include=dev
-set -a; source /etc/blessing.env; set +a
-npm run build
-test -f .next/server/middleware-manifest.json -o -f .next/middleware-manifest.json
-sudo cp deploy/aws/blessing.service /etc/systemd/system/blessing.service
-sudo systemctl daemon-reload
-sudo systemctl restart blessing
+sudo bash deploy/aws/redeploy.sh "$PWD"
 ```
 
-If `/opt/blessing` is itself a git clone:
-
-```bash
-cd /opt/blessing
-git pull origin main
-npm ci --include=dev
-set -a; source /etc/blessing.env; set +a
-npm run build
-sudo systemctl restart blessing
-```
+`redeploy.sh` aborts if `.next/server/middleware-manifest.json` is missing (never starts a broken build), removes nested `/opt/blessing/blessing` junk, and exits non-zero if localhost `/api/health` or `/api/ready` fail.
 
 WhatsApp auth state lives in `WHATSAPP_SESSION_DIR` (default `/var/lib/blessing/whatsapp_session` on AWS). Prefer not wiping that directory without backing up session data. `setup-lightsail.sh` creates and chowns it for the app user.
 
@@ -469,34 +442,17 @@ curl -sS http://127.0.0.1:3000/api/health
 curl -sS https://blessingpowerguide.duckdns.org/api/health
 ```
 
-If health still fails — **stop before rebuild** (never `restart` mid-build):
+If health still fails — **stop and use the safe redeploy script** (never `restart` mid-build):
 
 ```bash
-sudo systemctl stop blessing
 sudo sed -i 's/\r$//' /etc/blessing.env
-
-# Prefer git-pull path you actually use:
-cd ~/blessing/blessing && git pull origin main
-# then rsync into /opt/blessing if that is how you deploy (§8)
-# OR: cd /opt/blessing && git pull origin main
-
-cd /opt/blessing
-rm -rf /opt/blessing/blessing
-# Install deps WITHOUT sourcing env; build WITH env
-sudo -u ubuntu bash -lc 'cd /opt/blessing && npm ci --include=dev'
-sudo -u ubuntu bash -lc 'set -a; source /etc/blessing.env; set +a; cd /opt/blessing && npm run build'
-test -d /opt/blessing/.next
-test -f /opt/blessing/.next/server/middleware-manifest.json -o -f /opt/blessing/.next/middleware-manifest.json
-
-sudo cp /opt/blessing/deploy/aws/blessing.service /etc/systemd/system/blessing.service
-sudo systemctl daemon-reload
-sudo systemctl start blessing
-sleep 8
-curl -sS http://127.0.0.1:3000/api/health
+cd ~/blessing-src   # or ~/blessing/blessing
+git pull origin main
+sudo bash deploy/aws/redeploy.sh "$PWD"
 curl -sS https://blessingpowerguide.duckdns.org/api/health
 ```
 
-**Deploy rule:** stop `blessing` → pull/rsync → `npm ci --include=dev` (no env) → `npm run build` (with env) → start. Never source `/etc/blessing.env` before `npm ci`. Restarting while `.next` is incomplete is the #1 cause of mass 502s.
+**Deploy rule:** use `redeploy.sh` only. It stops → rsync → `npm ci --include=dev` (no env) → `npm run build` (with env) → verify middleware-manifest → start → curl health/ready. Never source `/etc/blessing.env` before `npm ci`.
 
 ### Build tip: `npm ci` + `NODE_ENV=production`
 
@@ -521,12 +477,41 @@ More Free-tier notes: [`docs/FREE-SCALE.md`](docs/FREE-SCALE.md). Skip catalog v
 
 ---
 
+## 11. 24/7 ops (honest Flipkart-feel)
+
+You cannot literally zero all loading — Flipkart itself shows **skeletons**. Goal for Blessing Power Guide:
+
+| OK | Not OK |
+|----|--------|
+| Brief skeleton / spinner while JSON loads | Blank white page, stuck forever, or raw 500 HTML |
+| Auto-recover after Neon blip (`Restart=always`) | Serving a half-built `.next` (broken CSS / every route 500) |
+| `/api/health` + `/api/ready` always return JSON quickly | Hanging TCP / empty Caddy 502 with no probe signal |
+
+**Rules**
+
+1. **Redeploy only via** `sudo bash deploy/aws/redeploy.sh /path/to/clone` — never restart while `npm run build` is running.
+2. **Cloudflare Free** in front of Lightsail (§10) — cache `/_next/static/*` and short-TTL anonymous catalog; bypass cookie’d `/api/*`.
+3. **Neon** — keep the **pooler** URL (`*-pooler.*.neon.tech`). If your Neon plan allows, **disable scale-to-zero** so the first catalog hit after idle is not a cold start.
+4. **Railway** — keep running until DuckDNS (or `.in`) §6 checklist passes; then pause Railway only. Keep Neon.
+5. **Keepalive** — already in-app (`KEEP_ALIVE_MS`, default ~4 min): DB ping + HTTP self-hit to `/api/health` via `PUBLIC_BASE_URL` / `NEXT_PUBLIC_SITE_URL`. No extra cron required on Lightsail (always-on VM). Optional external uptime (UptimeRobot) is fine but not required for WhatsApp.
+
+**One-liner (Lightsail, after `git pull` in the clone):**
+
+```bash
+sudo bash deploy/aws/redeploy.sh ~/blessing-src
+```
+
+(Use your real clone path if different, e.g. `~/blessing/blessing`.)
+
+---
+
 ## Files in this repo
 
 | Path | Purpose |
 |------|---------|
 | [`deploy/aws/setup-lightsail.sh`](deploy/aws/setup-lightsail.sh) | Ubuntu bootstrap |
-| [`deploy/aws/blessing.service`](deploy/aws/blessing.service) | systemd unit |
+| [`deploy/aws/redeploy.sh`](deploy/aws/redeploy.sh) | Safe stop → rsync → ci → build → start → health |
+| [`deploy/aws/blessing.service`](deploy/aws/blessing.service) | systemd unit (`Restart=always`) |
 | [`deploy/aws/Caddyfile`](deploy/aws/Caddyfile) | HTTPS reverse proxy → `:3000` |
 | [`deploy/aws/env.example`](deploy/aws/env.example) | Env keys (no secrets) |
 
