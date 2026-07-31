@@ -293,25 +293,43 @@ function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+function isAwsHosted(): boolean {
+  return (
+    Boolean(process.env.AWS_EXECUTION_ENV) ||
+    Boolean(process.env.ECS_CONTAINER_METADATA_URI) ||
+    String(process.env.HOSTING || '').toLowerCase() === 'aws'
+  );
+}
+
 function defaultPoolMax(): number {
-  // Free / soft launch: never honour oversized DB_POOL_MAX (was 50 → connection storms).
+  // Free / soft / Lightsail: never honour oversized DB_POOL_MAX (was 50 → connection storms).
   const tier = String(process.env.RUNTIME_TIER || process.env.RAILWAY_PLAN_TIER || '').toLowerCase();
   const freeSoft = tier === 'free' || String(process.env.LAUNCH_SCALE || 'soft') !== 'peak';
+  const awsHobby = isAwsHosted() || tier === 'hobby' || tier === 'free';
   if (process.env.DB_POOL_MAX) {
     const n = Number(process.env.DB_POOL_MAX);
     if (Number.isFinite(n) && n > 0) {
-      const capped = freeSoft ? Math.min(Math.floor(n), 5) : Math.floor(n);
+      // Neon PgBouncer / small VPS: hard-cap soft launch at 3 on aws/hobby, else 5.
+      const softCap = awsHobby ? 3 : 5;
+      const capped = freeSoft ? Math.min(Math.floor(n), softCap) : Math.floor(n);
       if (capped !== Math.floor(n)) {
-        console.warn(`[db] DB_POOL_MAX=${n} capped to ${capped} for soft/free launch`);
+        console.warn(`[db] DB_POOL_MAX=${n} capped to ${capped} for soft/aws/hobby`);
       }
       return capped;
     }
   }
-  return resolveDbPoolMaxPerReplica(getRuntimeTuning().dbPoolMax);
+  const fromTier = resolveDbPoolMaxPerReplica(getRuntimeTuning().dbPoolMax);
+  // Lightsail + Neon pooler: default 3 connections per process.
+  return awsHobby ? Math.min(fromTier, 3) : fromTier;
 }
 
 function defaultConnectTimeoutMs(): number {
-  return resolveTunedNumber('DB_CONNECT_TIMEOUT_MS', 'dbConnectTimeoutMs');
+  const fromEnv = resolveTunedNumber('DB_CONNECT_TIMEOUT_MS', 'dbConnectTimeoutMs');
+  // Neon cross-region from Lightsail needs headroom; keep 20–30s unless explicitly lower.
+  if (!process.env.DB_CONNECT_TIMEOUT_MS && isAwsHosted()) {
+    return Math.min(Math.max(fromEnv, 20_000), 30_000);
+  }
+  return fromEnv;
 }
 
 function defaultHeartbeatMs(): number {
@@ -321,19 +339,23 @@ function defaultHeartbeatMs(): number {
 function createPool(connectionString: string): Pool {
   const normalized = normalizeConnectionString(connectionString);
   const neon = isNeonUrl(normalized);
+  const poolerFriendly = neon || isAwsHosted();
   // Neon/PgBouncer closes idle sockets; holding them in node-pg causes "timeout exceeded"
-  // on the next checkout (Google sign-in hangs on "Signing in…"). Keep idle very short.
-  const idleDefault = neon ? 8_000 : 600_000;
+  // on the next checkout (Google sign-in hangs on "Signing in…"). Keep idle ≤8s.
+  const idleRaw = Number(process.env.DB_IDLE_TIMEOUT_MS || (poolerFriendly ? 5_000 : 600_000));
+  const idleTimeoutMillis = poolerFriendly
+    ? Math.min(Math.max(Number.isFinite(idleRaw) ? idleRaw : 5_000, 1_000), 8_000)
+    : idleRaw;
   const p = new Pool({
     connectionString: normalized,
-    max: neon ? Math.min(defaultPoolMax(), 5) : defaultPoolMax(),
-    idleTimeoutMillis: Number(process.env.DB_IDLE_TIMEOUT_MS || idleDefault),
+    max: poolerFriendly ? Math.min(defaultPoolMax(), 3) : defaultPoolMax(),
+    idleTimeoutMillis,
     connectionTimeoutMillis: defaultConnectTimeoutMs(),
     statement_timeout: Number(process.env.DB_STATEMENT_TIMEOUT_MS || 15_000),
     query_timeout: Number(process.env.DB_QUERY_TIMEOUT_MS || 15_000),
-    keepAlive: !neon,
-    keepAliveInitialDelayMillis: neon ? 0 : 10_000,
-    allowExitOnIdle: neon,
+    keepAlive: !poolerFriendly,
+    keepAliveInitialDelayMillis: poolerFriendly ? 0 : 10_000,
+    allowExitOnIdle: poolerFriendly,
     ssl: sslFor(normalized),
   });
 
@@ -421,26 +443,40 @@ export async function warmDbConnection(): Promise<boolean> {
 
 /** Readiness probe for monitoring / Caddy. Uses warm pool (no held client). Bounded total time. */
 export async function pingDb(): Promise<{ ok: boolean; host?: string; message?: string }> {
-  const retries = Number(process.env.DB_PING_RETRIES || 2);
-  const perAttemptMs = Number(process.env.DB_PING_TIMEOUT_MS || 8_000);
-  let lastMsg = 'Database unreachable';
-  for (let attempt = 0; attempt < retries; attempt++) {
-    try {
-      await withTimeout(queryDb('SELECT 1'), perAttemptMs, 'pingDb');
-      const host = activeConnectionString
-        ? new URL(activeConnectionString.replace(/^postgres(ql)?:\/\//, 'http://')).hostname
-        : undefined;
-      return { ok: true, host };
-    } catch (err: any) {
-      lastMsg = err?.message || 'Database unreachable';
-      if (/timeout/i.test(lastMsg)) {
-        await invalidatePool('pingDb timeout');
+  const totalMs = Number(process.env.DB_PING_TOTAL_MS || process.env.DB_READY_TIMEOUT_MS || 10_000);
+  const retries = Math.max(1, Number(process.env.DB_PING_RETRIES || 2));
+  const perAttemptMs = Math.min(
+    Number(process.env.DB_PING_TIMEOUT_MS || 5_000),
+    Math.max(2_000, Math.floor(totalMs / retries))
+  );
+
+  const run = async (): Promise<{ ok: boolean; host?: string; message?: string }> => {
+    let lastMsg = 'Database unreachable';
+    for (let attempt = 0; attempt < retries; attempt++) {
+      try {
+        // Prefer pool.query — never hold a client across awaits for a ping.
+        await withTimeout(queryDb('SELECT 1'), perAttemptMs, 'pingDb');
+        const host = activeConnectionString
+          ? new URL(activeConnectionString.replace(/^postgres(ql)?:\/\//, 'http://')).hostname
+          : undefined;
+        return { ok: true, host };
+      } catch (err: any) {
+        lastMsg = err?.message || 'Database unreachable';
+        if (/timeout/i.test(lastMsg)) {
+          await invalidatePool('pingDb timeout');
+        }
+        if (!isRecoverablePgError(err) || attempt === retries - 1) break;
+        await sleep(200 * (attempt + 1));
       }
-      if (!isRecoverablePgError(err) || attempt === retries - 1) break;
-      await sleep(300 * (attempt + 1));
     }
+    return { ok: false, message: lastMsg };
+  };
+
+  try {
+    return await withTimeout(run(), totalMs, 'pingDb.total');
+  } catch (err: any) {
+    return { ok: false, message: err?.message || 'Database unreachable' };
   }
-  return { ok: false, message: lastMsg };
 }
 
 /** Graceful shutdown on SIGTERM (Railway deploy rollover). */
@@ -657,8 +693,16 @@ async function ensurePoolReady(): Promise<Pool> {
   })();
 
   try {
-    // Bound total setup so readiness/analytics never wait on a stuck single-flight forever
-    const budget = Number(process.env.DB_ENSURE_TIMEOUT_MS || Math.min(connectMs * 2 + 5_000, 25_000));
+    // Bound total setup so /api/ready never waits on a stuck single-flight forever.
+    // Neon/Lightsail: keep under ~15s so ready's 10–12s budget can still return JSON.
+    const neonish =
+      isNeonUrl(activeConnectionString || '') ||
+      isNeonUrl(process.env.DATABASE_URL || '') ||
+      isAwsHosted();
+    const defaultBudget = neonish
+      ? Math.min(Math.max(connectMs, 12_000), 15_000)
+      : Math.min(connectMs * 2 + 5_000, 25_000);
+    const budget = Number(process.env.DB_ENSURE_TIMEOUT_MS || defaultBudget);
     return await withTimeout(poolReadyPromise, budget, 'ensurePoolReady');
   } catch (err) {
     void invalidatePool('ensurePoolReady failed');

@@ -4,14 +4,21 @@ import { pingDb } from '@/lib/db';
 /** Overall budget so Caddy/proxies get a 503 JSON body instead of a 0-byte hang. */
 const READY_BUDGET_MS = Number(process.env.DB_READY_TIMEOUT_MS || 12_000);
 
-/** Readiness probe — DB must respond (healthchecks / deploy gates). */
+/** Readiness probe — DB must respond (healthchecks / deploy gates). Always JSON within budget. */
 export async function GET() {
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     const result = await Promise.race([
-      pingDb(),
+      pingDb().finally(() => {
+        if (timer) clearTimeout(timer);
+      }),
       new Promise<{ ok: false; message: string }>((resolve) => {
-        setTimeout(
-          () => resolve({ ok: false, message: `Database ping timed out after ${READY_BUDGET_MS}ms` }),
+        timer = setTimeout(
+          () =>
+            resolve({
+              ok: false,
+              message: `Database ping timed out after ${READY_BUDGET_MS}ms`,
+            }),
           READY_BUDGET_MS
         );
       }),
@@ -46,5 +53,7 @@ export async function GET() {
       },
       { status: 503 }
     );
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 }

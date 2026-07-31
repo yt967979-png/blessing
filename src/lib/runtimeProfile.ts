@@ -81,9 +81,10 @@ function baseTuningForTier(t: RuntimeTier): RuntimeTuning {
       return {
         tier: t,
         load: 'normal',
-        dbPoolMax: 4,
+        // Lightsail + Neon pooler: small pool avoids PgBouncer checkout storms.
+        dbPoolMax: 3,
         dbHeartbeatMs: 30_000,
-        dbConnectTimeoutMs: 20_000,
+        dbConnectTimeoutMs: 30_000,
         courierCronEnabled: true,
         courierCronIntervalMs: 5 * 60 * 1000,
         courierCronStartDelayMs: 30_000,

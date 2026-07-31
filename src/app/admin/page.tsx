@@ -1054,7 +1054,7 @@ export default function AdminPage() {
                   <p className="font-bold text-gray-800">How to fix (Lightsail / HOSTING=aws):</p>
                   <ol className="list-decimal list-inside space-y-0.5 text-gray-600">
                     <li>SSH in and edit <code>/etc/blessing.env</code> — set <code>DATABASE_URL</code> to the Neon <strong>pooled</strong> URL (<code>*-pooler*.neon.tech</code>)</li>
-                    <li>Optional: <code>DB_CONNECT_TIMEOUT_MS=20000</code> and <code>DB_IDLE_TIMEOUT_MS=8000</code></li>
+                    <li>Optional: <code>DB_POOL_MAX=3</code>, <code>DB_CONNECT_TIMEOUT_MS=30000</code>, <code>DB_IDLE_TIMEOUT_MS=5000</code></li>
                     <li>Then: <code>sudo systemctl restart blessing</code> and check <code>curl -sS https://YOUR_HOST/api/ready</code></li>
                   </ol>
                 </div>

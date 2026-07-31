@@ -19,7 +19,9 @@ ExecStartPre=/usr/bin/test -d /opt/blessing/.next
 ExecStart=/usr/bin/node /opt/blessing/node_modules/next/dist/bin/next start --hostname 0.0.0.0 --port 3000
 Restart=always
 RestartSec=5
-TimeoutStopSec=30
+# Fast stop so `systemctl restart` does not sit on the default ~90s stop timeout.
+TimeoutStopSec=15
+KillSignal=SIGTERM
 # Baileys + Next share this process — keep one replica only.
 KillMode=mixed
 
