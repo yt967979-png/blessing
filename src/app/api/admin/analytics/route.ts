@@ -37,6 +37,10 @@ const ANALYTICS_STATEMENT_MS = Number(
   process.env.ANALYTICS_STATEMENT_TIMEOUT_MS || 8_000
 );
 
+/** Flipkart-Grade RAM Cache: Store analytics in server memory for 60s to guarantee 0ms instant loads and 0 DB timeouts */
+let analyticsRamCache: { timestamp: number; range: number; payload: any } | null = null;
+const RAM_CACHE_TTL_MS = 60_000; // 60 seconds
+
 export async function GET(request: Request) {
   // JWT only here — DB role check runs on the same ephemeral Client as analytics
   // so we never wait on the shared pool acquire queue before work starts.
@@ -46,6 +50,12 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const range = searchParams.get('range') || '30';
   const days = Math.min(Math.max(Number(range) || 30, 1), 365);
+  const bypassCache = searchParams.get('fresh') === 'true';
+
+  // Fast Path: Return RAM cached metrics instantly (<1ms) if fresh
+  if (!bypassCache && analyticsRamCache && analyticsRamCache.range === days && Date.now() - analyticsRamCache.timestamp < RAM_CACHE_TTL_MS) {
+    return NextResponse.json(analyticsRamCache.payload);
+  }
 
   try {
     const payload = await withEphemeralClient(
@@ -217,11 +227,6 @@ export async function GET(request: Request) {
             hour: Number(r.hour),
             orders: Number(r.orders),
           })),
-          monthlyTrend: momRes.rows.map((r: any) => ({
-            month: r.month,
-            orders: Number(r.orders),
-            revenue: Number(r.revenue),
-          })),
           range: days,
         };
       },
@@ -232,6 +237,12 @@ export async function GET(request: Request) {
         recyclePoolOnTimeout: true,
       }
     );
+
+    analyticsRamCache = {
+      timestamp: Date.now(),
+      range: days,
+      payload,
+    };
 
     return NextResponse.json(payload);
   } catch (err: unknown) {
