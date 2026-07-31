@@ -47,23 +47,13 @@ function OrdersContent() {
   const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
   const [orderTab, setOrderTab] = useState<'all' | 'active' | 'delivered' | 'cancelled'>('all');
 
-  // Recommended 8 Status Flow
-  const ALL_STATUS_STEPS = [
-    { key: 'Order Placed', label: 'Order Placed', desc: 'Order submitted & logged' },
-    { key: 'Payment Confirmed', label: 'Payment Confirmed', desc: 'Razorpay UPI payment verified' },
-    { key: 'Preparing Order', label: 'Preparing Order', desc: 'Retrieving books from inventory' },
-    { key: 'Packed', label: 'Packed', desc: 'Parcel packaged & sealed' },
-    { key: 'Handed to ST Courier', label: 'Handed to ST Courier', desc: 'Dispatched to ST Courier Hub' },
-    { key: 'In Transit', label: 'In Transit', desc: 'En route via ST Courier express route' },
-    { key: 'Out for Delivery', label: 'Out for Delivery', desc: 'Courier executive out for delivery' },
-    { key: 'Delivered', label: 'Delivered', desc: 'Successfully delivered to student' },
-  ];
-
   const isCancelledStatus = (status: string) => (status || '').toLowerCase().includes('cancel');
+  const isAwaitingStatus = (status: string) => (status || '').toLowerCase().includes('awaiting confirmation');
 
   const getCurrentStepIndex = (status: string) => {
     const s = (status || '').toLowerCase();
     if (s.includes('cancel')) return -1;
+    if (s.includes('awaiting confirmation')) return 0;
     if (s.includes('delivered')) return 7;
     if (s.includes('out for delivery')) return 6;
     if (s.includes('in transit') || s.includes('shipped')) return 5;
@@ -71,8 +61,19 @@ function OrdersContent() {
     if (s.includes('packed')) return 3;
     if (s.includes('preparing')) return 2;
     if (s.includes('payment confirmed') || s.includes('paid')) return 1;
-    return 0; // Order Placed
+    return 1; // confirmed / Order Placed
   };
+
+  const ALL_STATUS_STEPS = [
+    { key: 'Awaiting Confirmation', label: 'Confirm on WhatsApp', desc: 'Reply YES on WhatsApp to confirm' },
+    { key: 'Order Placed', label: 'Confirmed', desc: 'Order confirmed — we will pack soon' },
+    { key: 'Preparing Order', label: 'Preparing', desc: 'Retrieving books from inventory' },
+    { key: 'Packed', label: 'Packed', desc: 'Parcel packaged & sealed' },
+    { key: 'Handed to ST Courier', label: 'Shipped', desc: 'Dispatched to ST Courier Hub' },
+    { key: 'In Transit', label: 'In Transit', desc: 'En route via ST Courier' },
+    { key: 'Out for Delivery', label: 'Out for Delivery', desc: 'Courier executive out for delivery' },
+    { key: 'Delivered', label: 'Delivered', desc: 'Successfully delivered' },
+  ];
 
   const canCustomerCancel = (status: string) => {
     const s = (status || '').toLowerCase();
@@ -272,6 +273,9 @@ function OrdersContent() {
   const orderIsCancelled = searchedOrderData
     ? isCancelledStatus(searchedOrderData.courierStatus || searchedOrderData.status || '')
     : false;
+  const orderIsAwaiting = searchedOrderData
+    ? isAwaitingStatus(searchedOrderData.courierStatus || searchedOrderData.status || '')
+    : false;
   const isOfficialAwb = searchedOrderData?.trackingNumber && (searchedOrderData.trackingNumber.startsWith('STC') || !searchedOrderData.trackingNumber.startsWith('SHP-'));
   const progressPercent = orderIsCancelled
     ? 0
@@ -419,6 +423,16 @@ function OrdersContent() {
                 <h3 className="font-heading font-black text-lg text-red-800">Order Cancelled</h3>
                 <p className="text-xs text-red-700/80 max-w-md mx-auto">
                   This order is cancelled. Stock is restored — you can place a new order anytime from the shop.
+                </p>
+              </div>
+            ) : orderIsAwaiting ? (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-6 text-center space-y-2">
+                <div className="w-12 h-12 rounded-full bg-amber-100 border border-amber-200 text-amber-800 flex items-center justify-center mx-auto">
+                  <AlertCircle className="w-6 h-6" />
+                </div>
+                <h3 className="font-heading font-black text-lg text-amber-900">Confirm on WhatsApp</h3>
+                <p className="text-xs text-amber-800/90 max-w-md mx-auto">
+                  Reply <strong>YES</strong> to confirm or <strong>NO</strong> to cancel on the WhatsApp we sent. We pack only after YES.
                 </p>
               </div>
             ) : (

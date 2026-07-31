@@ -1,6 +1,6 @@
 'use client';
 
-import React, { FormEvent } from 'react';
+import React, { FormEvent, useEffect, useState } from 'react';
 import { MessageSquare, CheckCircle2, RefreshCw } from 'lucide-react';
 
 type WaStatus = {
@@ -28,6 +28,7 @@ export default function AdminWhatsAppTab({
   onUnlink,
   onRequestPairing,
   onRefreshQr,
+  authHeaders,
 }: {
   waStatus: WaStatus;
   waPhoneInput: string;
@@ -36,8 +37,49 @@ export default function AdminWhatsAppTab({
   onUnlink: () => void;
   onRequestPairing: (e: FormEvent) => void;
   onRefreshQr?: () => void;
+  authHeaders?: HeadersInit;
 }) {
   const showCode = isRealPairingCode(waPairingCode);
+  const [alertPhones, setAlertPhones] = useState('');
+  const [alertSaving, setAlertSaving] = useState(false);
+  const [alertMsg, setAlertMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!authHeaders) return;
+    void (async () => {
+      try {
+        const r = await fetch('/api/admin/alert-phones', { headers: authHeaders });
+        const d = await r.json();
+        if (r.ok) setAlertPhones(String(d.raw || d.phones?.join(', ') || ''));
+      } catch {
+        /* ignore */
+      }
+    })();
+  }, [authHeaders]);
+
+  const saveAlertPhones = async () => {
+    if (!authHeaders) return;
+    setAlertSaving(true);
+    setAlertMsg(null);
+    try {
+      const r = await fetch('/api/admin/alert-phones', {
+        method: 'PATCH',
+        headers: { ...authHeaders, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phones: alertPhones }),
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        setAlertMsg(d.error || 'Save failed');
+        return;
+      }
+      setAlertPhones(String(d.phones?.join(', ') || ''));
+      setAlertMsg(d.message || 'Saved');
+    } catch {
+      setAlertMsg('Network error');
+    } finally {
+      setAlertSaving(false);
+    }
+  };
 
   return (
     <div className="max-w-lg mx-auto space-y-4">
@@ -47,14 +89,37 @@ export default function AdminWhatsAppTab({
         </div>
         <h2 className="text-base font-bold text-gray-900">Admin WhatsApp Number</h2>
         <p className="text-xs text-gray-500 mt-2 leading-relaxed">
-          Link <strong>your shop WhatsApp</strong> here. After linking, the panel sends from{' '}
-          <strong>your number</strong> to each <strong>customer&apos;s number</strong>:
+          Link <strong>your shop WhatsApp</strong> here. Customers get a YES/NO confirm ask; after{' '}
+          <strong>YES</strong> you get an &quot;order received&quot; alert on the phones below.
         </p>
         <ul className="text-left text-xs text-gray-600 mt-3 space-y-1.5 max-w-xs mx-auto">
-          <li>• Order Placed → customer phone</li>
-          <li>• Packed / Shipped / Delivered → customer phone</li>
-          <li>• Coupon & offer broadcasts</li>
+          <li>• Order placed → customer: reply YES / NO</li>
+          <li>• YES → customer confirm reply + admin alert</li>
+          <li>• Then pack / add ST Courier AWB in Orders</li>
         </ul>
+      </div>
+
+      <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-3 text-left">
+        <h3 className="text-sm font-bold text-gray-900">Alert phones (after customer YES)</h3>
+        <p className="text-[11px] text-gray-500">
+          Extra numbers that get &quot;Order received&quot; WhatsApp when a customer confirms. Comma-separated 10-digit mobiles.
+        </p>
+        <input
+          type="text"
+          value={alertPhones}
+          onChange={(e) => setAlertPhones(e.target.value)}
+          placeholder="9840418228, 98XXXXXXXX"
+          className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg outline-none focus:border-[#2874f0] font-mono"
+        />
+        <button
+          type="button"
+          disabled={alertSaving || !authHeaders}
+          onClick={() => void saveAlertPhones()}
+          className="px-3 py-2 text-xs font-semibold text-white bg-[#2874f0] hover:bg-[#1a5dc8] disabled:opacity-50 rounded-lg cursor-pointer"
+        >
+          {alertSaving ? 'Saving…' : 'Save alert phones'}
+        </button>
+        {alertMsg && <p className="text-[11px] text-gray-600">{alertMsg}</p>}
       </div>
 
       {waStatus.status === 'CONNECTED' || waStatus.connected ? (
@@ -70,8 +135,7 @@ export default function AdminWhatsAppTab({
             {[
               ['Linked as', waStatus.linkedPhone ? `+${waStatus.linkedPhone}` : 'Admin device'],
               ['Sends to', 'Customer phone numbers'],
-              ['Orders', 'Placed → Packed → Delivered'],
-              ['Offers', 'Coupon broadcasts'],
+              ['Orders', 'YES/NO confirm → pack → AWB'],
               ['Cost', 'Free (your WhatsApp)'],
             ].map(([k, v]) => (
               <div key={k} className="flex justify-between gap-3">
@@ -101,7 +165,6 @@ export default function AdminWhatsAppTab({
             </p>
           </div>
 
-          {/* Step 1: QR (primary) */}
           <div className="rounded-xl border border-gray-100 bg-gray-50 p-4 space-y-3">
             <p className="text-xs font-bold text-gray-800 text-center">Step 1 — Scan QR (easiest)</p>
             {waStatus.qrImage ? (
@@ -147,7 +210,6 @@ export default function AdminWhatsAppTab({
             )}
           </div>
 
-          {/* Step 2: pairing code */}
           <div className="border-t border-gray-100 pt-4">
             <p className="text-xs font-semibold text-gray-700 mb-1">Step 2 — Or use pairing code (no camera)</p>
             <p className="text-[11px] text-gray-400 mb-3">

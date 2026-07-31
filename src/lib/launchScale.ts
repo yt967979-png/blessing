@@ -1,10 +1,11 @@
 /**
- * Launch traffic profile — soft now (1 replica), peak at campaign (~2k at once).
+ * Launch traffic profile — soft = free/single container (default), peak optional.
  *
  * Railway variables:
+ *   RUNTIME_TIER=free          (force free tuning on Railway Free)
  *   LAUNCH_SCALE=soft|peak     (default soft)
- *   APP_REPLICA_COUNT=3        (match Railway replica count at launch)
- *   DB_POOL_MAX=2              (optional override per replica)
+ *   APP_REPLICA_COUNT=1
+ *   DB_POOL_MAX=2              (optional; keep 2–3 on Free)
  */
 
 export type LaunchScale = 'soft' | 'peak';
@@ -25,7 +26,8 @@ export function getDbConnectionBudget(): number {
     const n = Number(process.env.DB_CONNECTION_BUDGET);
     if (Number.isFinite(n) && n > 0) return Math.floor(n);
   }
-  return getLaunchScale() === 'peak' ? 18 : 10;
+  // Free Postgres is tiny — soft budget stays very low
+  return getLaunchScale() === 'peak' ? 18 : 5;
 }
 
 export function resolveDbPoolMaxPerReplica(tierDefault: number): number {
@@ -35,14 +37,25 @@ export function resolveDbPoolMaxPerReplica(tierDefault: number): number {
   }
   const replicas = getAppReplicaCount();
   const perReplica = Math.max(1, Math.floor(getDbConnectionBudget() / replicas));
-  const cap = getLaunchScale() === 'peak' ? 3 : tierDefault;
+  // Soft/Free: honour tierDefault (often 2–3); peak: cap 3 per replica
+  const cap = getLaunchScale() === 'peak' ? 3 : Math.min(5, Math.max(1, tierDefault));
   return Math.min(cap, perReplica);
 }
 
+/** In-memory catalog TTL — soft/Free: long (most concurrent traffic hits RAM). */
 export function getCatalogCacheTtlMs(): number {
-  return getLaunchScale() === 'peak' ? 5 * 60 * 1000 : 2 * 60 * 1000;
+  if (process.env.CATALOG_CACHE_TTL_MS) {
+    const n = Number(process.env.CATALOG_CACHE_TTL_MS);
+    if (Number.isFinite(n) && n > 0) return Math.floor(n);
+  }
+  return getLaunchScale() === 'peak' ? 5 * 60 * 1000 : 15 * 60 * 1000;
 }
 
+/**
+ * Cache-Control for anonymous catalog JSON.
+ * Soft: long s-maxage so Cloudflare Free can absorb repeat views.
+ * Admin uses ?fresh=1 to bypass memory + should send no-store from client.
+ */
 export function getCatalogCdnHeaders(): Record<string, string> {
   if (getLaunchScale() === 'peak') {
     return {
@@ -51,7 +64,7 @@ export function getCatalogCdnHeaders(): Record<string, string> {
     };
   }
   return {
-    'Cache-Control': 'public, max-age=0, s-maxage=30, stale-while-revalidate=60',
+    'Cache-Control': 'public, max-age=60, s-maxage=300, stale-while-revalidate=900',
     Vary: 'Accept-Encoding',
   };
 }
@@ -62,7 +75,7 @@ export function logLaunchScaleConfig(): void {
   const budget = getDbConnectionBudget();
   const pool = resolveDbPoolMaxPerReplica(scale === 'peak' ? 3 : 2);
   console.log(
-    `[launch] scale=${scale} replicas=${replicas} dbPoolPerReplica=${pool} (budget≈${budget} total PG conns)`
+    `[launch] scale=${scale} replicas=${replicas} dbPoolPerReplica=${pool} (budget≈${budget} total PG conns) catalogTtlMs=${getCatalogCacheTtlMs()}`
   );
   if (scale === 'peak' && replicas < 3) {
     console.warn(
@@ -70,6 +83,8 @@ export function logLaunchScaleConfig(): void {
     );
   }
   if (scale === 'soft') {
-    console.log('[launch] soft mode (1 replica). Set LAUNCH_SCALE=peak + 3–4 replicas for ~2k at once.');
+    console.log(
+      '[launch] soft/Free mode: target ~20–80 concurrent catalog browsers with Cloudflare Free in front. Set RUNTIME_TIER=free on Railway Free. Do not claim Flipkart-scale concurrency.'
+    );
   }
 }

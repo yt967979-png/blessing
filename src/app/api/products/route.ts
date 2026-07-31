@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
-import { getDbClient, releaseDbClient, ensureDefaultCategories } from '@/lib/db';
+import { getDbClient, releaseDbClient, ensureDefaultCategories, queryDb } from '@/lib/db';
 import { verifyAdminRequest, forbiddenResponse } from '@/lib/serverSecurity';
 import { getCatalogCacheTtlMs, getCatalogCdnHeaders } from '@/lib/launchScale';
 
 // Shared catalog cache: same search/class/slug reused without hitting DB again
 const queryCache = new Map<string, { data: any[]; timestamp: number }>();
-const MAX_CACHE_KEYS = 80;
+const MAX_CACHE_KEYS = 120;
 
 export function invalidateProductsCache() {
   queryCache.clear();
@@ -97,23 +97,9 @@ export async function GET(request: Request) {
     });
   }
 
-  let client: any = null;
   try {
-    client = await getDbClient();
-  } catch (dbErr: any) {
-    console.warn('/api/products DB connect skipped, serving catalog fallback:', dbErr?.message);
-    const stale = readCache(key, true);
-    if (stale) {
-      return NextResponse.json(stale, {
-        headers: catalogHeaders({ 'X-Cache-Status': 'STALE_MEMORY' }),
-      });
-    }
-    return NextResponse.json([], { headers: catalogHeaders() });
-  }
-
-  try {
-    if (client) {
-      let sql = `
+    // Prefer pool.query for catalog reads (cheaper than holding a checkout client)
+    let sql = `
         SELECT b.*, 
                COALESCE(COUNT(r.id), 0)::int as review_count,
                COALESCE(AVG(r.rating), 0)::numeric(3,1) as avg_rating
@@ -121,70 +107,69 @@ export async function GET(request: Request) {
         LEFT JOIN reviews r ON b.id = r.book_id
         WHERE 1=1
       `;
-      const params: any[] = [];
-      let count = 1;
+    const params: any[] = [];
+    let count = 1;
 
-      if (slug) {
-        sql += ` AND (b.slug = $${count} OR b.id = $${count})`;
-        params.push(slug);
-        count++;
-      }
+    if (slug) {
+      sql += ` AND (b.slug = $${count} OR b.id = $${count})`;
+      params.push(slug);
+      count++;
+    }
 
-      if (cls && cls !== 'all' && cls !== 'ALL') {
-        sql += ` AND b.title ILIKE $${count++}`;
-        params.push(`%${cls}%`);
-      }
+    if (cls && cls !== 'all' && cls !== 'ALL') {
+      sql += ` AND b.title ILIKE $${count++}`;
+      params.push(`%${cls}%`);
+    }
 
-      if (search && search.trim()) {
-        sql += ` AND (b.title ILIKE $${count} OR b.subject ILIKE $${count} OR b.description ILIKE $${count})`;
-        params.push(`%${search.trim()}%`);
-        count++;
-      }
+    if (search && search.trim()) {
+      sql += ` AND (b.title ILIKE $${count} OR b.subject ILIKE $${count} OR b.description ILIKE $${count})`;
+      params.push(`%${search.trim()}%`);
+      count++;
+    }
 
-      sql += ' GROUP BY b.id ORDER BY b.created_at DESC';
+    sql += ' GROUP BY b.id ORDER BY b.created_at DESC';
 
-      const res = await client.query(sql, params);
+    const res = await queryDb(sql, params);
 
-      if (res.rows) {
-        const mapped = res.rows.map((d: any) => {
-          const { price, mrp, discount } = mapBookPrices(d);
+    if (res.rows) {
+      const mapped = res.rows.map((d: any) => {
+        const { price, mrp, discount } = mapBookPrices(d);
 
-          const safeTitle = String(d.title || '');
-          const isCombo = d.category_id === 'cat-combos' || safeTitle.toLowerCase().includes('combo');
-          const classMatch = safeTitle.match(/(6th|7th|8th|9th|10th|11th|12th)/i);
-          const extractedClass = classMatch ? classMatch[0] : '10th';
+        const safeTitle = String(d.title || '');
+        const isCombo = d.category_id === 'cat-combos' || safeTitle.toLowerCase().includes('combo');
+        const classMatch = safeTitle.match(/(6th|7th|8th|9th|10th|11th|12th)/i);
+        const extractedClass = classMatch ? classMatch[0] : '10th';
 
-          return {
-            id: d.id,
-            slug: d.slug || d.id,
-            title: safeTitle || 'Guide Book',
-            subtitle: `${extractedClass} Standard Guide`,
-            cls: extractedClass,
-            category: isCombo ? 'combo' : 'guide',
-            subject: d.subject || 'State Board',
-            price,
-            mrp,
-            discount,
-            rating: Number(d.review_count) > 0 ? Number(d.avg_rating || 0) : 0,
-            reviews: Number(d.review_count || 0),
-            badge: (d.badge && String(d.badge).trim()) || '',
-            badgeColor: (d.badge && String(d.badge).trim())
-              ? (String(d.badge).toUpperCase().includes('COMBO') ? 'bg-purple-600' : 'bg-blue-600')
-              : 'bg-blue-600',
-            image: d.cover_image || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80',
-            hoverImage: d.cover_image || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80',
-            description: d.description || 'Complete guide book for exam success.',
-            features: ['Solved Papers', 'Chapter Notes'],
-            inStock: mapBookInStock(d),
-            stock: Number(d.stock ?? 0),
-            isBestSeller: String(d.badge || '').toUpperCase().includes('BEST'),
-          };
-        });
-        writeCache(key, mapped);
-        return NextResponse.json(mapped, {
-          headers: catalogHeaders({ 'X-Cache-Status': 'MISS_DB' }),
-        });
-      }
+        return {
+          id: d.id,
+          slug: d.slug || d.id,
+          title: safeTitle || 'Guide Book',
+          subtitle: `${extractedClass} Standard Guide`,
+          cls: extractedClass,
+          category: isCombo ? 'combo' : 'guide',
+          subject: d.subject || 'State Board',
+          price,
+          mrp,
+          discount,
+          rating: Number(d.review_count) > 0 ? Number(d.avg_rating || 0) : 0,
+          reviews: Number(d.review_count || 0),
+          badge: (d.badge && String(d.badge).trim()) || '',
+          badgeColor: (d.badge && String(d.badge).trim())
+            ? (String(d.badge).toUpperCase().includes('COMBO') ? 'bg-purple-600' : 'bg-blue-600')
+            : 'bg-blue-600',
+          image: d.cover_image || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80',
+          hoverImage: d.cover_image || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80',
+          description: d.description || 'Complete guide book for exam success.',
+          features: ['Solved Papers', 'Chapter Notes'],
+          inStock: mapBookInStock(d),
+          stock: Number(d.stock ?? 0),
+          isBestSeller: String(d.badge || '').toUpperCase().includes('BEST'),
+        };
+      });
+      writeCache(key, mapped);
+      return NextResponse.json(mapped, {
+        headers: catalogHeaders({ 'X-Cache-Status': 'MISS_DB' }),
+      });
     }
   } catch (err: any) {
     console.error('Error fetching products from DB:', err.message);
@@ -194,8 +179,6 @@ export async function GET(request: Request) {
         headers: catalogHeaders({ 'X-Cache-Status': 'STALE_MEMORY' }),
       });
     }
-  } finally {
-    releaseDbClient(client);
   }
 
   return NextResponse.json([], { headers: catalogHeaders() });

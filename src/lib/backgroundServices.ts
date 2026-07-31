@@ -2,6 +2,7 @@ import { isBackgroundLeader } from '@/lib/backgroundLeader';
 
 let leaderServicesRunning = false;
 let abandonCartTimer: ReturnType<typeof setInterval> | null = null;
+let confirmExpireTimer: ReturnType<typeof setInterval> | null = null;
 
 /** WhatsApp, courier cron, outbox — leader replica only. */
 export async function startLeaderBackgroundServices() {
@@ -11,9 +12,9 @@ export async function startLeaderBackgroundServices() {
   const { startCourierSyncCron } = await import('@/lib/courierCron');
   startCourierSyncCron();
 
-  const { startWhatsAppOutboxWorker, initWhatsAppInProcess } = await import('@/lib/whatsapp');
+  // Stay single-service on Free: outbox only — Baileys connects lazily on QR/send
+  const { startWhatsAppOutboxWorker } = await import('@/lib/whatsapp');
   startWhatsAppOutboxWorker();
-  void initWhatsAppInProcess();
 
   if (!abandonCartTimer) {
     const drain = async () => {
@@ -31,7 +32,23 @@ export async function startLeaderBackgroundServices() {
     abandonCartTimer = setInterval(() => void drain(), 30 * 60 * 1000);
   }
 
-  console.log('[background] leader services started (WhatsApp, courier cron, outbox, abandon-cart)');
+  if (!confirmExpireTimer) {
+    const expire = async () => {
+      try {
+        const { expireAwaitingConfirmations } = await import('@/lib/orderConfirm');
+        const n = await expireAwaitingConfirmations(24);
+        if (n > 0) console.log(`[confirm-timeout] auto-cancelled ${n} awaiting order(s)`);
+      } catch (e: any) {
+        console.warn('[confirm-timeout]', e?.message || e);
+      }
+    };
+    setTimeout(() => void expire(), 10 * 60 * 1000);
+    confirmExpireTimer = setInterval(() => void expire(), 30 * 60 * 1000);
+  }
+
+  console.log(
+    '[background] leader services started (WhatsApp, courier cron, outbox, abandon-cart, confirm-timeout)'
+  );
 }
 
 /** Release leader-only resources when another replica takes over. */
@@ -42,6 +59,10 @@ export async function stopLeaderBackgroundServices() {
   if (abandonCartTimer) {
     clearInterval(abandonCartTimer);
     abandonCartTimer = null;
+  }
+  if (confirmExpireTimer) {
+    clearInterval(confirmExpireTimer);
+    confirmExpireTimer = null;
   }
 
   const { stopCourierSyncCron } = await import('@/lib/courierCron');

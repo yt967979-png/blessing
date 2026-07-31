@@ -308,7 +308,7 @@ export async function syncOrderByAwb(
     let updated = false;
     let nextStatus = previous;
 
-    // Never revive or overwrite a cancelled order via courier sync
+    // Never revive or overwrite a cancelled / awaiting-confirmation order via courier sync
     if (String(previous).toLowerCase().includes('cancel')) {
       return {
         verified: true,
@@ -319,6 +319,18 @@ export async function syncOrderByAwb(
         trackingUrl: tracked.trackingUrl,
         events: tracked.events,
         error: 'Order is cancelled — status not updated.',
+      };
+    }
+    if (String(previous).toLowerCase().includes('awaiting confirmation')) {
+      return {
+        verified: true,
+        updated: false,
+        status: previous,
+        previousStatus: previous,
+        orderId: order.order_number || order.id,
+        trackingUrl: tracked.trackingUrl,
+        events: tracked.events,
+        error: 'Awaiting customer YES — status not updated.',
       };
     }
 
@@ -424,6 +436,7 @@ export async function syncAllActiveAwbOrders(): Promise<{ checked: number; updat
          AND awb_number NOT ILIKE 'SHP-%'
          AND COALESCE(order_status, '') NOT ILIKE '%delivered%'
          AND COALESCE(order_status, '') NOT ILIKE '%cancel%'
+         AND COALESCE(order_status, '') NOT ILIKE '%awaiting confirmation%'
        LIMIT 40`
     );
     rows = res.rows;

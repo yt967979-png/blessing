@@ -456,8 +456,13 @@ export default function AdminPage() {
   // ── Dispatch + auto ST Courier sync
   const handleDispatch = async (orderId: string) => {
     const order = orders.find((x) => x.orderId === orderId);
-    if ((order?.courierStatus || '').toLowerCase().includes('cancel')) {
+    const st = (order?.courierStatus || '').toLowerCase();
+    if (st.includes('cancel')) {
       showToast('❌ Cannot add AWB — order is cancelled');
+      return;
+    }
+    if (st.includes('awaiting confirmation')) {
+      showToast('❌ Wait for customer WhatsApp YES before adding AWB');
       return;
     }
     const awb = (shiprocketAwbInput[orderId] ?? '').trim();
@@ -506,18 +511,23 @@ export default function AdminPage() {
   // ── WhatsApp
   const handleResendWhatsApp = async (o: Order) => {
     if (!o.customerPhone) { showToast('❌ No customer phone on this order'); return; }
-    if ((o.courierStatus || '').toLowerCase().includes('cancel')) {
-      // Only send cancel confirmation — never "order confirmed"
+    const st = (o.courierStatus || '').toLowerCase();
+    if (st.includes('cancel')) {
       showToast('📲 Sending cancel confirmation…');
+    } else if (st.includes('awaiting confirmation')) {
+      showToast('📲 Re-sending YES/NO confirm request…');
     } else {
       showToast('📲 Sending WhatsApp from linked admin number...');
     }
     try {
+      const step = st.includes('awaiting confirmation')
+        ? 'CONFIRM_REQUEST'
+        : (o.courierStatus || 'ORDER_PLACED').toUpperCase().replace(/\s+/g, '_');
       const r = await fetch('/api/whatsapp', {
         method: 'POST',
         headers: authHeaders(user),
         body: JSON.stringify({
-          step: (o.courierStatus || 'ORDER_PLACED').toUpperCase().replace(/\s+/g, '_'),
+          step,
           orderId: o.orderId,
           customerName: o.customerName,
           customerPhone: o.customerPhone,
@@ -527,16 +537,14 @@ export default function AdminPage() {
         }),
       });
       const d = await r.json();
-      if (r.ok && d.provider === 'BAILEYS_IN_PROCESS') {
-        showToast(`✅ WhatsApp sent to +91 ${o.customerPhone}`);
-      } else if (d.whatsappLink) {
-        showToast('⚠️ WhatsApp not linked — open WhatsApp tab and scan QR first');
-        window.open(d.whatsappLink, '_blank');
+      if (r.ok && d.success) {
+        showToast(d.whatsappLink ? '⚠️ Open wa.me link (Baileys not linked)' : '✅ WhatsApp sent');
+        if (d.whatsappLink) window.open(d.whatsappLink, '_blank');
       } else {
-        showToast(`❌ ${d.error || 'Failed to send WhatsApp'}`);
+        showToast(`❌ ${d.error || 'WhatsApp failed'}`);
       }
     } catch {
-      showToast('❌ WhatsApp send failed');
+      showToast('❌ WhatsApp failed');
     }
   };
 
@@ -550,6 +558,11 @@ export default function AdminPage() {
   ];
 
   const handleUpdateOrderStatus = async (o: Order, statusKey: string, orderStatus: string) => {
+    const awaiting = (o.courierStatus || '').toLowerCase().includes('awaiting confirmation');
+    if (awaiting && statusKey !== 'CANCELLED') {
+      showToast('❌ Wait for customer WhatsApp YES before packing / shipping');
+      return;
+    }
     if (statusKey === 'CANCELLED') {
       if (!confirm(`Cancel order ${o.orderId}? Stock will be restored.`)) return;
       setUpdatingStatusId(`${o.orderId}-${statusKey}`);
@@ -1040,11 +1053,12 @@ export default function AdminPage() {
                 {filteredOrders.map((o) => {
                   const allSteps = ['Order Placed', 'Payment Confirmed', 'Preparing Order', 'Packed', 'Handed to ST Courier', 'In Transit', 'Out for Delivery', 'Delivered'];
                   const isCancelled = (o.courierStatus || '').toLowerCase().includes('cancel');
-                  const stepIdx = isCancelled ? -1 : Math.max(0, allSteps.findIndex((s) => s.toLowerCase() === (o.courierStatus || '').toLowerCase()));
+                  const isAwaiting = (o.courierStatus || '').toLowerCase().includes('awaiting confirmation');
+                  const stepIdx = isCancelled || isAwaiting ? -1 : Math.max(0, allSteps.findIndex((s) => s.toLowerCase() === (o.courierStatus || '').toLowerCase()));
                   const isCod = (o.paymentMethod || '').toLowerCase().includes('cod');
-                  const isDelivered = !isCancelled && stepIdx >= 7;
+                  const isDelivered = !isCancelled && !isAwaiting && stepIdx >= 7;
                   return (
-                    <div key={o.orderId} className={`bg-white rounded-xl border overflow-hidden hover:shadow-sm transition-shadow ${isCancelled ? 'border-red-200' : 'border-gray-200'}`}>
+                    <div key={o.orderId} className={`bg-white rounded-xl border overflow-hidden hover:shadow-sm transition-shadow ${isCancelled ? 'border-red-200' : isAwaiting ? 'border-amber-300' : 'border-gray-200'}`}>
                       {/* Order header */}
                       <div className="px-4 py-3 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                         <div className="flex items-center gap-2.5 flex-wrap">
@@ -1053,7 +1067,8 @@ export default function AdminPage() {
                             {isCod ? 'COD' : 'PAID'} • {fmt(o.totalAmount)}
                           </span>
                           {isCancelled && <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-red-50 text-red-700 border border-red-200">CANCELLED</span>}
-                          {!isCancelled && o.isOfficialAwb && <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-50 text-blue-600 border border-blue-200">AUTO-TRACKED</span>}
+                          {isAwaiting && <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200">AWAITING YES</span>}
+                          {!isCancelled && !isAwaiting && o.isOfficialAwb && <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-50 text-blue-600 border border-blue-200">AUTO-TRACKED</span>}
                           {isDelivered && <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-green-50 text-green-700 border border-green-200 flex items-center gap-1"><CheckCircle2 className="w-2.5 h-2.5" />DELIVERED</span>}
                         </div>
                         <div className="flex items-center gap-1.5 text-xs text-gray-400"><Clock className="w-3 h-3" /><span>{o.createdAt}</span></div>
@@ -1087,13 +1102,15 @@ export default function AdminPage() {
                         </div>
 
                         {/* Progress bar */}
-                        <div className={`rounded-lg p-3 ${isCancelled ? 'bg-red-50' : 'bg-[#f8f9fa]'}`}>
+                        <div className={`rounded-lg p-3 ${isCancelled ? 'bg-red-50' : isAwaiting ? 'bg-amber-50' : 'bg-[#f8f9fa]'}`}>
                           <div className="flex items-center justify-between mb-2">
-                            <span className="text-[11px] font-semibold text-gray-500">{isCancelled ? 'Order status' : 'Delivery Progress'}</span>
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${isCancelled ? 'bg-red-100 text-red-700' : isDelivered ? 'bg-green-50 text-green-700' : stepIdx >= 4 ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700'}`}>{isCancelled ? 'Cancelled' : (o.courierStatus || 'Order Placed')}</span>
+                            <span className="text-[11px] font-semibold text-gray-500">{isCancelled || isAwaiting ? 'Order status' : 'Delivery Progress'}</span>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${isCancelled ? 'bg-red-100 text-red-700' : isAwaiting ? 'bg-amber-100 text-amber-800' : isDelivered ? 'bg-green-50 text-green-700' : stepIdx >= 4 ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700'}`}>{isCancelled ? 'Cancelled' : (o.courierStatus || 'Order Placed')}</span>
                           </div>
                           {isCancelled ? (
                             <p className="text-[11px] text-red-700 font-medium">Cancelled — AWB / dispatch locked. Revenue not counted.</p>
+                          ) : isAwaiting ? (
+                            <p className="text-[11px] text-amber-800 font-medium">Waiting for customer WhatsApp YES. Pack / AWB locked until confirmed (or Cancel).</p>
                           ) : (
                           <>
                           <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
@@ -1118,16 +1135,17 @@ export default function AdminPage() {
                             {ORDER_STATUS_ACTIONS.map((a) => {
                               const busy = updatingStatusId === `${o.orderId}-${a.statusKey}`;
                               const isCurrent = (o.courierStatus || '').toLowerCase() === a.orderStatus.toLowerCase();
-                              const isCancelled = (o.courierStatus || '').toLowerCase().includes('cancel');
+                              const isCancelledBtn = (o.courierStatus || '').toLowerCase().includes('cancel');
+                              const isAwaitingBtn = (o.courierStatus || '').toLowerCase().includes('awaiting confirmation');
                               const isCancelBtn = a.statusKey === 'CANCELLED';
                               return (
                                 <button
                                   key={a.statusKey}
-                                  disabled={busy || isCurrent || (isCancelBtn && isCancelled) || (!isCancelBtn && isCancelled)}
+                                  disabled={busy || isCurrent || (isCancelBtn && isCancelledBtn) || (!isCancelBtn && (isCancelledBtn || isAwaitingBtn))}
                                   onClick={() => handleUpdateOrderStatus(o, a.statusKey, a.orderStatus)}
                                   className={`px-2.5 py-1.5 text-[11px] font-semibold rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
                                     isCancelBtn
-                                      ? isCurrent || isCancelled
+                                      ? isCurrent || isCancelledBtn
                                         ? 'bg-red-100 text-red-700 border border-red-200'
                                         : 'bg-white text-red-700 border border-red-200 hover:bg-red-50'
                                       : isCurrent
@@ -1142,11 +1160,16 @@ export default function AdminPage() {
                           </div>
                         </div>
 
-                        {/* Dispatch — disabled after cancel */}
+                        {/* Dispatch — disabled after cancel / before YES */}
                         {(o.courierStatus || '').toLowerCase().includes('cancel') ? (
                           <div className="flex items-center gap-2 bg-red-50 border border-red-100 rounded-lg px-3 py-2.5 text-xs text-red-700">
                             <Truck className="w-4 h-4 shrink-0 opacity-60" />
                             <span className="font-medium">AWB / Dispatch locked — order cancelled</span>
+                          </div>
+                        ) : (o.courierStatus || '').toLowerCase().includes('awaiting confirmation') ? (
+                          <div className="flex items-center gap-2 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2.5 text-xs text-amber-800">
+                            <Truck className="w-4 h-4 shrink-0 opacity-60" />
+                            <span className="font-medium">AWB locked — waiting for customer WhatsApp YES</span>
                           </div>
                         ) : (
                           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-[#f8f9fa] rounded-lg p-3">
@@ -1428,6 +1451,7 @@ export default function AdminPage() {
             onUnlink={handleUnlinkWhatsApp}
             onRequestPairing={handleRequestPairingCode}
             onRefreshQr={handleRefreshWhatsAppQr}
+            authHeaders={authHeaders(user)}
           />
         )}
 

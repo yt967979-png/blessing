@@ -2,10 +2,11 @@ import { NextResponse } from 'next/server';
 import { getDbClient, releaseDbClient } from '@/lib/db';
 import { applyRateLimitAsync, clientIp } from '@/lib/serverSecurity';
 import { isOfficialAwb, syncOrderByAwb } from '@/lib/stCourier';
-import { isOrderCancelled } from '@/lib/orderStatus';
+import { isOrderCancelled, isAwaitingConfirmation } from '@/lib/orderStatus';
 
 const CUSTOMER_STEPS = [
-  { key: 'Order Placed', label: 'Order Placed', short: 'Placed' },
+  { key: 'Awaiting Confirmation', label: 'Confirm on WhatsApp', short: 'Confirm' },
+  { key: 'Order Placed', label: 'Confirmed', short: 'Confirmed' },
   { key: 'Packed', label: 'Packed', short: 'Packed' },
   { key: 'Handed to ST Courier', label: 'Shipped', short: 'Shipped' },
   { key: 'In Transit', label: 'In Transit', short: 'Transit' },
@@ -30,12 +31,13 @@ function phonesMatch(input: string, stored: string): boolean {
 function stepIndex(status: string): number {
   const s = (status || '').toLowerCase();
   if (isOrderCancelled(s)) return -1;
-  if (s.includes('delivered')) return 5;
-  if (s.includes('out for delivery')) return 4;
-  if (s.includes('in transit') || s.includes('shipped')) return 3;
-  if (s.includes('handed to st courier')) return 2;
-  if (s.includes('packed')) return 1;
-  return 0;
+  if (s.includes('delivered')) return 6;
+  if (s.includes('out for delivery')) return 5;
+  if (s.includes('in transit') || s.includes('shipped')) return 4;
+  if (s.includes('handed to st courier')) return 3;
+  if (s.includes('packed')) return 2;
+  if (isAwaitingConfirmation(s)) return 0;
+  return 1; // Order Placed / confirmed
 }
 
 function maskPhone(phone: string): string {
@@ -153,10 +155,11 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string) {
     releaseDbClient(client);
 
     const cancelled = isOrderCancelled(o.order_status);
+    const awaiting = isAwaitingConfirmation(o.order_status);
 
-    // Live refresh from ST Courier when official AWB exists (never for cancelled)
+    // Live refresh from ST Courier when official AWB exists (never for cancelled / awaiting)
     let live: any = null;
-    if (!cancelled && isOfficialAwb(o.awb_number)) {
+    if (!cancelled && !awaiting && isOfficialAwb(o.awb_number)) {
       try {
         live = await syncOrderByAwb(o.awb_number, { sendWhatsApp: false });
         if (live.updated && live.status) {
@@ -181,15 +184,16 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string) {
         orderId: o.order_number || o.id,
         status,
         cancelled,
+        awaitingConfirmation: awaiting,
         currentStep,
         steps: CUSTOMER_STEPS.map((s, i) => ({
           ...s,
           done: cancelled ? false : i <= currentStep,
           active: cancelled ? false : i === currentStep,
         })),
-        awb: cancelled ? null : awb,
+        awb: cancelled || awaiting ? null : awb,
         courierName: o.courier_name || 'ST Courier Express',
-        trackingUrl: cancelled ? null : trackingUrl,
+        trackingUrl: cancelled || awaiting ? null : trackingUrl,
         paymentStatus: o.payment_status,
         placedAt: o.ordered_at,
         customer: {

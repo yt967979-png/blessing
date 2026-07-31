@@ -37,19 +37,13 @@ export async function POST(request: Request) {
 
     const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
     const uploadPreset = process.env.CLOUDINARY_UPLOAD_PRESET;
-    const apiKey = process.env.CLOUDINARY_API_KEY;
-
     const uploadFolder = isReviewUpload ? 'blessing_reviews' : folder;
 
-    if (cloudName && uploadPreset && apiKey) {
-      const arrayBuffer = await file.arrayBuffer();
-      const buffer = Buffer.from(arrayBuffer);
-      const base64Data = `data:${file.type};base64,${buffer.toString('base64')}`;
-
+    if (cloudName && uploadPreset) {
+      // Unsigned upload with raw file blob — returns a CDN URL (not base64 in DB)
       const cldFormData = new FormData();
-      cldFormData.append('file', base64Data);
-      cldFormData.append('api_key', apiKey);
-      cldFormData.append('upload_preset', uploadPreset || 'ml_default');
+      cldFormData.append('file', file);
+      cldFormData.append('upload_preset', uploadPreset);
       cldFormData.append('folder', uploadFolder);
 
       const cldRes = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
@@ -65,17 +59,37 @@ export async function POST(request: Request) {
           provider: 'cloudinary',
         });
       }
+
+      const errText = await cldRes.text().catch(() => '');
+      console.error('[upload] Cloudinary failed:', cldRes.status, errText.slice(0, 300));
+      if (!isReviewUpload) {
+        return NextResponse.json(
+          {
+            error:
+              'Cloudinary upload failed. Check CLOUDINARY_CLOUD_NAME and an unsigned CLOUDINARY_UPLOAD_PRESET (free tier). Catalog covers must be URLs, not base64.',
+          },
+          { status: 502 }
+        );
+      }
+    } else if (!isReviewUpload) {
+      return NextResponse.json(
+        {
+          error:
+            'Set CLOUDINARY_CLOUD_NAME and CLOUDINARY_UPLOAD_PRESET (unsigned preset on free Cloudinary). Catalog images cannot be stored as base64 on Free.',
+        },
+        { status: 503 }
+      );
     }
 
+    // Reviews only: small inline fallback when Cloudinary is unset
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
-    const base64 = buffer.toString('base64');
-    const dataUrl = `data:${file.type};base64,${base64}`;
+    const dataUrl = `data:${file.type};base64,${buffer.toString('base64')}`;
 
     return NextResponse.json({
       url: dataUrl,
       provider: 'inline-base64',
-      warning: 'Cloudinary not configured — using inline image (fine for reviews).',
+      warning: 'Cloudinary not configured — inline image for reviews only.',
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message || 'Upload failed' }, { status: 500 });

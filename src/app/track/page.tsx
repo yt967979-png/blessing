@@ -138,6 +138,11 @@ function TrackForm() {
                   <X className="w-3.5 h-3.5" />
                   Cancelled
                 </span>
+              ) : order.awaitingConfirmation || String(order.status || '').toLowerCase().includes('awaiting') ? (
+                <span className="inline-flex items-center gap-1.5 bg-amber-50 text-amber-900 border border-amber-200 text-xs font-bold px-3 py-1.5 rounded-full">
+                  <Clock className="w-3.5 h-3.5" />
+                  Confirm on WhatsApp
+                </span>
               ) : (
                 <span className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold px-3 py-1.5 rounded-full">
                   <CheckCircle2 className="w-3.5 h-3.5" />
@@ -154,6 +159,13 @@ function TrackForm() {
             <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-5 text-center space-y-1">
               <p className="font-heading font-black text-red-800 text-sm">Order Cancelled</p>
               <p className="text-xs text-red-700/80">This order will not be shipped. You can place a new order anytime.</p>
+            </div>
+          ) : order.awaitingConfirmation || String(order.status || '').toLowerCase().includes('awaiting') ? (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-5 text-center space-y-1">
+              <p className="font-heading font-black text-amber-900 text-sm">Confirm on WhatsApp</p>
+              <p className="text-xs text-amber-800/90">
+                Reply <strong>YES</strong> to confirm or <strong>NO</strong> to cancel on the WhatsApp message we sent.
+              </p>
             </div>
           ) : (
           <div className="overflow-x-auto pb-2">

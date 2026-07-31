@@ -1,15 +1,23 @@
 import { NextResponse } from 'next/server';
 import { getTokenFromRequest, verifySessionToken } from '@/lib/auth';
 
-/** In-memory fallback when DB rate_limits is unavailable */
+/** In-memory rate limit (Free default — avoids a DB round-trip on every request) */
 const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
 
-/** Durable rate limit via Postgres (falls back to memory) */
+/**
+ * Rate limit. Free/soft: memory-first (no Postgres per request).
+ * Set RATE_LIMIT_USE_DB=true for durable multi-replica limits.
+ */
 export async function applyRateLimitAsync(
   key: string,
   limit: number = 30,
   windowMs: number = 60000
 ): Promise<{ allowed: boolean; remaining: number }> {
+  const useDb = String(process.env.RATE_LIMIT_USE_DB || '').toLowerCase() === 'true';
+  if (!useDb) {
+    return applyRateLimit(key, limit, windowMs);
+  }
+
   const now = Date.now();
   let client: any = null;
   try {

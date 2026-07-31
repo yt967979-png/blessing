@@ -285,7 +285,8 @@ export async function POST(request: Request) {
     const orderNumber = 'BPG-' + Math.floor(1000 + Math.random() * 9000);
     const ymd = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     const internalShipmentId = `SHP-${ymd}-${Math.floor(100000 + Math.random() * 900000)}`;
-    const initialStatus = 'Order Placed';
+    // Hold until customer replies YES on WhatsApp (AWB/pack blocked until then)
+    const initialStatus = 'Awaiting Confirmation';
 
     const shippingAddressObj = JSON.stringify({
       name: customerName,
@@ -376,7 +377,7 @@ export async function POST(request: Request) {
     }
 
     await client.query(
-      `INSERT INTO order_timeline (id, order_id, status, remarks) VALUES ($1, $2, 'Order Placed', 'Order placed by customer')`,
+      `INSERT INTO order_timeline (id, order_id, status, remarks) VALUES ($1, $2, 'Awaiting Confirmation', 'Order placed — waiting WhatsApp YES/NO')`,
       [`tl-${Date.now()}`, id]
     );
 
@@ -406,7 +407,7 @@ export async function POST(request: Request) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          step: 'ORDER_PLACED',
+          step: 'CONFIRM_REQUEST',
           customerPhone,
           customerName,
           orderId: orderNumber,
@@ -464,6 +465,15 @@ export async function PATCH(request: NextRequest) {
     if (currentStatus.includes('cancel')) {
       return NextResponse.json(
         { error: 'Cannot update status or AWB on a cancelled order.' },
+        { status: 409 }
+      );
+    }
+    if (currentStatus.includes('awaiting confirmation')) {
+      return NextResponse.json(
+        {
+          error:
+            'Customer has not confirmed yet (Awaiting Confirmation). Wait for WhatsApp YES before packing or adding AWB.',
+        },
         { status: 409 }
       );
     }

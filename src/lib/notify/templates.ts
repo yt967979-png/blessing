@@ -1,0 +1,73 @@
+/** WhatsApp message templates — keep volume low (confirm ask + one reply). */
+
+const siteBase = () =>
+  (process.env.NEXT_PUBLIC_SITE_URL || 'https://blessingpowerguide.in').replace(/\/$/, '');
+
+export function trackUrl(orderId: string) {
+  return `${siteBase()}/track?orderId=${encodeURIComponent(orderId)}`;
+}
+
+export function confirmRequestMessage(opts: {
+  customerName?: string;
+  orderId: string;
+  totalAmount: number | string;
+  bookTitle?: string;
+}) {
+  const name = opts.customerName || 'Student';
+  const book = opts.bookTitle || 'Blessing Power Guide';
+  return (
+    `*BLESSING POWER GUIDE*\n*📋 CONFIRM YOUR ORDER*\n\n` +
+    `Dear *${name}*,\n` +
+    `We received your order. Please confirm to proceed.\n\n` +
+    `📦 *Order ID:* ${opts.orderId}\n` +
+    `📖 *Books:* ${book}\n` +
+    `💰 *Total:* ₹${opts.totalAmount}\n\n` +
+    `Reply *YES* to confirm\n` +
+    `Reply *NO* to cancel\n\n` +
+    `👉 Track: ${trackUrl(opts.orderId)}`
+  );
+}
+
+export function confirmYesReplyMessage(opts: {
+  customerName?: string;
+  orderId: string;
+}) {
+  const name = opts.customerName || 'Student';
+  return (
+    `*BLESSING POWER GUIDE*\n*✅ ORDER CONFIRMED*\n\n` +
+    `Dear *${name}*,\n` +
+    `Thank you! Your order *${opts.orderId}* is confirmed. We will pack and ship soon.\n\n` +
+    `👉 Track: ${trackUrl(opts.orderId)}`
+  );
+}
+
+export function confirmNoReplyMessage(opts: {
+  customerName?: string;
+  orderId: string;
+}) {
+  const name = opts.customerName || 'Student';
+  return (
+    `*BLESSING POWER GUIDE*\n*❌ ORDER CANCELLED*\n\n` +
+    `Dear *${name}*,\n` +
+    `Your order *${opts.orderId}* was cancelled as requested. Stock is restored.\n\n` +
+    `Order again anytime:\n${siteBase()}`
+  );
+}
+
+export function adminOrderConfirmedMessage(opts: {
+  orderId: string;
+  customerName?: string;
+  customerPhone?: string;
+  totalAmount: number | string;
+  city?: string;
+}) {
+  return (
+    `*BLESSING POWER GUIDE*\n*🛒 ORDER RECEIVED (CONFIRMED)*\n\n` +
+    `📦 *${opts.orderId}*\n` +
+    `👤 ${opts.customerName || 'Customer'}\n` +
+    `📞 ${opts.customerPhone || '—'}\n` +
+    `📍 ${opts.city || '—'}\n` +
+    `💰 ₹${opts.totalAmount}\n\n` +
+    `Open Admin → Orders to add ST Courier AWB or cancel.`
+  );
+}

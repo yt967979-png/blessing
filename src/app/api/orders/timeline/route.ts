@@ -75,6 +75,16 @@ export async function POST(request: Request) {
         { status: 409 }
       );
     }
+    if (currentStatus.includes('awaiting confirmation')) {
+      await client.end();
+      return NextResponse.json(
+        {
+          error:
+            'Customer has not confirmed yet. Wait for WhatsApp YES before packing or adding AWB. You may cancel if needed.',
+        },
+        { status: 409 }
+      );
+    }
 
     const eventId = `TL-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
     const statusLabel = STAGE_META[status].label;

@@ -43,8 +43,18 @@ export async function POST(request: Request) {
     const statusClean = (step || body.status || '').toUpperCase();
     let stepTitle = '📚 ORDER CONFIRMED';
     let stepDescription = 'Your study guide order has been received and verified!';
+    let useConfirmAsk = false;
 
-    if (statusClean.includes('CANCEL')) {
+    if (
+      statusClean.includes('CONFIRM_REQUEST') ||
+      statusClean.includes('AWAITING_CONFIRMATION') ||
+      statusClean.includes('AWAITING CONFIRMATION')
+    ) {
+      useConfirmAsk = true;
+      stepTitle = '📋 CONFIRM YOUR ORDER';
+      stepDescription =
+        'We received your order. Please confirm to proceed.\n\nReply *YES* to confirm\nReply *NO* to cancel';
+    } else if (statusClean.includes('CANCEL')) {
       stepTitle = '❌ ORDER CANCELLED';
       stepDescription = 'Your order has been cancelled. Stock is restored — you can place a new order anytime from our website.';
     } else if (statusClean.includes('DELIVERED')) {
@@ -73,7 +83,11 @@ export async function POST(request: Request) {
       stepDescription = 'Thank you for placing your order with Blessing Power Guide! We are processing it right now.';
     }
 
-    const fullFormattedText = customMessage || `*BLESSING POWER GUIDE*\n*${stepTitle}*\n\nDear *${customerName || 'Student'}*,\n${stepDescription}\n\n📦 *Order ID:* ${orderId || ''}\n📖 *Books:* ${bookTitle}\n💰 *Total Amount:* ₹${totalAmount || body.totalAmount || 0}\n🚚 *Logistics Partner:* ST Courier Express\n📍 *Docket AWB:* ${trackingNo}\n\n👉 *Track Live on Website:* ${websiteTrackingUrl}`;
+    const fullFormattedText =
+      customMessage ||
+      (useConfirmAsk
+        ? `*BLESSING POWER GUIDE*\n*${stepTitle}*\n\nDear *${customerName || 'Student'}*,\n${stepDescription}\n\n📦 *Order ID:* ${orderId || ''}\n📖 *Books:* ${bookTitle}\n💰 *Total Amount:* ₹${totalAmount || body.totalAmount || 0}\n\n👉 *Track:* ${websiteTrackingUrl}`
+        : `*BLESSING POWER GUIDE*\n*${stepTitle}*\n\nDear *${customerName || 'Student'}*,\n${stepDescription}\n\n📦 *Order ID:* ${orderId || ''}\n📖 *Books:* ${bookTitle}\n💰 *Total Amount:* ₹${totalAmount || body.totalAmount || 0}\n🚚 *Logistics Partner:* ST Courier Express\n📍 *Docket AWB:* ${trackingNo}\n\n👉 *Track Live on Website:* ${websiteTrackingUrl}`);
 
     // Priority Strategy 1: In-Process Baileys Free Unlimited WhatsApp Engine (100% Reliable & Permanent)
     try {

@@ -1,4 +1,6 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+This is a [Next.js](https://nextjs.org) shop (Blessing Power Guide) bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+
+**Railway Free:** put Cloudflare Free in front and set `RUNTIME_TIER=free` — see [docs/FREE-SCALE.md](docs/FREE-SCALE.md).
 
 ## Getting Started
 

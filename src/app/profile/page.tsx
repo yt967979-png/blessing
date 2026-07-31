@@ -500,9 +500,10 @@ export default function ProfilePage() {
                     {liveOrders.map((o) => {
                       const currentStatus = o.courierStatus || o.status || 'Order Placed';
                       const cancelled = String(currentStatus).toLowerCase().includes('cancel');
+                      const awaiting = String(currentStatus).toLowerCase().includes('awaiting confirmation');
                       const allSteps = [
+                        'Awaiting Confirmation',
                         'Order Placed',
-                        'Payment Confirmed',
                         'Preparing Order',
                         'Packed',
                         'Handed to ST Courier',
@@ -511,13 +512,13 @@ export default function ProfilePage() {
                         'Delivered',
                       ];
                       const activeIdx = allSteps.findIndex((s) => s.toLowerCase() === currentStatus.toLowerCase());
-                      const stepIdx = cancelled ? -1 : activeIdx >= 0 ? activeIdx : 0;
+                      const stepIdx = cancelled ? -1 : activeIdx >= 0 ? activeIdx : awaiting ? 0 : 1;
 
                       return (
                         <div
                           key={o.orderId}
                           className={`border rounded-2xl p-5 bg-white shadow-xs space-y-4 transition-all ${
-                            cancelled ? 'border-red-200' : 'border-slate-200 hover:border-blue-300'
+                            cancelled ? 'border-red-200' : awaiting ? 'border-amber-300' : 'border-slate-200 hover:border-blue-300'
                           }`}
                         >
                           <div className="flex flex-wrap justify-between items-center gap-2 pb-3 border-b border-slate-100">
@@ -535,6 +536,10 @@ export default function ProfilePage() {
                                 <X className="w-4 h-4" />
                                 <span>Cancelled</span>
                               </div>
+                            ) : awaiting ? (
+                              <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-900 font-extrabold text-xs px-3 py-1 rounded-full">
+                                <span>Confirm on WhatsApp</span>
+                              </div>
                             ) : (
                               <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-700 font-extrabold text-xs px-3 py-1 rounded-full">
                                 <Truck className="w-4 h-4 text-emerald-600 animate-pulse" />
@@ -546,6 +551,10 @@ export default function ProfilePage() {
                           {cancelled ? (
                             <div className="bg-red-50 border border-red-100 rounded-xl px-3 py-3 text-xs text-red-700 font-semibold">
                               This order is cancelled — no shipment will be sent.
+                            </div>
+                          ) : awaiting ? (
+                            <div className="bg-amber-50 border border-amber-100 rounded-xl px-3 py-3 text-xs text-amber-900 font-semibold">
+                              Reply YES on WhatsApp to confirm, or NO to cancel. We pack only after YES.
                             </div>
                           ) : (
                           <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 space-y-1.5">

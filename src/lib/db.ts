@@ -237,6 +237,12 @@ export async function getDbPool(): Promise<Pool> {
   return ensurePoolReady();
 }
 
+/** Cheap read path — uses pool.query (auto-checkout) instead of a held client. */
+export async function queryDb(text: string, params?: any[]) {
+  const activePool = await ensurePoolReady();
+  return activePool.query(text, params);
+}
+
 /** Boot-time warmup — call from instrumentation before crons. */
 export async function warmDbConnection(): Promise<boolean> {
   try {
@@ -751,7 +757,8 @@ async function runSchemaInit(client: any) {
           support_phone VARCHAR(255) DEFAULT '+91 98404 18228',
           razorpay_key VARCHAR(255),
           shipping_charge NUMERIC DEFAULT 0,
-          tax_percentage NUMERIC DEFAULT 0
+          tax_percentage NUMERIC DEFAULT 0,
+          admin_alert_phones TEXT DEFAULT ''
         );
 
         CREATE TABLE IF NOT EXISTS rate_limits (
@@ -792,6 +799,7 @@ async function runSchemaInit(client: any) {
         );
 
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_address TEXT;
+        ALTER TABLE settings ADD COLUMN IF NOT EXISTS admin_alert_phones TEXT DEFAULT '';
         ALTER TABLE addresses ADD COLUMN IF NOT EXISTS alternate_phone VARCHAR(20);
         ALTER TABLE reviews ADD COLUMN IF NOT EXISTS user_name VARCHAR(255);
         ALTER TABLE reviews ADD COLUMN IF NOT EXISTS order_id VARCHAR(255);

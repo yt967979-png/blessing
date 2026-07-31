@@ -15,6 +15,16 @@ if (!fs.existsSync(PUBLIC_DIR)) fs.mkdirSync(PUBLIC_DIR, { recursive: true });
 let sock: any = null;
 let isConnected = false;
 let isInitializing = false;
+let sessionBackupTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Debounce DB session writes — Baileys can fire creds.update often. */
+function scheduleSessionBackup() {
+  if (sessionBackupTimer) clearTimeout(sessionBackupTimer);
+  sessionBackupTimer = setTimeout(() => {
+    sessionBackupTimer = null;
+    void backupSessionToDb();
+  }, 8_000);
+}
 
 async function updateSessionStatus(data: {
   status: string;
@@ -116,6 +126,7 @@ export async function resetWhatsAppSession() {
 }
 
 async function backupSessionToDb() {
+  let client: any = null;
   try {
     if (!fs.existsSync(SESSION_DIR)) return;
     const files = fs.readdirSync(SESSION_DIR);
@@ -128,7 +139,7 @@ async function backupSessionToDb() {
     if (Object.keys(sessionMap).length === 0) return;
     const sessionJson = JSON.stringify(sessionMap);
 
-    const client = await getDbClient();
+    client = await getDbClient();
     if (client) {
       await client.query(
         `INSERT INTO whatsapp_sessions (id, status, connected, session_data, updated_at)
@@ -140,9 +151,12 @@ async function backupSessionToDb() {
              updated_at = NOW()`,
         [sessionJson]
       );
-      await client.end();
     }
-  } catch (_) {}
+  } catch (_) {
+    /* ignore */
+  } finally {
+    releaseDbClient(client);
+  }
 }
 
 async function restoreSessionFromDb() {
@@ -179,11 +193,42 @@ export async function initWhatsAppInProcess(opts?: { requireLeader?: boolean }) 
       auth: state,
       printQRInTerminal: false,
       browser: ['Blessing Power Guide', 'Chrome', '1.0.0'],
+      // Free: skip heavy history sync / presence (same process as Next)
+      syncFullHistory: false,
+      markOnlineOnConnect: false,
+      generateHighQualityLinkPreview: false,
     });
 
     sock.ev.on('creds.update', async () => {
       await saveCreds();
-      await backupSessionToDb();
+      scheduleSessionBackup();
+    });
+
+    sock.ev.on('messages.upsert', async (upsert: any) => {
+      try {
+        if (upsert?.type !== 'notify' && upsert?.type !== 'append') return;
+        const messages = upsert?.messages || [];
+        for (const msg of messages) {
+          if (!msg?.message || msg.key?.fromMe) continue;
+          const jid = String(msg.key?.remoteJid || '');
+          if (!jid.endsWith('@s.whatsapp.net')) continue;
+          const fromPhone = jid.replace(/@s\.whatsapp\.net$/, '').replace(/\D/g, '');
+          const text =
+            msg.message?.conversation ||
+            msg.message?.extendedTextMessage?.text ||
+            msg.message?.buttonsResponseMessage?.selectedDisplayText ||
+            msg.message?.listResponseMessage?.title ||
+            '';
+          if (!text || !fromPhone) continue;
+          const { handleInboundYesNo } = await import('@/lib/orderConfirm');
+          const result = await handleInboundYesNo(fromPhone, String(text));
+          if (result.handled) {
+            console.log(`[whatsapp] YES/NO handled from +${fromPhone}:`, result.answer);
+          }
+        }
+      } catch (e: any) {
+        console.warn('[whatsapp] inbound handler:', e?.message || e);
+      }
     });
 
     sock.ev.on('connection.update', async (update: any) => {
@@ -230,7 +275,8 @@ export async function initWhatsAppInProcess(opts?: { requireLeader?: boolean }) 
             message: 'Logged out — generating a fresh QR code. Please wait…',
           });
           if (isBackgroundLeader()) {
-            setTimeout(() => initWhatsAppInProcess(), 1500);
+            // Soft reconnect — avoid storm on Free RAM
+            setTimeout(() => initWhatsAppInProcess(), 4_000);
           }
         } else {
           await updateSessionStatus({
@@ -240,13 +286,13 @@ export async function initWhatsAppInProcess(opts?: { requireLeader?: boolean }) 
             message: 'Reconnecting to WhatsApp...',
           });
           if (isBackgroundLeader()) {
-            setTimeout(() => initWhatsAppInProcess(), 5000);
+            setTimeout(() => initWhatsAppInProcess(), 12_000);
           }
         }
       } else if (connection === 'open') {
         isConnected = true;
         isInitializing = false;
-        await backupSessionToDb();
+        scheduleSessionBackup();
         const linkedPhone = sock?.user?.id?.split(':')[0] || sock?.user?.id?.split('@')[0] || null;
         await updateSessionStatus({
           status: 'CONNECTED',
@@ -311,7 +357,29 @@ async function sendWhatsAppDirect(to: string, message: string) {
 
 async function drainWhatsAppOutboxOnce() {
   if (!shouldRunBackgroundTask('outbox')) return;
-  if (!isBackgroundLeader() || !isConnected) return;
+  if (!isBackgroundLeader()) return;
+
+  // Lazy reconnect: only spin Baileys when there is pending work (not on every boot)
+  if (!isConnected) {
+    let pending = 0;
+    let client: any = null;
+    try {
+      client = await getDbClient();
+      const res = await client.query(
+        `SELECT COUNT(*)::int AS n FROM whatsapp_outbox WHERE sent_at IS NULL`
+      );
+      pending = Number(res.rows[0]?.n || 0);
+    } catch {
+      pending = 0;
+    } finally {
+      releaseDbClient(client);
+    }
+    if (pending > 0) {
+      void initWhatsAppInProcess();
+    }
+    return;
+  }
+
   const client = await getDbClient();
   let rows: { id: string; phone: string; message: string }[] = [];
   try {
