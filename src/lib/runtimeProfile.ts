@@ -68,7 +68,7 @@ function baseTuningForTier(t: RuntimeTier): RuntimeTuning {
         load: 'normal',
         dbPoolMax: 3,
         dbHeartbeatMs: 60_000,
-        dbConnectTimeoutMs: 15_000,
+        dbConnectTimeoutMs: 8_000,
         courierCronEnabled: true,
         courierCronIntervalMs: 20 * 60 * 1000,
         courierCronStartDelayMs: 120_000,
@@ -84,7 +84,8 @@ function baseTuningForTier(t: RuntimeTier): RuntimeTuning {
         // Lightsail + Neon pooler: small pool avoids PgBouncer checkout storms.
         dbPoolMax: 3,
         dbHeartbeatMs: 30_000,
-        dbConnectTimeoutMs: 30_000,
+        // Fail fast — long connects made /api/products and admin analytics hang.
+        dbConnectTimeoutMs: 8_000,
         courierCronEnabled: true,
         courierCronIntervalMs: 5 * 60 * 1000,
         courierCronStartDelayMs: 30_000,

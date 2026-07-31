@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { pingDb } from '@/lib/db';
 
 /** Overall budget so Caddy/proxies get a 503 JSON body instead of a 0-byte hang. */
-const READY_BUDGET_MS = Number(process.env.DB_READY_TIMEOUT_MS || 12_000);
+const READY_BUDGET_MS = Number(process.env.DB_READY_TIMEOUT_MS || 8_000);
 
 /** Readiness probe — DB must respond (healthchecks / deploy gates). Always JSON within budget. */
 export async function GET() {

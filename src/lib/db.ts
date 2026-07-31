@@ -325,11 +325,32 @@ function defaultPoolMax(): number {
 
 function defaultConnectTimeoutMs(): number {
   const fromEnv = resolveTunedNumber('DB_CONNECT_TIMEOUT_MS', 'dbConnectTimeoutMs');
-  // Neon cross-region from Lightsail needs headroom; keep 20–30s unless explicitly lower.
-  if (!process.env.DB_CONNECT_TIMEOUT_MS && isAwsHosted()) {
-    return Math.min(Math.max(fromEnv, 20_000), 30_000);
+  // Lightsail + Neon: fail fast so /api/ready and catalog never hang the UI.
+  // Cross-region blips recover on the next request via pool invalidate + retry.
+  if (!process.env.DB_CONNECT_TIMEOUT_MS && (isAwsHosted() || isNeonUrl(process.env.DATABASE_URL || ''))) {
+    return Math.min(Math.max(fromEnv, 6_000), 10_000);
   }
   return fromEnv;
+}
+
+function defaultQueryTimeoutMs(): number {
+  const fromEnv = Number(process.env.DB_QUERY_TIMEOUT_MS || 0);
+  if (Number.isFinite(fromEnv) && fromEnv > 0) return fromEnv;
+  // Soft/aws: short statements — stuck PgBouncer sockets must not block pages 15–30s.
+  if (isAwsHosted() || isNeonUrl(process.env.DATABASE_URL || '')) return 8_000;
+  return 15_000;
+}
+
+function ensurePoolBudgetMs(): number {
+  const connectMs = defaultConnectTimeoutMs();
+  const neonish =
+    isNeonUrl(activeConnectionString || '') ||
+    isNeonUrl(process.env.DATABASE_URL || '') ||
+    isAwsHosted();
+  const defaultBudget = neonish
+    ? Math.min(Math.max(connectMs, 8_000), 12_000)
+    : Math.min(connectMs * 2 + 5_000, 25_000);
+  return Number(process.env.DB_ENSURE_TIMEOUT_MS || defaultBudget);
 }
 
 function defaultHeartbeatMs(): number {
@@ -346,13 +367,14 @@ function createPool(connectionString: string): Pool {
   const idleTimeoutMillis = poolerFriendly
     ? Math.min(Math.max(Number.isFinite(idleRaw) ? idleRaw : 5_000, 1_000), 8_000)
     : idleRaw;
+  const queryMs = defaultQueryTimeoutMs();
   const p = new Pool({
     connectionString: normalized,
     max: poolerFriendly ? Math.min(defaultPoolMax(), 3) : defaultPoolMax(),
     idleTimeoutMillis,
     connectionTimeoutMillis: defaultConnectTimeoutMs(),
-    statement_timeout: Number(process.env.DB_STATEMENT_TIMEOUT_MS || 15_000),
-    query_timeout: Number(process.env.DB_QUERY_TIMEOUT_MS || 15_000),
+    statement_timeout: Number(process.env.DB_STATEMENT_TIMEOUT_MS || queryMs),
+    query_timeout: queryMs,
     keepAlive: !poolerFriendly,
     keepAliveInitialDelayMillis: poolerFriendly ? 0 : 10_000,
     allowExitOnIdle: poolerFriendly,
@@ -410,13 +432,17 @@ export async function getDbPool(): Promise<Pool> {
 
 /** Cheap read path — uses pool.query (auto-checkout) instead of a held client. */
 export async function queryDb(text: string, params?: any[]) {
-  const queryMs = Number(process.env.DB_QUERY_TIMEOUT_MS || 15_000);
+  const queryMs = defaultQueryTimeoutMs();
   const connectMs = defaultConnectTimeoutMs();
+  // Bound the whole acquire+query path so waiters on a stuck ensure never exceed budget.
+  const totalMs = Math.min(queryMs + connectMs, ensurePoolBudgetMs() + queryMs);
   try {
-    const activePool = await ensurePoolReady();
     return await withTimeout(
-      activePool.query(text, params),
-      queryMs + connectMs,
+      (async () => {
+        const activePool = await ensurePoolReady();
+        return activePool.query(text, params);
+      })(),
+      totalMs,
       'queryDb'
     );
   } catch (err: any) {
@@ -443,10 +469,13 @@ export async function warmDbConnection(): Promise<boolean> {
 
 /** Readiness probe for monitoring / Caddy. Uses warm pool (no held client). Bounded total time. */
 export async function pingDb(): Promise<{ ok: boolean; host?: string; message?: string }> {
-  const totalMs = Number(process.env.DB_PING_TOTAL_MS || process.env.DB_READY_TIMEOUT_MS || 10_000);
-  const retries = Math.max(1, Number(process.env.DB_PING_RETRIES || 2));
+  const neonish = isAwsHosted() || isNeonUrl(process.env.DATABASE_URL || '');
+  const totalMs = Number(
+    process.env.DB_PING_TOTAL_MS || process.env.DB_READY_TIMEOUT_MS || (neonish ? 8_000 : 10_000)
+  );
+  const retries = Math.max(1, Number(process.env.DB_PING_RETRIES || (neonish ? 1 : 2)));
   const perAttemptMs = Math.min(
-    Number(process.env.DB_PING_TIMEOUT_MS || 5_000),
+    Number(process.env.DB_PING_TIMEOUT_MS || (neonish ? 4_000 : 5_000)),
     Math.max(2_000, Math.floor(totalMs / retries))
   );
 
@@ -487,11 +516,11 @@ export async function shutdownDb() {
 
 async function probeConnection(connStr: string): Promise<void> {
   const normalized = normalizeConnectionString(connStr);
-  // Neon (esp. cross-region) + Railway mesh need headroom; keep probes under ~20s.
+  // Keep probes inside ensurePool budget — long Neon probes made ready/products hang.
   const base = defaultConnectTimeoutMs();
   const timeoutMs = isPrivateRailwayUrl(normalized)
-    ? Math.min(Math.max(base, 8_000), 12_000)
-    : Math.min(Math.max(base, isNeonUrl(normalized) ? 12_000 : 8_000), 20_000);
+    ? Math.min(Math.max(base, 4_000), 8_000)
+    : Math.min(Math.max(base, isNeonUrl(normalized) ? 6_000 : 5_000), 10_000);
   const client = new Client({
     connectionString: normalized,
     ssl: sslFor(normalized),
@@ -604,6 +633,7 @@ function poolStaleMs(): number {
 /** Single-flight pool setup — keeps pool alive 24/7, only reconnects on real failure. */
 async function ensurePoolReady(): Promise<Pool> {
   const connectMs = defaultConnectTimeoutMs();
+  const budget = ensurePoolBudgetMs();
   // Fast path: recent heartbeat → instant return (Neon sockets die when idle; do not trust old pings)
   if (
     isPoolUsable(pool) &&
@@ -613,7 +643,10 @@ async function ensurePoolReady(): Promise<Pool> {
   ) {
     return pool;
   }
-  if (poolReadyPromise) return poolReadyPromise;
+  // CRITICAL: waiters must also be bounded — bare `return poolReadyPromise` hung catalog/admin.
+  if (poolReadyPromise) {
+    return withTimeout(poolReadyPromise, budget, 'ensurePoolReady.wait');
+  }
 
   const myGeneration = poolGeneration;
   poolReadyPromise = (async () => {
@@ -622,7 +655,7 @@ async function ensurePoolReady(): Promise<Pool> {
       let testClient: any = null;
       try {
         testClient = await withTimeout(pool!.connect(), connectMs, 'pool.verify connect');
-        await withTimeout(testClient.query('SELECT 1'), Math.min(connectMs, 8_000), 'pool.verify query');
+        await withTimeout(testClient.query('SELECT 1'), Math.min(connectMs, 4_000), 'pool.verify query');
         testClient.release();
         testClient = null;
         await ensureSchemaReady(pool!);
@@ -639,7 +672,7 @@ async function ensurePoolReady(): Promise<Pool> {
 
     const candidates = getConnectionCandidates();
     // Lightsail/Neon: keep reconnect budget tight so /api/ready returns instead of proxy 0-byte hang
-    const rounds = Number(process.env.DB_CONNECT_ROUNDS || 2);
+    const rounds = Number(process.env.DB_CONNECT_ROUNDS || (isAwsHosted() ? 1 : 2));
     let lastErr: Error | null = null;
 
     for (let round = 0; round < rounds; round++) {
@@ -681,7 +714,7 @@ async function ensurePoolReady(): Promise<Pool> {
       }
 
       if (round < rounds - 1 && lastErr && isRecoverablePgError(lastErr)) {
-        const waitMs = Math.min(3_000, 500 * (round + 1));
+        const waitMs = Math.min(1_500, 400 * (round + 1));
         console.warn(`[db] retrying all candidates (round ${round + 2}/${rounds}) in ${waitMs}ms…`);
         await sleep(waitMs);
         continue;
@@ -694,15 +727,6 @@ async function ensurePoolReady(): Promise<Pool> {
 
   try {
     // Bound total setup so /api/ready never waits on a stuck single-flight forever.
-    // Neon/Lightsail: keep under ~15s so ready's 10–12s budget can still return JSON.
-    const neonish =
-      isNeonUrl(activeConnectionString || '') ||
-      isNeonUrl(process.env.DATABASE_URL || '') ||
-      isAwsHosted();
-    const defaultBudget = neonish
-      ? Math.min(Math.max(connectMs, 12_000), 15_000)
-      : Math.min(connectMs * 2 + 5_000, 25_000);
-    const budget = Number(process.env.DB_ENSURE_TIMEOUT_MS || defaultBudget);
     return await withTimeout(poolReadyPromise, budget, 'ensurePoolReady');
   } catch (err) {
     void invalidatePool('ensurePoolReady failed');

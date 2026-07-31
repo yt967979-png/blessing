@@ -195,14 +195,16 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const CATALOG_CACHE_KEY = 'bpg_catalog_cache_v1';
   const CATALOG_TTL_MS = 5 * 60 * 1000;
 
-  const readCatalogCache = (): Product[] | null => {
+  const readCatalogCache = (allowStale = false): Product[] | null => {
     if (typeof window === 'undefined') return null;
     try {
       const raw = sessionStorage.getItem(CATALOG_CACHE_KEY);
       if (!raw) return null;
       const parsed = JSON.parse(raw);
       if (!Array.isArray(parsed?.products)) return null;
-      if (typeof parsed.at !== 'number' || Date.now() - parsed.at > CATALOG_TTL_MS) return null;
+      if (typeof parsed.at !== 'number') return null;
+      // Soft-fail path may reuse stale cache so the shop never blanks on Neon stalls.
+      if (!allowStale && Date.now() - parsed.at > CATALOG_TTL_MS) return null;
       return parsed.products as Product[];
     } catch {
       return null;
@@ -227,16 +229,31 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setProductsLoading(true);
     }
     const url = forceFresh ? '/api/products?fresh=1' : '/api/products';
-    fetch(url, forceFresh ? { cache: 'no-store' } : undefined)
+    const opts: RequestInit = {
+      ...(forceFresh ? { cache: 'no-store' as RequestCache } : {}),
+      // Fail fast — never leave the shop on a blank skeleton when Neon/pool stalls.
+      signal: AbortSignal.timeout(10_000),
+    };
+    fetch(url, opts)
       .then((res) => res.json())
       .then((data) => {
         if (Array.isArray(data)) {
           setProducts(data);
+          // Cache even empty arrays so a later timeout can soft-fail without hanging UX.
           writeCatalogCache(data);
         }
       })
       .catch(() => {
-        if (productsRef.current.length === 0) setProducts([]);
+        // Keep session cache / in-memory catalog; only clear when we never had products.
+        if (productsRef.current.length === 0) {
+          const cached = readCatalogCache(true);
+          if (cached?.length) {
+            productsRef.current = cached;
+            setProducts(cached);
+          } else {
+            setProducts([]);
+          }
+        }
       })
       .finally(() => setProductsLoading(false));
   };

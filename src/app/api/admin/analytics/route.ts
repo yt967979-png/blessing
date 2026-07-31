@@ -28,6 +28,8 @@ function emptyAnalytics(days: number, error?: string) {
   };
 }
 
+const ANALYTICS_BUDGET_MS = Number(process.env.ANALYTICS_TIMEOUT_MS || 10_000);
+
 export async function GET(request: Request) {
   const auth = await verifyAdminRequest(request);
   if (!auth.isAdmin) return forbiddenResponse(auth.error);
@@ -36,7 +38,9 @@ export async function GET(request: Request) {
   const range = searchParams.get('range') || '30';
   const days = Math.min(Math.max(Number(range) || 30, 1), 365);
 
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
+    const run = (async () => {
     const ping = await pingDb();
     if (!ping.ok) {
       return NextResponse.json(
@@ -197,6 +201,28 @@ export async function GET(request: Request) {
       })),
       range: days,
     });
+    })();
+
+    return await Promise.race([
+      run.finally(() => {
+        if (timer) clearTimeout(timer);
+      }),
+      new Promise<NextResponse>((resolve) => {
+        timer = setTimeout(
+          () =>
+            resolve(
+              NextResponse.json(
+                emptyAnalytics(
+                  days,
+                  `Analytics timed out after ${ANALYTICS_BUDGET_MS}ms — database pool may be stuck. On Lightsail: sudo systemctl restart blessing`
+                ),
+                { status: 503 }
+              )
+            ),
+          ANALYTICS_BUDGET_MS
+        );
+      }),
+    ]);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     console.error('Analytics error:', message);
@@ -211,5 +237,7 @@ export async function GET(request: Request) {
       ),
       { status: isDb ? 503 : 500 }
     );
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 }

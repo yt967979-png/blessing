@@ -203,6 +203,7 @@ export default function AdminPage() {
       const res = await fetch(`/api/orders`, {
         headers: authHeaders(user),
         credentials: 'include',
+        signal: AbortSignal.timeout(12_000),
       });
       if (res.ok) {
         const data = await res.json();
@@ -213,7 +214,13 @@ export default function AdminPage() {
         setOrders([]);
       }
     } catch (e: any) {
-      setOrdersError(e?.message || 'Network error loading orders');
+      const timedOut = e?.name === 'TimeoutError' || /abort|timeout/i.test(String(e?.message || ''));
+      setOrdersError(
+        timedOut
+          ? 'Orders request timed out — database pool may be stuck. On the server: sudo systemctl restart blessing'
+          : (e?.message || 'Network error loading orders')
+      );
+      setOrders([]);
     } finally {
       setOrdersLoading(false);
     }
@@ -241,7 +248,7 @@ export default function AdminPage() {
       const res = await fetch(`/api/admin/analytics?range=${analyticsRange}`, {
         headers: authHeaders(user),
         credentials: 'include',
-        signal: AbortSignal.timeout(28_000),
+        signal: AbortSignal.timeout(12_000),
       });
       const data = await res.json().catch(() => null);
       // Always clear skeleton: accept empty/503 payload so charts show zeros + error banner.
