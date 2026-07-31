@@ -16,25 +16,103 @@ let sock: any = null;
 let isConnected = false;
 let isInitializing = false;
 
-async function updateSessionStatus(data: { status: string; connected: boolean; qrImage?: string | null; message: string }) {
+async function updateSessionStatus(data: {
+  status: string;
+  connected: boolean;
+  qrImage?: string | null;
+  message: string;
+  pairingCode?: string | null;
+  linkedPhone?: string | null;
+}) {
   try {
-    fs.writeFileSync(path.join(PUBLIC_DIR, 'whatsapp_status.json'), JSON.stringify({ ...data, timestamp: Date.now() }, null, 2));
+    fs.writeFileSync(
+      path.join(PUBLIC_DIR, 'whatsapp_status.json'),
+      JSON.stringify({ ...data, timestamp: Date.now() }, null, 2)
+    );
+    const client = await getDbClient();
+    if (client) {
+      if (data.pairingCode !== undefined) {
+        await client.query(
+          `INSERT INTO whatsapp_sessions (id, status, connected, qr_image, message, pairing_code, updated_at)
+           VALUES ('default', $1, $2, $3, $4, $5, NOW())
+           ON CONFLICT (id) DO UPDATE 
+           SET status = EXCLUDED.status,
+               connected = EXCLUDED.connected,
+               qr_image = EXCLUDED.qr_image,
+               message = EXCLUDED.message,
+               pairing_code = EXCLUDED.pairing_code,
+               updated_at = NOW()`,
+          [data.status, data.connected, data.qrImage ?? null, data.message, data.pairingCode]
+        );
+      } else {
+        await client.query(
+          `INSERT INTO whatsapp_sessions (id, status, connected, qr_image, message, updated_at)
+           VALUES ('default', $1, $2, $3, $4, NOW())
+           ON CONFLICT (id) DO UPDATE 
+           SET status = EXCLUDED.status,
+               connected = EXCLUDED.connected,
+               qr_image = EXCLUDED.qr_image,
+               message = EXCLUDED.message,
+               updated_at = NOW()`,
+          [data.status, data.connected, data.qrImage ?? null, data.message]
+        );
+      }
+      releaseDbClient(client);
+    }
+  } catch (_) {}
+}
+
+function clearLocalAuthFiles() {
+  try {
+    if (!fs.existsSync(SESSION_DIR)) {
+      fs.mkdirSync(SESSION_DIR, { recursive: true });
+      return;
+    }
+    for (const f of fs.readdirSync(SESSION_DIR)) {
+      try {
+        fs.rmSync(path.join(SESSION_DIR, f), { recursive: true, force: true });
+      } catch (_) {}
+    }
+  } catch (_) {}
+}
+
+/** Hard reset socket + auth so a fresh QR can appear. */
+export async function resetWhatsAppSession() {
+  try {
+    if (sock) {
+      try {
+        sock.end?.(undefined);
+      } catch (_) {}
+    }
+  } catch (_) {}
+  sock = null;
+  isConnected = false;
+  isInitializing = false;
+  clearLocalAuthFiles();
+  try {
     const client = await getDbClient();
     if (client) {
       await client.query(
-        `INSERT INTO whatsapp_sessions (id, status, connected, qr_image, message, updated_at)
-         VALUES ('default', $1, $2, $3, $4, NOW())
-         ON CONFLICT (id) DO UPDATE 
-         SET status = EXCLUDED.status,
-             connected = EXCLUDED.connected,
-             qr_image = EXCLUDED.qr_image,
-             message = EXCLUDED.message,
-             updated_at = NOW()`,
-        [data.status, data.connected, data.qrImage || null, data.message]
+        `UPDATE whatsapp_sessions
+         SET status = 'DISCONNECTED',
+             connected = false,
+             qr_image = NULL,
+             session_data = NULL,
+             pairing_code = NULL,
+             message = 'Session cleared — open WhatsApp tab to scan a new QR',
+             updated_at = NOW()
+         WHERE id = 'default'`
       );
-      await client.end();
+      releaseDbClient(client);
     }
   } catch (_) {}
+  await updateSessionStatus({
+    status: 'DISCONNECTED',
+    connected: false,
+    qrImage: null,
+    pairingCode: null,
+    message: 'Session cleared — generating new QR…',
+  });
 }
 
 async function backupSessionToDb() {
@@ -128,16 +206,42 @@ export async function initWhatsAppInProcess(opts?: { requireLeader?: boolean }) 
         const isLoggedOut = statusCode === DisconnectReason.loggedOut;
         isConnected = false;
         isInitializing = false;
+        sock = null;
 
-        await updateSessionStatus({
-          status: 'DISCONNECTED',
-          connected: false,
-          qrImage: null,
-          message: isLoggedOut ? 'WhatsApp logged out permanently.' : 'Reconnecting to WhatsApp...',
-        });
-
-        if (!isLoggedOut && isBackgroundLeader()) {
-          setTimeout(() => initWhatsAppInProcess(), 5000);
+        if (isLoggedOut) {
+          // Stale logged-out auth blocks QR — wipe and restart so a new QR appears
+          clearLocalAuthFiles();
+          try {
+            const client = await getDbClient();
+            if (client) {
+              await client.query(
+                `UPDATE whatsapp_sessions
+                 SET session_data = NULL, pairing_code = NULL, qr_image = NULL, updated_at = NOW()
+                 WHERE id = 'default'`
+              );
+              releaseDbClient(client);
+            }
+          } catch (_) {}
+          await updateSessionStatus({
+            status: 'INITIALIZING',
+            connected: false,
+            qrImage: null,
+            pairingCode: null,
+            message: 'Logged out — generating a fresh QR code. Please wait…',
+          });
+          if (isBackgroundLeader()) {
+            setTimeout(() => initWhatsAppInProcess(), 1500);
+          }
+        } else {
+          await updateSessionStatus({
+            status: 'DISCONNECTED',
+            connected: false,
+            qrImage: null,
+            message: 'Reconnecting to WhatsApp...',
+          });
+          if (isBackgroundLeader()) {
+            setTimeout(() => initWhatsAppInProcess(), 5000);
+          }
         }
       } else if (connection === 'open') {
         isConnected = true;
@@ -148,20 +252,12 @@ export async function initWhatsAppInProcess(opts?: { requireLeader?: boolean }) 
           status: 'CONNECTED',
           connected: true,
           qrImage: null,
+          pairingCode: null,
+          linkedPhone,
           message: linkedPhone
             ? `Admin WhatsApp linked (+${linkedPhone}). Order updates & coupon alerts will send from this number.`
             : 'WhatsApp Bot Connected and Active!',
         });
-        try {
-          const client = await getDbClient();
-          if (client && linkedPhone) {
-            await client.query(
-              `UPDATE whatsapp_sessions SET pairing_code = $1, updated_at = NOW() WHERE id = 'default'`,
-              [linkedPhone]
-            );
-            await client.end();
-          }
-        } catch (_) {}
         console.log('✅ In-Process Baileys WhatsApp Bot Connected and Active!', linkedPhone || '');
       }
     });

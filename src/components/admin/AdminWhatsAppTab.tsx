@@ -1,7 +1,7 @@
 'use client';
 
 import React, { FormEvent } from 'react';
-import { MessageSquare, CheckCircle2 } from 'lucide-react';
+import { MessageSquare, CheckCircle2, RefreshCw } from 'lucide-react';
 
 type WaStatus = {
   status: string;
@@ -10,7 +10,15 @@ type WaStatus = {
   pairingCode?: string;
   message?: string;
   linkedPhone?: string;
+  leader?: boolean;
 };
+
+function isRealPairingCode(code: string | null | undefined): boolean {
+  const c = String(code || '').replace(/\s/g, '');
+  if (!c) return false;
+  if (/^\d{10,15}$/.test(c.replace(/-/g, ''))) return false;
+  return c.replace(/-/g, '').length >= 8;
+}
 
 export default function AdminWhatsAppTab({
   waStatus,
@@ -19,6 +27,7 @@ export default function AdminWhatsAppTab({
   waPairingCode,
   onUnlink,
   onRequestPairing,
+  onRefreshQr,
 }: {
   waStatus: WaStatus;
   waPhoneInput: string;
@@ -26,7 +35,10 @@ export default function AdminWhatsAppTab({
   waPairingCode: string | null;
   onUnlink: () => void;
   onRequestPairing: (e: FormEvent) => void;
+  onRefreshQr?: () => void;
 }) {
+  const showCode = isRealPairingCode(waPairingCode);
+
   return (
     <div className="max-w-lg mx-auto space-y-4">
       <div className="bg-white rounded-xl border border-gray-200 p-6 text-center">
@@ -56,7 +68,7 @@ export default function AdminWhatsAppTab({
           </div>
           <div className="bg-gray-50 rounded-lg p-3 text-xs space-y-1.5">
             {[
-              ['Linked as', waStatus.pairingCode ? `+${waStatus.pairingCode}` : 'Admin device'],
+              ['Linked as', waStatus.linkedPhone ? `+${waStatus.linkedPhone}` : 'Admin device'],
               ['Sends to', 'Customer phone numbers'],
               ['Orders', 'Placed → Packed → Delivered'],
               ['Offers', 'Coupon broadcasts'],
@@ -80,36 +92,71 @@ export default function AdminWhatsAppTab({
         <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
           <div className="text-center space-y-1">
             <p className="text-sm font-bold text-gray-700">
-              {waStatus.status === 'LOADING'
-                ? 'Connecting...'
-                : waStatus.status === 'INITIALIZING'
-                  ? 'WhatsApp Engine Starting...'
-                  : 'Link your WhatsApp number'}
+              {waStatus.status === 'LOADING' || waStatus.status === 'INITIALIZING'
+                ? 'Preparing QR…'
+                : 'Connect WhatsApp'}
             </p>
             <p className="text-xs text-gray-400">
-              {waStatus.message || 'Use admin phone — scan QR or enter pairing code'}
+              {waStatus.message || 'Scan the QR with your shop WhatsApp phone'}
             </p>
           </div>
 
-          {waStatus.qrImage && (
-            <div className="text-center">
-              <img
-                src={waStatus.qrImage}
-                alt="WhatsApp QR"
-                className="w-48 h-48 mx-auto rounded-xl border border-gray-200 shadow-sm"
-              />
-              <p className="text-xs text-gray-400 mt-2">
-                Open WhatsApp on admin phone → Linked Devices → Scan QR
-              </p>
-            </div>
-          )}
+          {/* Step 1: QR (primary) */}
+          <div className="rounded-xl border border-gray-100 bg-gray-50 p-4 space-y-3">
+            <p className="text-xs font-bold text-gray-800 text-center">Step 1 — Scan QR (easiest)</p>
+            {waStatus.qrImage ? (
+              <div className="text-center">
+                <img
+                  src={waStatus.qrImage}
+                  alt="WhatsApp QR"
+                  className="w-52 h-52 mx-auto rounded-xl border border-gray-200 bg-white shadow-sm"
+                />
+                <ol className="text-left text-[11px] text-gray-600 mt-3 space-y-1 max-w-xs mx-auto list-decimal list-inside">
+                  <li>Open <strong>WhatsApp</strong> on your phone</li>
+                  <li>Tap <strong>⋮</strong> or <strong>Settings → Linked devices</strong></li>
+                  <li>Tap <strong>Link a device</strong></li>
+                  <li>Scan this QR code</li>
+                </ol>
+              </div>
+            ) : (
+              <div className="text-center space-y-2 py-4">
+                <p className="text-xs text-gray-500">QR not ready yet — keep this tab open (refreshes every few seconds).</p>
+                {onRefreshQr && (
+                  <button
+                    type="button"
+                    onClick={onRefreshQr}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-white bg-[#25d366] hover:bg-[#1da851] rounded-lg cursor-pointer"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    Show new QR
+                  </button>
+                )}
+              </div>
+            )}
+            {waStatus.qrImage && onRefreshQr && (
+              <div className="text-center">
+                <button
+                  type="button"
+                  onClick={onRefreshQr}
+                  className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-gray-500 hover:text-[#2874f0] cursor-pointer"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  QR expired? Generate new one
+                </button>
+              </div>
+            )}
+          </div>
 
+          {/* Step 2: pairing code */}
           <div className="border-t border-gray-100 pt-4">
-            <p className="text-xs font-semibold text-gray-700 mb-3">Or link via Pairing Code (admin number)</p>
+            <p className="text-xs font-semibold text-gray-700 mb-1">Step 2 — Or use pairing code (no camera)</p>
+            <p className="text-[11px] text-gray-400 mb-3">
+              Phone → Linked devices → Link with phone number → enter the <strong>8-digit code</strong> (not your phone number).
+            </p>
             <form onSubmit={onRequestPairing} className="flex gap-2">
               <input
                 type="tel"
-                placeholder="91XXXXXXXXXX (your admin WhatsApp)"
+                placeholder="91XXXXXXXXXX (your WhatsApp)"
                 value={waPhoneInput}
                 onChange={(e) => setWaPhoneInput(e.target.value)}
                 required
@@ -122,11 +169,9 @@ export default function AdminWhatsAppTab({
                 Get Code
               </button>
             </form>
-            {waPairingCode && (
+            {showCode && (
               <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg text-center">
-                <p className="text-xs text-amber-700 font-medium mb-1">
-                  On admin phone: WhatsApp → Linked Devices → Link with phone number:
-                </p>
+                <p className="text-xs text-amber-700 font-medium mb-1">Enter this code in WhatsApp:</p>
                 <p className="text-2xl font-black text-amber-800 tracking-[0.3em]">{waPairingCode}</p>
               </div>
             )}

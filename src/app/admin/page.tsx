@@ -281,19 +281,76 @@ export default function AdminPage() {
     if (activeTab !== 'whatsapp') return;
     const fetchWa = async () => {
       try {
-        const r = await fetch('/api/whatsapp/qr');
+        const r = await fetch('/api/whatsapp/qr', { headers: authHeaders(user) });
         if (r.ok) {
           const data = await r.json();
           setWaStatus(data);
+          if (data.pairingCode && /[A-Za-z0-9]{4}-[A-Za-z0-9]{4}/.test(String(data.pairingCode))) {
+            setWaPairingCode(data.pairingCode);
+          }
         }
       } catch {
         setWaStatus({ status: 'INITIALIZING' });
       }
     };
     fetchWa();
-    const iv = setInterval(fetchWa, 10000);
+    const iv = setInterval(fetchWa, 4000);
     return () => clearInterval(iv);
-  }, [activeTab]);
+  }, [activeTab, user]);
+
+  const handleUnlinkWhatsApp = async () => {
+    if (!confirm('Unlink WhatsApp session? A new QR will be generated.')) return;
+    try {
+      const r = await fetch('/api/whatsapp/qr', { method: 'DELETE', headers: authHeaders(user) });
+      if (r.ok) {
+        showToast('✅ Unlinked — wait for new QR');
+        setWaStatus({ status: 'INITIALIZING', message: 'Generating new QR…' });
+        setWaPairingCode(null);
+      }
+    } catch (_) {
+      showToast('❌ Unlink failed');
+    }
+  };
+
+  const handleRefreshWhatsAppQr = async () => {
+    showToast('⏳ Generating new QR…');
+    setWaPairingCode(null);
+    try {
+      const r = await fetch('/api/whatsapp/qr?refresh=1', { headers: authHeaders(user) });
+      const d = await r.json();
+      if (r.ok) {
+        setWaStatus(d);
+        showToast(d.qrImage ? '✅ Scan the QR now' : '⏳ QR loading — keep tab open');
+      } else {
+        showToast(`⚠️ ${d.error || 'Could not refresh QR'}`);
+      }
+    } catch (_) {
+      showToast('❌ QR refresh failed');
+    }
+  };
+
+  const handleRequestPairingCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!waPhoneInput) return;
+    showToast('⏳ Generating pairing code...');
+    try {
+      const r = await fetch(`/api/whatsapp/qr?phone=${encodeURIComponent(waPhoneInput)}`, {
+        headers: authHeaders(user),
+      });
+      const d = await r.json();
+      const code = String(d.pairingCode || '');
+      const ok = d.success && code && !/^\d{10,15}$/.test(code.replace(/-/g, ''));
+      if (ok) {
+        setWaPairingCode(code);
+        showToast(`✅ Enter code on phone: ${code}`);
+      } else {
+        setWaPairingCode(null);
+        showToast(`⚠️ ${d.error || 'Use QR scan instead'}`);
+      }
+    } catch (_) {
+      showToast('❌ Error');
+    }
+  };
 
   // ── Filtered orders
   const filteredOrders = useMemo(() => {
@@ -574,15 +631,6 @@ export default function AdminPage() {
       createdAt: o.createdAt,
       items: o.items,
     }, 'a4');
-  };
-  const handleUnlinkWhatsApp = async () => {
-    if (!confirm('Unlink WhatsApp session?')) return;
-    try { const r = await fetch('/api/whatsapp/qr', { method: 'DELETE' }); if (r.ok) { showToast('✅ Session unlinked'); setWaStatus({ status: 'DISCONNECTED' }); } } catch (_) { }
-  };
-  const handleRequestPairingCode = async (e: React.FormEvent) => {
-    e.preventDefault(); if (!waPhoneInput) return;
-    showToast('⏳ Generating pairing code...');
-    try { const r = await fetch(`/api/whatsapp/qr?phone=${encodeURIComponent(waPhoneInput)}`); const d = await r.json(); if (d.pairingCode) { setWaPairingCode(d.pairingCode); showToast(`✅ Code: ${d.pairingCode}`); } else showToast(`⚠️ ${d.error}`); } catch (_) { showToast('❌ Error'); }
   };
 
   // ── Access gate
@@ -1379,6 +1427,7 @@ export default function AdminPage() {
             waPairingCode={waPairingCode}
             onUnlink={handleUnlinkWhatsApp}
             onRequestPairing={handleRequestPairingCode}
+            onRefreshQr={handleRefreshWhatsAppQr}
           />
         )}
 
