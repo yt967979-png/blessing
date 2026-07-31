@@ -278,7 +278,7 @@ export async function initWhatsAppInProcess(opts?: { requireLeader?: boolean }) 
       auth: state,
       logger: waLogger,
       printQRInTerminal: false,
-      browser: ['Ubuntu', 'Chrome', '22.04.4'],
+      browser: ['Blessing Power Guide', 'Chrome', '122.0.0'],
       syncFullHistory: false,
       markOnlineOnConnect: false,
       generateHighQualityLinkPreview: false,
