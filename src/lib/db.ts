@@ -340,11 +340,12 @@ export async function shutdownDb() {
 
 async function probeConnection(connStr: string): Promise<void> {
   const normalized = normalizeConnectionString(connStr);
-  // Give Railway private mesh + public TCP proxy enough time; short probes caused false "timeout".
+  // Give Railway private mesh + public TCP proxy enough time, but keep probes short
+  // enough that fallback + retries don't hang HTTP for a minute.
   const base = defaultConnectTimeoutMs();
   const timeoutMs = isPrivateRailwayUrl(normalized)
-    ? Math.max(base, 12_000)
-    : Math.max(base, 15_000);
+    ? Math.min(Math.max(base, 8_000), 12_000)
+    : Math.min(Math.max(base, 8_000), 15_000);
   const client = new Client({
     connectionString: normalized,
     ssl: sslFor(normalized),
@@ -465,7 +466,7 @@ async function ensurePoolReady(): Promise<Pool> {
     }
 
     const candidates = getConnectionCandidates();
-    const rounds = Number(process.env.DB_CONNECT_ROUNDS || 6);
+    const rounds = Number(process.env.DB_CONNECT_ROUNDS || 3);
     let lastErr: Error | null = null;
 
     for (let round = 0; round < rounds; round++) {
@@ -527,8 +528,10 @@ async function ensurePoolReady(): Promise<Pool> {
 }
 
 export async function getDbClient() {
-  const retries = Number(process.env.DB_ACQUIRE_RETRIES || 8);
+  // Keep request latency bounded — long retries caused Admin 499/502 hangs.
+  const retries = Number(process.env.DB_ACQUIRE_RETRIES || 4);
   let lastErr: Error | null = null;
+  let consecutiveTimeouts = 0;
 
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
@@ -539,16 +542,23 @@ export async function getDbClient() {
       }
       const client: any = await activePool.connect();
       wrapPoolClient(client);
+      consecutiveTimeouts = 0;
       return client;
     } catch (err: any) {
       lastErr = err;
       console.warn(`[db] acquire attempt ${attempt + 1}/${retries}:`, err?.message || err);
-      if (isRecoverablePgError(err)) {
+      if (!isRecoverablePgError(err)) throw err;
+
+      const msg = String(err?.message || err);
+      const isTimeout = msg.includes('timeout exceeded') || msg.includes('ETIMEDOUT');
+      if (isTimeout) consecutiveTimeouts++;
+
+      // Don't tear the pool down on the first blip — that causes reconnect storms.
+      if (consecutiveTimeouts >= 2 || msg.includes('starting up') || msg.includes('terminated')) {
         await invalidatePool('client acquire failed');
-        await sleep(Math.min(8_000, 800 * (attempt + 1)));
-        continue;
+        consecutiveTimeouts = 0;
       }
-      throw err;
+      await sleep(Math.min(3_000, 400 * (attempt + 1)));
     }
   }
 

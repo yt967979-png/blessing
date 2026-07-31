@@ -125,17 +125,25 @@ function applyLoadAdjustments(base: RuntimeTuning, level: LoadLevel): RuntimeTun
 }
 
 function measureLoadLevel(): LoadLevel {
-  // Railway Free/shared hosts often expose host-wide cpus/mem/loadavg (e.g. 48 CPUs /
-  // 300GB). That falsely flips us to "critical" and thrashes DB workers. When the
-  // tier is forced via env, only use this process's heap pressure.
-  const forced = String(process.env.RAILWAY_PLAN_TIER || process.env.RUNTIME_TIER || '').toLowerCase();
+  // Railway Free/shared hosts expose host-wide cpus/mem/loadavg (e.g. 48 CPUs /
+  // 300GB). That falsely flips "critical" and thrashes DB workers. Soft/free
+  // always uses this process only, and never escalates to critical.
+  const soft =
+    tier === 'free' ||
+    tier === 'hobby' ||
+    String(process.env.LAUNCH_SCALE || 'soft').toLowerCase() !== 'peak' ||
+    String(process.env.RUNTIME_TIER || process.env.RAILWAY_PLAN_TIER || '')
+      .toLowerCase() === 'free' ||
+    String(process.env.RUNTIME_TIER || '').toLowerCase() === 'hobby';
+
   const mem = process.memoryUsage();
   const heapPressure = mem.heapUsed / Math.max(mem.heapTotal, 1);
+  const heapMb = mem.heapUsed / (1024 * 1024);
 
-  if (forced === 'free' || forced === 'hobby') {
-    if (heapPressure >= 0.92) return 'critical';
-    if (heapPressure >= 0.82) return 'high';
-    if (heapPressure <= 0.55) return 'low';
+  if (soft) {
+    // Absolute heap (not V8 heapTotal ratio — that spikes falsely right after boot).
+    if (heapMb >= 450) return 'high';
+    if (heapMb <= 120 && heapPressure <= 0.7) return 'low';
     return 'normal';
   }
 
