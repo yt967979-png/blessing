@@ -245,6 +245,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   useEffect(() => {
     const cached = readCatalogCache();
     if (cached?.length) {
+      // Sync ref immediately so refreshProducts() does not flash skeleton over cache
+      productsRef.current = cached;
       setProducts(cached);
       setProductsLoading(false);
     }

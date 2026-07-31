@@ -335,9 +335,26 @@ function OrdersContent() {
       </div>
 
       {isLoading ? (
-        <div className="py-20 text-center space-y-3">
-          <div className="w-10 h-10 border-4 border-amber-400 border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-xs font-bold text-slate-600">Retrieving Order Details from Database...</p>
+        <div className="space-y-4 py-2" aria-busy="true" aria-label="Loading orders">
+          <div className="flex gap-2 overflow-hidden">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="h-9 w-20 bg-slate-200 rounded-xl animate-pulse shrink-0" />
+            ))}
+          </div>
+          {[1, 2, 3].map((i) => (
+            <div
+              key={i}
+              className="bg-white border border-slate-200 rounded-2xl p-4 space-y-3 animate-pulse"
+            >
+              <div className="flex justify-between">
+                <div className="h-4 w-28 bg-slate-100 rounded" />
+                <div className="h-4 w-16 bg-slate-100 rounded" />
+              </div>
+              <div className="h-3 w-full bg-slate-100 rounded" />
+              <div className="h-3 w-2/3 bg-slate-100 rounded" />
+              <div className="h-8 w-full bg-slate-100 rounded-lg" />
+            </div>
+          ))}
         </div>
       ) : searchedOrderData ? (
         <div className="space-y-6">
@@ -1050,7 +1067,22 @@ export default function OrdersPage() {
     <main className="min-h-screen bg-[#F4F6F9] text-slate-900 font-sans page-mobile-nav">
       <Header />
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-28 md:pb-16">
-        <Suspense fallback={<div className="py-20 text-center">Loading...</div>}>
+        <Suspense
+          fallback={
+            <div className="space-y-4 py-2" aria-busy="true">
+              {[1, 2, 3].map((i) => (
+                <div
+                  key={i}
+                  className="bg-white border border-slate-200 rounded-2xl p-4 space-y-3 animate-pulse"
+                >
+                  <div className="h-4 w-28 bg-slate-100 rounded" />
+                  <div className="h-3 w-full bg-slate-100 rounded" />
+                  <div className="h-8 w-full bg-slate-100 rounded-lg" />
+                </div>
+              ))}
+            </div>
+          }
+        >
           <OrdersContent />
         </Suspense>
       </div>

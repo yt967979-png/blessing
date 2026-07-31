@@ -26,6 +26,14 @@ export default function Home() {
     }
   }, [user, router]);
 
+  // Prefetch critical shop routes on mount for Flipkart-like instant nav
+  useEffect(() => {
+    const routes = ['/search', '/cart', '/orders', '/profile', '/track'];
+    for (const href of routes) {
+      router.prefetch(href);
+    }
+  }, [router]);
+
   return (
     <main className="min-h-screen bg-slate-50 flex flex-col page-mobile-nav">
       <AnnouncementBar />

@@ -54,11 +54,17 @@ function sslFor(connectionString) {
   if (process.env.DATABASE_SSL === 'false') return false;
   if (process.env.DATABASE_SSL === 'true') return { rejectUnauthorized: false };
   if (connectionString.includes('railway.internal')) return false;
+  // Cloud PG (Neon/Railway proxy/Render/Supabase) — TLS via explicit ssl option.
+  // sslmode is stripped from the URL so node-pg does not warn/double-negotiate.
   if (
     connectionString.includes('rlwy.net') ||
     connectionString.includes('proxy.rlwy.net') ||
     connectionString.includes('railway.app') ||
-    connectionString.includes('render.com')
+    connectionString.includes('render.com') ||
+    connectionString.includes('neon.tech') ||
+    connectionString.includes('supabase.co') ||
+    connectionString.includes('supabase.com') ||
+    connectionString.includes('aivencloud.com')
   ) {
     return { rejectUnauthorized: false };
   }

@@ -87,7 +87,11 @@ git clone https://github.com/yt967979-png/blessing.git /opt/blessing
 cd /opt/blessing
 cp deploy/aws/env.example /tmp/blessing.env.example
 # → create /etc/blessing.env (step 3)
-npm ci && npm run build
+# NEVER source /etc/blessing.env before npm ci — NODE_ENV=production omits
+# @tailwindcss/postcss (devDependency) → Turbopack build fails → 500s.
+npm ci --include=dev
+set -a; source /etc/blessing.env; set +a
+npm run build
 
 # systemd
 sudo cp deploy/aws/blessing.service /etc/systemd/system/blessing.service
@@ -175,10 +179,14 @@ Do **not** copy `RAILWAY_*` or `RENDER_*` variables.
 
 See [`deploy/aws/env.example`](deploy/aws/env.example).
 
-After editing env:
+After editing env (rebuild so `NEXT_PUBLIC_*` bake in):
 
 ```bash
-cd /opt/blessing && npm ci && npm run build
+cd /opt/blessing
+# Do NOT source blessing.env before npm ci
+npm ci --include=dev
+set -a; source /etc/blessing.env; set +a
+npm run build
 sudo systemctl restart blessing
 ```
 
@@ -229,7 +237,10 @@ PUBLIC_BASE_URL=https://blessingpowerguide.in
 ```
 
 ```bash
-cd /opt/blessing && npm ci && npm run build
+cd /opt/blessing
+npm ci --include=dev
+set -a; source /etc/blessing.env; set +a
+npm run build
 sudo systemctl restart blessing
 ```
 
@@ -266,7 +277,10 @@ sudo sed -i "s|^NEXT_PUBLIC_SITE_URL=.*|NEXT_PUBLIC_SITE_URL=https://${BLESSING_
 grep -q '^PUBLIC_BASE_URL=' /etc/blessing.env || echo "PUBLIC_BASE_URL=https://${BLESSING_HOST}" | sudo tee -a /etc/blessing.env
 grep -q '^NEXT_PUBLIC_SITE_URL=' /etc/blessing.env || echo "NEXT_PUBLIC_SITE_URL=https://${BLESSING_HOST}" | sudo tee -a /etc/blessing.env
 
-cd /opt/blessing && npm ci && npm run build
+cd /opt/blessing
+npm ci --include=dev
+set -a; source /etc/blessing.env; set +a
+npm run build
 sudo systemctl restart blessing
 curl -sS "https://${BLESSING_HOST}/api/health"
 ```
@@ -383,9 +397,14 @@ rsync -a --delete \
   --exclude node_modules --exclude .next --exclude .git \
   --exclude whatsapp_session --exclude 'whatsapp_session_*' \
   ~/blessing/blessing/ /opt/blessing/
+# Remove accidental nested clone from a bad rsync source path
+rm -rf /opt/blessing/blessing
 cd /opt/blessing
+# NEVER source blessing.env before npm ci (NODE_ENV=production drops @tailwindcss/postcss)
+npm ci --include=dev
 set -a; source /etc/blessing.env; set +a
-npm ci && npm run build
+npm run build
+test -f .next/server/middleware-manifest.json -o -f .next/middleware-manifest.json
 sudo cp deploy/aws/blessing.service /etc/systemd/system/blessing.service
 sudo systemctl daemon-reload
 sudo systemctl restart blessing
@@ -396,8 +415,9 @@ If `/opt/blessing` is itself a git clone:
 ```bash
 cd /opt/blessing
 git pull origin main
+npm ci --include=dev
 set -a; source /etc/blessing.env; set +a
-npm ci && npm run build
+npm run build
 sudo systemctl restart blessing
 ```
 
@@ -461,10 +481,12 @@ cd ~/blessing/blessing && git pull origin main
 # OR: cd /opt/blessing && git pull origin main
 
 cd /opt/blessing
-set -a; source /etc/blessing.env; set +a
-# Build as the app user so ownership of .next stays correct
-sudo -u ubuntu -E bash -lc 'cd /opt/blessing && npm ci && npm run build'
+rm -rf /opt/blessing/blessing
+# Install deps WITHOUT sourcing env; build WITH env
+sudo -u ubuntu bash -lc 'cd /opt/blessing && npm ci --include=dev'
+sudo -u ubuntu bash -lc 'set -a; source /etc/blessing.env; set +a; cd /opt/blessing && npm run build'
 test -d /opt/blessing/.next
+test -f /opt/blessing/.next/server/middleware-manifest.json -o -f /opt/blessing/.next/middleware-manifest.json
 
 sudo cp /opt/blessing/deploy/aws/blessing.service /etc/systemd/system/blessing.service
 sudo systemctl daemon-reload
@@ -474,7 +496,11 @@ curl -sS http://127.0.0.1:3000/api/health
 curl -sS https://blessingpowerguide.duckdns.org/api/health
 ```
 
-**Deploy rule:** stop `blessing` → pull/rsync → `npm run build` → start. Restarting while `.next` is incomplete is the #1 cause of mass 502s on orders/analytics/courier.
+**Deploy rule:** stop `blessing` → pull/rsync → `npm ci --include=dev` (no env) → `npm run build` (with env) → start. Never source `/etc/blessing.env` before `npm ci`. Restarting while `.next` is incomplete is the #1 cause of mass 502s.
+
+### Build tip: `npm ci` + `NODE_ENV=production`
+
+`/etc/blessing.env` sets `NODE_ENV=production`. If you `source` it **before** `npm ci`, npm omits `devDependencies` including `@tailwindcss/postcss`. The Turbopack/PostCSS build then fails, `.next` is incomplete (no `middleware-manifest`), and every page returns **500**. Fix: always `npm ci --include=dev` with a clean shell, then source env only for `npm run build`.
 
 ---
 

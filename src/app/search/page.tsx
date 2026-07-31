@@ -18,7 +18,7 @@ function SearchContent() {
   const classParam = searchParams.get('class') || 'all';
   const categoryParam = searchParams.get('category') || 'all';
 
-  const { products } = useStore();
+  const { products, productsLoading } = useStore();
 
   const [searchTerm, setSearchTerm] = useState(queryParam);
   const [selectedClass, setSelectedClass] = useState(classParam);
@@ -246,8 +246,10 @@ function SearchContent() {
               </div>
             </div>
 
-            {/* Products Grid */}
-            {filteredProducts.length === 0 ? (
+            {/* Products Grid — skeleton until catalog hydrates; never blank white */}
+            {productsLoading && products.length === 0 ? (
+              <ProductCardSkeletonGrid count={8} />
+            ) : filteredProducts.length === 0 ? (
               <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center space-y-4">
                 <div className="w-14 h-14 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto border border-blue-100">
                   <BookOpen className="w-7 h-7" />

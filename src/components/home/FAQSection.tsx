@@ -29,7 +29,12 @@ export const FAQSection = () => {
   if (loading) {
     return (
       <section className="py-14 bg-gradient-to-b from-slate-50 to-white border-t border-slate-200">
-        <div className="max-w-4xl mx-auto px-4 text-center text-slate-400 text-sm">Loading FAQs...</div>
+        <div className="max-w-4xl mx-auto px-4 space-y-3">
+          <div className="h-8 w-64 bg-slate-200 rounded-lg animate-pulse mx-auto mb-8" />
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-14 bg-white border border-slate-200 rounded-xl animate-pulse" />
+          ))}
+        </div>
       </section>
     );
   }

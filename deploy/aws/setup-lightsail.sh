@@ -80,8 +80,21 @@ fi
 # systemd EnvironmentFile breaks on Windows CRLF (empty "" env vars / crash-loop)
 sed -i 's/\r$//' "$ENV_FILE"
 
-echo "==> npm ci && npm run build (as $APP_USER)"
-sudo -u "$APP_USER" bash -lc "cd '$APP_DIR' && npm ci && npm run build"
+# CRITICAL: never source /etc/blessing.env before npm ci.
+# blessing.env sets NODE_ENV=production, which makes npm ci omit devDependencies
+# (@tailwindcss/postcss, typescript, …). Turbopack then fails → no .next/middleware-manifest
+# → Next 500s on every route. Always: npm ci --include=dev (clean env), then build WITH env.
+echo "==> npm ci --include=dev (no env sourced — keeps build tools)"
+sudo -u "$APP_USER" bash -lc "cd '$APP_DIR' && npm ci --include=dev"
+echo "==> npm run build (with $ENV_FILE for NEXT_PUBLIC_* / DATABASE_URL)"
+if [[ -f "$ENV_FILE" ]]; then
+  sudo -u "$APP_USER" bash -lc "set -a; source '$ENV_FILE'; set +a; cd '$APP_DIR' && npm run build"
+else
+  sudo -u "$APP_USER" bash -lc "cd '$APP_DIR' && npm run build"
+fi
+test -f "$APP_DIR/.next/server/middleware-manifest.json" \
+  || test -f "$APP_DIR/.next/middleware-manifest.json" \
+  || echo "WARN: middleware-manifest missing after build — check npm ci used --include=dev"
 
 echo "==> systemd unit"
 cp "$APP_DIR/deploy/aws/blessing.service" /etc/systemd/system/blessing.service

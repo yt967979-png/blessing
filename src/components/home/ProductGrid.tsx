@@ -55,7 +55,9 @@ export const ProductGrid = () => {
               FEATURED STUDY GUIDES
             </h2>
             <p className="text-xs text-slate-500 font-medium mt-0.5">
-              {filteredProducts.length} guide{filteredProducts.length === 1 ? '' : 's'}
+              {productsLoading && products.length === 0
+                ? 'Loading catalog…'
+                : `${filteredProducts.length} guide${filteredProducts.length === 1 ? '' : 's'}`}
             </p>
           </div>
 
