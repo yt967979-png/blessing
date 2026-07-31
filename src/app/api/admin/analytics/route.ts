@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
-import { pingDb, queryDb } from '@/lib/db';
-import { verifyAdminRequest, forbiddenResponse } from '@/lib/serverSecurity';
+import { withEphemeralClient } from '@/lib/db';
+import {
+  getAuthenticatedUser,
+  forbiddenResponse,
+} from '@/lib/serverSecurity';
 
 /** Active (non-cancelled) orders only — cancelled sales do not count toward revenue. */
 const ACTIVE = `COALESCE(order_status, '') NOT ILIKE '%cancel%'`;
@@ -28,34 +31,51 @@ function emptyAnalytics(days: number, error?: string) {
   };
 }
 
-const ANALYTICS_BUDGET_MS = Number(process.env.ANALYTICS_TIMEOUT_MS || 10_000);
+/** Server wall-clock budget — keep below admin client AbortSignal (20s). */
+const ANALYTICS_BUDGET_MS = Number(process.env.ANALYTICS_TIMEOUT_MS || 14_000);
+const ANALYTICS_STATEMENT_MS = Number(
+  process.env.ANALYTICS_STATEMENT_TIMEOUT_MS || 8_000
+);
 
 export async function GET(request: Request) {
-  const auth = await verifyAdminRequest(request);
-  if (!auth.isAdmin) return forbiddenResponse(auth.error);
+  // JWT only here — DB role check runs on the same ephemeral Client as analytics
+  // so we never wait on the shared pool acquire queue before work starts.
+  const session = await getAuthenticatedUser(request);
+  if (!session) return forbiddenResponse('Unauthorized: Missing session');
 
   const { searchParams } = new URL(request.url);
   const range = searchParams.get('range') || '30';
   const days = Math.min(Math.max(Number(range) || 30, 1), 365);
 
-  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    const run = (async () => {
-    const ping = await pingDb();
-    if (!ping.ok) {
-      return NextResponse.json(
-        emptyAnalytics(
-          days,
-          ping.message ||
-            'Database disconnected. On Lightsail set DATABASE_URL (Neon pooler) in /etc/blessing.env, then: sudo systemctl restart blessing'
-        ),
-        { status: 503 }
-      );
-    }
+    const payload = await withEphemeralClient(
+      async (client) => {
+        const authRes = await client.query(
+          `SELECT role, status FROM users WHERE id = $1 LIMIT 1`,
+          [session.userId]
+        );
+        if (authRes.rows.length === 0) {
+          throw Object.assign(new Error('Unauthorized: User not found'), {
+            code: 'AUTH',
+            status: 403,
+          });
+        }
+        const row = authRes.rows[0];
+        if (String(row.status || '').toLowerCase() === 'banned') {
+          throw Object.assign(new Error('Forbidden: Account disabled'), {
+            code: 'AUTH',
+            status: 403,
+          });
+        }
+        if (String(row.role || '').toLowerCase() !== 'admin') {
+          throw Object.assign(new Error('Forbidden: Admin privilege required'), {
+            code: 'AUTH',
+            status: 403,
+          });
+        }
 
-    // Keep concurrency low (Free pool is tiny) — 2 batches instead of 8 parallel
-    const [summaryRes, dailyRes, paymentMethodRes, statusRes] = await Promise.all([
-      queryDb(`
+        // Sequential on one fresh connection — no pool concurrency storm (max=3).
+        const summaryRes = await client.query(`
         SELECT
           COUNT(*) FILTER (WHERE ${ACTIVE})::int                                        AS total_orders,
           COALESCE(SUM(total_amount) FILTER (WHERE ${ACTIVE}), 0)::numeric              AS total_revenue,
@@ -65,9 +85,10 @@ export async function GET(request: Request) {
           COUNT(*) FILTER (WHERE ${ACTIVE} AND ordered_at >= NOW() - INTERVAL '1 day')::int   AS today_orders,
           COALESCE(SUM(total_amount) FILTER (WHERE ${ACTIVE} AND ordered_at >= NOW() - INTERVAL '1 day'), 0)::numeric AS today_revenue
         FROM orders
-      `),
-      queryDb(
-        `
+      `);
+
+        const dailyRes = await client.query(
+          `
         SELECT
           DATE(ordered_at AT TIME ZONE 'Asia/Kolkata') AS day,
           COUNT(*)::int                                AS orders,
@@ -80,9 +101,10 @@ export async function GET(request: Request) {
         GROUP BY day
         ORDER BY day ASC
       `,
-        [days]
-      ),
-      queryDb(`
+          [days]
+        );
+
+        const paymentMethodRes = await client.query(`
         SELECT
           payment_method,
           COUNT(*)::int                           AS count,
@@ -91,8 +113,9 @@ export async function GET(request: Request) {
         WHERE ${ACTIVE}
         GROUP BY payment_method
         ORDER BY revenue DESC
-      `),
-      queryDb(`
+      `);
+
+        const statusRes = await client.query(`
         SELECT
           order_status                            AS status,
           COUNT(*)::int                           AS count,
@@ -100,11 +123,9 @@ export async function GET(request: Request) {
         FROM orders
         GROUP BY order_status
         ORDER BY count DESC
-      `),
-    ]);
+      `);
 
-    const [payStatusRes, topProductsRes, hourlyRes, momRes] = await Promise.all([
-      queryDb(`
+        const payStatusRes = await client.query(`
         SELECT
           payment_status,
           COUNT(*)::int                           AS count,
@@ -113,8 +134,9 @@ export async function GET(request: Request) {
         WHERE ${ACTIVE}
         GROUP BY payment_status
         ORDER BY count DESC
-      `),
-      queryDb(`
+      `);
+
+        const topProductsRes = await client.query(`
         SELECT
           oi.book_title                            AS title,
           SUM(oi.quantity)::int                    AS total_qty,
@@ -126,8 +148,9 @@ export async function GET(request: Request) {
         GROUP BY oi.book_title
         ORDER BY total_qty DESC
         LIMIT 10
-      `),
-      queryDb(`
+      `);
+
+        const hourlyRes = await client.query(`
         SELECT
           EXTRACT(HOUR FROM ordered_at AT TIME ZONE 'Asia/Kolkata')::int AS hour,
           COUNT(*)::int AS orders
@@ -136,8 +159,9 @@ export async function GET(request: Request) {
           AND ${ACTIVE}
         GROUP BY hour
         ORDER BY hour ASC
-      `),
-      queryDb(`
+      `);
+
+        const momRes = await client.query(`
         SELECT
           TO_CHAR(DATE_TRUNC('month', ordered_at AT TIME ZONE 'Asia/Kolkata'), 'Mon YYYY') AS month,
           COUNT(*)::int                               AS orders,
@@ -147,97 +171,89 @@ export async function GET(request: Request) {
           AND ${ACTIVE}
         GROUP BY DATE_TRUNC('month', ordered_at AT TIME ZONE 'Asia/Kolkata')
         ORDER BY DATE_TRUNC('month', ordered_at AT TIME ZONE 'Asia/Kolkata') ASC
-      `),
-    ]);
+      `);
 
-    const summary = summaryRes.rows[0] || {};
+        const summary = summaryRes.rows[0] || {};
 
-    return NextResponse.json({
-      summary: {
-        totalOrders: Number(summary.total_orders || 0),
-        totalRevenue: Number(summary.total_revenue || 0),
-        avgOrderValue: Math.round(Number(summary.avg_order_value || 0)),
-        paidOrders: Number(summary.paid_orders || 0),
-        codOrders: Number(summary.cod_orders || 0),
-        todayOrders: Number(summary.today_orders || 0),
-        todayRevenue: Number(summary.today_revenue || 0),
+        return {
+          summary: {
+            totalOrders: Number(summary.total_orders || 0),
+            totalRevenue: Number(summary.total_revenue || 0),
+            avgOrderValue: Math.round(Number(summary.avg_order_value || 0)),
+            paidOrders: Number(summary.paid_orders || 0),
+            codOrders: Number(summary.cod_orders || 0),
+            todayOrders: Number(summary.today_orders || 0),
+            todayRevenue: Number(summary.today_revenue || 0),
+          },
+          daily: dailyRes.rows.map((r: any) => ({
+            day: r.day,
+            orders: Number(r.orders),
+            revenue: Number(r.revenue),
+            onlineRevenue: Number(r.online_revenue),
+            codRevenue: Number(r.cod_revenue),
+          })),
+          paymentMethods: paymentMethodRes.rows.map((r: any) => ({
+            method: r.payment_method || 'Unknown',
+            count: Number(r.count),
+            revenue: Number(r.revenue),
+          })),
+          orderStatuses: statusRes.rows.map((r: any) => ({
+            status: r.status || 'Unknown',
+            count: Number(r.count),
+            revenue: Number(r.revenue),
+          })),
+          paymentStatuses: payStatusRes.rows.map((r: any) => ({
+            status: r.payment_status || 'Unknown',
+            count: Number(r.count),
+            revenue: Number(r.revenue),
+          })),
+          topProducts: topProductsRes.rows.map((r: any) => ({
+            title: r.title,
+            totalQty: Number(r.total_qty),
+            totalRevenue: Number(r.total_revenue),
+            orderCount: Number(r.order_count),
+          })),
+          hourly: hourlyRes.rows.map((r: any) => ({
+            hour: Number(r.hour),
+            orders: Number(r.orders),
+          })),
+          monthlyTrend: momRes.rows.map((r: any) => ({
+            month: r.month,
+            orders: Number(r.orders),
+            revenue: Number(r.revenue),
+          })),
+          range: days,
+        };
       },
-      daily: dailyRes.rows.map((r: any) => ({
-        day: r.day,
-        orders: Number(r.orders),
-        revenue: Number(r.revenue),
-        onlineRevenue: Number(r.online_revenue),
-        codRevenue: Number(r.cod_revenue),
-      })),
-      paymentMethods: paymentMethodRes.rows.map((r: any) => ({
-        method: r.payment_method || 'Unknown',
-        count: Number(r.count),
-        revenue: Number(r.revenue),
-      })),
-      orderStatuses: statusRes.rows.map((r: any) => ({
-        status: r.status || 'Unknown',
-        count: Number(r.count),
-        revenue: Number(r.revenue),
-      })),
-      paymentStatuses: payStatusRes.rows.map((r: any) => ({
-        status: r.payment_status || 'Unknown',
-        count: Number(r.count),
-        revenue: Number(r.revenue),
-      })),
-      topProducts: topProductsRes.rows.map((r: any) => ({
-        title: r.title,
-        totalQty: Number(r.total_qty),
-        totalRevenue: Number(r.total_revenue),
-        orderCount: Number(r.order_count),
-      })),
-      hourly: hourlyRes.rows.map((r: any) => ({
-        hour: Number(r.hour),
-        orders: Number(r.orders),
-      })),
-      monthlyTrend: momRes.rows.map((r: any) => ({
-        month: r.month,
-        orders: Number(r.orders),
-        revenue: Number(r.revenue),
-      })),
-      range: days,
-    });
-    })();
+      {
+        budgetMs: ANALYTICS_BUDGET_MS,
+        statementTimeoutMs: ANALYTICS_STATEMENT_MS,
+        label: 'analytics',
+        recyclePoolOnTimeout: true,
+      }
+    );
 
-    return await Promise.race([
-      run.finally(() => {
-        if (timer) clearTimeout(timer);
-      }),
-      new Promise<NextResponse>((resolve) => {
-        timer = setTimeout(
-          () =>
-            resolve(
-              NextResponse.json(
-                emptyAnalytics(
-                  days,
-                  `Analytics timed out after ${ANALYTICS_BUDGET_MS}ms — database pool may be stuck. On Lightsail: sudo systemctl restart blessing`
-                ),
-                { status: 503 }
-              )
-            ),
-          ANALYTICS_BUDGET_MS
-        );
-      }),
-    ]);
+    return NextResponse.json(payload);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error';
+    const code = (err as { code?: string; status?: number })?.code;
+    const status = (err as { status?: number })?.status;
+    if (code === 'AUTH' || status === 403) {
+      return forbiddenResponse(message);
+    }
     console.error('Analytics error:', message);
     const isDb =
-      /timeout|connect|ECONNREFUSED|ENOTFOUND|database|pool/i.test(message);
+      /timeout|connect|ECONNREFUSED|ENOTFOUND|database|pool|ephemeral|analytics/i.test(
+        message
+      );
     return NextResponse.json(
       emptyAnalytics(
         days,
         isDb
-          ? `${message}. On Lightsail: fix DATABASE_URL in /etc/blessing.env (Neon *-pooler*.neon.tech), then sudo systemctl restart blessing.`
+          ? `${message}. On Lightsail: fix DATABASE_URL in /etc/blessing.env (Neon *-pooler*.neon.tech), then sudo systemctl restart blessing — or sudo bash deploy/aws/redeploy.sh ~/blessing-src`
           : message
       ),
       { status: isDb ? 503 : 500 }
     );
-  } finally {
-    if (timer) clearTimeout(timer);
   }
 }

@@ -47,7 +47,7 @@ While the app process is running, the DB pool heartbeats and a keep-alive pings 
 
 First request after a real sleep can still take a few seconds (cold start). That is platform sleep, not slow SQL.
 
-Analytics already runs **8 queries in parallel** via `queryDb` (warm pool). Expect tens–hundreds of ms over the internet — not literal “&lt;5ms” from India to Railway.
+Admin analytics uses a **short-lived ephemeral `pg.Client`** (pool-bypass) with session `statement_timeout`, not 8 parallel `queryDb` checkouts — so a wedged Neon pool cannot stall `/admin` forever. Expect tens–hundreds of ms over the internet when Neon is healthy — not literal “&lt;5ms” from India to Railway.
 
 ## Env checklist (Free)
 

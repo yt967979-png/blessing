@@ -37,7 +37,8 @@ Request ➔ Understand Deeply ➔ Deep Research ➔ 10/10 Architecture & Plan �
    - Never write sequential `await` DB waterfalls (`await q1; await q2;`). Combine independent queries into `Promise.all([queryDb(...), queryDb(...)])`.
 
 2. **Warm Connection Pool Directives**:
-   - All read routes MUST execute directly against the shared warm pool via `queryDb()`. Never hold individual connection clients (`getDbClient`) unless inside an explicit SQL transaction (`BEGIN` / `COMMIT`).
+   - Most read routes MUST execute against the shared warm pool via `queryDb()`. Never hold individual pool clients (`getDbClient`) unless inside an explicit SQL transaction (`BEGIN` / `COMMIT`).
+   - **Exception (Neon / Lightsail stuck pool):** Admin analytics and admin role re-checks MUST use `withEphemeralClient` / `queryEphemeral` so they cannot sit behind a wedged `pool.connect` waiter queue. Ephemeral paths set `statement_timeout` and recycle the shared pool on timeout.
 
 3. **In-Memory RAM Catalog Caching**:
    - Serve product catalog views and categories directly from RAM cache (`queryCache`), invalidating cache on Admin updates to achieve sub-5ms response times.

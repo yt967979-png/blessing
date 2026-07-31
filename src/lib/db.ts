@@ -454,6 +454,113 @@ export async function queryDb(text: string, params?: any[]) {
   }
 }
 
+export type EphemeralDbOpts = {
+  /** Wall-clock budget for connect + callback (ms). */
+  budgetMs?: number;
+  /** Postgres statement_timeout for this session (ms). */
+  statementTimeoutMs?: number;
+  label?: string;
+  /** Drop shared pool when this path times out (default true). */
+  recyclePoolOnTimeout?: boolean;
+};
+
+/**
+ * Short-lived dedicated Client — bypasses the shared pool waiter queue entirely.
+ * Use for admin analytics / role checks when a wedged pool would hang getDbClient/queryDb.
+ */
+export async function withEphemeralClient<T>(
+  fn: (client: Client) => Promise<T>,
+  opts: EphemeralDbOpts = {}
+): Promise<T> {
+  const neonish = isAwsHosted() || isNeonUrl(process.env.DATABASE_URL || '');
+  const budgetMs = Math.max(
+    2_000,
+    Number(opts.budgetMs || process.env.DB_EPHEMERAL_BUDGET_MS || (neonish ? 12_000 : 15_000))
+  );
+  const statementTimeoutMs = Math.max(
+    1_000,
+    Number(
+      opts.statementTimeoutMs ||
+        process.env.DB_EPHEMERAL_STATEMENT_TIMEOUT_MS ||
+        Math.min(defaultQueryTimeoutMs(), neonish ? 8_000 : 12_000)
+    )
+  );
+  const label = opts.label || 'ephemeral';
+  const recycle = opts.recyclePoolOnTimeout !== false;
+  const connectMs = Math.min(defaultConnectTimeoutMs(), neonish ? 6_000 : 8_000);
+
+  const candidates = getConnectionCandidates();
+  if (!candidates.length) {
+    throw Object.assign(new Error('No DATABASE_URL configured'), { code: 'ENOCONFIG' });
+  }
+
+  const run = async (): Promise<T> => {
+    let lastErr: Error | null = null;
+    // Prefer pooled Neon URL first (same as app); at most 2 hosts.
+    for (const connStr of candidates.slice(0, 2)) {
+      const normalized = normalizeConnectionString(connStr);
+      const client = new Client({
+        connectionString: normalized,
+        ssl: sslFor(normalized),
+        connectionTimeoutMillis: connectMs,
+        keepAlive: false,
+      });
+      try {
+        await withTimeout(client.connect(), connectMs, `${label}.connect`);
+        // Session-level cap — SET LOCAL needs a transaction; this Client is single-use.
+        await client.query(`SET statement_timeout = ${Math.floor(statementTimeoutMs)}`);
+        const result = await fn(client);
+        try {
+          await withTimeout(client.end(), 2_000, `${label}.end`);
+        } catch {
+          try {
+            client.end();
+          } catch {
+            /* ignore */
+          }
+        }
+        return result;
+      } catch (err: any) {
+        lastErr = err;
+        try {
+          await withTimeout(client.end(), 1_500, `${label}.end.fail`);
+        } catch {
+          try {
+            (client as any).end?.();
+          } catch {
+            /* ignore */
+          }
+        }
+        const msg = String(err?.message || err);
+        // Auth / SQL errors — do not try another host.
+        if (!isRecoverablePgError(err) && !/timeout|ECONN|ENOTFOUND|connect/i.test(msg)) {
+          throw err;
+        }
+      }
+    }
+    throw lastErr || new Error(`${label}: could not open database connection`);
+  };
+
+  try {
+    return await withTimeout(run(), budgetMs, label);
+  } catch (err: any) {
+    const msg = String(err?.message || err);
+    if (recycle && /timeout|terminat|ECONNRESET|ECONNREFUSED|not queryable|ENOTFOUND/i.test(msg)) {
+      // Never block the request on pool teardown.
+      void invalidatePool(`${label} timeout/reset`);
+    }
+    throw err;
+  }
+}
+
+/** One-shot query on a fresh Client (pool-bypass). */
+export async function queryEphemeral(text: string, params?: any[], opts?: EphemeralDbOpts) {
+  return withEphemeralClient((client) => client.query(text, params), {
+    ...opts,
+    label: opts?.label || 'queryEphemeral',
+  });
+}
+
 /** Boot-time warmup — call from instrumentation before crons. */
 export async function warmDbConnection(): Promise<boolean> {
   try {

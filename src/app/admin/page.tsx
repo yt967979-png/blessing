@@ -245,10 +245,11 @@ export default function AdminPage() {
     setAnalyticsLoading(true);
     setAnalyticsError(null);
     try {
+      // Must exceed server ANALYTICS_TIMEOUT_MS (14s) so 503 JSON wins over AbortError.
       const res = await fetch(`/api/admin/analytics?range=${analyticsRange}`, {
         headers: authHeaders(user),
         credentials: 'include',
-        signal: AbortSignal.timeout(12_000),
+        signal: AbortSignal.timeout(20_000),
       });
       const data = await res.json().catch(() => null);
       // Always clear skeleton: accept empty/503 payload so charts show zeros + error banner.
