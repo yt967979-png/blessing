@@ -276,18 +276,22 @@ export default function AdminPage() {
     if (activeTab === 'content') startTransition(() => { void loadContent(); });
   }, [activeTab, loadContent]);
 
-  // WhatsApp polling — only while WhatsApp tab is open
+  // WhatsApp polling — only while WhatsApp tab is open.
+  // Never auto ?refresh=1 — that wiped the QR while scanning and made link fail.
   useEffect(() => {
     if (activeTab !== 'whatsapp') return;
-    let first = true;
     const fetchWa = async () => {
       try {
-        const q = first ? '?refresh=1' : '';
-        first = false;
-        const r = await fetch(`/api/whatsapp/qr${q}`, { headers: authHeaders(user) });
+        const r = await fetch('/api/whatsapp/qr', { headers: authHeaders(user) });
         if (r.ok) {
           const data = await r.json();
-          setWaStatus(data);
+          setWaStatus((prev) => {
+            // During reconnect after scan, API may briefly clear qrImage — keep showing until linked
+            if (prev.qrImage && !data.connected && !data.qrImage && data.status !== 'CONNECTED') {
+              return { ...data, qrImage: prev.qrImage, status: prev.status === 'QR_READY' ? 'QR_READY' : data.status };
+            }
+            return data;
+          });
           if (data.pairingCode && /[A-Za-z0-9]{4}-[A-Za-z0-9]{4}/.test(String(data.pairingCode))) {
             setWaPairingCode(data.pairingCode);
           }
@@ -297,7 +301,7 @@ export default function AdminPage() {
       }
     };
     void fetchWa();
-    const iv = setInterval(() => void fetchWa(), 3000);
+    const iv = setInterval(() => void fetchWa(), 4000);
     return () => clearInterval(iv);
   }, [activeTab, user]);
 

@@ -356,9 +356,11 @@ export async function initWhatsAppInProcess(opts?: { requireLeader?: boolean }) 
         }
 
         if (isLoggedOut) {
+          // Only wipe on real logout / unlink — never during QR scan handshake
           clearLocalAuthFiles();
           clearReconnectTimer();
           reconnectAttempts = 0;
+          latestQrMemory = null;
           try {
             const client = await getDbClient();
             if (client) {
@@ -381,43 +383,21 @@ export async function initWhatsAppInProcess(opts?: { requireLeader?: boolean }) 
             reconnectTimer = setTimeout(() => initWhatsAppInProcess(), 2_000);
           }
         } else {
+          // Normal close (incl. 515 restart after QR scan) — keep auth files, reconnect only.
+          // Do NOT wipe session here or the scan will fail and QR keeps changing.
           reconnectAttempts += 1;
-          // After 2 failed reconnects, wipe and force QR (stops endless "Reconnecting…")
-          if (reconnectAttempts >= 2) {
-            console.warn('[whatsapp] reconnect failed twice — wiping session for fresh QR');
-            clearLocalAuthFiles();
-            try {
-              const client = await getDbClient();
-              if (client) {
-                await client.query(
-                  `UPDATE whatsapp_sessions
-                   SET session_data = NULL, pairing_code = NULL, qr_image = NULL, updated_at = NOW()
-                   WHERE id = 'default'`
-                );
-                releaseDbClient(client);
-              }
-            } catch (_) {}
-            reconnectAttempts = 0;
-            await updateSessionStatus({
-              status: 'INITIALIZING',
-              connected: false,
-              qrImage: null,
-              pairingCode: null,
-              message: 'Generating fresh QR… keep this tab open.',
-            });
-            if (isBackgroundLeader()) {
-              reconnectTimer = setTimeout(() => initWhatsAppInProcess(), 2_000);
-            }
-          } else {
-            await updateSessionStatus({
-              status: 'DISCONNECTED',
-              connected: false,
-              qrImage: null,
-              message: 'Reconnecting to WhatsApp...',
-            });
-            if (isBackgroundLeader()) {
-              reconnectTimer = setTimeout(() => initWhatsAppInProcess(), 5_000);
-            }
+          const keepQr = latestQrMemory;
+          await updateSessionStatus({
+            status: keepQr ? 'QR_READY' : 'DISCONNECTED',
+            connected: false,
+            qrImage: keepQr,
+            message: keepQr
+              ? 'Scan QR Code with WhatsApp phone to link'
+              : 'Reconnecting to WhatsApp…',
+          });
+          if (isBackgroundLeader()) {
+            const delay = statusCode === DisconnectReason.restartRequired ? 1_500 : 4_000;
+            reconnectTimer = setTimeout(() => initWhatsAppInProcess(), delay);
           }
         }
       } else if (connection === 'open') {
@@ -468,9 +448,7 @@ export async function ensureWhatsAppQr(opts?: { forceFresh?: boolean }): Promise
     /* ignore */
   }
 
-  // Always allow QR init on this request if election still false (testing / single Free)
-  const canRun = isBackgroundLeader();
-  if (!canRun) {
+  if (!isBackgroundLeader()) {
     console.warn('[whatsapp] ensureQr: not leader yet — trying init with requireLeader=false');
   }
 
@@ -483,23 +461,64 @@ export async function ensureWhatsAppQr(opts?: { forceFresh?: boolean }): Promise
     };
   }
 
-  // Stuck "Reconnecting" / dead socket → always wipe and force QR
-  let stuckReconnect = false;
-  try {
-    const statusPath = path.join(PUBLIC_DIR, 'whatsapp_status.json');
-    if (fs.existsSync(statusPath)) {
-      const st = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
-      const msg = String(st?.message || '').toLowerCase();
-      stuckReconnect =
-        msg.includes('reconnect') ||
-        (Boolean(st?.status) && st.status !== 'QR_READY' && st.status !== 'CONNECTED' && !st?.qrImage);
+  // Stable QR: if we already have one and user did not ask for a new one, keep it.
+  // Never wipe just because sock exists while waiting for scan — that breaks scanning.
+  if (!opts?.forceFresh && latestQrMemory) {
+    return {
+      qrImage: latestQrMemory,
+      connected: false,
+      status: 'QR_READY',
+      message: latestWaStatusMemory?.message || 'Scan QR Code with WhatsApp phone to link',
+    };
+  }
+  if (!opts?.forceFresh) {
+    try {
+      const statusPath = path.join(PUBLIC_DIR, 'whatsapp_status.json');
+      if (fs.existsSync(statusPath)) {
+        const st = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
+        if (st?.qrImage && st.status === 'QR_READY') {
+          latestQrMemory = st.qrImage;
+          return {
+            qrImage: st.qrImage,
+            connected: false,
+            status: 'QR_READY',
+            message: st.message || 'Scan QR Code with WhatsApp phone to link',
+          };
+        }
+      }
+    } catch (_) {
+      /* ignore */
     }
-  } catch (_) {
-    /* ignore */
   }
 
-  if (opts?.forceFresh || stuckReconnect || (sock && !isConnected)) {
+  // Only wipe when Admin explicitly asks for a new QR (Unlink / "Generate new one")
+  if (opts?.forceFresh) {
     await resetWhatsAppSession();
+  }
+
+  // Socket already waiting for scan — do not recreate
+  if (sock && !isConnected) {
+    const maxWait = 8;
+    for (let i = 0; i < maxWait; i++) {
+      if (isConnected) {
+        return { qrImage: null, connected: true, status: 'CONNECTED', message: 'Linked' };
+      }
+      if (latestQrMemory) {
+        return {
+          qrImage: latestQrMemory,
+          connected: false,
+          status: 'QR_READY',
+          message: 'Scan QR Code with WhatsApp phone to link',
+        };
+      }
+      await new Promise((r) => setTimeout(r, 500));
+    }
+    return {
+      qrImage: null,
+      connected: false,
+      status: 'INITIALIZING',
+      message: 'Still generating QR… keep this tab open.',
+    };
   }
 
   let active = await initWhatsAppInProcess({ requireLeader: true });
@@ -516,7 +535,7 @@ export async function ensureWhatsAppQr(opts?: { forceFresh?: boolean }): Promise
     };
   }
 
-  const maxWait = opts?.forceFresh || stuckReconnect ? 20 : 8;
+  const maxWait = opts?.forceFresh ? 20 : 10;
   for (let i = 0; i < maxWait; i++) {
     if (isConnected) {
       return { qrImage: null, connected: true, status: 'CONNECTED', message: 'Linked' };
@@ -549,36 +568,11 @@ export async function ensureWhatsAppQr(opts?: { forceFresh?: boolean }): Promise
     await new Promise((r) => setTimeout(r, 500));
   }
 
-  // Last resort: wipe once more and try again briefly
-  if (!opts?.forceFresh) {
-    await resetWhatsAppSession();
-    await initWhatsAppInProcess();
-    for (let i = 0; i < 12; i++) {
-      try {
-        const statusPath = path.join(PUBLIC_DIR, 'whatsapp_status.json');
-        if (fs.existsSync(statusPath)) {
-          const st = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
-          if (st?.qrImage) {
-            return {
-              qrImage: st.qrImage,
-              connected: false,
-              status: 'QR_READY',
-              message: st.message || 'Scan QR Code with WhatsApp phone to link',
-            };
-          }
-        }
-      } catch (_) {
-        /* ignore */
-      }
-      await new Promise((r) => setTimeout(r, 500));
-    }
-  }
-
   return {
     qrImage: null,
     connected: false,
     status: 'INITIALIZING',
-    message: 'Still generating QR… tap Show new QR again in a few seconds.',
+    message: 'Still generating QR… tap “Generate new one” only if it stays blank.',
   };
 }
 
