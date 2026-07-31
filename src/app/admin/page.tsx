@@ -477,7 +477,10 @@ export default function AdminPage() {
     setDispatchingOrderIds((p) => ({ ...p, [orderId]: true }));
     showToast('Verifying docket on ST Courier…');
     try {
-      const vr = await fetch(`/api/courier/track?docket=${encodeURIComponent(awb)}&orderId=${encodeURIComponent(orderId)}`);
+      const vr = await fetch(
+        `/api/courier/track?docket=${encodeURIComponent(awb)}&orderId=${encodeURIComponent(orderId)}`,
+        { headers: authHeaders(user) }
+      );
       const vd = await vr.json();
       if (!vr.ok || !vd.isValid || !vd.verified) {
         showToast(`❌ ${vd.error || 'Invalid docket'}`);

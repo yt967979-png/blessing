@@ -37,6 +37,26 @@ const nextConfig: NextConfig = {
             value: "unsafe-none",
           },
           {
+            key: "Strict-Transport-Security",
+            value: "max-age=63072000; includeSubDomains; preload",
+          },
+          {
+            key: "Content-Security-Policy",
+            value: [
+              "default-src 'self'",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://accounts.google.com https://apis.google.com",
+              "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+              "font-src 'self' https://fonts.gstatic.com data:",
+              "img-src 'self' data: blob: https://res.cloudinary.com https://images.unsplash.com https://*.googleusercontent.com",
+              "connect-src 'self' https://accounts.google.com https://oauth2.googleapis.com https://stcourier.com https://erpstcourier.com https://api.razorpay.com",
+              "frame-src 'self' https://accounts.google.com https://api.razorpay.com",
+              "object-src 'none'",
+              "base-uri 'self'",
+              "form-action 'self'",
+              "frame-ancestors 'none'",
+            ].join('; '),
+          },
+          {
             key: "Permissions-Policy",
             value: "camera=(), microphone=(), geolocation=(), payment=(self)",
           },

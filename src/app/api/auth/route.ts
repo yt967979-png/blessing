@@ -1,23 +1,26 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { getDbClient } from '@/lib/db';
-import { createSessionToken, sessionCookieOptions } from '@/lib/auth';
-import { applyRateLimitAsync, clientIp, getAuthenticatedUser, unauthorizedResponse } from '@/lib/serverSecurity';
+import { getDbClient, releaseDbClient } from '@/lib/db';
+import {
+  applyRateLimitAsync,
+  clientIp,
+  getAuthenticatedUser,
+  unauthorizedResponse,
+} from '@/lib/serverSecurity';
 import { isValidMobileNumber, normalizeMobileDigits } from '@/lib/authValidation';
 import { userNeedsProfile } from '@/lib/userProfile';
 
 const LEGACY_AUTH_DISABLED =
   'Email/password login is disabled. Please sign in with Google.';
 
-function setSessionCookie(response: NextResponse, token: string) {
-  response.cookies.set('bpg_session', token, sessionCookieOptions());
-  return response;
-}
-
-function buildUserResponse(
-  user: { id: string; name: string; email: string; phone: string; role: string; profile_completed?: boolean | null },
-  token: string
-) {
+function buildUserResponse(user: {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  role: string;
+  profile_completed?: boolean | null;
+}) {
   const needsProfile =
     userNeedsProfile(user.phone) ||
     user.profile_completed !== true ||
@@ -28,43 +31,53 @@ function buildUserResponse(
     email: user.email,
     phone: user.phone,
     role: user.role || 'customer',
-    token,
     needsProfile,
   };
 }
 
-// GET /api/auth?userId=xxx — Restore session + cart/wishlist
+/**
+ * GET /api/auth — restore cart/wishlist for the *current* session only.
+ * Never mints a session from userId/email query params (account takeover vector).
+ */
 export async function GET(request: Request) {
+  const rl = await applyRateLimitAsync(`auth-restore:${clientIp(request)}`, 60, 60000);
+  if (!rl.allowed) {
+    return NextResponse.json({ error: 'Too many requests. Please wait.' }, { status: 429 });
+  }
+
+  const session = await getAuthenticatedUser(request);
+  if (!session) {
+    return NextResponse.json({ exists: false, error: 'UNAUTHORIZED' }, { status: 401 });
+  }
+
   let client: any = null;
   try {
     const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('userId');
-    const email = searchParams.get('email');
-
-    if (!userId && !email) {
-      return NextResponse.json({ error: 'userId or email is required' }, { status: 400 });
+    const requestedId = searchParams.get('userId');
+    // Ignore spoofed userId — only the signed session may restore data.
+    if (requestedId && requestedId !== session.userId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     client = await getDbClient();
-    let res;
-    if (userId) {
-      res = await client.query(
-        'SELECT id, name, email, phone, role, profile_completed FROM users WHERE id = $1',
-        [String(userId)]
-      );
-    } else {
-      res = await client.query(
-        'SELECT id, name, email, phone, role, profile_completed FROM users WHERE LOWER(email) = $1',
-        [String(email).toLowerCase().trim()]
-      );
-    }
+    const res = await client.query(
+      `SELECT id, name, email, phone, role, profile_completed, status
+       FROM users WHERE id = $1 LIMIT 1`,
+      [session.userId]
+    );
 
     if (res.rows.length === 0) {
-      await client.end();
+      releaseDbClient(client);
+      client = null;
       return NextResponse.json({ exists: false, error: 'USER_NOT_FOUND' }, { status: 404 });
     }
 
     const user = res.rows[0];
+    if (String(user.status || '').toLowerCase() === 'banned') {
+      releaseDbClient(client);
+      client = null;
+      return NextResponse.json({ error: 'This account is disabled.' }, { status: 403 });
+    }
 
     const cartRes = await client.query(
       `SELECT ci.book_id as id, ci.quantity as qty, ci.price,
@@ -99,33 +112,31 @@ export async function GET(request: Request) {
 
     const wishRes = await client.query('SELECT book_id FROM wishlist WHERE user_id = $1', [user.id]);
     const wishlistIds = wishRes.rows.map((row: any) => row.book_id);
-    await client.end();
+    releaseDbClient(client);
+    client = null;
 
-    const token = createSessionToken(user.id, user.role || 'customer');
-    const response = NextResponse.json({
+    // Do not mint a new token here — keep existing cookie/Bearer; return user without elevating privileges.
+    return NextResponse.json({
       exists: true,
-      user: buildUserResponse(user, token),
+      user: buildUserResponse(user),
       cart: cartItems,
       wishlist: wishlistIds,
     });
-    return setSessionCookie(response, token);
   } catch {
     if (client) {
       try {
-        await client.end();
+        releaseDbClient(client);
       } catch (_) {}
     }
     return NextResponse.json({ error: 'Database connection failed' }, { status: 503 });
   }
 }
 
-// POST — legacy email/password login disabled (Google Sign-In only)
 export async function POST(request: Request) {
   await applyRateLimitAsync(`auth-legacy:${clientIp(request)}`, 10, 60000);
   return NextResponse.json({ error: LEGACY_AUTH_DISABLED }, { status: 410 });
 }
 
-// PATCH /api/auth — Update own profile (authenticated)
 export async function PATCH(request: Request) {
   const session = await getAuthenticatedUser(request);
   if (!session) return unauthorizedResponse('Please sign in with Google first.');
@@ -150,8 +161,12 @@ export async function PATCH(request: Request) {
       session.userId,
     ]);
     if (dup.rows.length > 0) {
-      await client.end();
-      return NextResponse.json({ error: 'This mobile number is already used on another account.' }, { status: 409 });
+      releaseDbClient(client);
+      client = null;
+      return NextResponse.json(
+        { error: 'This mobile number is already used on another account.' },
+        { status: 409 }
+      );
     }
 
     const updated = await client.query(
@@ -160,7 +175,8 @@ export async function PATCH(request: Request) {
        RETURNING id, name, email, phone, role`,
       [cleanName, cleanPhone, session.userId]
     );
-    await client.end();
+    releaseDbClient(client);
+    client = null;
 
     if (updated.rows.length === 0) {
       return NextResponse.json({ error: 'User not found.' }, { status: 404 });
@@ -176,14 +192,13 @@ export async function PATCH(request: Request) {
   } catch {
     if (client) {
       try {
-        await client.end();
+        releaseDbClient(client);
       } catch (_) {}
     }
     return NextResponse.json({ error: 'Failed to update profile' }, { status: 500 });
   }
 }
 
-// DELETE /api/auth — Logout (clear session cookie)
 export async function DELETE() {
   const cookieStore = await cookies();
   cookieStore.delete('bpg_session');

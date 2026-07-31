@@ -1,11 +1,17 @@
 import { NextResponse } from 'next/server';
-import { applyRateLimitAsync, clientIp } from '@/lib/serverSecurity';
+import {
+  applyRateLimitAsync,
+  clientIp,
+  verifyAdminRequest,
+  unauthorizedResponse,
+  forbiddenResponse,
+} from '@/lib/serverSecurity';
 import { cleanDocket, fetchStCourierTrack, syncOrderByAwb, VALID_DOCKET_PATTERN } from '@/lib/stCourier';
 
 /**
  * GET /api/courier/track?docket=XXX
- * Verifies AWB on ST Courier live network and auto-updates matching order status
- * (In Transit / Out for Delivery / Delivered) when courier advances.
+ * - Public (docket only): verify on ST Courier (read-only). May sync status without WhatsApp.
+ * - Admin + orderId: assign AWB to order, then sync (may send WhatsApp).
  */
 export async function GET(request: Request) {
   const ip = clientIp(request);
@@ -30,8 +36,14 @@ export async function GET(request: Request) {
     );
   }
 
-  // If orderId provided, ensure AWB is saved then sync (admin just assigned)
+  // AWB assign / order mutation — admin only
   if (orderId) {
+    const admin = await verifyAdminRequest(request);
+    if (!admin.isAdmin) {
+      if (!admin.user) return unauthorizedResponse(admin.error || 'Unauthorized');
+      return forbiddenResponse('Admin privilege required to assign AWB');
+    }
+
     const { getDbClient, releaseDbClient } = await import('@/lib/db');
     const client = await getDbClient();
     try {
@@ -73,36 +85,81 @@ export async function GET(request: Request) {
     } finally {
       releaseDbClient(client);
     }
+
+    const synced = await syncOrderByAwb(docket, { sendWhatsApp: true });
+    if (!synced.verified) {
+      return NextResponse.json(
+        {
+          isValid: false,
+          verified: false,
+          error: synced.error || 'ST Courier docket not found / not booked yet.',
+          docket,
+          trackingUrl: synced.trackingUrl,
+        },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      isValid: true,
+      verified: true,
+      docket,
+      courierName: 'ST Courier Express',
+      status: synced.status,
+      previousStatus: synced.previousStatus,
+      updated: synced.updated,
+      orderId: synced.orderId,
+      events: synced.events || [],
+      trackingUrl: synced.trackingUrl,
+      autoSynced: synced.updated,
+      timestamp: new Date().toISOString(),
+    });
   }
 
-  const synced = await syncOrderByAwb(docket, { sendWhatsApp: true });
-
-  if (!synced.verified) {
+  // Public / customer: verify + quiet sync (no WhatsApp spam)
+  const live = await fetchStCourierTrack(docket);
+  if (!live.ok) {
+    // Still try quiet sync if docket already on an order
+    const synced = await syncOrderByAwb(docket, { sendWhatsApp: false });
+    if (synced.verified) {
+      return NextResponse.json({
+        success: true,
+        isValid: true,
+        verified: true,
+        docket,
+        courierName: 'ST Courier Express',
+        status: synced.status,
+        updated: synced.updated,
+        orderId: synced.orderId,
+        events: synced.events || [],
+        trackingUrl: synced.trackingUrl,
+        timestamp: new Date().toISOString(),
+      });
+    }
     return NextResponse.json(
       {
         isValid: false,
         verified: false,
-        error: synced.error || 'ST Courier docket not found / not booked yet.',
+        error: live.error || synced.error || 'ST Courier docket not found / not booked yet.',
         docket,
-        trackingUrl: synced.trackingUrl,
       },
       { status: 404 }
     );
   }
 
+  const synced = await syncOrderByAwb(docket, { sendWhatsApp: false });
   return NextResponse.json({
     success: true,
     isValid: true,
     verified: true,
     docket,
     courierName: 'ST Courier Express',
-    status: synced.status,
-    previousStatus: synced.previousStatus,
+    status: synced.status || live.status,
     updated: synced.updated,
     orderId: synced.orderId,
-    events: synced.events || [],
-    trackingUrl: synced.trackingUrl,
-    autoSynced: synced.updated,
+    events: synced.events || live.events || [],
+    trackingUrl: synced.trackingUrl || live.trackingUrl,
     timestamp: new Date().toISOString(),
   });
 }

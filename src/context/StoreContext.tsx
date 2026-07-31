@@ -225,13 +225,19 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         const u = JSON.parse(savedUser);
         if (u?.id) {
           setUser(u);
-          fetch(`/api/auth?userId=${u.id}`)
+          const headers: Record<string, string> = {};
+          if (u.token) headers.Authorization = `Bearer ${u.token}`;
+          fetch(`/api/auth?userId=${encodeURIComponent(u.id)}`, {
+            credentials: 'include',
+            headers,
+          })
             .then((res) => (res.ok ? res.json() : null))
             .then((dbUser) => {
               if (dbUser?.user) {
                 const nextUser = {
                   ...dbUser.user,
-                  token: dbUser.user.token || u.token,
+                  // Keep existing client token — server no longer re-mints on restore
+                  token: u.token,
                   needsProfile:
                     dbUser.user.needsProfile ??
                     userNeedsProfile(dbUser.user.phone),

@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { Client } from 'pg';
 import { getDbClient, releaseDbClient, resolveDbConnectionConfig } from '@/lib/db';
-import { getAuthenticatedUser } from '@/lib/serverSecurity';
+import { getAuthenticatedUser, verifyAdminRequest } from '@/lib/serverSecurity';
 import { resolveTunedNumber, shouldRunBackgroundTask } from '@/lib/runtimeProfile';
 
 const clients = new Set<ReadableStreamDefaultController>();
@@ -152,6 +152,15 @@ export async function GET(req: NextRequest) {
   if (!session) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  // Full order bus is admin-only (prevents customers seeing other orders' AWB/status).
+  const admin = await verifyAdminRequest(req);
+  if (!admin.isAdmin) {
+    return new Response(JSON.stringify({ error: 'Forbidden' }), {
+      status: 403,
       headers: { 'Content-Type': 'application/json' },
     });
   }

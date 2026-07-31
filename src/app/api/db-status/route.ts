@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getDbClient, releaseDbClient } from '@/lib/db';
+import { verifyAdminRequest, unauthorizedResponse, forbiddenResponse } from '@/lib/serverSecurity';
 
 async function countTable(client: any, table: string): Promise<number | null> {
   try {
@@ -10,7 +11,14 @@ async function countTable(client: any, table: string): Promise<number | null> {
   }
 }
 
-export async function GET() {
+/** Admin-only DB diagnostics — never expose hosts/env/row counts publicly. */
+export async function GET(request: Request) {
+  const admin = await verifyAdminRequest(request);
+  if (!admin.isAdmin) {
+    if (!admin.user) return unauthorizedResponse();
+    return forbiddenResponse();
+  }
+
   const connectionString =
     process.env.DATABASE_URL ||
     process.env.POSTGRES_URL ||
@@ -26,16 +34,6 @@ export async function GET() {
       {
         status: 'DISCONNECTED',
         message: err?.message || 'Could not connect to PostgreSQL.',
-        hint: err?.message?.includes('ENOTFOUND') || err?.message?.includes('railway.internal')
-          ? 'Stale Railway private hostname — set DATABASE_URL to your Neon pooled connection string'
-          : err?.message?.includes('timeout')
-            ? 'Connection timed out — confirm Neon project is active and DATABASE_URL uses the -pooler host'
-            : undefined,
-        instruction:
-          'Railway → blessing → Variables: set DATABASE_URL to Neon “Pooled connection” string (*.neon.tech, sslmode=require). Remove old Railway Postgres URLs. Redeploy.',
-        envKeysPresent: Object.keys(process.env).filter(
-          (k) => k.includes('DATABASE') || k.includes('POSTGRES') || k.includes('PG')
-        ),
         connectionUrlFound: !!connectionString,
       },
       { status: 200 }
@@ -71,18 +69,19 @@ export async function GET() {
       );
     }
 
+    let hostHint: string | null = null;
+    try {
+      const u = connectionString || '';
+      hostHint = new URL(u.replace(/^postgres(ql)?:\/\//, 'http://')).hostname;
+    } catch {
+      hostHint = null;
+    }
+
     return NextResponse.json({
       status: 'CONNECTED',
       database: 'PostgreSQL',
       connectionUrlFound: !!connectionString,
-      preferredHostHint: (() => {
-        try {
-          const u = connectionString || '';
-          return new URL(u.replace(/^postgres(ql)?:\/\//, 'http://')).hostname;
-        } catch {
-          return null;
-        }
-      })(),
+      preferredHostHint: hostHint,
       tableRowCounts: {
         books: books ?? 0,
         categories: categories ?? 0,

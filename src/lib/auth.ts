@@ -14,8 +14,9 @@ let sessionSecret: string | null = null;
 
 function getSessionSecret(): string {
   if (sessionSecret) return sessionSecret;
-  const secret = process.env.SESSION_SECRET || process.env.RAZORPAY_KEY_SECRET;
-  if (secret) {
+  // Never fall back to Razorpay secret — that couples payment keys to session crypto.
+  const secret = process.env.SESSION_SECRET;
+  if (secret && secret.length >= 32) {
     sessionSecret = secret;
     return sessionSecret;
   }
@@ -23,7 +24,7 @@ function getSessionSecret(): string {
     sessionSecret = DEV_SESSION_SECRET;
     return sessionSecret;
   }
-  throw new Error('SESSION_SECRET must be set in production');
+  throw new Error('SESSION_SECRET must be set in production (min 32 characters)');
 }
 
 export function assertSessionSecretConfigured(): void {

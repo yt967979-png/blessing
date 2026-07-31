@@ -22,10 +22,10 @@ function phonesMatch(input: string, stored: string): boolean {
   const a = normalizePhone(input);
   const b = normalizePhone(stored);
   if (!a || !b) return false;
-  if (a === b) return true;
-  if (a.length >= 4 && b.endsWith(a.slice(-4))) return true;
-  if (b.length >= 10 && a.length >= 10 && b.slice(-10) === a.slice(-10)) return true;
-  return false;
+  // Require full 10-digit match (last-4 is too weak for order oracle attacks)
+  const a10 = a.length >= 10 ? a.slice(-10) : a;
+  const b10 = b.length >= 10 ? b.slice(-10) : b;
+  return a10.length === 10 && a10 === b10;
 }
 
 function stepIndex(status: string): number {

@@ -87,19 +87,43 @@ export async function getAuthenticatedUser(
   return verifySessionToken(token);
 }
 
-/** Admin only from verified session — no header/query spoofing */
+/** Admin only — verifies signed session then re-checks role+status in DB (no stale JWT admin). */
 export async function verifyAdminRequest(
   request: Request
 ): Promise<{ isAdmin: boolean; error?: string; user?: { userId: string; role: string } }> {
   try {
     const session = await getAuthenticatedUser(request);
-    if (session?.role === 'admin') {
-      return { isAdmin: true, user: session };
-    }
     if (!session) {
       return { isAdmin: false, error: 'Unauthorized: Missing session' };
     }
-    return { isAdmin: false, error: 'Forbidden: Admin privilege required' };
+
+    // Always re-validate against DB so demoted/banned users lose admin immediately.
+    try {
+      const { getDbClient, releaseDbClient } = await import('@/lib/db');
+      const client = await getDbClient();
+      try {
+        const res = await client.query(
+          `SELECT role, status FROM users WHERE id = $1 LIMIT 1`,
+          [session.userId]
+        );
+        if (res.rows.length === 0) {
+          return { isAdmin: false, error: 'Unauthorized: User not found' };
+        }
+        const row = res.rows[0];
+        if (String(row.status || '').toLowerCase() === 'banned') {
+          return { isAdmin: false, error: 'Forbidden: Account disabled' };
+        }
+        if (String(row.role || '').toLowerCase() !== 'admin') {
+          return { isAdmin: false, error: 'Forbidden: Admin privilege required' };
+        }
+        return { isAdmin: true, user: { userId: session.userId, role: 'admin' } };
+      } finally {
+        releaseDbClient(client);
+      }
+    } catch {
+      // Fail closed if DB unavailable for admin checks
+      return { isAdmin: false, error: 'Admin check unavailable — try again' };
+    }
   } catch {
     return { isAdmin: false, error: 'Server authentication check error' };
   }
