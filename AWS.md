@@ -232,6 +232,51 @@ PUBLIC_BASE_URL=https://blessingpowerguide.in
 cd /opt/blessing && npm ci && npm run build
 sudo systemctl restart blessing
 ```
+
+### 4c. Free hostname (DuckDNS) - no `.in` purchase
+
+If you do not have `blessingpowerguide.in` yet, use a free **DuckDNS** name that still reads like the brand:
+
+**Recommended:** `blessingpowerguide.duckdns.org` -> A / current IP `18.139.220.64` (Lightsail static IP; update DuckDNS if you recreate the static IP).
+
+1. Create a free account at [duckdns.org](https://www.duckdns.org/).
+2. Create subdomain `blessingpowerguide` -> hostname `blessingpowerguide.duckdns.org`.
+3. Set the IP to your Lightsail static IP (`18.139.220.64` today) and save.
+4. Point Caddy at that host, set env URLs, rebuild, add Google JS origin (commands below).
+
+Optional one-liner (no account): `https://18-139-220-64.sslip.io` - quick HTTPS tests only; prefer DuckDNS for a stable brand-like name.
+
+After DuckDNS points at the static IP, on the Lightsail VM:
+
+```bash
+export BLESSING_HOST=blessingpowerguide.duckdns.org
+
+# Caddy: HTTPS for DuckDNS (replaces temporary :80 smoke-test block)
+sudo tee /etc/caddy/Caddyfile >/dev/null <<EOF
+${BLESSING_HOST} {
+	encode gzip
+	reverse_proxy 127.0.0.1:3000
+}
+EOF
+sudo systemctl reload caddy
+
+# App URLs in /etc/blessing.env (do not touch secrets)
+sudo sed -i "s|^PUBLIC_BASE_URL=.*|PUBLIC_BASE_URL=https://${BLESSING_HOST}|" /etc/blessing.env
+sudo sed -i "s|^NEXT_PUBLIC_SITE_URL=.*|NEXT_PUBLIC_SITE_URL=https://${BLESSING_HOST}|" /etc/blessing.env
+grep -q '^PUBLIC_BASE_URL=' /etc/blessing.env || echo "PUBLIC_BASE_URL=https://${BLESSING_HOST}" | sudo tee -a /etc/blessing.env
+grep -q '^NEXT_PUBLIC_SITE_URL=' /etc/blessing.env || echo "NEXT_PUBLIC_SITE_URL=https://${BLESSING_HOST}" | sudo tee -a /etc/blessing.env
+
+cd /opt/blessing && npm ci && npm run build
+sudo systemctl restart blessing
+curl -sS "https://${BLESSING_HOST}/api/health"
+```
+
+Then Google Cloud → OAuth Web client → **Authorized JavaScript origins** (no trailing slash):
+
+```text
+https://blessingpowerguide.duckdns.org
+```
+
 ## 5. Google Cloud Console (required or Sign-In stays broken)
 
 This shop uses **Google Identity Services (GIS)** — the “Continue with Google” button returns an ID token posted to `/api/auth/google`. It is **not** the OAuth redirect flow.

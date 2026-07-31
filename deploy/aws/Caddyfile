@@ -10,9 +10,25 @@
 	reverse_proxy 127.0.0.1:3000
 }
 
-# --- When DNS is ready (Let's Encrypt HTTPS) ---
-# 1. Point A records for blessingpowerguide.in + www at the Lightsail static IP.
+# --- Free hostname (DuckDNS) + Let's Encrypt ---
+# Recommended: blessingpowerguide.duckdns.org -> A/IP 18.139.220.64
+# (update DuckDNS if you recreate the Lightsail static IP)
+# 1. Create subdomain at https://www.duckdns.org/ and set the IP.
 # 2. Comment out the :80 block above.
+# 3. Uncomment the block below (or tee a single-host Caddyfile on the VM).
+# 4. sudo systemctl reload caddy
+# 5. Set PUBLIC_BASE_URL / NEXT_PUBLIC_SITE_URL to https://blessingpowerguide.duckdns.org and rebuild.
+# 6. Add that URL to Google OAuth Authorized JavaScript origins.
+# Optional quick HTTPS (no account): https://18-139-220-64.sslip.io
+#
+# blessingpowerguide.duckdns.org {
+# 	encode gzip
+# 	reverse_proxy 127.0.0.1:3000
+# }
+
+# --- Paid/custom domain (.in) + Let's Encrypt ---
+# 1. Point A records for blessingpowerguide.in + www at the Lightsail static IP.
+# 2. Comment out the :80 block (and any DuckDNS block) above.
 # 3. Uncomment the block below.
 # 4. sudo systemctl reload caddy
 # 5. Set PUBLIC_BASE_URL / NEXT_PUBLIC_SITE_URL to https://blessingpowerguide.in and rebuild.
