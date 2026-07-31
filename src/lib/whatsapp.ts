@@ -292,7 +292,7 @@ export async function initWhatsAppInProcess(opts?: { requireLeader?: boolean }) 
     isInitializing = false;
     sock.ev.on('creds.update', async () => {
       await saveCreds();
-      scheduleSessionBackup();
+      void backupSessionToDb();
     });
 
     sock.ev.on('messages.upsert', async (upsert: any) => {
