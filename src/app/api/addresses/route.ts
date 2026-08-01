@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getDbClient } from '@/lib/db';
+import { queryDb } from '@/lib/db';
 import { getAuthenticatedUser } from '@/lib/serverSecurity';
 import { isValidMobileNumber, normalizeMobileDigits } from '@/lib/authValidation';
 
@@ -18,8 +18,8 @@ function mapAddress(row: any) {
   };
 }
 
-async function ensureAddressColumns(client: any) {
-  await client.query(`ALTER TABLE addresses ADD COLUMN IF NOT EXISTS alternate_phone VARCHAR(20)`);
+async function ensureAddressColumns(db: typeof queryDb) {
+  await db(`ALTER TABLE addresses ADD COLUMN IF NOT EXISTS alternate_phone VARCHAR(20)`);
 }
 
 async function resolveUserId(request: Request): Promise<string | null> {
@@ -43,18 +43,15 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Login required to load saved addresses.' }, { status: 401 });
   }
 
-  const client = await getDbClient();
   try {
-    await ensureAddressColumns(client);
-    const res = await client.query(
+    await ensureAddressColumns(queryDb);
+    const res = await queryDb(
       `SELECT * FROM addresses WHERE user_id = $1 ORDER BY is_default DESC, created_at DESC`,
       [userId]
     );
     return NextResponse.json(res.rows.map(mapAddress));
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
-  } finally {
-    await client.end();
   }
 }
 
@@ -93,20 +90,19 @@ export async function POST(request: Request) {
     );
   }
 
-  const client = await getDbClient();
   try {
-    await ensureAddressColumns(client);
-    const userCheck = await client.query('SELECT id FROM users WHERE id = $1', [userId]);
+    await ensureAddressColumns(queryDb);
+    const userCheck = await queryDb('SELECT id FROM users WHERE id = $1', [userId]);
     if (userCheck.rows.length === 0) {
       return NextResponse.json({ error: 'User not found.' }, { status: 404 });
     }
 
     if (isDefault) {
-      await client.query(`UPDATE addresses SET is_default = FALSE WHERE user_id = $1`, [userId]);
+      await queryDb(`UPDATE addresses SET is_default = FALSE WHERE user_id = $1`, [userId]);
     }
 
     const id = `addr-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    const res = await client.query(
+    const res = await queryDb(
       `INSERT INTO addresses (id, user_id, full_name, phone, alternate_phone, address_line1, city, pincode, landmark, state, is_default)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'Tamil Nadu', $10)
        RETURNING *`,
@@ -116,8 +112,6 @@ export async function POST(request: Request) {
     return NextResponse.json(mapAddress(res.rows[0]), { status: 201 });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
-  } finally {
-    await client.end();
   }
 }
 
@@ -130,11 +124,10 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: 'userId and address id are required.' }, { status: 400 });
   }
 
-  const client = await getDbClient();
   try {
-    await ensureAddressColumns(client);
+    await ensureAddressColumns(queryDb);
     if (body.isDefault) {
-      await client.query(`UPDATE addresses SET is_default = FALSE WHERE user_id = $1`, [userId]);
+      await queryDb(`UPDATE addresses SET is_default = FALSE WHERE user_id = $1`, [userId]);
     }
 
     const fields: string[] = [];
@@ -187,7 +180,7 @@ export async function PATCH(request: Request) {
     }
 
     values.push(id, userId);
-    const res = await client.query(
+    const res = await queryDb(
       `UPDATE addresses SET ${fields.join(', ')}
        WHERE id = $${idx++} AND user_id = $${idx}
        RETURNING *`,
@@ -201,8 +194,6 @@ export async function PATCH(request: Request) {
     return NextResponse.json(mapAddress(res.rows[0]));
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
-  } finally {
-    await client.end();
   }
 }
 
@@ -215,9 +206,8 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: 'userId and address id are required.' }, { status: 400 });
   }
 
-  const client = await getDbClient();
   try {
-    const res = await client.query(
+    const res = await queryDb(
       `DELETE FROM addresses WHERE id = $1 AND user_id = $2 RETURNING id`,
       [id, userId]
     );
@@ -227,7 +217,5 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ success: true, deletedId: id });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
-  } finally {
-    await client.end();
   }
 }

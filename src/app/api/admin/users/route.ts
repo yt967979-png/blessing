@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDbClient, releaseDbClient } from '@/lib/db';
+import { queryDb } from '@/lib/db';
 import { forbiddenResponse, verifyAdminRequest } from '@/lib/serverSecurity';
 
 /** Admin: list customers + low-stock books */
@@ -10,12 +10,9 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const view = searchParams.get('view') || 'users';
 
-  let client: any = null;
   try {
-    client = await getDbClient();
-
     if (view === 'low_stock') {
-      const res = await client.query(
+      const res = await queryDb(
         `SELECT id, title, stock, status, price
          FROM books
          WHERE COALESCE(stock, 0) <= 5
@@ -33,7 +30,7 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const res = await client.query(
+    const res = await queryDb(
       `SELECT u.id, u.name, u.email, u.phone, u.status, u.created_at,
               COUNT(DISTINCT o.id) FILTER (
                 WHERE o.id IS NOT NULL AND COALESCE(o.order_status, '') NOT ILIKE '%cancel%'
@@ -70,8 +67,6 @@ export async function GET(request: NextRequest) {
   } catch (err: any) {
     console.error('[admin/users GET]', err?.message || err);
     return NextResponse.json({ error: 'Could not load data.' }, { status: 500 });
-  } finally {
-    releaseDbClient(client);
   }
 }
 
@@ -79,7 +74,6 @@ export async function PATCH(request: NextRequest) {
   const admin = await verifyAdminRequest(request);
   if (!admin.isAdmin) return forbiddenResponse(admin.error);
 
-  let client: any = null;
   try {
     const body = await request.json();
     const userId = String(body.userId || '').trim();
@@ -88,15 +82,12 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'userId and status (active|banned) required.' }, { status: 400 });
     }
 
-    client = await getDbClient();
-    await client.query(`UPDATE users SET status = $1 WHERE id = $2 AND COALESCE(role, 'customer') != 'admin'`, [
+    await queryDb(`UPDATE users SET status = $1 WHERE id = $2 AND COALESCE(role, 'customer') != 'admin'`, [
       status,
       userId,
     ]);
     return NextResponse.json({ success: true, userId, status });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
-  } finally {
-    releaseDbClient(client);
   }
 }

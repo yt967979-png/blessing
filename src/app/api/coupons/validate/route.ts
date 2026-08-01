@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDbClient, releaseDbClient } from '@/lib/db';
+import { queryDb } from '@/lib/db';
 import { applyRateLimitAsync, clientIp, getAuthenticatedUser } from '@/lib/serverSecurity';
 import { priceCartItems } from '@/lib/orderPricing';
 import {
@@ -20,7 +20,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ valid: false, error: 'Too many attempts. Please wait.' }, { status: 429 });
   }
 
-  let client: any = null;
   try {
     const body = await request.json();
     const code = normalizeCouponCode(body.code);
@@ -31,15 +30,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ valid: false, error: 'Enter a coupon code.' }, { status: 400 });
     }
 
-    client = await getDbClient();
-    await ensureCouponSchema(client);
+    await ensureCouponSchema(queryDb as any);
 
-    const coupon = await fetchCouponByCode(client, code);
+    const coupon = await fetchCouponByCode(queryDb, code);
     if (!coupon) {
       return NextResponse.json({ valid: false, error: 'Invalid coupon code.' }, { status: 404 });
     }
 
-    const priced = await priceCartItems(client, items);
+    const priced = await priceCartItems(queryDb, items);
     if (!priced.ok) {
       return NextResponse.json({ valid: false, error: priced.error }, { status: priced.status });
     }
@@ -52,14 +50,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ valid: false, error: eligible.message });
     }
 
-    const cartRules = await checkCouponCartRestrictions(client, coupon, cartBookIds);
+    const cartRules = await checkCouponCartRestrictions(queryDb, coupon, cartBookIds);
     if (!cartRules.ok) {
       return NextResponse.json({ valid: false, error: cartRules.message });
     }
 
     const session = await getAuthenticatedUser(request);
     if (session?.userId) {
-      const userLimit = await checkUserCouponLimit(client, coupon, session.userId);
+      const userLimit = await checkUserCouponLimit(queryDb, coupon, session.userId);
       if (!userLimit.ok) {
         return NextResponse.json({ valid: false, error: userLimit.message });
       }
@@ -81,7 +79,7 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      const bookRes = await client.query(
+      const bookRes = await queryDb(
         `SELECT id, title, price, discount_price, stock, status FROM books WHERE id = $1 LIMIT 1`,
         [freeBookId]
       );
@@ -128,7 +126,5 @@ export async function POST(request: NextRequest) {
   } catch (err: any) {
     console.error('[coupons validate]', err?.message || err);
     return NextResponse.json({ valid: false, error: 'Could not validate coupon.' }, { status: 500 });
-  } finally {
-    releaseDbClient(client);
   }
 }
