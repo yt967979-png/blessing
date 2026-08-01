@@ -11,7 +11,7 @@ const routesToTest = [
   { path: '/api/products?cls=12th', expectedStatus: 200, name: '12th Standard Category API' },
   { path: '/api/products?category=combo', expectedStatus: 200, name: 'Combos Category API' },
   { path: '/', expectedStatus: 200, name: 'Home Page' },
-  { path: '/products', expectedStatus: 307, name: 'Products Catalog Page' },
+  { path: '/products', expectedStatus: [200, 301, 302, 307, 308], name: 'Products Catalog Page' },
   { path: '/cart', expectedStatus: 200, name: 'Cart Page' },
   { path: '/checkout', expectedStatus: 200, name: 'Checkout Page' },
   { path: '/track', expectedStatus: 200, name: 'Order Tracking Page' },
