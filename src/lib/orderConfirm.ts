@@ -1,5 +1,5 @@
 /**
- * WhatsApp YES/NO order confirmation + admin alert phones + Admin AWB / CANCEL reply commands.
+ * WhatsApp YES/NO order confirmation + admin alert phones + Admin AWB/CANCEL + Customer TRACK status commands.
  */
 import { queryDb } from '@/lib/db';
 import {
@@ -186,6 +186,58 @@ export async function confirmAwaitingOrder(orderId: string): Promise<
   }
 }
 
+/** Customer WhatsApp command: "TRACK" or "STATUS" */
+export async function handleCustomerTrackRequest(fromPhone: string, text: string) {
+  const dig = last10(fromPhone);
+  if (dig.length !== 10) return { handled: false as const };
+
+  const trimmed = text.trim().toUpperCase();
+  if (!['TRACK', 'STATUS', 'MY ORDER', 'TRACK ORDER', 'WHERE IS MY ORDER'].includes(trimmed)) {
+    return { handled: false as const };
+  }
+
+  try {
+    const res = await queryDb(
+      `SELECT order_number, order_status, total_amount, awb_number, tracking_url, shipping_address, ordered_at
+       FROM orders
+       ORDER BY ordered_at DESC NULLS LAST
+       LIMIT 40`
+    );
+
+    let matchRow: any = null;
+    for (const row of res.rows) {
+      const addr = parseAddr(row.shipping_address);
+      if (last10(addr.phone) === dig || last10(addr.alternatePhone || '') === dig) {
+        matchRow = row;
+        break;
+      }
+    }
+
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://blessingpowerguide.duckdns.org';
+    if (!matchRow) {
+      return {
+        handled: true as const,
+        message: `ℹ️ No active orders found for +91 ${dig}.\n\nBrowse & Order online: ${siteUrl}`,
+      };
+    }
+
+    const awb = matchRow.awb_number ? `\n🚚 *AWB Docket:* ${matchRow.awb_number}` : '';
+    const track = matchRow.tracking_url || `${siteUrl}/track?orderId=${matchRow.order_number}`;
+
+    return {
+      handled: true as const,
+      message:
+        `📦 *BLESSING POWER GUIDE ORDER STATUS*\n\n` +
+        `Order ID: *${matchRow.order_number}*\n` +
+        `Status: *${matchRow.order_status || 'Processing'}*${awb}\n` +
+        `Amount: ₹${matchRow.total_amount}\n\n` +
+        `👉 Live Track: ${track}`,
+    };
+  } catch (err: any) {
+    return { handled: true as const, message: 'Could not fetch order status. Please try again.' };
+  }
+}
+
 /** Admin WhatsApp reply command: "AWB STC123456" or "CANCEL BPG-12345" */
 export async function handleAdminAwbReply(fromPhone: string, text: string) {
   const admins = await getAdminAlertPhones();
@@ -274,12 +326,19 @@ export async function handleAdminAwbReply(fromPhone: string, text: string) {
 
 /** Handle inbound WhatsApp text from customer OR admin. */
 export async function handleInboundYesNo(fromPhone: string, text: string) {
-  // First check if it's an Admin AWB or CANCEL command
+  // 1. Check if customer is asking for order tracking "TRACK" or "STATUS"
+  const trackCmd = await handleCustomerTrackRequest(fromPhone, text);
+  if (trackCmd.handled) {
+    return { handled: true as const, answer: 'track_status', result: trackCmd };
+  }
+
+  // 2. Check if it's an Admin AWB or CANCEL command
   const adminCmd = await handleAdminAwbReply(fromPhone, text);
   if (adminCmd.handled) {
     return { handled: true as const, answer: 'admin_command', result: adminCmd };
   }
 
+  // 3. Handle YES / NO confirmation reply
   const answer = parseYesNoReply(text);
   if (!answer) return { handled: false as const };
 

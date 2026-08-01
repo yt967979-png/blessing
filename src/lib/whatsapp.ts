@@ -349,7 +349,13 @@ export async function initWhatsAppInProcess(opts?: { requireLeader?: boolean }) 
           const { handleInboundYesNo } = await import('@/lib/orderConfirm');
           const result = await handleInboundYesNo(fromPhone, String(text));
           if (result.handled) {
-            console.log(`[whatsapp] YES/NO handled from +${fromPhone}:`, result.answer);
+            console.log(`[whatsapp] Handled command from +${fromPhone}:`, result.answer);
+            const replyMsg = (result as any).result?.message;
+            if (replyMsg && sock) {
+              try {
+                await sock.sendMessage(jid, { text: replyMsg });
+              } catch (_) {}
+            }
           }
         }
       } catch (e: any) {
