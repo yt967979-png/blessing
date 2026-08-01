@@ -39,11 +39,10 @@ const nextConfig: NextConfig = {
         headers: [
           { key: "X-Frame-Options", value: "DENY" },
           { key: "X-Content-Type-Options", value: "nosniff" },
-          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-          // Google Identity Services needs opener access for credential postMessage
+          // Allowed for Google Sign-In FedCM & OAuth popup window postMessage
           {
-            key: "Cross-Origin-Opener-Policy",
-            value: "same-origin-allow-popups",
+            key: "Referrer-Policy",
+            value: "no-referrer-when-downgrade",
           },
           {
             key: "Strict-Transport-Security",

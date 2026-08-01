@@ -11,57 +11,61 @@ function setSessionCookie(response: NextResponse, token: string) {
 }
 
 async function loadUserSessionData(queryFn: any, userId: string) {
-  const cartRes = await queryFn(
-    `SELECT ci.book_id as id, ci.quantity as qty, ci.price,
-            b.title, b.cover_image as image, b.price as mrp,
-            b.subject, b.slug, b.discount_price, b.status, b.stock
-     FROM cart c
-     JOIN cart_items ci ON c.id = ci.cart_id
-     LEFT JOIN books b ON ci.book_id = b.id
-     WHERE c.user_id = $1`,
-    [userId]
-  );
-  const cartItems = cartRes.rows.map((row: any) => ({
-    id: row.id,
-    title: row.title || `Book #${row.id}`,
-    price: Number(row.discount_price || row.price),
-    mrp: Number(row.mrp || row.price),
-    qty: Number(row.qty),
-    image: row.image || '',
-    subject: row.subject || 'Guide',
-    slug: row.slug || row.id,
-    cls: '10th',
-    category: 'guide' as const,
-    discount: 20,
-    rating: 5.0,
-    reviews: 0,
-    badge: 'BESTSELLER',
-    badgeColor: 'bg-blue-600',
-    description: 'Official guide book.',
-    features: ['Solved Papers'],
-    inStock: row.status !== 'out_of_stock' && Number(row.stock || 1) > 0,
-  }));
+  try {
+    const [cartRes, wishRes, addrRes] = await Promise.all([
+      queryFn(
+        `SELECT ci.book_id as id, ci.quantity as qty, ci.price,
+                b.title, b.cover_image as image, b.price as mrp,
+                b.subject, b.slug, b.discount_price, b.status, b.stock
+         FROM cart c
+         JOIN cart_items ci ON c.id = ci.cart_id
+         LEFT JOIN books b ON ci.book_id = b.id
+         WHERE c.user_id = $1`,
+        [userId]
+      ).catch(() => ({ rows: [] })),
+      queryFn('SELECT book_id FROM wishlist WHERE user_id = $1', [userId]).catch(() => ({ rows: [] })),
+      queryFn('SELECT * FROM addresses WHERE user_id = $1 ORDER BY created_at DESC', [userId]).catch(() => ({ rows: [] })),
+    ]);
 
-  const wishRes = await queryFn('SELECT book_id FROM wishlist WHERE user_id = $1', [userId]);
-  const addrRes = await queryFn(
-    'SELECT * FROM addresses WHERE user_id = $1 ORDER BY created_at DESC',
-    [userId]
-  );
-  const addresses = addrRes.rows.map((row: any) => ({
-    id: row.id,
-    type: row.landmark || 'HOME',
-    name: row.full_name,
-    phone: row.phone,
-    address: row.address_line1,
-    city: row.city,
-    pincode: row.pincode,
-  }));
+    const cartItems = cartRes.rows.map((row: any) => ({
+      id: row.id,
+      title: row.title || `Book #${row.id}`,
+      price: Number(row.discount_price || row.price),
+      mrp: Number(row.mrp || row.price),
+      qty: Number(row.qty),
+      image: row.image || '',
+      subject: row.subject || 'Guide',
+      slug: row.slug || row.id,
+      cls: '10th',
+      category: 'guide' as const,
+      discount: 20,
+      rating: 5.0,
+      reviews: 0,
+      badge: 'BESTSELLER',
+      badgeColor: 'bg-blue-600',
+      description: 'Official guide book.',
+      features: ['Solved Papers'],
+      inStock: row.status !== 'out_of_stock' && Number(row.stock || 1) > 0,
+    }));
 
-  return {
-    cart: cartItems,
-    wishlist: wishRes.rows.map((row: any) => row.book_id),
-    addresses,
-  };
+    const addresses = addrRes.rows.map((row: any) => ({
+      id: row.id,
+      type: row.landmark || 'HOME',
+      name: row.full_name,
+      phone: row.phone,
+      address: row.address_line1,
+      city: row.city,
+      pincode: row.pincode,
+    }));
+
+    return {
+      cart: cartItems,
+      wishlist: wishRes.rows.map((row: any) => row.book_id),
+      addresses,
+    };
+  } catch (_) {
+    return { cart: [], wishlist: [], addresses: [] };
+  }
 }
 
 function buildUserResponse(
