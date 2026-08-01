@@ -1,5 +1,5 @@
 /**
- * WhatsApp YES/NO order confirmation + admin alert phones + Admin AWB reply commands.
+ * WhatsApp YES/NO order confirmation + admin alert phones + Admin AWB / CANCEL reply commands.
  */
 import { queryDb } from '@/lib/db';
 import {
@@ -186,13 +186,33 @@ export async function confirmAwaitingOrder(orderId: string): Promise<
   }
 }
 
-/** Admin WhatsApp reply command: "AWB [orderId] STC123456" or "STC123456" */
+/** Admin WhatsApp reply command: "AWB STC123456" or "CANCEL BPG-12345" */
 export async function handleAdminAwbReply(fromPhone: string, text: string) {
   const admins = await getAdminAlertPhones();
   const isAdmin = admins.includes(last10(fromPhone));
   if (!isAdmin) return { handled: false as const };
 
   const trimmed = text.trim();
+
+  // Match Admin CANCEL command: "CANCEL BPG-12345" or "CANCEL 12345"
+  const cancelMatch = trimmed.match(/^CANCEL\s+(BPG-\w+|\w+)/i);
+  if (cancelMatch) {
+    const cancelOrderId = cancelMatch[1];
+    const res = await executeOrderCancel({
+      orderId: cancelOrderId,
+      reason: 'Cancelled by Admin via WhatsApp',
+      actor: 'admin',
+      skipCustomerWhatsApp: false,
+    });
+    if (res.ok) {
+      return {
+        handled: true as const,
+        message: `❌ Order #${res.orderNumber} has been cancelled by Admin. Stock restored and customer notified on WhatsApp!`,
+      };
+    }
+    return { handled: true as const, message: `Failed to cancel order: ${res.error}` };
+  }
+
   // Match patterns like "AWB BPG-12345 STC999888", "AWB STC999888", or "STC999888"
   const awbMatch = trimmed.match(/(?:AWB\s+)?(?:(BPG-\w+)\s+)?(STC\w+|\d{6,14})/i);
   if (!awbMatch) return { handled: false as const };
@@ -254,10 +274,10 @@ export async function handleAdminAwbReply(fromPhone: string, text: string) {
 
 /** Handle inbound WhatsApp text from customer OR admin. */
 export async function handleInboundYesNo(fromPhone: string, text: string) {
-  // First check if it's an Admin AWB command
+  // First check if it's an Admin AWB or CANCEL command
   const adminCmd = await handleAdminAwbReply(fromPhone, text);
   if (adminCmd.handled) {
-    return { handled: true as const, answer: 'admin_awb', result: adminCmd };
+    return { handled: true as const, answer: 'admin_command', result: adminCmd };
   }
 
   const answer = parseYesNoReply(text);
