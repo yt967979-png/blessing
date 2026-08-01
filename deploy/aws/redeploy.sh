@@ -110,6 +110,21 @@ sed -i "s|/opt/blessing|$APP_DIR|g" /etc/systemd/system/blessing.service
 systemctl daemon-reload
 systemctl start blessing
 
+echo "==> Install Nginx zero-downtime retry configuration"
+if [[ -f "$APP_DIR/deploy/aws/nginx-blessing.conf" ]]; then
+  cp "$APP_DIR/deploy/aws/nginx-blessing.conf" /etc/nginx/sites-available/blessing || true
+  ln -sf /etc/nginx/sites-available/blessing /etc/nginx/sites-enabled/blessing || true
+  nginx -t && systemctl reload nginx || true
+fi
+
+echo "==> Install Systemd Watchdog Timer (30s Proactive Health Checks)"
+if [[ -f "$APP_DIR/deploy/aws/blessing-watchdog.service" && -f "$APP_DIR/deploy/aws/blessing-watchdog.timer" ]]; then
+  cp "$APP_DIR/deploy/aws/blessing-watchdog.service" /etc/systemd/system/blessing-watchdog.service
+  cp "$APP_DIR/deploy/aws/blessing-watchdog.timer" /etc/systemd/system/blessing-watchdog.timer
+  systemctl daemon-reload
+  systemctl enable --now blessing-watchdog.timer || true
+fi
+
 echo "==> Health probes (localhost)"
 sleep 3
 HEALTH_OK=0

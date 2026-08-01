@@ -1,0 +1,9 @@
+[Unit]
+Description=24/7 Proactive Watchdog Service for Blessing Power Guide
+After=network.target postgresql.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /opt/blessing/deploy/aws/watchdog.sh
+StandardOutput=journal
+StandardError=journal
