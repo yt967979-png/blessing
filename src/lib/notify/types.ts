@@ -21,6 +21,7 @@ export type NotifyPayload = {
   itemsSummary?: string;
   paymentMethod?: string;
   awbNumber?: string;
+  trackingUrl?: string;
   city?: string;
   /** cancel reason / actor nuance: requested | expired | admin | system */
   cancelReason?: string;

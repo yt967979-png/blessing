@@ -1,7 +1,7 @@
 /**
- * WhatsApp YES/NO order confirmation + admin alert phones.
+ * WhatsApp YES/NO order confirmation + admin alert phones + Admin AWB reply commands.
  */
-import { getDbClient, releaseDbClient, queryDb } from '@/lib/db';
+import { queryDb } from '@/lib/db';
 import {
   AWAITING_CONFIRMATION,
   ORDER_PLACED,
@@ -77,20 +77,17 @@ export async function setAdminAlertPhones(raw: string): Promise<string[]> {
   const unique = [...new Set(cleaned)];
   const value = unique.join(',');
 
-  const client = await getDbClient();
   try {
-    await client.query(
+    await queryDb(
       `ALTER TABLE settings ADD COLUMN IF NOT EXISTS admin_alert_phones TEXT DEFAULT ''`
     );
-    await client.query(
+    await queryDb(
       `INSERT INTO settings (id, admin_alert_phones)
        VALUES ('main', $1)
        ON CONFLICT (id) DO UPDATE SET admin_alert_phones = EXCLUDED.admin_alert_phones`,
       [value]
     );
-  } finally {
-    releaseDbClient(client);
-  }
+  } catch (_) {}
   return unique;
 }
 
@@ -116,35 +113,29 @@ export async function confirmAwaitingOrder(orderId: string): Promise<
   | { ok: true; orderNumber: string; already?: boolean }
   | { ok: false; error: string }
 > {
-  let client: any = null;
   try {
-    client = await getDbClient();
-    await client.query('BEGIN');
-
-    const ord = await client.query(
+    const ord = await queryDb(
       `SELECT id, order_number, order_status, total_amount, shipping_address, payment_method
-       FROM orders WHERE order_number = $1 OR id = $1 LIMIT 1 FOR UPDATE`,
+       FROM orders WHERE order_number = $1 OR id = $1 LIMIT 1`,
       [orderId]
     );
     if (!ord.rows.length) {
-      await client.query('ROLLBACK');
       return { ok: false, error: 'Order not found' };
     }
 
     const row = ord.rows[0];
     if (!isAwaitingConfirmation(row.order_status)) {
-      await client.query('ROLLBACK');
       if (String(row.order_status || '').toLowerCase().includes('cancel')) {
         return { ok: false, error: 'Order already cancelled' };
       }
       return { ok: true, orderNumber: row.order_number, already: true };
     }
 
-    await client.query(
+    await queryDb(
       `UPDATE orders SET order_status = $2, updated_at = NOW() WHERE id = $1`,
       [row.id, ORDER_PLACED]
     );
-    await client.query(
+    await queryDb(
       `INSERT INTO order_timeline (id, order_id, status, remarks)
        VALUES ($1, $2, $3, $4)`,
       [
@@ -154,7 +145,6 @@ export async function confirmAwaitingOrder(orderId: string): Promise<
         'Customer confirmed via WhatsApp YES',
       ]
     );
-    await client.query('COMMIT');
 
     const { phone, name, city } = parseAddr(row.shipping_address);
 
@@ -192,19 +182,84 @@ export async function confirmAwaitingOrder(orderId: string): Promise<
 
     return { ok: true, orderNumber: row.order_number };
   } catch (err: any) {
-    try {
-      await client?.query('ROLLBACK');
-    } catch {
-      /* ignore */
-    }
     return { ok: false, error: err?.message || 'Confirm failed' };
-  } finally {
-    releaseDbClient(client);
   }
 }
 
-/** Handle inbound WhatsApp text from a customer phone. */
+/** Admin WhatsApp reply command: "AWB [orderId] STC123456" or "STC123456" */
+export async function handleAdminAwbReply(fromPhone: string, text: string) {
+  const admins = await getAdminAlertPhones();
+  const isAdmin = admins.includes(last10(fromPhone));
+  if (!isAdmin) return { handled: false as const };
+
+  const trimmed = text.trim();
+  // Match patterns like "AWB BPG-12345 STC999888", "AWB STC999888", or "STC999888"
+  const awbMatch = trimmed.match(/(?:AWB\s+)?(?:(BPG-\w+)\s+)?(STC\w+|\d{6,14})/i);
+  if (!awbMatch) return { handled: false as const };
+
+  const targetOrderId = awbMatch[1];
+  const awbNumber = awbMatch[2].toUpperCase();
+
+  try {
+    let orderRow: any = null;
+    if (targetOrderId) {
+      const res = await queryDb(
+        `SELECT id, order_number, shipping_address FROM orders WHERE order_number ILIKE $1 OR id = $1 LIMIT 1`,
+        [targetOrderId]
+      );
+      orderRow = res.rows[0];
+    } else {
+      // Latest unfulfilled placed order
+      const res = await queryDb(
+        `SELECT id, order_number, shipping_address FROM orders 
+         WHERE order_status ILIKE '%Placed%' OR order_status ILIKE '%Packed%'
+         ORDER BY ordered_at DESC LIMIT 1`
+      );
+      orderRow = res.rows[0];
+    }
+
+    if (!orderRow) {
+      return { handled: true as const, message: 'No matching order found for AWB update.' };
+    }
+
+    const isOfficial = awbNumber.startsWith('STC') || !awbNumber.startsWith('SHP-');
+    const trackingUrl = isOfficial
+      ? `https://stcourier.com/track/shipment?docket=${awbNumber}`
+      : 'https://stcourier.com';
+
+    await queryDb(
+      `UPDATE orders SET order_status = 'In Transit', awb_number = $1, tracking_url = $2, shipped_at = NOW(), updated_at = NOW() WHERE id = $3`,
+      [awbNumber, trackingUrl, orderRow.id]
+    );
+
+    const { phone: custPhone, name: custName } = parseAddr(orderRow.shipping_address);
+    if (custPhone) {
+      await notify('order.shipped', {
+        customerPhone: custPhone,
+        customerName: custName,
+        orderId: orderRow.order_number,
+        awbNumber,
+        trackingUrl,
+      });
+    }
+
+    return {
+      handled: true as const,
+      message: `✅ Order #${orderRow.order_number} updated to In Transit with AWB ${awbNumber}. Customer notified on WhatsApp!`,
+    };
+  } catch (err: any) {
+    return { handled: true as const, message: `Failed to update AWB: ${err.message}` };
+  }
+}
+
+/** Handle inbound WhatsApp text from customer OR admin. */
 export async function handleInboundYesNo(fromPhone: string, text: string) {
+  // First check if it's an Admin AWB command
+  const adminCmd = await handleAdminAwbReply(fromPhone, text);
+  if (adminCmd.handled) {
+    return { handled: true as const, answer: 'admin_awb', result: adminCmd };
+  }
+
   const answer = parseYesNoReply(text);
   if (!answer) return { handled: false as const };
 
@@ -232,7 +287,7 @@ export async function expireAwaitingConfirmations(maxAgeHours = 24) {
     const res = await queryDb(
       `SELECT order_number FROM orders
        WHERE order_status ILIKE '%Awaiting Confirmation%'
-         AND COALESCE(ordered_at, updated_at, NOW()) < NOW() - ($1::int * INTERVAL '1 hour')
+       AND COALESCE(ordered_at, updated_at, NOW()) < NOW() - ($1::int * INTERVAL '1 hour')
        ORDER BY COALESCE(ordered_at, updated_at) ASC
        LIMIT 20`,
       [maxAgeHours]
