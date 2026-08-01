@@ -1,11 +1,14 @@
-import { NextResponse } from 'next/server';
-import { getDbClient } from '@/lib/db';
-import {
-  getAuthenticatedUser,
-  unauthorizedResponse,
-  applyRateLimitAsync,
-  clientIp,
-} from '@/lib/serverSecurity';
+import { queryDb } from '@/lib/db';
+
+async function execQuery(client: any, sql: string, params?: any[]): Promise<any> {
+  if (typeof client === 'function') {
+    return client(sql, params);
+  }
+  if (client && typeof client.query === 'function') {
+    return client.query(sql, params);
+  }
+  return queryDb(sql, params);
+}
 
 /** Price cart items from DB; returns total in rupees */
 export async function priceCartItems(
@@ -25,8 +28,9 @@ export async function priceCartItems(
     if (!item.id) {
       return { ok: false, error: 'Invalid cart item.', status: 400 };
     }
-    const dbBook = await client.query(
-      `SELECT id, title, price, discount_price, stock, status FROM books WHERE id = $1 LIMIT 1 FOR UPDATE`,
+    const dbBook = await execQuery(
+      client,
+      `SELECT id, title, price, discount_price, stock, status FROM books WHERE id = $1 LIMIT 1`,
       [item.id]
     );
     if (dbBook.rows.length === 0) {

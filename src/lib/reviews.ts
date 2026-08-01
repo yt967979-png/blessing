@@ -1,3 +1,5 @@
+import { queryDb } from '@/lib/db';
+
 export interface ReviewRow {
   id: string;
   user_id: string | null;
@@ -12,8 +14,18 @@ export interface ReviewRow {
   updated_at: string | Date | null;
 }
 
+async function execQuery(client: any, sql: string, params?: any[]): Promise<any> {
+  if (typeof client === 'function') {
+    return client(sql, params);
+  }
+  if (client && typeof client.query === 'function') {
+    return client.query(sql, params);
+  }
+  return queryDb(sql, params);
+}
+
 export async function ensureReviewSchema(client: any) {
-  await client.query(`
+  await execQuery(client, `
     ALTER TABLE reviews ADD COLUMN IF NOT EXISTS user_id VARCHAR(255);
     ALTER TABLE reviews ADD COLUMN IF NOT EXISTS order_id VARCHAR(255);
     ALTER TABLE reviews ADD COLUMN IF NOT EXISTS images JSONB DEFAULT '[]'::jsonb;
@@ -68,7 +80,8 @@ export async function findDeliveredPurchase(
   userId: string,
   bookId: string
 ): Promise<{ orderId: string; orderNumber: string } | null> {
-  const res = await client.query(
+  const res = await execQuery(
+    client,
     `SELECT o.id AS order_id, o.order_number
      FROM orders o
      INNER JOIN order_items oi ON oi.order_id = o.id
@@ -91,7 +104,8 @@ export async function findDeliveredPurchase(
 }
 
 export async function getUserReviewForBook(client: any, userId: string, bookId: string) {
-  const res = await client.query(
+  const res = await execQuery(
+    client,
     `SELECT * FROM reviews WHERE user_id = $1 AND book_id = $2 LIMIT 1`,
     [userId, bookId]
   );
@@ -99,7 +113,8 @@ export async function getUserReviewForBook(client: any, userId: string, bookId: 
 }
 
 export async function getBookReviewStats(client: any, bookId: string) {
-  const res = await client.query(
+  const res = await execQuery(
+    client,
     `SELECT COUNT(*)::int AS count, COALESCE(AVG(rating), 0)::numeric(3,1) AS avg_rating
      FROM reviews WHERE book_id = $1`,
     [bookId]

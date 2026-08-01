@@ -1,3 +1,5 @@
+import { queryDb } from '@/lib/db';
+
 export type CouponOfferType = 'discount' | 'free_book';
 export type CouponDiscountType = 'percentage' | 'fixed';
 export type CouponConditionMode = 'any' | 'all' | 'amount' | 'quantity';
@@ -35,109 +37,135 @@ export interface PublicCoupon {
   minimumQuantity: number;
   conditionMode: CouponConditionMode;
   expiryDate: string | null;
-  label: string;
   allowedClasses: string[];
   allowedCategories: string[];
+  perUserLimit: number;
+  badge: string;
 }
 
-function num(v: unknown, fallback = 0) {
-  const n = Number(v);
+async function execQuery(client: any, sql: string, params?: any[]): Promise<any> {
+  if (typeof client === 'function') {
+    return client(sql, params);
+  }
+  if (client && typeof client.query === 'function') {
+    return client.query(sql, params);
+  }
+  return queryDb(sql, params);
+}
+
+function num(val: unknown, fallback = 0): number {
+  const n = Number(val);
   return Number.isFinite(n) ? n : fallback;
 }
 
-export function normalizeCouponCode(code: string) {
+function parseCsvList(raw: unknown): string[] {
+  if (Array.isArray(raw)) return raw.map(String).map((s) => s.trim().toLowerCase()).filter(Boolean);
+  if (typeof raw === 'string') {
+    return raw
+      .split(/[,;\s]+/)
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean);
+  }
+  return [];
+}
+
+export function serializeCsvList(input: unknown): string {
+  if (Array.isArray(input)) {
+    return input.map(String).map((s) => s.trim()).filter(Boolean).join(',');
+  }
+  if (typeof input === 'string') {
+    return input.split(/[,;\s]+/).map((s) => s.trim()).filter(Boolean).join(',');
+  }
+  return '';
+}
+
+export function couponOfferLabel(row: CouponRow): string {
+  if (row.offer_type === 'free_book') return 'Free Book';
+  return row.discount_type === 'percentage' ? `${row.discount_value}% OFF` : `₹${row.discount_value} OFF`;
+}
+
+export function couponConditionLabel(row: CouponRow): string {
+  const mode = row.condition_mode || 'any';
+  const minAmt = num(row.minimum_amount);
+  const minQty = num(row.minimum_quantity);
+  if (mode === 'amount') return `Min ₹${minAmt}`;
+  if (mode === 'quantity') return `Min ${minQty} books`;
+  if (mode === 'all') return `Min ₹${minAmt} & ${minQty} books`;
+  return `Min ₹${minAmt} or ${minQty} books`;
+}
+
+export function restrictionLabel(row: CouponRow): string {
+  const classes = parseCsvList(row.allowed_classes);
+  const cats = parseCsvList(row.allowed_categories);
+  const parts: string[] = [];
+  if (classes.length) parts.push(classes.join(', ') + ' std');
+  if (cats.length) parts.push(cats.join(', '));
+  return parts.length ? parts.join(' | ') : 'All books';
+}
+
+export function normalizeCouponCode(code: unknown): string {
   return String(code || '')
     .trim()
-    .toUpperCase()
-    .replace(/\s+/g, '');
+    .toUpperCase();
 }
 
-export function isCouponExpired(expiry: string | Date | null | undefined) {
+export function isCouponExpired(expiry: string | Date | null): boolean {
   if (!expiry) return false;
-  return new Date(expiry).getTime() < Date.now();
+  const t = new Date(expiry).getTime();
+  return Number.isFinite(t) && t < Date.now();
 }
 
-export function couponOfferLabel(c: Pick<CouponRow, 'offer_type' | 'discount_type' | 'discount_value'>) {
-  if (c.offer_type === 'free_book') {
-    const cap = num(c.discount_value);
-    return cap > 0 ? `Pick any book FREE (up to ₹${cap})` : 'Pick any book you like — FREE';
+export function bookMetaFromRow(row: any): { cls: string; category: string } {
+  const dept = String(row.department || row.category_id || '').toLowerCase();
+  const title = String(row.title || '').toLowerCase();
+
+  let cls = '';
+  if (dept.includes('10th') || title.includes('10th')) cls = '10th';
+  else if (dept.includes('12th') || title.includes('12th')) cls = '12th';
+  else if (dept.includes('11th') || title.includes('11th')) cls = '11th';
+
+  let category = 'guide';
+  if (dept.includes('combo') || title.includes('combo') || title.includes('pack')) {
+    category = 'combo';
   }
-  if (c.discount_type === 'percentage') return `${num(c.discount_value)}% OFF`;
-  return `₹${num(c.discount_value)} OFF`;
-}
 
-export function couponConditionLabel(c: Pick<CouponRow, 'minimum_amount' | 'minimum_quantity' | 'condition_mode'>) {
-  const minAmt = num(c.minimum_amount);
-  const minQty = num(c.minimum_quantity);
-  const parts: string[] = [];
-  if (minAmt > 0) parts.push(`cart ₹${minAmt}+`);
-  if (minQty > 0) parts.push(`${minQty}+ books`);
-  if (parts.length === 0) return 'No minimum';
-  if (c.condition_mode === 'all' && parts.length > 1) return parts.join(' & ');
-  if (c.condition_mode === 'amount' && minAmt > 0) return `Min order ₹${minAmt}`;
-  if (c.condition_mode === 'quantity' && minQty > 0) return `Min ${minQty} books`;
-  return parts.join(' or ');
-}
-
-function parseCsvList(raw: string | null | undefined): string[] {
-  if (!raw) return [];
-  return String(raw)
-    .split(',')
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean);
-}
-
-export function serializeCsvList(values: string[] | null | undefined): string | null {
-  if (!values?.length) return null;
-  const cleaned = [...new Set(values.map((v) => v.trim().toLowerCase()).filter(Boolean))];
-  return cleaned.length ? cleaned.join(',') : null;
-}
-
-/** Match product API class/category inference from a books row. */
-export function bookMetaFromRow(row: {
-  title?: string;
-  category_id?: string;
-  department?: string;
-}) {
-  const isCombo =
-    row.category_id === 'cat-combos' || String(row.title || '').toLowerCase().includes('combo');
-  const classMatch = String(row.title || row.department || '').match(/(6th|7th|8th|9th|10th|11th|12th)/i);
-  const cls = classMatch ? classMatch[0].toLowerCase() : '10th';
-  const category = isCombo ? 'combo' : 'guide';
   return { cls, category };
 }
 
-export function restrictionLabel(coupon: Pick<CouponRow, 'allowed_classes' | 'allowed_categories'>) {
-  const classes = parseCsvList(coupon.allowed_classes);
-  const categories = parseCsvList(coupon.allowed_categories);
-  const parts: string[] = [];
-  if (classes.length) parts.push(`${classes.join(', ')} std`);
-  if (categories.length) parts.push(categories.map((c) => (c === 'combo' ? 'combos' : 'guides')).join(', '));
-  return parts.length ? parts.join(' · ') : '';
-}
-
 export function mapPublicCoupon(row: CouponRow): PublicCoupon {
-  const allowedClasses = parseCsvList(row.allowed_classes);
-  const allowedCategories = parseCsvList(row.allowed_categories);
-  const restriction = restrictionLabel(row);
+  const offerType = (row.offer_type as CouponOfferType) || 'discount';
+  const discountType = (row.discount_type as CouponDiscountType) || 'fixed';
+  const val = num(row.discount_value);
+  let badge = 'Special Offer';
+
+  if (offerType === 'free_book') {
+    badge = val > 0 ? `Free Book (up to ₹${val})` : 'Free Book';
+  } else if (discountType === 'percentage') {
+    badge = `${val}% OFF`;
+  } else {
+    badge = `₹${val} OFF`;
+  }
+
   return {
     id: row.id,
-    code: row.code,
-    title: row.title || row.code,
+    code: String(row.code || '').toUpperCase(),
+    title: row.title || `${badge} Offer`,
     description:
       row.description ||
-      [couponConditionLabel(row), restriction].filter(Boolean).join(' · ') ||
-      couponConditionLabel(row),
-    offerType: (row.offer_type as CouponOfferType) || 'discount',
-    discountType: (row.discount_type as CouponDiscountType) || 'percentage',
-    discountValue: num(row.discount_value),
+      (offerType === 'free_book'
+        ? 'Get a free guide with eligible books'
+        : `Save ${badge} on your order`),
+    offerType,
+    discountType,
+    discountValue: val,
     minimumAmount: num(row.minimum_amount),
     minimumQuantity: num(row.minimum_quantity),
     conditionMode: (row.condition_mode as CouponConditionMode) || 'any',
     expiryDate: row.expiry_date ? new Date(row.expiry_date).toISOString() : null,
-    label: couponOfferLabel(row),
-    allowedClasses,
-    allowedCategories,
+    allowedClasses: parseCsvList(row.allowed_classes),
+    allowedCategories: parseCsvList(row.allowed_categories),
+    perUserLimit: num(row.per_user_limit, 1),
+    badge,
   };
 }
 
@@ -153,7 +181,8 @@ export async function checkCouponCartRestrictions(
     return { ok: false, message: 'Cart is empty.' };
   }
 
-  const res = await client.query(
+  const res = await execQuery(
+    client,
     `SELECT b.id, b.title, b.department, b.category_id FROM books b WHERE b.id = ANY($1)`,
     [bookIds]
   );
@@ -189,7 +218,8 @@ export async function getUserCouponRedemptionCount(
   couponId: string,
   userId: string
 ): Promise<number> {
-  const res = await client.query(
+  const res = await execQuery(
+    client,
     `SELECT COUNT(*)::int AS c FROM coupon_redemptions WHERE coupon_id = $1 AND user_id = $2`,
     [couponId, userId]
   );
@@ -281,12 +311,12 @@ export function computeDiscountAmount(coupon: CouponRow, cartSubtotal: number) {
 export async function fetchCouponByCode(client: any, code: string): Promise<CouponRow | null> {
   const normalized = normalizeCouponCode(code);
   if (!normalized) return null;
-  const res = await client.query(`SELECT * FROM coupons WHERE UPPER(code) = $1 LIMIT 1`, [normalized]);
+  const res = await execQuery(client, `SELECT * FROM coupons WHERE UPPER(code) = $1 LIMIT 1`, [normalized]);
   return res.rows[0] || null;
 }
 
 export async function ensureCouponSchema(client: any) {
-  await client.query(`
+  await execQuery(client, `
     ALTER TABLE coupons ADD COLUMN IF NOT EXISTS title VARCHAR(255);
     ALTER TABLE coupons ADD COLUMN IF NOT EXISTS description TEXT;
     ALTER TABLE coupons ADD COLUMN IF NOT EXISTS minimum_quantity INT DEFAULT 0;

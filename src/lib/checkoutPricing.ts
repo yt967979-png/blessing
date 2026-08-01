@@ -1,3 +1,4 @@
+import { queryDb } from '@/lib/db';
 import {
   checkCouponCartRestrictions,
   checkCouponEligibility,
@@ -21,6 +22,16 @@ export type CheckoutPricingResult =
       coupon: CouponRow | null;
     }
   | { ok: false; error: string; status: number };
+
+async function execQuery(client: any, sql: string, params?: any[]): Promise<any> {
+  if (typeof client === 'function') {
+    return client(sql, params);
+  }
+  if (client && typeof client.query === 'function') {
+    return client.query(sql, params);
+  }
+  return queryDb(sql, params);
+}
 
 /** Server-side cart + optional coupon total (shared by Razorpay + order create). */
 export async function priceCheckoutOrder(
@@ -75,8 +86,9 @@ export async function priceCheckoutOrder(
   if (!userLimit.ok) return { ok: false, error: userLimit.message, status: 400 };
 
   if (opts.lockCoupon) {
-    const lockedCoupon = await client.query(
-      `SELECT used_count, usage_limit FROM coupons WHERE id = $1 FOR UPDATE`,
+    const lockedCoupon = await execQuery(
+      client,
+      `SELECT used_count, usage_limit FROM coupons WHERE id = $1`,
       [coupon.id]
     );
     if (
@@ -93,8 +105,9 @@ export async function priceCheckoutOrder(
       return { ok: false, error: 'Please select your free book for this coupon.', status: 400 };
     }
 
-    const bookRes = await client.query(
-      `SELECT id, title, price, discount_price, stock, status FROM books WHERE id = $1 LIMIT 1 FOR UPDATE`,
+    const bookRes = await execQuery(
+      client,
+      `SELECT id, title, price, discount_price, stock, status FROM books WHERE id = $1 LIMIT 1`,
       [pickId]
     );
     if (!bookRes.rows.length) {
@@ -121,18 +134,18 @@ export async function priceCheckoutOrder(
       ...verifiedItems,
       {
         id: book.id,
-        title: `(FREE) ${book.title}`,
+        title: `${book.title} (FREE Offer)`,
         price: 0,
         qty: 1,
         subtotal: 0,
-        isFreeGift: true,
+        isFreeBonus: true,
       },
     ];
   } else {
     discountAmount = computeDiscountAmount(coupon, calculatedSubtotal);
-    totalAmount = Math.max(0, calculatedSubtotal - discountAmount);
   }
 
+  totalAmount = Math.max(0, calculatedSubtotal - (coupon.offer_type === 'free_book' ? 0 : discountAmount));
   appliedCouponId = coupon.id;
   appliedCouponCode = coupon.code;
 
