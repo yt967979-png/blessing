@@ -304,11 +304,11 @@ function isAwsHosted(): boolean {
 function defaultPoolMax(): number {
   // Local PostgreSQL never needs connection caps — it runs on the same machine
   // and supports 100 connections by default. Only cap for Neon/PgBouncer remote endpoints.
-  const dbUrl = process.env.DATABASE_URL || '';
-  const isLocal = /(@localhost[:/]|@127\.0\.0\.1[:/])/.test(dbUrl) || dbUrl.startsWith('postgresql:///');
+  const dbUrl = process.env.DATABASE_URL || activeConnectionString || '';
+  const isLocal = /(@localhost[:/]|@127\.0\.0\.1[:/]|host=localhost|host=127\.0\.0\.1)/.test(dbUrl) || dbUrl.startsWith('postgresql:///');
   if (isLocal) {
-    const n = Number(process.env.DB_POOL_MAX || 10);
-    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 10;
+    const n = Number(process.env.DB_POOL_MAX || 20);
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 20;
   }
   // Free / soft / Lightsail: never honour oversized DB_POOL_MAX (was 50 → connection storms).
   const tier = String(process.env.RUNTIME_TIER || process.env.RAILWAY_PLAN_TIER || '').toLowerCase();
@@ -317,24 +317,17 @@ function defaultPoolMax(): number {
   if (process.env.DB_POOL_MAX) {
     const n = Number(process.env.DB_POOL_MAX);
     if (Number.isFinite(n) && n > 0) {
-      // Neon PgBouncer / small VPS: hard-cap soft launch at 3 on aws/hobby, else 5.
-      const softCap = awsHobby ? 3 : 5;
+      const softCap = awsHobby ? 5 : 10;
       const capped = freeSoft ? Math.min(Math.floor(n), softCap) : Math.floor(n);
-      if (capped !== Math.floor(n)) {
-        console.warn(`[db] DB_POOL_MAX=${n} capped to ${capped} for soft/aws/hobby`);
-      }
       return capped;
     }
   }
   const fromTier = resolveDbPoolMaxPerReplica(getRuntimeTuning().dbPoolMax);
-  // Lightsail + Neon pooler: default 3 connections per process.
-  return awsHobby ? Math.min(fromTier, 3) : fromTier;
+  return awsHobby ? Math.min(fromTier, 5) : fromTier;
 }
 
 function defaultConnectTimeoutMs(): number {
   const fromEnv = resolveTunedNumber('DB_CONNECT_TIMEOUT_MS', 'dbConnectTimeoutMs');
-  // Lightsail + Neon: fail fast so /api/ready and catalog never hang the UI.
-  // Cross-region blips recover on the next request via pool invalidate + retry.
   if (!process.env.DB_CONNECT_TIMEOUT_MS && (isAwsHosted() || isNeonUrl(process.env.DATABASE_URL || ''))) {
     return Math.min(Math.max(fromEnv, 6_000), 10_000);
   }
@@ -344,8 +337,10 @@ function defaultConnectTimeoutMs(): number {
 function defaultQueryTimeoutMs(): number {
   const fromEnv = Number(process.env.DB_QUERY_TIMEOUT_MS || 0);
   if (Number.isFinite(fromEnv) && fromEnv > 0) return fromEnv;
-  // Soft/aws: short statements — stuck PgBouncer sockets must not block pages 15–30s.
-  if (isAwsHosted() || isNeonUrl(process.env.DATABASE_URL || '')) return 8_000;
+  const dbUrl = process.env.DATABASE_URL || activeConnectionString || '';
+  const isLocal = /(@localhost[:/]|@127\.0\.0\.1[:/]|host=localhost|host=127\.0\.0\.1)/.test(dbUrl);
+  if (isLocal) return 30_000;
+  if (isAwsHosted() || isNeonUrl(process.env.DATABASE_URL || '')) return 12_000;
   return 15_000;
 }
 
@@ -353,8 +348,7 @@ function ensurePoolBudgetMs(): number {
   const connectMs = defaultConnectTimeoutMs();
   const neonish =
     isNeonUrl(activeConnectionString || '') ||
-    isNeonUrl(process.env.DATABASE_URL || '') ||
-    isAwsHosted();
+    isNeonUrl(process.env.DATABASE_URL || '');
   const defaultBudget = neonish
     ? Math.min(Math.max(connectMs, 8_000), 12_000)
     : Math.min(connectMs * 2 + 5_000, 25_000);
@@ -368,21 +362,17 @@ function defaultHeartbeatMs(): number {
 function createPool(connectionString: string): Pool {
   const normalized = normalizeConnectionString(connectionString);
   const neon = isNeonUrl(normalized);
-  // Local PostgreSQL (localhost/127.0.0.1) must NOT be treated as pooler-friendly —
-  // it supports long-lived connections with TCP keepalive and large pools.
-  // Only Neon or remote AWS PgBouncer endpoints need the small-pool/short-idle mode.
   const isLocal = /(@localhost[:/]|@127\.0\.0\.1[:/]|host=localhost|host=127\.0\.0\.1)/.test(normalized);
   const poolerFriendly = !isLocal && (neon || isAwsHosted());
-  // Neon/PgBouncer closes idle sockets; holding them in node-pg causes "timeout exceeded"
-  // on the next checkout (Google sign-in hangs on "Signing in…"). Keep idle ≤8s.
   const idleRaw = Number(process.env.DB_IDLE_TIMEOUT_MS || (poolerFriendly ? 5_000 : 600_000));
   const idleTimeoutMillis = poolerFriendly
     ? Math.min(Math.max(Number.isFinite(idleRaw) ? idleRaw : 5_000, 1_000), 8_000)
     : idleRaw;
   const queryMs = defaultQueryTimeoutMs();
+  const poolMax = isLocal ? 20 : (poolerFriendly ? Math.min(defaultPoolMax(), 5) : defaultPoolMax());
   const p = new Pool({
     connectionString: normalized,
-    max: poolerFriendly ? Math.min(defaultPoolMax(), 3) : defaultPoolMax(),
+    max: poolMax,
     idleTimeoutMillis,
     connectionTimeoutMillis: defaultConnectTimeoutMs(),
     statement_timeout: Number(process.env.DB_STATEMENT_TIMEOUT_MS || queryMs),
