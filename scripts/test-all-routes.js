@@ -11,6 +11,7 @@ const routesToTest = [
   { path: '/api/products?cls=12th', expectedStatus: 200, name: '12th Standard Category API' },
   { path: '/api/products?category=combo', expectedStatus: 200, name: 'Combos Category API' },
   { path: '/', expectedStatus: 200, name: 'Home Page' },
+  { path: '/products', expectedStatus: 307, name: 'Products Catalog Page' },
   { path: '/cart', expectedStatus: 200, name: 'Cart Page' },
   { path: '/checkout', expectedStatus: 200, name: 'Checkout Page' },
   { path: '/track', expectedStatus: 200, name: 'Order Tracking Page' },
@@ -31,7 +32,9 @@ function fetchRoute(route) {
       res.on('data', (chunk) => (body += chunk));
       res.on('end', () => {
         const ms = Date.now() - start;
-        const pass = res.statusCode === route.expectedStatus;
+        const pass = Array.isArray(route.expectedStatus)
+          ? route.expectedStatus.includes(res.statusCode)
+          : res.statusCode === route.expectedStatus;
         resolve({
           name: route.name,
           path: route.path,
@@ -47,7 +50,7 @@ function fetchRoute(route) {
       resolve({
         name: route.name,
         path: route.path,
-        status: 0,
+        status: 'ERROR',
         ms: Date.now() - start,
         pass: false,
         error: err.message,
@@ -59,45 +62,40 @@ function fetchRoute(route) {
       resolve({
         name: route.name,
         path: route.path,
-        status: 408,
+        status: 'TIMEOUT',
         ms: Date.now() - start,
         pass: false,
-        error: 'Timeout exceeded 8000ms',
       });
     });
   });
 }
 
 async function runAllTests() {
-  console.log(`\n======================================================`);
+  console.log('======================================================');
   console.log(`🧪 BLESSING POWER GUIDE — AUTOMATED ROUTE MONITOR & TEST`);
   console.log(` Target: ${baseUrl}`);
   console.log(` Date: ${new Date().toISOString()}`);
-  console.log(`======================================================\n`);
+  console.log('======================================================\n');
 
-  let totalPassed = 0;
-  let totalFailed = 0;
+  let passed = 0;
+  let failed = 0;
 
   for (const route of routesToTest) {
-    const result = await fetchRoute(route);
-    const icon = result.pass ? '✅' : '❌';
-    const statusText = result.pass ? `HTTP ${result.status}` : `FAIL (${result.status || result.error})`;
-    
-    console.log(`${icon} [${result.ms}ms] ${route.name.padEnd(28)} ${route.path.padEnd(30)} ${statusText}`);
-
-    if (result.pass) {
-      totalPassed++;
+    const res = await fetchRoute(route);
+    if (res.pass) {
+      passed++;
+      console.log(`✅ [${res.ms}ms] ${res.name.padEnd(28)} ${res.path.padEnd(30)} HTTP ${res.status}`);
     } else {
-      totalFailed++;
-      if (result.error) console.log(`   └─ Error: ${result.error}`);
+      failed++;
+      console.error(`❌ [${res.ms}ms] ${res.name.padEnd(28)} ${res.path.padEnd(30)} HTTP ${res.status} ${res.error ? `(${res.error})` : ''}`);
     }
   }
 
-  console.log(`\n------------------------------------------------------`);
-  console.log(`📊 RESULTS: ${totalPassed} Passed, ${totalFailed} Failed (${routesToTest.length} Total)`);
-  console.log(`------------------------------------------------------\n`);
+  console.log('\n------------------------------------------------------');
+  console.log(`📊 RESULTS: ${passed} Passed, ${failed} Failed (${routesToTest.length} Total)`);
+  console.log('------------------------------------------------------\n');
 
-  if (totalFailed > 0) {
+  if (failed > 0) {
     process.exit(1);
   }
 }
