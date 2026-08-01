@@ -136,4 +136,13 @@ curl -fsS --max-time 15 "http://127.0.0.1:3000/api/ready" || {
   exit 1
 }
 echo ""
-echo "OK: redeploy complete — blessing is up with verified health + ready."
+
+echo "==> Running Automated Route Test Suite (14 Core Pages & APIs)"
+node "$APP_DIR/scripts/test-all-routes.js" "http://127.0.0.1:3000" || {
+  echo "ERROR: Automated route testing suite detected a failure!"
+  journalctl -u blessing -n 30 --no-pager || true
+  exit 1
+}
+
+echo ""
+echo "OK: redeploy complete — blessing is up with 100% verified health + all 14 routes passing."
