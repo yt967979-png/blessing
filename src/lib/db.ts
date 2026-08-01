@@ -360,7 +360,11 @@ function defaultHeartbeatMs(): number {
 function createPool(connectionString: string): Pool {
   const normalized = normalizeConnectionString(connectionString);
   const neon = isNeonUrl(normalized);
-  const poolerFriendly = neon || isAwsHosted();
+  // Local PostgreSQL (localhost/127.0.0.1) must NOT be treated as pooler-friendly —
+  // it supports long-lived connections with TCP keepalive and large pools.
+  // Only Neon or remote AWS PgBouncer endpoints need the small-pool/short-idle mode.
+  const isLocal = /(@localhost[:/]|@127\.0\.0\.1[:/]|host=localhost|host=127\.0\.0\.1)/.test(normalized);
+  const poolerFriendly = !isLocal && (neon || isAwsHosted());
   // Neon/PgBouncer closes idle sockets; holding them in node-pg causes "timeout exceeded"
   // on the next checkout (Google sign-in hangs on "Signing in…"). Keep idle ≤8s.
   const idleRaw = Number(process.env.DB_IDLE_TIMEOUT_MS || (poolerFriendly ? 5_000 : 600_000));
