@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
-import { getDbClient } from '@/lib/db';
-import { createSessionToken, getTokenFromRequest, sessionCookieOptions } from '@/lib/auth';
-import { getAuthenticatedUser, applyRateLimitAsync, clientIp } from '@/lib/serverSecurity';
+import { queryDb } from '@/lib/db';
+import { createSessionToken, sessionCookieOptions } from '@/lib/auth';
+import { getAuthenticatedUser, unauthorizedResponse, applyRateLimitAsync, clientIp } from '@/lib/serverSecurity';
 import { isValidMobileNumber, normalizeMobileDigits } from '@/lib/authValidation';
 
 function setSessionCookie(response: NextResponse, token: string) {
@@ -17,10 +17,9 @@ export async function POST(request: Request) {
 
   const session = await getAuthenticatedUser(request);
   if (!session) {
-    return NextResponse.json({ error: 'Please sign in with Google first.' }, { status: 401 });
+    return unauthorizedResponse('Please sign in with Google first.');
   }
 
-  let client: any = null;
   try {
     const { name, phone } = await request.json();
     const cleanPhone = normalizeMobileDigits(String(phone || ''));
@@ -33,27 +32,24 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Please enter a valid 10-digit mobile number.' }, { status: 400 });
     }
 
-    client = await getDbClient();
-
-    const dup = await client.query(
+    const dup = await queryDb(
       `SELECT id FROM users WHERE phone = $1 AND id <> $2 LIMIT 1`,
       [cleanPhone, session.userId]
     );
     if (dup.rows.length > 0) {
-      await client.end();
       return NextResponse.json({ error: 'This mobile number is already used on another account.' }, { status: 409 });
     }
 
-    const updated = await client.query(
+    const updated = await queryDb(
       `UPDATE users SET name = $1, phone = $2, profile_completed = TRUE, updated_at = NOW()
        WHERE id = $3
        RETURNING id, name, email, phone, role, profile_image`,
       [cleanName, cleanPhone, session.userId]
     );
     const user = updated.rows[0];
-    const token = getTokenFromRequest(request) || createSessionToken(user.id, user.role || 'customer');
+    const token = createSessionToken(user.id, user.role || 'customer');
 
-    const cartRes = await client.query(
+    const cartRes = await queryDb(
       `SELECT ci.book_id as id, ci.quantity as qty, ci.price,
               b.title, b.cover_image as image, b.price as mrp,
               b.subject, b.slug, b.discount_price, b.status, b.stock
@@ -83,8 +79,7 @@ export async function POST(request: Request) {
       features: ['Solved Papers'],
       inStock: row.status !== 'out_of_stock' && Number(row.stock || 1) > 0,
     }));
-    const wishRes = await client.query('SELECT book_id FROM wishlist WHERE user_id = $1', [user.id]);
-    await client.end();
+    const wishRes = await queryDb('SELECT book_id FROM wishlist WHERE user_id = $1', [user.id]);
 
     const response = NextResponse.json({
       success: true,
@@ -104,11 +99,6 @@ export async function POST(request: Request) {
     return setSessionCookie(response, token);
   } catch (err: any) {
     console.error('[complete-profile]', err?.message || err);
-    if (client) {
-      try {
-        await client.end();
-      } catch (_) {}
-    }
     return NextResponse.json({ error: 'Could not save your details.' }, { status: 500 });
   }
 }
