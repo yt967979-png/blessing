@@ -302,6 +302,14 @@ function isAwsHosted(): boolean {
 }
 
 function defaultPoolMax(): number {
+  // Local PostgreSQL never needs connection caps — it runs on the same machine
+  // and supports 100 connections by default. Only cap for Neon/PgBouncer remote endpoints.
+  const dbUrl = process.env.DATABASE_URL || '';
+  const isLocal = /(@localhost[:/]|@127\.0\.0\.1[:/])/.test(dbUrl) || dbUrl.startsWith('postgresql:///');
+  if (isLocal) {
+    const n = Number(process.env.DB_POOL_MAX || 10);
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 10;
+  }
   // Free / soft / Lightsail: never honour oversized DB_POOL_MAX (was 50 → connection storms).
   const tier = String(process.env.RUNTIME_TIER || process.env.RAILWAY_PLAN_TIER || '').toLowerCase();
   const freeSoft = tier === 'free' || String(process.env.LAUNCH_SCALE || 'soft') !== 'peak';
