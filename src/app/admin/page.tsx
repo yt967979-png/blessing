@@ -88,7 +88,7 @@ function MiniBar({ value, max, color = 'bg-blue-500' }: { value: number; max: nu
 
 // Simple SVG bar chart — no external dependency
 function SimpleBarChart({ data, height = 120 }: { data: DailyPoint[]; height?: number }) {
-  if (!data.length) return <div className="flex items-center justify-center h-28 text-xs text-gray-400">No data yet</div>;
+  if (!data || !data.length) return <div className="flex items-center justify-center h-28 text-xs text-gray-400">No data yet</div>;
   const maxRev = Math.max(...data.map((d) => d.revenue), 1);
   const barW = Math.max(4, Math.min(28, Math.floor(560 / data.length) - 3));
   const gap = Math.max(2, Math.floor(560 / data.length) - barW);
@@ -122,7 +122,8 @@ function SimpleBarChart({ data, height = 120 }: { data: DailyPoint[]; height?: n
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function AdminPage() {
   const router = useRouter();
-  const { user, setIsAuthOpen, products, updateProductInDb, addNewProductToDb, deleteProductFromDb, showToast, logoutUser } = useStore();
+  const { user, setIsAuthOpen, products: storeProducts, updateProductInDb, addNewProductToDb, deleteProductFromDb, showToast, logoutUser } = useStore();
+  const products = storeProducts || [];
 
   type Tab = 'analytics' | 'orders' | 'catalog' | 'coupons' | 'users' | 'reviews' | 'content' | 'whatsapp';
   const [activeTab, setActiveTab] = useState<Tab>('analytics');
@@ -254,7 +255,27 @@ export default function AdminPage() {
       const data = await res.json().catch(() => null);
       // Always clear skeleton: accept empty/503 payload so charts show zeros + error banner.
       if (data && typeof data === 'object' && data.summary) {
-        setAnalytics(data as Analytics);
+        const safeAnalyticsData: Analytics = {
+          summary: {
+            totalOrders: data.summary.totalOrders || 0,
+            totalRevenue: data.summary.totalRevenue || 0,
+            avgOrderValue: data.summary.avgOrderValue || 0,
+            paidOrders: data.summary.paidOrders || 0,
+            codOrders: data.summary.codOrders || 0,
+            todayOrders: data.summary.todayOrders || 0,
+            todayRevenue: data.summary.todayRevenue || 0,
+          },
+          daily: Array.isArray(data.daily) ? data.daily : [],
+          paymentMethods: Array.isArray(data.paymentMethods) ? data.paymentMethods : [],
+          orderStatuses: Array.isArray(data.orderStatuses) ? data.orderStatuses : [],
+          paymentStatuses: Array.isArray(data.paymentStatuses) ? data.paymentStatuses : [],
+          topProducts: Array.isArray(data.topProducts) ? data.topProducts : [],
+          monthlyTrend: Array.isArray(data.monthlyTrend) ? data.monthlyTrend : [],
+          range: data.range || analyticsRange,
+          error: data.error,
+          dbDisconnected: data.dbDisconnected,
+        };
+        setAnalytics(safeAnalyticsData);
         if (!res.ok || data.dbDisconnected || data.error) {
           setAnalyticsError(
             data.error || data.message || `Database not connected (Status ${res.status})`
