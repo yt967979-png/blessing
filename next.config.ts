@@ -39,7 +39,12 @@ const nextConfig: NextConfig = {
         headers: [
           { key: "X-Frame-Options", value: "DENY" },
           { key: "X-Content-Type-Options", value: "nosniff" },
-          // Allowed for Google Sign-In FedCM & OAuth popup window postMessage
+          // MUST be explicit unsafe-none — omitting it lets Chrome enforce default COOP
+          // which blocks Google Sign-In FedCM postMessage calls
+          {
+            key: "Cross-Origin-Opener-Policy",
+            value: "unsafe-none",
+          },
           {
             key: "Referrer-Policy",
             value: "no-referrer-when-downgrade",
