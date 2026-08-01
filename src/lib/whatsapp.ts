@@ -7,7 +7,7 @@ import QRCode from 'qrcode';
 import path from 'path';
 import fs from 'fs';
 import pino from 'pino';
-import { getDbClient, releaseDbClient } from '@/lib/db';
+import { getDbClient, releaseDbClient, queryDb } from '@/lib/db';
 import { isBackgroundLeader } from '@/lib/backgroundLeader';
 import { resolveTunedNumber, shouldRunBackgroundTask } from '@/lib/runtimeProfile';
 
@@ -662,19 +662,17 @@ async function drainWhatsAppOutboxOnce() {
   if (!isBackgroundLeader()) return;
 
   // Lazy reconnect: only spin Baileys when there is pending work (not on every boot)
+  // Use queryDb (pool.query) — never checks out a dedicated slot so connections can't leak
+  // when the pool is invalidated mid-run.
   if (!isConnected) {
     let pending = 0;
-    let client: any = null;
     try {
-      client = await getDbClient();
-      const res = await client.query(
+      const res = await queryDb(
         `SELECT COUNT(*)::int AS n FROM whatsapp_outbox WHERE sent_at IS NULL`
       );
       pending = Number(res.rows[0]?.n || 0);
     } catch {
       pending = 0;
-    } finally {
-      releaseDbClient(client);
     }
     if (pending > 0) {
       void initWhatsAppInProcess();
@@ -682,40 +680,28 @@ async function drainWhatsAppOutboxOnce() {
     return;
   }
 
-  const client = await getDbClient();
   let rows: { id: string; phone: string; message: string }[] = [];
   try {
-    const res = await client.query(
+    const res = await queryDb(
       `SELECT id, phone, message FROM whatsapp_outbox
        WHERE sent_at IS NULL
        ORDER BY created_at ASC
-       LIMIT 5
-       FOR UPDATE SKIP LOCKED`
+       LIMIT 5`
     );
     rows = res.rows;
-  } finally {
-    releaseDbClient(client);
+  } catch {
+    return;
   }
 
   for (const row of rows) {
     try {
       await sendWhatsAppDirect(row.phone, row.message);
-      const c = await getDbClient();
-      try {
-        await c.query(`UPDATE whatsapp_outbox SET sent_at = NOW(), last_error = NULL WHERE id = $1`, [row.id]);
-      } finally {
-        releaseDbClient(c);
-      }
+      await queryDb(`UPDATE whatsapp_outbox SET sent_at = NOW(), last_error = NULL WHERE id = $1`, [row.id]);
     } catch (err: any) {
-      const c = await getDbClient();
-      try {
-        await c.query(`UPDATE whatsapp_outbox SET last_error = $2 WHERE id = $1`, [
-          row.id,
-          String(err?.message || err).slice(0, 500),
-        ]);
-      } finally {
-        releaseDbClient(c);
-      }
+      await queryDb(`UPDATE whatsapp_outbox SET last_error = $2 WHERE id = $1`, [
+        row.id,
+        String(err?.message || err).slice(0, 500),
+      ]).catch(() => {/* ignore secondary failure */});
     }
   }
 }
