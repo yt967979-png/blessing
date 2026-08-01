@@ -77,7 +77,8 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const orderNumberParam = searchParams.get('orderId');
-    const isAdminRequest = session.role === 'admin';
+    const adminCheck = await verifyAdminRequest(request);
+    const isAdminRequest = adminCheck.isAdmin;
 
     let query = `
       SELECT o.*,
