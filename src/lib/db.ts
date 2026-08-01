@@ -911,8 +911,8 @@ export async function tryGetDbClient(): Promise<any | null> {
 export function releaseDbClient(client: any) {
   if (!client) return;
   try {
-    if (typeof client.end === 'function') client.end();
-    else if (typeof client.release === 'function') client.release();
+    if (typeof client.release === 'function') client.release();
+    else if (typeof client.end === 'function') client.end();
   } catch (_) {
     /* ignore */
   }
