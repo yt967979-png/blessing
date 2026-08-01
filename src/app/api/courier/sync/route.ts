@@ -17,7 +17,7 @@ export async function POST(request: Request) {
     if (!auth.isAdmin) return forbiddenResponse(auth.error);
   }
 
-  const rl = await applyRateLimitAsync(`courier-sync:${clientIp(request)}`, 6, 60000);
+  const rl = await applyRateLimitAsync(`courier-sync:${clientIp(request)}`, 30, 60000);
   if (!rl.allowed) {
     return NextResponse.json({ error: 'Sync rate limit. Try again shortly.' }, { status: 429 });
   }
