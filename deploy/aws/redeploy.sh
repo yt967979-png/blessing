@@ -57,6 +57,7 @@ sed -i 's/\r$//' "$ENV_FILE"
 
 echo "==> Stop blessing (avoid serving incomplete .next)"
 systemctl stop blessing || true
+sudo -u postgres psql -d blessing -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='blessing' AND pid != pg_backend_pid();" >/dev/null 2>&1 || true
 
 echo "==> Rsync $CLONE_PATH → $APP_DIR"
 mkdir -p "$APP_DIR"
