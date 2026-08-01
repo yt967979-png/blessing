@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getDbClient, releaseDbClient } from '@/lib/db';
+import { queryDb } from '@/lib/db';
 import {
   getAuthenticatedUser,
   unauthorizedResponse,
@@ -19,7 +19,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Too many payment attempts. Please wait.' }, { status: 429 });
   }
 
-  let client: any = null;
   try {
     const body = await request.json();
     const {
@@ -43,80 +42,72 @@ export async function POST(request: Request) {
       );
     }
 
-    client = await getDbClient();
-    await client.query('BEGIN');
-    await ensureCouponSchema(client);
+    await ensureCouponSchema(queryDb as any);
 
-    const checkout = await priceCheckoutOrder(client, {
+    const checkout = await priceCheckoutOrder(queryDb, {
       items,
       userId: session.userId,
       couponCode: couponCode || null,
       freeBookId: freeBookId || null,
       lockCoupon: false,
     });
-    await client.query('ROLLBACK');
 
     if (!checkout.ok) {
       return NextResponse.json({ error: checkout.error }, { status: checkout.status });
     }
 
-    const amountRupees = checkout.totalAmount;
-    if (amountRupees <= 0) {
-      return NextResponse.json({ error: 'Invalid order amount.' }, { status: 400 });
+    const amountInPaisa = Math.round(checkout.totalAmount * 100);
+    if (amountInPaisa < 100) {
+      return NextResponse.json({ error: 'Invalid order total' }, { status: 400 });
     }
 
-    const authHeader = 'Basic ' + Buffer.from(`${keyId}:${keySecret}`).toString('base64');
-    const res = await fetch('https://api.razorpay.com/v1/orders', {
+    const authHeader = `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString('base64')}`;
+    const rzpRes = await fetch('https://api.razorpay.com/v1/orders', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: authHeader,
       },
       body: JSON.stringify({
-        amount: Math.round(amountRupees * 100),
+        amount: amountInPaisa,
         currency,
         receipt: receipt || `rcpt_${Date.now()}`,
-        payment_capture: 1,
         notes: {
           userId: session.userId,
-          coupon: checkout.appliedCouponCode || '',
+          couponCode: checkout.appliedCouponCode || '',
         },
       }),
     });
 
-    const orderData = await res.json();
-    if (!res.ok || !orderData.id) {
-      console.error('Razorpay order creation failed:', orderData);
-      return NextResponse.json({ error: 'Failed to create Razorpay order.' }, { status: 502 });
+    const rzpData = await rzpRes.json();
+    if (!rzpRes.ok) {
+      console.error('[Razorpay Order Error]', rzpData);
+      return NextResponse.json(
+        { error: rzpData.error?.description || 'Razorpay order creation failed.' },
+        { status: rzpRes.status }
+      );
     }
 
     return NextResponse.json({
-      id: orderData.id,
-      amount: orderData.amount,
-      currency: orderData.currency,
-      key: keyId,
-      expectedRupees: amountRupees,
+      orderId: rzpData.id,
+      amount: rzpData.amount,
+      currency: rzpData.currency,
+      keyId,
       subtotal: checkout.subtotal,
       discountAmount: checkout.discountAmount,
-      couponCode: checkout.appliedCouponCode,
+      totalAmount: checkout.totalAmount,
+      appliedCouponCode: checkout.appliedCouponCode,
     });
   } catch (err: any) {
-    if (client) {
-      try {
-        await client.query('ROLLBACK');
-      } catch (_) {}
-    }
-    return NextResponse.json({ error: err.message || 'Payment error' }, { status: 500 });
-  } finally {
-    releaseDbClient(client);
+    console.error('[Razorpay Route Error]', err);
+    return NextResponse.json({ error: err.message || 'Payment initiation failed' }, { status: 500 });
   }
 }
 
 export async function PUT(request: Request) {
   const session = await getAuthenticatedUser(request);
-  if (!session) return unauthorizedResponse('Please login.');
+  if (!session) return unauthorizedResponse('Please login to verify payment.');
 
-  let client: any = null;
   try {
     const {
       razorpay_order_id,
@@ -134,17 +125,14 @@ export async function PUT(request: Request) {
 
     let amount = Number(expectedRupees || 0);
     if ((!amount || amount <= 0) && Array.isArray(items)) {
-      client = await getDbClient();
-      await client.query('BEGIN');
-      await ensureCouponSchema(client);
-      const checkout = await priceCheckoutOrder(client, {
+      await ensureCouponSchema(queryDb as any);
+      const checkout = await priceCheckoutOrder(queryDb, {
         items,
         userId: session.userId,
         couponCode: couponCode || null,
         freeBookId: freeBookId || null,
         lockCoupon: false,
       });
-      await client.query('ROLLBACK');
       if (checkout.ok) amount = checkout.totalAmount;
     }
 
@@ -166,7 +154,5 @@ export async function PUT(request: Request) {
     return NextResponse.json({ verified: true, expectedRupees: amount });
   } catch (err: any) {
     return NextResponse.json({ verified: false, error: err.message }, { status: 500 });
-  } finally {
-    releaseDbClient(client);
   }
 }

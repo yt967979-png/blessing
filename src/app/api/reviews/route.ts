@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDbClient, releaseDbClient } from '@/lib/db';
+import { queryDb } from '@/lib/db';
 import {
   ensureReviewSchema,
   findDeliveredPurchase,
@@ -14,7 +14,6 @@ import {
 } from '@/lib/serverSecurity';
 
 export async function GET(request: NextRequest) {
-  let client: any = null;
   try {
     const { searchParams } = new URL(request.url);
     const bookId = searchParams.get('bookId');
@@ -27,11 +26,10 @@ export async function GET(request: NextRequest) {
       if (!admin.isAdmin) return unauthorizedResponse('Admin only.');
     }
 
-    client = await getDbClient();
-    await ensureReviewSchema(client);
+    await ensureReviewSchema(queryDb as any);
 
     if (adminList) {
-      const res = await client.query(
+      const res = await queryDb(
         `SELECT r.*, b.title AS book_title, u.name AS user_name, u.email AS user_email
          FROM reviews r
          LEFT JOIN books b ON b.id = r.book_id
@@ -50,20 +48,20 @@ export async function GET(request: NextRequest) {
     }
 
     if (bookId && includeStats) {
-      const stats = await getBookReviewStats(client, bookId);
+      const stats = await getBookReviewStats(queryDb, bookId);
       let userReview = null;
       let canReview = false;
       if (session?.userId) {
-        const existing = await getUserReviewForBook(client, session.userId, bookId);
+        const existing = await getUserReviewForBook(queryDb, session.userId, bookId);
         if (existing) {
           userReview = { ...mapPublicReview(existing), isOwn: true };
         } else {
-          const purchase = await findDeliveredPurchase(client, session.userId, bookId);
+          const purchase = await findDeliveredPurchase(queryDb, session.userId, bookId);
           canReview = !!purchase;
         }
       }
 
-      const res = await client.query(
+      const res = await queryDb(
         `SELECT * FROM reviews WHERE book_id = $1 ORDER BY created_at DESC LIMIT 100`,
         [bookId]
       );
@@ -90,14 +88,12 @@ export async function GET(request: NextRequest) {
       params.push(bookId);
     }
 
-    const res = await client.query(query, params);
+    const res = await queryDb(query, params);
     const reviews = res.rows.map((r: any) => mapPublicReview(r));
     return NextResponse.json(reviews);
   } catch (err: any) {
     console.error('[reviews GET]', err?.message || err);
     return NextResponse.json({ error: 'Could not load reviews.' }, { status: 503 });
-  } finally {
-    releaseDbClient(client);
   }
 }
 
@@ -105,7 +101,6 @@ export async function POST(request: NextRequest) {
   const session = await getAuthenticatedUser(request);
   if (!session) return unauthorizedResponse('Login required to submit a review.');
 
-  let client: any = null;
   try {
     const body = await request.json();
     const bookId = String(body.bookId || '').trim();
@@ -125,10 +120,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Review must be at least 10 characters.' }, { status: 400 });
     }
 
-    client = await getDbClient();
-    await ensureReviewSchema(client);
+    await ensureReviewSchema(queryDb as any);
 
-    const existing = await getUserReviewForBook(client, session.userId, bookId);
+    const existing = await getUserReviewForBook(queryDb, session.userId, bookId);
     if (existing) {
       return NextResponse.json(
         { error: 'You already reviewed this book. Use edit to update your review.' },
@@ -136,7 +130,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const purchase = await findDeliveredPurchase(client, session.userId, bookId);
+    const purchase = await findDeliveredPurchase(queryDb, session.userId, bookId);
     if (!purchase) {
       return NextResponse.json(
         {
@@ -147,11 +141,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const userRes = await client.query(`SELECT name FROM users WHERE id = $1`, [session.userId]);
+    const userRes = await queryDb(`SELECT name FROM users WHERE id = $1`, [session.userId]);
     const userName = userRes.rows[0]?.name || 'Verified Student';
 
     const revId = `rev-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    await client.query(
+    await queryDb(
       `INSERT INTO reviews (id, user_id, user_name, book_id, order_id, rating, review, images, verified_purchase, created_at, updated_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, TRUE, NOW(), NOW())`,
       [
@@ -166,7 +160,7 @@ export async function POST(request: NextRequest) {
       ]
     );
 
-    const stats = await getBookReviewStats(client, bookId);
+    const stats = await getBookReviewStats(queryDb, bookId);
     return NextResponse.json({
       success: true,
       message: 'Thank you! Your verified review is published.',
@@ -186,8 +180,6 @@ export async function POST(request: NextRequest) {
     }
     console.error('[reviews POST]', err?.message || err);
     return NextResponse.json({ error: 'Could not save review.' }, { status: 500 });
-  } finally {
-    releaseDbClient(client);
   }
 }
 
@@ -195,7 +187,6 @@ export async function PATCH(request: NextRequest) {
   const session = await getAuthenticatedUser(request);
   if (!session) return unauthorizedResponse('Login required to edit your review.');
 
-  let client: any = null;
   try {
     const body = await request.json();
     const reviewId = String(body.id || '').trim();
@@ -212,15 +203,14 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Review id or book id is required.' }, { status: 400 });
     }
 
-    client = await getDbClient();
-    await ensureReviewSchema(client);
+    await ensureReviewSchema(queryDb as any);
 
     let row: any;
     if (reviewId) {
-      const res = await client.query(`SELECT * FROM reviews WHERE id = $1 LIMIT 1`, [reviewId]);
+      const res = await queryDb(`SELECT * FROM reviews WHERE id = $1 LIMIT 1`, [reviewId]);
       row = res.rows[0];
     } else {
-      row = await getUserReviewForBook(client, session.userId, bookId);
+      row = await getUserReviewForBook(queryDb, session.userId, bookId);
     }
 
     if (!row) {
@@ -254,12 +244,12 @@ export async function PATCH(request: NextRequest) {
     }
 
     values.push(row.id);
-    const updated = await client.query(
+    const updated = await queryDb(
       `UPDATE reviews SET ${fields.join(', ')} WHERE id = $${idx} RETURNING *`,
       values
     );
 
-    const stats = await getBookReviewStats(client, updated.rows[0].book_id);
+    const stats = await getBookReviewStats(queryDb, updated.rows[0].book_id);
     return NextResponse.json({
       success: true,
       review: { ...mapPublicReview(updated.rows[0]), isOwn: true },
@@ -268,8 +258,6 @@ export async function PATCH(request: NextRequest) {
   } catch (err: any) {
     console.error('[reviews PATCH]', err?.message || err);
     return NextResponse.json({ error: 'Could not update review.' }, { status: 500 });
-  } finally {
-    releaseDbClient(client);
   }
 }
 
@@ -281,12 +269,10 @@ export async function DELETE(request: NextRequest) {
   const id = searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'Review id required.' }, { status: 400 });
 
-  let client: any = null;
   try {
-    client = await getDbClient();
-    await client.query(`DELETE FROM reviews WHERE id = $1`, [id]);
+    await queryDb(`DELETE FROM reviews WHERE id = $1`, [id]);
     return NextResponse.json({ success: true });
-  } finally {
-    releaseDbClient(client);
+  } catch (err: any) {
+    return NextResponse.json({ error: err?.message || 'Delete failed.' }, { status: 500 });
   }
 }
