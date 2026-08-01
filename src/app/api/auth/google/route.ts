@@ -117,12 +117,13 @@ export async function POST(request: Request) {
       }
     }
 
+    const adminEmail = String(process.env.ADMIN_EMAIL || '').toLowerCase().trim();
+    const shouldBeAdmin = adminEmail && googleUser.email.toLowerCase().trim() === adminEmail;
+
     if (!dbUser) {
       const userId = `usr-g-${Date.now()}`;
       const passHash = hashPassword(crypto.randomBytes(32).toString('hex'));
-      const adminEmail = String(process.env.ADMIN_EMAIL || '').toLowerCase().trim();
-      const role =
-        adminEmail && googleUser.email === adminEmail ? 'admin' : 'customer';
+      const role = shouldBeAdmin ? 'admin' : 'customer';
 
       await queryDb(
         `INSERT INTO users (id, name, email, phone, password_hash, google_id, profile_image, profile_completed, role, status)
@@ -154,12 +155,18 @@ export async function POST(request: Request) {
     } else if (dbUser.status === 'banned') {
       return NextResponse.json({ error: 'This account is disabled. Contact support.' }, { status: 403 });
     } else {
+      let activeRole = dbUser.role || 'customer';
+      if (shouldBeAdmin && activeRole !== 'admin') {
+        activeRole = 'admin';
+        await queryDb(`UPDATE users SET role = 'admin' WHERE id = $1`, [dbUser.id]);
+      }
       await queryDb(
         `UPDATE users SET name = COALESCE(NULLIF($1, ''), name),
          profile_image = COALESCE($2, profile_image), updated_at = NOW() WHERE id = $3`,
         [googleUser.name, googleUser.picture || null, dbUser.id]
       );
       dbUser.name = googleUser.name || dbUser.name;
+      dbUser.role = activeRole;
     }
 
     const needsProfile =
