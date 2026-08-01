@@ -211,9 +211,7 @@ export async function POST(request: Request) {
   const auth = await verifyAdminRequest(request);
   if (!auth.isAdmin) return forbiddenResponse(auth.error);
 
-  let client: any = null;
   try {
-    client = await getDbClient();
     const body = await request.json();
     const { title, cls, category, price, mrp, badge, image, description } = body;
 
@@ -232,15 +230,15 @@ export async function POST(request: Request) {
     const finalDesc = description || `Complete ${cls || '10th'} Standard ${title} guide.`;
     const finalBadge = String(badge || '').trim().slice(0, 100);
 
-    await ensureDefaultCategories(client);
-    await ensureCategory(client, categoryId, cls || '10th', category || 'guide');
+    await ensureDefaultCategories(queryDb as any);
+    await ensureCategory(queryDb, categoryId, cls || '10th', category || 'guide');
 
     const sql = `
       INSERT INTO books (id, title, slug, category_id, price, discount_price, cover_image, description, status, featured, badge, stock)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'published', TRUE, $9, 50)
       RETURNING *
     `;
-    const res = await client.query(sql, [
+    const res = await queryDb(sql, [
       id,
       title,
       slug,
@@ -264,8 +262,6 @@ export async function POST(request: Request) {
     }
     const status = msg.includes('connect') || msg.includes('timeout') ? 503 : 500;
     return NextResponse.json({ error: msg }, { status });
-  } finally {
-    releaseDbClient(client);
   }
 }
 
@@ -273,9 +269,7 @@ export async function PATCH(request: Request) {
   const auth = await verifyAdminRequest(request);
   if (!auth.isAdmin) return forbiddenResponse(auth.error);
 
-  let client: any = null;
   try {
-    client = await getDbClient();
     const { id, title, price, mrp, inStock, stock, description, image, badge, hasDiscount } = await request.json();
     if (!id) return NextResponse.json({ error: 'Product id is required' }, { status: 400 });
 
@@ -329,7 +323,7 @@ export async function PATCH(request: Request) {
       const params = [...setCols.values(), id];
       const assignments = cols.map((c, i) => `${c} = $${i + 1}`);
       assignments.push('updated_at = NOW()');
-      await client.query(
+      await queryDb(
         `UPDATE books SET ${assignments.join(', ')} WHERE id = $${params.length}`,
         params
       );
@@ -340,8 +334,6 @@ export async function PATCH(request: Request) {
   } catch (err: any) {
     console.error('PATCH /api/products failed:', err?.message || err);
     return NextResponse.json({ error: err?.message || 'Update failed' }, { status: 500 });
-  } finally {
-    releaseDbClient(client);
   }
 }
 
@@ -349,20 +341,16 @@ export async function DELETE(request: Request) {
   const auth = await verifyAdminRequest(request);
   if (!auth.isAdmin) return forbiddenResponse(auth.error);
 
-  let client: any = null;
   try {
-    client = await getDbClient();
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
     if (!id) return NextResponse.json({ error: 'Product id is required' }, { status: 400 });
 
-    await client.query(`DELETE FROM books WHERE id = $1`, [id]);
+    await queryDb(`DELETE FROM books WHERE id = $1`, [id]);
     invalidateProductsCache();
     return NextResponse.json({ success: true, deletedId: id });
   } catch (err: any) {
     console.error('DELETE /api/products failed:', err?.message || err);
     return NextResponse.json({ error: err?.message || 'Delete failed' }, { status: 500 });
-  } finally {
-    releaseDbClient(client);
   }
 }
