@@ -1,6 +1,5 @@
 import crypto from 'crypto';
 import { NextResponse } from 'next/server';
-import { getDbClient, releaseDbClient } from '@/lib/db';
 import { createSessionToken, hashPassword, sessionCookieOptions } from '@/lib/auth';
 import { applyRateLimitAsync, clientIp } from '@/lib/serverSecurity';
 import { verifyGoogleIdToken } from '@/lib/googleAuth';
@@ -11,8 +10,8 @@ function setSessionCookie(response: NextResponse, token: string) {
   return response;
 }
 
-async function loadUserSessionData(client: any, userId: string) {
-  const cartRes = await client.query(
+async function loadUserSessionData(queryFn: any, userId: string) {
+  const cartRes = await queryFn(
     `SELECT ci.book_id as id, ci.quantity as qty, ci.price,
             b.title, b.cover_image as image, b.price as mrp,
             b.subject, b.slug, b.discount_price, b.status, b.stock
@@ -43,8 +42,8 @@ async function loadUserSessionData(client: any, userId: string) {
     inStock: row.status !== 'out_of_stock' && Number(row.stock || 1) > 0,
   }));
 
-  const wishRes = await client.query('SELECT book_id FROM wishlist WHERE user_id = $1', [userId]);
-  const addrRes = await client.query(
+  const wishRes = await queryFn('SELECT book_id FROM wishlist WHERE user_id = $1', [userId]);
+  const addrRes = await queryFn(
     'SELECT * FROM addresses WHERE user_id = $1 ORDER BY created_at DESC',
     [userId]
   );
@@ -100,17 +99,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Google sign-in could not be verified.' }, { status: 401 });
     }
 
-    client = await getDbClient();
     let dbUser: any = null;
 
-    const byGoogle = await client.query(`SELECT * FROM users WHERE google_id = $1 LIMIT 1`, [googleUser.sub]);
+    const { queryDb } = await import('@/lib/db');
+    const byGoogle = await queryDb(`SELECT * FROM users WHERE google_id = $1 LIMIT 1`, [googleUser.sub]);
     if (byGoogle.rows.length > 0) {
       dbUser = byGoogle.rows[0];
     } else {
-      const byEmail = await client.query(`SELECT * FROM users WHERE LOWER(email) = $1 LIMIT 1`, [googleUser.email]);
+      const byEmail = await queryDb(`SELECT * FROM users WHERE LOWER(email) = $1 LIMIT 1`, [googleUser.email]);
       if (byEmail.rows.length > 0) {
         dbUser = byEmail.rows[0];
-        await client.query(
+        await queryDb(
           `UPDATE users SET google_id = $1, profile_image = COALESCE($2, profile_image), updated_at = NOW() WHERE id = $3`,
           [googleUser.sub, googleUser.picture || null, dbUser.id]
         );
@@ -125,7 +124,7 @@ export async function POST(request: Request) {
       const role =
         adminEmail && googleUser.email === adminEmail ? 'admin' : 'customer';
 
-      await client.query(
+      await queryDb(
         `INSERT INTO users (id, name, email, phone, password_hash, google_id, profile_image, profile_completed, role, status)
          VALUES ($1, $2, $3, $4, $5, $6, $7, FALSE, $8, 'active')`,
         [
@@ -139,7 +138,7 @@ export async function POST(request: Request) {
           role,
         ]
       );
-      await client.query(
+      await queryDb(
         `INSERT INTO cart (id, user_id) VALUES ($1, $2) ON CONFLICT (user_id) DO NOTHING`,
         [`cart-${userId}`, userId]
       );
@@ -153,11 +152,9 @@ export async function POST(request: Request) {
         profile_completed: false,
       };
     } else if (dbUser.status === 'banned') {
-      releaseDbClient(client);
-      client = null;
       return NextResponse.json({ error: 'This account is disabled. Contact support.' }, { status: 403 });
     } else {
-      await client.query(
+      await queryDb(
         `UPDATE users SET name = COALESCE(NULLIF($1, ''), name),
          profile_image = COALESCE($2, profile_image), updated_at = NOW() WHERE id = $3`,
         [googleUser.name, googleUser.picture || null, dbUser.id]
@@ -173,10 +170,7 @@ export async function POST(request: Request) {
     const token = createSessionToken(dbUser.id, role);
     const sessionData = needsProfile
       ? { cart: [], wishlist: [], addresses: [] }
-      : await loadUserSessionData(client, dbUser.id);
-
-    releaseDbClient(client);
-    client = null;
+      : await loadUserSessionData(queryDb, dbUser.id);
 
     const response = NextResponse.json({
       user: buildUserResponse(dbUser, token, needsProfile),
@@ -185,12 +179,6 @@ export async function POST(request: Request) {
     return setSessionCookie(response, token);
   } catch (err: any) {
     console.error('[auth/google]', err?.message || err);
-    if (client) {
-      try {
-        releaseDbClient(client);
-      } catch (_) {}
-      client = null;
-    }
     const msg = String(err?.message || err);
     const dbBusy =
       msg.includes('timeout') || msg.includes('Could not acquire') || msg.includes('unreachable');
