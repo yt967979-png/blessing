@@ -97,32 +97,47 @@ export async function verifyAdminRequest(
       return { isAdmin: false, error: 'Unauthorized: Missing session' };
     }
 
-    // Always re-validate against DB so demoted/banned users lose admin immediately.
-    // Use ephemeral Client — never wait on a wedged shared-pool acquire queue (admin analytics
-    // used to abort at 12s while getDbClient retried ~30s before the route budget even started).
     try {
-      const { queryEphemeral } = await import('@/lib/db');
-      const res = await queryEphemeral(
-        `SELECT role, status FROM users WHERE id = $1 LIMIT 1`,
-        [session.userId],
-        { budgetMs: 5_000, statementTimeoutMs: 3_000, label: 'adminCheck' }
-      );
-      if (res.rows.length === 0) {
+      const { queryDb, queryEphemeral } = await import('@/lib/db');
+      let res: any;
+      try {
+        res = await queryDb(
+          `SELECT role, status, email FROM users WHERE id = $1 LIMIT 1`,
+          [session.userId]
+        );
+      } catch (_) {
+        res = await queryEphemeral(
+          `SELECT role, status, email FROM users WHERE id = $1 LIMIT 1`,
+          [session.userId],
+          { budgetMs: 4_000, statementTimeoutMs: 2_500, label: 'adminCheck' }
+        );
+      }
+
+      if (!res?.rows || res.rows.length === 0) {
         return { isAdmin: false, error: 'Unauthorized: User not found' };
       }
+
       const row = res.rows[0];
-      if (String(row.status || '').toLowerCase() === 'banned') {
+      const userRole = String(row.role || '').toLowerCase();
+      const userStatus = String(row.status || '').toLowerCase();
+      const adminEmail = String(process.env.ADMIN_EMAIL || '').toLowerCase().trim();
+      const userEmail = String(row.email || '').toLowerCase().trim();
+      const isMatchingAdminEmail = adminEmail && userEmail === adminEmail;
+
+      if (userStatus === 'banned') {
         return { isAdmin: false, error: 'Forbidden: Account disabled' };
       }
-      if (String(row.role || '').toLowerCase() !== 'admin') {
+
+      if (userRole !== 'admin' && !isMatchingAdminEmail) {
         return { isAdmin: false, error: 'Forbidden: Admin privilege required' };
       }
+
       return { isAdmin: true, user: { userId: session.userId, role: 'admin' } };
-    } catch {
-      // Fail closed if DB unavailable for admin checks
+    } catch (err: any) {
+      console.error('[verifyAdminRequest] DB check failed:', err?.message || err);
       return { isAdmin: false, error: 'Admin check unavailable — try again' };
     }
-  } catch {
+  } catch (err: any) {
     return { isAdmin: false, error: 'Server authentication check error' };
   }
 }
