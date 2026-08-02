@@ -134,6 +134,12 @@ if [[ -f "$APP_DIR/deploy/aws/logrotate-blessing.conf" ]]; then
   cp "$APP_DIR/deploy/aws/logrotate-blessing.conf" /etc/logrotate.d/blessing || true
 fi
 
+echo "==> Enforce 128MB Redis RAM Cache"
+if [[ -f "$APP_DIR/deploy/aws/install-redis.sh" ]]; then
+  chmod +x "$APP_DIR/deploy/aws/install-redis.sh"
+  bash "$APP_DIR/deploy/aws/install-redis.sh" || true
+fi
+
 echo "==> Health probes (localhost)"
 sleep 3
 HEALTH_OK=0
