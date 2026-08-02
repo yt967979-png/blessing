@@ -17,6 +17,7 @@ import {
   Sparkles,
   Star,
   Zap,
+  Truck,
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 
@@ -266,12 +267,12 @@ export const HeroSection = () => {
               </div>
             </div>
 
-            {/* Bottom Floating Badge */}
+            {/* Bottom Floating Badge — 100% Real Delivery Information */}
             <div className="absolute -bottom-4 -right-4 md:-right-6 bg-slate-900/90 border border-blue-400/50 text-white px-3.5 py-2 rounded-xl shadow-xl backdrop-blur-md flex items-center gap-2 animate-float-slow">
-              <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
+              <Truck className="w-4 h-4 text-amber-400" />
               <div>
-                <p className="text-[11px] font-black text-amber-300">4.9★ Rating</p>
-                <p className="text-[10px] text-slate-300 font-semibold">50,000+ Happy Students</p>
+                <p className="text-[11px] font-black text-amber-300">Express Delivery</p>
+                <p className="text-[10px] text-slate-300 font-semibold">Dispatched via ST Courier</p>
               </div>
             </div>
           </div>
