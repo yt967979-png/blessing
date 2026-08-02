@@ -175,3 +175,56 @@ h1, h2, h3, h4, h5, h6, .font-heading {
   animation: cart-badge-bump 0.38s ease-out;
 }
 
+/* Premium First-Page Animations */
+@keyframes float-slow {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-10px) rotate(1deg); }
+}
+.animate-float-slow {
+  animation: float-slow 5s ease-in-out infinite;
+}
+
+@keyframes float-reverse {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(8px) rotate(-1deg); }
+}
+.animate-float-reverse {
+  animation: float-reverse 6s ease-in-out infinite;
+}
+
+@keyframes pulse-aura {
+  0%, 100% { opacity: 0.3; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.08); }
+}
+.animate-pulse-aura {
+  animation: pulse-aura 4s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.animate-shimmer {
+  background: linear-gradient(90deg, #F0C14B 0%, #FFF3C4 50%, #D4A843 100%);
+  background-size: 200% 100%;
+  animation: shimmer 3s linear infinite;
+}
+
+@keyframes fade-slide-up {
+  0% { opacity: 0; transform: translateY(16px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-slide-up {
+  animation: fade-slide-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.hero-3d-card {
+  perspective: 1000px;
+  transform-style: preserve-3d;
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.hero-3d-card:hover {
+  transform: perspective(1000px) rotateY(-4deg) rotateX(2deg) translateY(-4px);
+}
+
+
