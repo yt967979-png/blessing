@@ -87,7 +87,16 @@ export async function getAuthenticatedUser(
   return verifySessionToken(token);
 }
 
-/** Admin only — verifies signed session then re-checks role+status in DB (no stale JWT admin). */
+interface CachedAdminRole {
+  isAdmin: boolean;
+  user?: { userId: string; role: string };
+  error?: string;
+  cachedAt: number;
+}
+const adminRoleCache = new Map<string, CachedAdminRole>();
+const ADMIN_CACHE_TTL_MS = 60_000; // 60 seconds RAM cache
+
+/** Admin only — verifies signed session with 60s RAM cache (0ms DB load for repeat calls). */
 export async function verifyAdminRequest(
   request: Request
 ): Promise<{ isAdmin: boolean; error?: string; user?: { userId: string; role: string } }> {
@@ -95,6 +104,12 @@ export async function verifyAdminRequest(
     const session = await getAuthenticatedUser(request);
     if (!session) {
       return { isAdmin: false, error: 'Unauthorized: Missing session' };
+    }
+
+    const now = Date.now();
+    const cached = adminRoleCache.get(session.userId);
+    if (cached && now - cached.cachedAt < ADMIN_CACHE_TTL_MS) {
+      return { isAdmin: cached.isAdmin, error: cached.error, user: cached.user };
     }
 
     try {
@@ -114,7 +129,9 @@ export async function verifyAdminRequest(
       }
 
       if (!res?.rows || res.rows.length === 0) {
-        return { isAdmin: false, error: 'Unauthorized: User not found' };
+        const out = { isAdmin: false, error: 'Unauthorized: User not found' };
+        adminRoleCache.set(session.userId, { ...out, cachedAt: now });
+        return out;
       }
 
       const row = res.rows[0];
@@ -125,14 +142,20 @@ export async function verifyAdminRequest(
       const isMatchingAdminEmail = adminEmail && userEmail === adminEmail;
 
       if (userStatus === 'banned') {
-        return { isAdmin: false, error: 'Forbidden: Account disabled' };
+        const out = { isAdmin: false, error: 'Forbidden: Account disabled' };
+        adminRoleCache.set(session.userId, { ...out, cachedAt: now });
+        return out;
       }
 
       if (userRole !== 'admin' && !isMatchingAdminEmail) {
-        return { isAdmin: false, error: 'Forbidden: Admin privilege required' };
+        const out = { isAdmin: false, error: 'Forbidden: Admin privilege required' };
+        adminRoleCache.set(session.userId, { ...out, cachedAt: now });
+        return out;
       }
 
-      return { isAdmin: true, user: { userId: session.userId, role: 'admin' } };
+      const out = { isAdmin: true, user: { userId: session.userId, role: 'admin' } };
+      adminRoleCache.set(session.userId, { ...out, cachedAt: now });
+      return out;
     } catch (err: any) {
       console.error('[verifyAdminRequest] DB check failed:', err?.message || err);
       return { isAdmin: false, error: 'Admin check unavailable — try again' };

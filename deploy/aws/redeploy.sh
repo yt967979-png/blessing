@@ -125,6 +125,15 @@ if [[ -f "$APP_DIR/deploy/aws/blessing-watchdog.service" && -f "$APP_DIR/deploy/
   systemctl enable --now blessing-watchdog.timer || true
 fi
 
+echo "==> Install Daily Database Backup Cron & Logrotate Protection"
+if [[ -f "$APP_DIR/deploy/aws/backup-db.sh" ]]; then
+  chmod +x "$APP_DIR/deploy/aws/backup-db.sh"
+  (crontab -l 2>/dev/null | grep -v "backup-db.sh" ; echo "0 3 * * * /bin/bash $APP_DIR/deploy/aws/backup-db.sh >/var/log/blessing-backup.log 2>&1") | crontab - || true
+fi
+if [[ -f "$APP_DIR/deploy/aws/logrotate-blessing.conf" ]]; then
+  cp "$APP_DIR/deploy/aws/logrotate-blessing.conf" /etc/logrotate.d/blessing || true
+fi
+
 echo "==> Health probes (localhost)"
 sleep 3
 HEALTH_OK=0
