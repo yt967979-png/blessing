@@ -87,16 +87,7 @@ export async function getAuthenticatedUser(
   return verifySessionToken(token);
 }
 
-interface CachedAdminRole {
-  isAdmin: boolean;
-  user?: { userId: string; role: string };
-  error?: string;
-  cachedAt: number;
-}
-const adminRoleCache = new Map<string, CachedAdminRole>();
-const ADMIN_CACHE_TTL_MS = 60_000; // 60 seconds RAM cache
-
-/** Admin only — verifies signed session with 60s RAM cache (0ms DB load for repeat calls). */
+/** Admin only — verifies signed session then re-checks role+status in DB (no stale JWT admin). */
 export async function verifyAdminRequest(
   request: Request
 ): Promise<{ isAdmin: boolean; error?: string; user?: { userId: string; role: string } }> {
@@ -106,61 +97,32 @@ export async function verifyAdminRequest(
       return { isAdmin: false, error: 'Unauthorized: Missing session' };
     }
 
-    const now = Date.now();
-    const cached = adminRoleCache.get(session.userId);
-    if (cached && now - cached.cachedAt < ADMIN_CACHE_TTL_MS) {
-      return { isAdmin: cached.isAdmin, error: cached.error, user: cached.user };
-    }
-
+    // Always re-validate against DB so demoted/banned users lose admin immediately.
+    // Use ephemeral Client — never wait on a wedged shared-pool acquire queue (admin analytics
+    // used to abort at 12s while getDbClient retried ~30s before the route budget even started).
     try {
-      const { queryDb, queryEphemeral } = await import('@/lib/db');
-      let res: any;
-      try {
-        res = await queryDb(
-          `SELECT role, status, email FROM users WHERE id = $1 LIMIT 1`,
-          [session.userId]
-        );
-      } catch (_) {
-        res = await queryEphemeral(
-          `SELECT role, status, email FROM users WHERE id = $1 LIMIT 1`,
-          [session.userId],
-          { budgetMs: 4_000, statementTimeoutMs: 2_500, label: 'adminCheck' }
-        );
+      const { queryEphemeral } = await import('@/lib/db');
+      const res = await queryEphemeral(
+        `SELECT role, status FROM users WHERE id = $1 LIMIT 1`,
+        [session.userId],
+        { budgetMs: 5_000, statementTimeoutMs: 3_000, label: 'adminCheck' }
+      );
+      if (res.rows.length === 0) {
+        return { isAdmin: false, error: 'Unauthorized: User not found' };
       }
-
-      if (!res?.rows || res.rows.length === 0) {
-        const out = { isAdmin: false, error: 'Unauthorized: User not found' };
-        adminRoleCache.set(session.userId, { ...out, cachedAt: now });
-        return out;
-      }
-
       const row = res.rows[0];
-      const userRole = String(row.role || '').toLowerCase();
-      const userStatus = String(row.status || '').toLowerCase();
-      const adminEmail = String(process.env.ADMIN_EMAIL || '').toLowerCase().trim();
-      const userEmail = String(row.email || '').toLowerCase().trim();
-      const isMatchingAdminEmail = adminEmail && userEmail === adminEmail;
-
-      if (userStatus === 'banned') {
-        const out = { isAdmin: false, error: 'Forbidden: Account disabled' };
-        adminRoleCache.set(session.userId, { ...out, cachedAt: now });
-        return out;
+      if (String(row.status || '').toLowerCase() === 'banned') {
+        return { isAdmin: false, error: 'Forbidden: Account disabled' };
       }
-
-      if (userRole !== 'admin' && !isMatchingAdminEmail) {
-        const out = { isAdmin: false, error: 'Forbidden: Admin privilege required' };
-        adminRoleCache.set(session.userId, { ...out, cachedAt: now });
-        return out;
+      if (String(row.role || '').toLowerCase() !== 'admin') {
+        return { isAdmin: false, error: 'Forbidden: Admin privilege required' };
       }
-
-      const out = { isAdmin: true, user: { userId: session.userId, role: 'admin' } };
-      adminRoleCache.set(session.userId, { ...out, cachedAt: now });
-      return out;
-    } catch (err: any) {
-      console.error('[verifyAdminRequest] DB check failed:', err?.message || err);
+      return { isAdmin: true, user: { userId: session.userId, role: 'admin' } };
+    } catch {
+      // Fail closed if DB unavailable for admin checks
       return { isAdmin: false, error: 'Admin check unavailable — try again' };
     }
-  } catch (err: any) {
+  } catch {
     return { isAdmin: false, error: 'Server authentication check error' };
   }
 }
