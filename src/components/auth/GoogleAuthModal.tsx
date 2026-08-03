@@ -1,39 +1,22 @@
 'use client';
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { X, User, Phone, ShieldCheck, AlertCircle, KeyRound, MessageSquare, ArrowRight, Check } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useStore } from '@/context/StoreContext';
 import { BrandLogo } from '@/components/ui/BrandLogo';
 
-declare global {
-  interface Window {
-    google?: {
-      accounts: {
-        id: {
-          initialize: (config: Record<string, unknown>) => void;
-          renderButton: (el: HTMLElement, config: Record<string, unknown>) => void;
-          prompt: () => void;
-        };
-      };
-    };
-  }
-}
-
-type AuthMode = 'otp_register' | 'phone_login' | 'google';
+type AuthMode = 'otp_register' | 'phone_login';
 
 export function GoogleAuthModal({
   onClose,
-  forceProfileStep = false,
 }: {
   onClose: () => void;
   forceProfileStep?: boolean;
 }) {
   const router = useRouter();
-  const { loginUser, showToast, user } = useStore();
-  const googleBtnRef = useRef<HTMLDivElement>(null);
-  const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '';
+  const { loginUser, showToast } = useStore();
 
   const [mode, setMode] = useState<AuthMode>('otp_register');
   const [authError, setAuthError] = useState<string | null>(null);
@@ -43,72 +26,9 @@ export function GoogleAuthModal({
   const [phone, setPhone] = useState('');
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [otpCode, setOtpCode] = useState('');
   const [otpSent, setOtpSent] = useState(false);
-
-  // Google Fallback
-  const handleGoogleCredential = useCallback(
-    async (credential: string) => {
-      setIsSubmitting(true);
-      setAuthError(null);
-      try {
-        const res = await fetch('/api/auth/google', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ credential }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok || data.error) {
-          setAuthError(data.error || 'Google sign-in failed. Please try again.');
-          return;
-        }
-
-        loginUser(data.user, data.cart || [], data.wishlist || [], data.addresses || []);
-        onClose();
-        if (data.user?.role === 'admin' || data.user?.role === 'super_admin') router.push('/admin');
-      } catch {
-        setAuthError('Connection error. Please try again.');
-      } finally {
-        setIsSubmitting(false);
-      }
-    },
-    [loginUser, onClose, router]
-  );
-
-  useEffect(() => {
-    if (!clientId || mode !== 'google') return;
-    const initGoogle = () => {
-      if (!window.google?.accounts?.id || !googleBtnRef.current) return;
-      try {
-        window.google.accounts.id.initialize({
-          client_id: clientId,
-          callback: (res: { credential?: string }) => {
-            if (res?.credential) void handleGoogleCredential(res.credential);
-          },
-          auto_select: false,
-        });
-        googleBtnRef.current.innerHTML = '';
-        window.google.accounts.id.renderButton(googleBtnRef.current, {
-          theme: 'outline',
-          size: 'large',
-          width: 280,
-          text: 'continue_with',
-          shape: 'pill',
-        });
-      } catch (_) {}
-    };
-
-    if (window.google?.accounts?.id) {
-      initGoogle();
-    } else {
-      const script = document.createElement('script');
-      script.src = 'https://accounts.google.com/gsi/client';
-      script.async = true;
-      script.defer = true;
-      script.onload = initGoogle;
-      document.head.appendChild(script);
-    }
-  }, [clientId, handleGoogleCredential, mode]);
 
   // Request WhatsApp OTP
   const handleSendOtp = async (e: React.FormEvent) => {
@@ -118,6 +38,14 @@ export function GoogleAuthModal({
     const clean = phone.replace(/\D/g, '');
     if (clean.length < 10) {
       setAuthError('Please enter a valid 10-digit mobile number.');
+      return;
+    }
+    if (!password || password.length < 4) {
+      setAuthError('Password must be at least 4 characters long.');
+      return;
+    }
+    if (password !== confirmPassword) {
+      setAuthError('Passwords do not match. Please check again.');
       return;
     }
 
@@ -149,10 +77,6 @@ export function GoogleAuthModal({
 
     if (!otpCode || otpCode.length !== 6) {
       setAuthError('Please enter the 6-digit OTP code sent on WhatsApp.');
-      return;
-    }
-    if (!password || password.length < 4) {
-      setAuthError('Please set a password (min 4 characters).');
       return;
     }
 
@@ -246,7 +170,7 @@ export function GoogleAuthModal({
           </div>
           <h2 className="text-xl font-black tracking-tight">Blessing Power Guide</h2>
           <p className="text-xs text-blue-100 mt-1">
-            {mode === 'otp_register' ? 'WhatsApp OTP Fast Registration' : mode === 'phone_login' ? 'Phone & Password Sign In' : 'Google Sign In'}
+            {mode === 'otp_register' ? 'Register with WhatsApp OTP' : 'Phone & Password Sign In'}
           </p>
         </div>
 
@@ -254,30 +178,21 @@ export function GoogleAuthModal({
         <div className="flex border-b border-slate-200 bg-slate-50 text-xs font-bold text-slate-600">
           <button
             type="button"
-            onClick={() => { setMode('otp_register'); setAuthError(null); }}
+            onClick={() => { setMode('otp_register'); setAuthError(null); setOtpSent(false); }}
             className={`flex-1 py-3 text-center border-b-2 transition-all ${
-              mode === 'otp_register' ? 'border-[#0044AA] text-[#0044AA] bg-white' : 'border-transparent hover:text-slate-900'
+              mode === 'otp_register' ? 'border-[#0044AA] text-[#0044AA] bg-white font-extrabold' : 'border-transparent hover:text-slate-900'
             }`}
           >
-            💬 WhatsApp OTP
+            💬 Register via WhatsApp OTP
           </button>
           <button
             type="button"
             onClick={() => { setMode('phone_login'); setAuthError(null); }}
             className={`flex-1 py-3 text-center border-b-2 transition-all ${
-              mode === 'phone_login' ? 'border-[#0044AA] text-[#0044AA] bg-white' : 'border-transparent hover:text-slate-900'
+              mode === 'phone_login' ? 'border-[#0044AA] text-[#0044AA] bg-white font-extrabold' : 'border-transparent hover:text-slate-900'
             }`}
           >
-            🔑 Phone Login
-          </button>
-          <button
-            type="button"
-            onClick={() => { setMode('google'); setAuthError(null); }}
-            className={`flex-1 py-3 text-center border-b-2 transition-all ${
-              mode === 'google' ? 'border-[#0044AA] text-[#0044AA] bg-white' : 'border-transparent hover:text-slate-900'
-            }`}
-          >
-            🌐 Google
+            🔑 Phone Sign In
           </button>
         </div>
 
@@ -294,7 +209,7 @@ export function GoogleAuthModal({
           {mode === 'otp_register' && (
             <>
               {!otpSent ? (
-                <form onSubmit={handleSendOtp} className="space-y-3.5">
+                <form onSubmit={handleSendOtp} className="space-y-3">
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">Full Name</label>
                     <div className="relative">
@@ -325,10 +240,42 @@ export function GoogleAuthModal({
                     </div>
                   </div>
 
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Set Password</label>
+                      <div className="relative">
+                        <KeyRound className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
+                        <input
+                          type="password"
+                          required
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          placeholder="Password"
+                          className="w-full pl-9 pr-3 py-2.5 text-xs border border-slate-300 rounded-xl outline-none focus:border-[#0044AA]"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Confirm Password</label>
+                      <div className="relative">
+                        <KeyRound className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
+                        <input
+                          type="password"
+                          required
+                          value={confirmPassword}
+                          onChange={(e) => setConfirmPassword(e.target.value)}
+                          placeholder="Confirm"
+                          className="w-full pl-9 pr-3 py-2.5 text-xs border border-slate-300 rounded-xl outline-none focus:border-[#0044AA]"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
                   <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="w-full bg-[#0044AA] hover:bg-[#003388] active:bg-[#002266] text-white font-extrabold text-xs py-3 rounded-xl uppercase tracking-wider flex items-center justify-center gap-2 shadow-md disabled:opacity-50"
+                    className="w-full mt-2 bg-[#0044AA] hover:bg-[#003388] active:bg-[#002266] text-white font-extrabold text-xs py-3 rounded-xl uppercase tracking-wider flex items-center justify-center gap-2 shadow-md disabled:opacity-50"
                   >
                     <MessageSquare className="w-4 h-4" />
                     <span>{isSubmitting ? 'Sending OTP…' : 'Send WhatsApp OTP'}</span>
@@ -357,27 +304,12 @@ export function GoogleAuthModal({
                     </div>
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Set Password</label>
-                    <div className="relative">
-                      <KeyRound className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
-                      <input
-                        type="password"
-                        required
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        placeholder="Min 4 characters"
-                        className="w-full pl-9 pr-3 py-2.5 text-xs border border-slate-300 rounded-xl outline-none focus:border-[#0044AA]"
-                      />
-                    </div>
-                  </div>
-
                   <button
                     type="submit"
                     disabled={isSubmitting}
                     className="w-full bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-extrabold text-xs py-3 rounded-xl uppercase tracking-wider flex items-center justify-center gap-2 shadow-md disabled:opacity-50"
                   >
-                    <span>{isSubmitting ? 'Verifying…' : 'Verify & Register Account'}</span>
+                    <span>{isSubmitting ? 'Verifying…' : 'Verify OTP & Create Account'}</span>
                     <ArrowRight className="w-4 h-4" />
                   </button>
 
@@ -386,7 +318,7 @@ export function GoogleAuthModal({
                     onClick={() => setOtpSent(false)}
                     className="w-full text-center text-xs text-slate-500 hover:text-slate-800"
                   >
-                    Change phone number
+                    Edit mobile number or password
                   </button>
                 </form>
               )}
@@ -435,14 +367,6 @@ export function GoogleAuthModal({
                 <ArrowRight className="w-4 h-4" />
               </button>
             </form>
-          )}
-
-          {/* Mode 3: Google Sign-In */}
-          {mode === 'google' && (
-            <div className="flex flex-col items-center justify-center py-4 space-y-4">
-              <p className="text-xs text-slate-500 text-center">Sign in using your Google Account for fast 1-tap authentication.</p>
-              <div ref={googleBtnRef} className="min-h-[44px]" />
-            </div>
           )}
         </div>
 
