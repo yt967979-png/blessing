@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
     }
 
     await queryDb(
-      `UPDATE users SET role = $1, updated_at = NOW() WHERE id = $2 AND COALESCE(role, 'customer') != 'super_admin'`,
+      `UPDATE users SET role = $1, updated_at = NOW() WHERE id::text = $2::text AND COALESCE(role, 'customer') != 'super_admin'`,
       [newRole, userId]
     );
 
@@ -108,7 +108,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'userId and status (active|banned) required.' }, { status: 400 });
     }
 
-    await queryDb(`UPDATE users SET status = $1 WHERE id = $2 AND COALESCE(role, 'customer') != 'super_admin'`, [
+    await queryDb(`UPDATE users SET status = $1 WHERE id::text = $2::text AND COALESCE(role, 'customer') != 'super_admin'`, [
       status,
       userId,
     ]);
@@ -131,7 +131,7 @@ export async function DELETE(request: NextRequest) {
   }
 
   try {
-    await queryDb(`DELETE FROM users WHERE id = $1 AND COALESCE(role, 'customer') != 'super_admin'`, [userId]);
+    await queryDb(`DELETE FROM users WHERE id::text = $1::text AND COALESCE(role, 'customer') != 'super_admin'`, [userId]);
     return NextResponse.json({ success: true, userId });
   } catch (err: any) {
     console.error('[admin/users DELETE]', err?.message || err);

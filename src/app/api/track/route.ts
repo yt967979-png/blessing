@@ -71,7 +71,7 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string, request?: Reque
     const res = await client.query(
       `SELECT o.id, o.order_number, o.order_status, o.awb_number, o.shipment_id, o.tracking_url,
               o.courier_name, o.total_amount, o.ordered_at, o.packed_at, o.shipped_at, o.delivered_at,
-              o.shipping_address, o.payment_status, o.user_id,
+              o.shipping_address, o.payment_status, o.user_id, u.phone as user_phone,
               COALESCE(
                 json_agg(
                   json_build_object(
@@ -81,16 +81,17 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string, request?: Reque
                 ) FILTER (WHERE oi.id IS NOT NULL), '[]'
               ) as items
        FROM orders o
+       LEFT JOIN users u ON o.user_id = u.id
        LEFT JOIN order_items oi ON o.id = oi.order_id
-       WHERE UPPER(o.order_number) = $1 OR o.id = $1 OR UPPER(o.id) = $1
-       GROUP BY o.id
+       WHERE UPPER(o.order_number) = $1 OR o.id = $1 OR UPPER(o.id) = $1 OR UPPER(COALESCE(o.awb_number, '')) = $1 OR UPPER(COALESCE(o.shipment_id, '')) = $1
+       GROUP BY o.id, u.phone
        LIMIT 1`,
       [orderId]
     );
 
     const deny = () =>
       NextResponse.json(
-        { error: 'Order not found. Check Order ID and the mobile number from checkout.' },
+        { error: 'Order not found. Check Order ID / AWB Number and the mobile number from checkout.' },
         { status: 404 }
       );
 
@@ -109,7 +110,7 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string, request?: Reque
     let isAuthorized = false;
     if (request) {
       const session = await getAuthenticatedUser(request);
-      if (session?.userId && session.userId === o.user_id) {
+      if (session?.userId && String(session.userId) === String(o.user_id)) {
         isAuthorized = true;
       }
     }
@@ -117,7 +118,11 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string, request?: Reque
     if (!isAuthorized && (phoneDigits.length >= 10 || phoneDigits.length === 0)) {
       if (phoneDigits.length === 0 && isAuthorized) {
         // Authorized session
-      } else if (phonesMatch(phone, addr.phone || '') || phonesMatch(phone, addr.alternatePhone || addr.alternate_phone || '')) {
+      } else if (
+        phonesMatch(phone, addr.phone || '') ||
+        phonesMatch(phone, addr.alternatePhone || addr.alternate_phone || '') ||
+        phonesMatch(phone, o.user_phone || '')
+      ) {
         isAuthorized = true;
       }
     }
