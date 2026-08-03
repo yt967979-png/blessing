@@ -1,6 +1,7 @@
 /**
  * WasenderAPI Gateway Provider (wasenderapi.com)
  * Enables dispatching WhatsApp messages & receiving webhook events via WasenderAPI REST API.
+ * Supports Meta-style Interactive Quick Reply Buttons (same as Chennai Metro Rail / Official WhatsApp API).
  */
 
 export async function sendViaWasender(to: string, message: string): Promise<{ ok: boolean; error?: string }> {
@@ -22,13 +23,10 @@ export async function sendViaWasender(to: string, message: string): Promise<{ ok
   }
   const phoneWithCc = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
 
-  const isConfirmMsg = message.includes('CONFIRM YOUR ORDER') || message.includes('Reply YES') || message.includes('1️⃣ Reply *YES*');
-  const buttonsPayload = isConfirmMsg
-    ? [
-        { id: 'yes', text: '✅ YES - CONFIRM ORDER', displayText: '✅ YES - CONFIRM ORDER' },
-        { id: 'no', text: '❌ NO - CANCEL ORDER', displayText: '❌ NO - CANCEL ORDER' },
-      ]
-    : undefined;
+  const isConfirmMsg =
+    message.includes('CONFIRM YOUR ORDER') ||
+    message.includes('Reply YES') ||
+    message.includes('1️⃣ Reply *YES*');
 
   const bodyData: any = {
     session: sessionId,
@@ -40,14 +38,37 @@ export async function sendViaWasender(to: string, message: string): Promise<{ ok
   };
 
   if (isConfirmMsg) {
-    bodyData.type = 'buttons';
+    // Meta Interactive Button Payload (same as Chennai Metro Rail & Official WhatsApp API)
+    bodyData.type = 'interactive';
+    bodyData.interactive = {
+      type: 'button',
+      header: { type: 'text', text: 'BLESSING POWER GUIDE' },
+      body: { text: message },
+      footer: { text: 'Blessing Power Guide • Tap button to reply' },
+      action: {
+        buttons: [
+          {
+            type: 'reply',
+            reply: {
+              id: 'yes',
+              title: '✅ YES - CONFIRM',
+            },
+          },
+          {
+            type: 'reply',
+            reply: {
+              id: 'no',
+              title: '❌ CANCEL ORDER',
+            },
+          },
+        ],
+      },
+    };
+
+    // Backup button payload arrays for WasenderAPI gateway formats
     bodyData.buttons = [
-      { id: 'yes', text: '✅ YES - CONFIRM ORDER', buttonId: 'yes', buttonText: { displayText: '✅ YES - CONFIRM ORDER' } },
-      { id: 'no', text: '❌ NO - CANCEL ORDER', buttonId: 'no', buttonText: { displayText: '❌ NO - CANCEL ORDER' } },
-    ];
-    bodyData.templateButtons = [
-      { index: 1, quickReplyButton: { displayText: '✅ YES - CONFIRM ORDER', id: 'yes' } },
-      { index: 2, quickReplyButton: { displayText: '❌ NO - CANCEL ORDER', id: 'no' } },
+      { id: 'yes', text: '✅ YES - CONFIRM', title: '✅ YES - CONFIRM' },
+      { id: 'no', text: '❌ CANCEL ORDER', title: '❌ CANCEL ORDER' },
     ];
   }
 
@@ -68,7 +89,7 @@ export async function sendViaWasender(to: string, message: string): Promise<{ ok
       return { ok: false, error: data.message || data.error || `WasenderAPI returned HTTP ${res.status}` };
     }
 
-    console.log(`✅ [WASENDER API SENT] Message ${isConfirmMsg ? 'with interactive buttons ' : ''}sent to +${phoneWithCc}`);
+    console.log(`✅ [WASENDER API SENT] Message ${isConfirmMsg ? 'with Meta Interactive buttons ' : ''}sent to +${phoneWithCc}`);
     return { ok: true };
   } catch (err: any) {
     console.warn('[wasenderapi] Send failed:', err?.message || err);
