@@ -17,15 +17,8 @@ import { openShippingLabelPrint } from '@/lib/shippingLabel';
 
 
 
-const AdminUsersTab = dynamic(() => import('@/components/admin/AdminUsersTab'), {
-  ssr: false,
-  loading: () => <p className="text-center text-sm text-gray-500 py-12">Loading customers…</p>,
-});
-
-const AdminReviewsTab = dynamic(() => import('@/components/admin/AdminReviewsTab'), {
-  ssr: false,
-  loading: () => <p className="text-center text-sm text-gray-500 py-12">Loading reviews…</p>,
-});
+import AdminUsersTab from '@/components/admin/AdminUsersTab';
+import AdminReviewsTab from '@/components/admin/AdminReviewsTab';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface OrderItem { title: string; qty: number; price?: number; subtotal?: number; }

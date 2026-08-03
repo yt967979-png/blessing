@@ -1,15 +1,10 @@
 'use client';
 
 import React from 'react';
-import dynamic from 'next/dynamic';
 import { useStore } from '@/context/StoreContext';
+import { ModalsBundle } from './ModalsBundle';
 
-const ModalsBundle = dynamic(
-  () => import('./ModalsBundle').then((m) => ({ default: m.ModalsBundle })),
-  { ssr: false }
-);
-
-/** Thin shell — downloads modal bundle only when a modal is open */
+/** Storefront modals shell */
 export const Modals = () => {
   const {
     quickViewProduct,
@@ -29,5 +24,6 @@ export const Modals = () => {
     !!orderSuccessData;
 
   if (!anyOpen) return null;
+
   return <ModalsBundle />;
 };
