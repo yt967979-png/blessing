@@ -10,7 +10,6 @@ import {
 } from '@/lib/orderStatus';
 import { executeOrderCancel } from '@/lib/orderCancel';
 import { notify } from '@/lib/notify/send';
-import { broadcastOrderChange, notifyOrderChanged } from '@/app/api/orders/stream/route';
 
 function last10(phone: string) {
   return String(phone || '').replace(/\D/g, '').slice(-10);
@@ -95,7 +94,7 @@ export async function findAwaitingOrderByPhone(phone: string) {
   const dig = last10(phone);
   if (dig.length !== 10) return null;
 
-  // Direct SQL search for phone number in shipping_address with awaiting/pending confirmation
+  // Direct SQL search for phone number in shipping_address with awaiting/pending/placed confirmation
   const res = await queryDb(
     `SELECT id, order_number, order_status, total_amount, shipping_address, ordered_at
      FROM orders
@@ -160,40 +159,9 @@ export async function confirmAwaitingOrder(orderId: string): Promise<
       ]
     );
 
-    const { phone, name, city } = parseAddr(row.shipping_address);
-
-    let itemsSummary = '';
-    try {
-      const rawItems = typeof row.items === 'string' ? JSON.parse(row.items) : row.items;
-      if (Array.isArray(rawItems)) {
-        itemsSummary = rawItems.map((i: any) => `${i.title || 'Guide'} (x${i.qty || i.quantity || 1})`).join(', ');
-      }
-    } catch (_) {}
-
-    if (phone) {
-      await notify('order.confirmed', {
-        customerPhone: phone,
-        customerName: name,
-        orderId: row.order_number,
-      });
-    }
-
-    const event = {
-      type: 'ORDER_UPDATED',
-      orderId: row.order_number,
-      status: ORDER_PLACED,
-      timestamp: Date.now(),
-    };
-    try {
-      broadcastOrderChange(event);
-      await notifyOrderChanged(event);
-    } catch {
-      /* ignore */
-    }
-
     return { ok: true, orderNumber: row.order_number };
   } catch (err: any) {
-    return { ok: false, error: err?.message || 'Confirm failed' };
+    return { ok: false, error: err.message || 'Confirmation failed' };
   }
 }
 
@@ -356,18 +324,29 @@ export async function handleInboundYesNo(fromPhone: string, text: string) {
   const pending = await findAwaitingOrderByPhone(fromPhone);
   if (!pending) return { handled: false as const, reason: 'no_pending' as const };
 
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://blessingpowerguide.duckdns.org';
+
   if (answer === 'yes') {
     const r = await confirmAwaitingOrder(pending.order_number);
-    return { handled: true as const, answer, result: r };
+    const confirmMsg = (r as any).already
+      ? `✅ Your Order #${pending.order_number} is ALREADY CONFIRMED and is being prepared for ST Courier dispatch! 🚚\n\nTrack status: ${siteUrl}/track?orderId=${pending.order_number}`
+      : `✅ Thank you! Your Order #${pending.order_number} HAS BEEN CONFIRMED! 🚚\nWe are now packing your guides for ST Courier dispatch.\n\nTrack status: ${siteUrl}/track?orderId=${pending.order_number}`;
+    return { handled: true as const, answer, result: { message: confirmMsg } };
   }
 
+  // Handle NO reply -> Cancel order
   const r = await executeOrderCancel({
     orderId: pending.order_number,
     reason: 'Customer replied NO on WhatsApp',
     actor: 'whatsapp_no',
-    skipCustomerWhatsApp: false,
+    skipCustomerWhatsApp: true,
   });
-  return { handled: true as const, answer, result: r };
+
+  const cancelMsg = (r as any).duplicate
+    ? `❌ Order #${pending.order_number} was ALREADY CANCELLED.\n\nYou can place a new order anytime at ${siteUrl}`
+    : `❌ Order #${pending.order_number} HAS BEEN CANCELLED as requested.\n\nIf this was a mistake, you can place a new order anytime at ${siteUrl}`;
+
+  return { handled: true as const, answer, result: { message: cancelMsg } };
 }
 
 /** Auto-cancel awaiting orders older than 24h. */
@@ -385,15 +364,11 @@ export async function expireAwaitingConfirmations(maxAgeHours = 24) {
     for (const row of res.rows) {
       const r = await executeOrderCancel({
         orderId: row.order_number,
-        reason: 'No YES within 24h — auto-cancelled',
+        reason: `Auto-cancelled after ${maxAgeHours}h without WhatsApp confirmation`,
         actor: 'system',
       });
-      if (r.ok && !r.duplicate) cancelled += 1;
+      if (r.ok && !r.duplicate) cancelled++;
     }
-  } catch (e: any) {
-    console.warn('[confirm-timeout]', e?.message || e);
-  }
+  } catch (_) {}
   return cancelled;
 }
-
-export { AWAITING_CONFIRMATION, ORDER_PLACED };
