@@ -26,14 +26,14 @@ export default function WishlistPage() {
         <NavBar />
         <div className="max-w-md mx-auto my-16 p-8 bg-white border border-slate-200 rounded-3xl shadow-sm text-center space-y-4">
           <Heart className="w-12 h-12 text-red-400 mx-auto" />
-          <h1 className="font-heading font-black text-xl text-[#001B3A]">Sign in with Google</h1>
-          <p className="text-xs text-slate-500">Wishlist is available after Google login.</p>
+          <h1 className="font-heading font-black text-xl text-[#001B3A]">Sign In to View Saved Guides</h1>
+          <p className="text-xs text-slate-500">Your saved wishlist is available after signing in to your account.</p>
           <button
             type="button"
             onClick={() => setIsAuthOpen(true)}
-            className="w-full bg-[#2874f0] text-white font-extrabold text-sm py-3 rounded-xl"
+            className="w-full bg-[#0044AA] hover:bg-[#003388] text-white font-extrabold text-xs py-3 rounded-xl uppercase tracking-wider shadow-md"
           >
-            Continue with Google
+            Sign In with WhatsApp
           </button>
         </div>
         <Footer />
