@@ -2,8 +2,9 @@ import { sendViaWasender } from '@/lib/wasender';
 import { sendWhatsAppMessageInProcess } from '@/lib/whatsapp';
 
 /**
- * Primary WhatsApp Transport: WasenderAPI Gateway (wasenderapi.com)
- * Native Baileys is disabled by default to run exclusively via WasenderAPI.
+ * High-Availability Dual WhatsApp Transport:
+ * 1. WasenderAPI Cloud Gateway (Primary)
+ * 2. Native Baileys Direct Socket (Automatic Fallback if WasenderAPI rate-limits or fails)
  */
 export async function sendViaBaileys(to: string, message: string) {
   const digits = String(to || '').replace(/\D/g, '');
@@ -11,7 +12,7 @@ export async function sendViaBaileys(to: string, message: string) {
     return { ok: false as const, error: 'invalid phone' };
   }
 
-  // WasenderAPI primary dispatch
+  // 1. Try WasenderAPI primary dispatch
   const wasenderResult = await sendViaWasender(digits, message);
   if (wasenderResult.ok) {
     return {
@@ -21,20 +22,23 @@ export async function sendViaBaileys(to: string, message: string) {
     };
   }
 
-  // Baileys fallback only if explicitly enabled in environment
-  if (process.env.ENABLE_BAILEYS_FALLBACK === 'true') {
-    try {
-      const result = await sendWhatsAppMessageInProcess(digits, message);
+  console.warn(`[notify/wasender] WasenderAPI fallback engaged (${wasenderResult.error || 'rate limited'}). Attempting Baileys direct dispatch...`);
+
+  // 2. High-Availability Automatic Fallback to Native Baileys Direct Dispatch
+  try {
+    const result = await sendWhatsAppMessageInProcess(digits, message);
+    if ((result as any)?.success) {
       return {
         ok: true as const,
         provider: 'baileys_fallback',
         queued: Boolean((result as { queued?: boolean })?.queued),
         recipient: digits.length === 10 ? `91${digits}` : digits,
       };
-    } catch (err: unknown) {
-      console.warn('[notify/baileys fallback failed]', err);
     }
+  } catch (err: unknown) {
+    const errText = err instanceof Error ? err.message : String(err);
+    console.warn('[notify/baileys fallback error]', errText);
   }
 
-  return { ok: false as const, error: wasenderResult.error || 'WasenderAPI send failed' };
+  return { ok: false as const, error: wasenderResult.error || 'WhatsApp message dispatch failed' };
 }

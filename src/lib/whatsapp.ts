@@ -279,7 +279,7 @@ async function restoreSessionFromDb() {
 }
 
 export async function initWhatsAppInProcess(opts?: { requireLeader?: boolean }) {
-  if (process.env.DISABLE_LOCAL_BAILEYS !== 'false') {
+  if (process.env.DISABLE_LOCAL_BAILEYS === 'true') {
     return null;
   }
   const requireLeader = opts?.requireLeader !== false;
@@ -791,12 +791,11 @@ export async function shutdownWhatsAppInProcess() {
 }
 
 export async function sendWhatsAppMessageInProcess(to: string, message: string) {
-  const { sendViaWasender } = await import('@/lib/wasender');
-  const res = await sendViaWasender(to, message);
-  if (!res.ok) {
-    throw new Error(res.error || 'WasenderAPI send failed');
+  const digits = String(to || '').replace(/\D/g, '');
+  if (digits.length < 10) {
+    throw new Error('Customer phone number is missing or invalid');
   }
-  return { success: true, recipient: to };
+  return await sendWhatsAppDirect(digits, message);
 }
 
 export function getWhatsAppConnectionState() {
