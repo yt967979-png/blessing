@@ -2,8 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { Heart, ShoppingBag, ArrowLeft } from 'lucide-react';
+import { Heart, ArrowLeft } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { Header } from '@/components/layout/Header';
 import { NavBar } from '@/components/layout/NavBar';
@@ -12,9 +11,7 @@ import { Footer } from '@/components/layout/Footer';
 import { ProductCard } from '@/components/ui/ProductCard';
 
 export default function WishlistPage() {
-  const router = useRouter();
-  const { user, wishlist, products, setIsAuthOpen, addToCart, setIsCheckoutOpen, toggleWishlist } =
-    useStore();
+  const { user, wishlist, products, setIsAuthOpen } = useStore();
 
   const items = products.filter((p) => wishlist.includes(p.id));
 
@@ -66,38 +63,7 @@ export default function WishlistPage() {
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {items.map((p) => (
-              <div key={p.id} className="space-y-2">
-                <ProductCard product={p as any} />
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      addToCart(p);
-                    }}
-                    className="text-[10px] font-extrabold py-2 rounded-lg bg-[#0044AA] text-white flex items-center justify-center gap-1"
-                  >
-                    <ShoppingBag className="w-3 h-3" /> Cart
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      addToCart(p);
-                      setIsCheckoutOpen(true);
-                      router.push('/checkout');
-                    }}
-                    className="text-[10px] font-extrabold py-2 rounded-lg bg-amber-400 text-[#001B3A]"
-                  >
-                    Buy now
-                  </button>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => toggleWishlist(p.id)}
-                  className="w-full text-[10px] font-semibold text-red-600"
-                >
-                  Remove
-                </button>
-              </div>
+              <ProductCard key={p.id} product={p as any} />
             ))}
           </div>
         )}

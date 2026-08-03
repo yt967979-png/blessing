@@ -184,15 +184,15 @@ export const Header = () => {
           )}
         </div>
 
-        {/* Actions — cart/profile live in bottom nav on mobile */}
-        <div className="flex items-center gap-0.5 flex-shrink-0">
+        {/* Actions */}
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           {user && user.role === 'admin' && (
             <Link
               href="/admin"
-              className="hidden sm:flex bg-[#001B3A] text-amber-400 font-extrabold text-[11px] px-3 py-1.5 rounded-xl items-center gap-1 border border-amber-400/30"
+              className="bg-[#001B3A] text-amber-400 font-extrabold text-[10px] sm:text-[11px] px-2.5 sm:px-3 py-1.5 rounded-xl flex items-center gap-1 border border-amber-400/30 shrink-0"
             >
               <ShieldCheck className="w-3.5 h-3.5" />
-              ADMIN
+              <span>ADMIN</span>
             </Link>
           )}
 
@@ -204,7 +204,7 @@ export const Header = () => {
                 setIsAuthOpen(true);
               }
             }}
-            className="hidden sm:flex p-2.5 rounded-xl text-slate-700 hover:bg-slate-100 min-h-11 min-w-11 items-center justify-center"
+            className="flex p-2 rounded-xl text-slate-700 hover:bg-slate-100 min-h-10 min-w-10 sm:min-h-11 sm:min-w-11 items-center justify-center shrink-0 cursor-pointer"
             aria-label={user ? 'Profile' : 'Login'}
           >
             <User className="w-5 h-5 text-blue-600" />
@@ -212,7 +212,7 @@ export const Header = () => {
 
           <Link
             href="/wishlist"
-            className="relative hidden sm:flex p-2.5 rounded-xl text-slate-700 hover:bg-slate-100 min-h-11 min-w-11 items-center justify-center"
+            className="relative flex p-2 rounded-xl text-slate-700 hover:bg-slate-100 min-h-10 min-w-10 sm:min-h-11 sm:min-w-11 items-center justify-center shrink-0 cursor-pointer"
             aria-label="Wishlist"
           >
             <Heart
@@ -221,7 +221,7 @@ export const Header = () => {
               }`}
             />
             {wishlist.length > 0 && (
-              <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 text-white text-[10px] font-extrabold rounded-full flex items-center justify-center">
+              <span className="absolute top-0.5 right-0.5 w-4 h-4 bg-red-500 text-white text-[10px] font-extrabold rounded-full flex items-center justify-center shadow-xs">
                 {wishlist.length}
               </span>
             )}
@@ -230,13 +230,13 @@ export const Header = () => {
           <Link
             href="/cart"
             onPointerEnter={() => router.prefetch('/cart')}
-            className="relative hidden sm:flex p-2.5 rounded-xl text-slate-700 hover:bg-slate-100 min-h-11 min-w-11 items-center justify-center"
+            className="relative flex p-2 rounded-xl text-slate-700 hover:bg-slate-100 min-h-10 min-w-10 sm:min-h-11 sm:min-w-11 items-center justify-center shrink-0 cursor-pointer"
             aria-label="Cart"
           >
             <ShoppingBag className="w-5 h-5" />
             {cartCount > 0 && (
               <span
-                className={`absolute top-1 right-1 w-4 h-4 bg-red-500 text-white text-[10px] font-extrabold rounded-full flex items-center justify-center ${
+                className={`absolute top-0.5 right-0.5 w-4 h-4 bg-red-500 text-white text-[10px] font-extrabold rounded-full flex items-center justify-center shadow-xs ${
                   cartBump ? 'cart-badge-bump' : ''
                 }`}
               >
