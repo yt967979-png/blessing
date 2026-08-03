@@ -671,18 +671,32 @@ async function sendWhatsAppDirect(to: string, message: string) {
     try {
       await activeSock.sendMessage(jid, {
         text: message,
-        footer: 'Blessing Power Guide • Tap button or reply YES / NO',
-        buttons: [
-          { buttonId: 'yes', buttonText: { displayText: '✅ YES - CONFIRM ORDER' }, type: 1 },
-          { buttonId: 'no', buttonText: { displayText: '❌ NO - CANCEL ORDER' }, type: 1 },
+        footer: 'Blessing Power Guide • Quick Reply',
+        templateButtons: [
+          { index: 1, quickReplyButton: { displayText: '✅ YES - CONFIRM ORDER', id: 'yes' } },
+          { index: 2, quickReplyButton: { displayText: '❌ NO - CANCEL ORDER', id: 'no' } },
         ],
-        headerType: 1,
       } as any);
-      console.log(`✅ [IN-PROCESS BAILEYS BUTTONS SENT] Interactive message sent to +${phoneWithCountry}`);
+      console.log(`✅ [IN-PROCESS BAILEYS TEMPLATE BUTTONS SENT] Sent to +${phoneWithCountry}`);
       await new Promise((resolve) => setTimeout(resolve, 500));
       return { success: true, recipient: phoneWithCountry };
     } catch (_) {
-      // Fallback to text send if buttons payload fails on recipient device
+      try {
+        await activeSock.sendMessage(jid, {
+          text: message,
+          footer: 'Blessing Power Guide • Quick Reply',
+          buttons: [
+            { buttonId: 'yes', buttonText: { displayText: '✅ YES - CONFIRM ORDER' }, type: 1 },
+            { buttonId: 'no', buttonText: { displayText: '❌ NO - CANCEL ORDER' }, type: 1 },
+          ],
+          headerType: 1,
+        } as any);
+        console.log(`✅ [IN-PROCESS BAILEYS BUTTONS SENT] Sent to +${phoneWithCountry}`);
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        return { success: true, recipient: phoneWithCountry };
+      } catch (_) {
+        // Fallback to plain text message
+      }
     }
   }
 
