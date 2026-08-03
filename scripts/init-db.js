@@ -640,10 +640,7 @@ async function main() {
       await migrateDatabase(postgresConnStr, 'postgres');
     }
 
-    await seedCategories(connectionString, targetDbName);
-    await seedAdmin(connectionString, targetDbName);
-    await seedCouponsAndFaqs(connectionString, targetDbName);
-    console.log('✅ Database initialization complete.');
+    console.log('✅ Database schema migration complete.');
   } catch (err) {
     console.warn('⚠️ Build phase DB migration notice:', err.message);
     console.warn('   Schema initialization will automatically run on runtime startup.');

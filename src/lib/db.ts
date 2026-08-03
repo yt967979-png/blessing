@@ -1324,9 +1324,7 @@ async function runSchemaInit(client: any) {
       /* ignore */
     }
 
-    // Ensure default admin + catalog categories (empty DB or missing seeds)
-    await ensureDefaultCategories(client);
-    await ensureAdminUser(client);
+
 }
 
 /** Idempotent seed for 6th–12th + combo categories — safe to call before any book insert. */
