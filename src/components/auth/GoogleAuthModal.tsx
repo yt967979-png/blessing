@@ -2,11 +2,10 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { X, User, Phone, ShieldCheck, AlertCircle } from 'lucide-react';
+import { X, User, Phone, ShieldCheck, AlertCircle, KeyRound, MessageSquare, ArrowRight, Check } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useStore } from '@/context/StoreContext';
 import { BrandLogo } from '@/components/ui/BrandLogo';
-import { isValidMobileNumber, normalizeMobileDigits } from '@/lib/authValidation';
 
 declare global {
   interface Window {
@@ -22,7 +21,7 @@ declare global {
   }
 }
 
-type Step = 'google' | 'profile';
+type AuthMode = 'otp_register' | 'phone_login' | 'google';
 
 export function GoogleAuthModal({
   onClose,
@@ -36,33 +35,27 @@ export function GoogleAuthModal({
   const googleBtnRef = useRef<HTMLDivElement>(null);
   const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '';
 
-  const [step, setStep] = useState<Step>(forceProfileStep ? 'profile' : 'google');
+  const [mode, setMode] = useState<AuthMode>('otp_register');
   const [authError, setAuthError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [profileName, setProfileName] = useState('');
-  const [profilePhone, setProfilePhone] = useState('');
-  const [sessionToken, setSessionToken] = useState<string | null>(user?.token || null);
 
-  useEffect(() => {
-    if (forceProfileStep && user) {
-      setProfileName(user.name || '');
-      setSessionToken(user.token || null);
-      setStep('profile');
-    }
-  }, [forceProfileStep, user]);
+  // Form State
+  const [phone, setPhone] = useState('');
+  const [name, setName] = useState('');
+  const [password, setPassword] = useState('');
+  const [otpCode, setOtpCode] = useState('');
+  const [otpSent, setOtpSent] = useState(false);
 
+  // Google Fallback
   const handleGoogleCredential = useCallback(
     async (credential: string) => {
       setIsSubmitting(true);
       setAuthError(null);
-      const controller = new AbortController();
-      const timer = window.setTimeout(() => controller.abort(), 25_000);
       try {
         const res = await fetch('/api/auth/google', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ credential }),
-          signal: controller.signal,
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok || data.error) {
@@ -70,26 +63,12 @@ export function GoogleAuthModal({
           return;
         }
 
-        // Ask name + number only when profile is incomplete
-        if (data.user?.needsProfile) {
-          setProfileName(data.user.name || '');
-          setProfilePhone('');
-          setSessionToken(data.user.token || null);
-          setStep('profile');
-          return;
-        }
-
         loginUser(data.user, data.cart || [], data.wishlist || [], data.addresses || []);
         onClose();
-        if (data.user?.role === 'admin') router.push('/admin');
-      } catch (err: any) {
-        if (err?.name === 'AbortError') {
-          setAuthError('Sign-in is taking too long. Please try again in a moment.');
-        } else {
-          setAuthError('Connection error. Please try again.');
-        }
+        if (data.user?.role === 'admin' || data.user?.role === 'super_admin') router.push('/admin');
+      } catch {
+        setAuthError('Connection error. Please try again.');
       } finally {
-        window.clearTimeout(timer);
         setIsSubmitting(false);
       }
     },
@@ -97,210 +76,382 @@ export function GoogleAuthModal({
   );
 
   useEffect(() => {
-    if (!clientId || step !== 'google') return;
-
+    if (!clientId || mode !== 'google') return;
     const initGoogle = () => {
       if (!window.google?.accounts?.id || !googleBtnRef.current) return;
-      window.google.accounts.id.initialize({
-        client_id: clientId,
-        callback: (response: { credential?: string }) => {
-          if (response.credential) void handleGoogleCredential(response.credential);
-        },
-        auto_select: false,
-      });
-      googleBtnRef.current.innerHTML = '';
-      window.google.accounts.id.renderButton(googleBtnRef.current, {
-        type: 'standard',
-        theme: 'filled_blue',
-        size: 'large',
-        shape: 'pill',
-        text: 'continue_with',
-        width: 320,
-      });
+      try {
+        window.google.accounts.id.initialize({
+          client_id: clientId,
+          callback: (res: { credential?: string }) => {
+            if (res?.credential) void handleGoogleCredential(res.credential);
+          },
+          auto_select: false,
+        });
+        googleBtnRef.current.innerHTML = '';
+        window.google.accounts.id.renderButton(googleBtnRef.current, {
+          theme: 'outline',
+          size: 'large',
+          width: 280,
+          text: 'continue_with',
+          shape: 'pill',
+        });
+      } catch (_) {}
     };
 
     if (window.google?.accounts?.id) {
       initGoogle();
-      return;
+    } else {
+      const script = document.createElement('script');
+      script.src = 'https://accounts.google.com/gsi/client';
+      script.async = true;
+      script.defer = true;
+      script.onload = initGoogle;
+      document.head.appendChild(script);
     }
+  }, [clientId, handleGoogleCredential, mode]);
 
-    const existing = document.querySelector('script[data-bpg-google-gsi]');
-    if (existing) {
-      existing.addEventListener('load', initGoogle);
-      return () => existing.removeEventListener('load', initGoogle);
-    }
-
-    const script = document.createElement('script');
-    script.src = 'https://accounts.google.com/gsi/client';
-    script.async = true;
-    script.defer = true;
-    script.dataset.bpgGoogleGsi = '1';
-    script.onload = initGoogle;
-    document.head.appendChild(script);
-  }, [clientId, step, handleGoogleCredential]);
-
-  const submitProfile = async (e: React.FormEvent) => {
+  // Request WhatsApp OTP
+  const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError(null);
-    if (!profileName.trim() || profileName.trim().length < 2) {
-      setAuthError('Please enter your full name.');
-      return;
-    }
-    if (!isValidMobileNumber(profilePhone)) {
+
+    const clean = phone.replace(/\D/g, '');
+    if (clean.length < 10) {
       setAuthError('Please enter a valid 10-digit mobile number.');
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const res = await fetch('/api/auth/complete-profile', {
+      const res = await fetch('/api/auth/send-otp', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: clean }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setAuthError(data.error || 'Failed to send OTP.');
+        return;
+      }
+      setOtpSent(true);
+      showToast('💬 WhatsApp OTP sent to your phone!');
+    } catch {
+      setAuthError('Network error sending OTP.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Verify OTP & Register
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError(null);
+
+    if (!otpCode || otpCode.length !== 6) {
+      setAuthError('Please enter the 6-digit OTP code sent on WhatsApp.');
+      return;
+    }
+    if (!password || password.length < 4) {
+      setAuthError('Please set a password (min 4 characters).');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const res = await fetch('/api/auth/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: profileName.trim(),
-          phone: normalizeMobileDigits(profilePhone),
+          phone,
+          otp: otpCode,
+          name: name || 'Verified Student',
+          password,
         }),
       });
       const data = await res.json();
-      if (!res.ok || data.error) {
-        setAuthError(data.error || 'Could not save details.');
+      if (!res.ok) {
+        setAuthError(data.error || 'OTP verification failed.');
         return;
       }
-      loginUser(data.user, data.cart || [], data.wishlist || [], []);
-      showToast('✓ Profile saved — you can shop and get WhatsApp order updates!');
+
+      loginUser(data.user, [], [], []);
+      showToast('🎉 Account registered successfully!');
       onClose();
-      if (data.user?.role === 'admin') router.push('/admin');
+      if (data.user?.role === 'admin' || data.user?.role === 'super_admin') router.push('/admin');
     } catch {
-      setAuthError('Network error. Please try again.');
+      setAuthError('Network error verifying OTP.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Phone + Password Login
+  const handlePhonePasswordLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError(null);
+
+    const clean = phone.replace(/\D/g, '');
+    if (clean.length < 10) {
+      setAuthError('Please enter a valid 10-digit mobile number.');
+      return;
+    }
+    if (!password) {
+      setAuthError('Please enter your password.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const res = await fetch('/api/auth/login-phone', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: clean, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setAuthError(data.error || 'Login failed.');
+        return;
+      }
+
+      loginUser(data.user, [], [], []);
+      showToast('🔑 Logged in successfully!');
+      onClose();
+      if (data.user?.role === 'admin' || data.user?.role === 'super_admin') router.push('/admin');
+    } catch {
+      setAuthError('Network error during login.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div
-      onClick={onClose}
-      className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto"
-    >
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm">
       <motion.div
-        initial={{ y: 48, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        exit={{ y: 48, opacity: 0 }}
-        onClick={(e) => e.stopPropagation()}
-        className="bg-white rounded-t-3xl sm:rounded-3xl max-w-md w-full relative shadow-2xl border border-slate-100 overflow-hidden"
-        style={{ paddingBottom: 'max(0px, env(safe-area-inset-bottom))' }}
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        className="w-full max-w-md overflow-hidden bg-white shadow-2xl rounded-3xl border border-slate-200"
       >
-        <div className="sm:hidden w-12 h-1 rounded-full bg-slate-200 mx-auto mt-3" />
-
-        <div className="bg-gradient-to-r from-[#001B3A] via-[#002B5B] to-[#0044AA] text-white p-5 sm:p-6 relative">
+        {/* Header Banner */}
+        <div className="relative bg-gradient-to-br from-[#002B66] to-[#0044AA] p-6 text-white text-center">
           <button
             type="button"
             onClick={onClose}
-            className="absolute top-3 right-3 w-11 h-11 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center touch-target"
-            aria-label="Close"
+            className="absolute top-4 right-4 text-white/80 hover:text-white p-2 rounded-full hover:bg-white/10 transition-colors"
           >
-            <X className="w-4 h-4" />
+            <X className="w-5 h-5" />
           </button>
-          <div className="flex items-center gap-2 mb-2">
-            <BrandLogo size={32} className="w-8 h-8 shadow-md" />
-            <span className="font-heading font-black text-xs text-amber-300 tracking-wider uppercase">
-              BLESSING POWER GUIDE
-            </span>
+          <div className="inline-flex p-3 mb-3 bg-white/10 rounded-2xl border border-white/20 backdrop-blur-md">
+            <BrandLogo size={36} />
           </div>
-          <h3 className="font-heading font-black text-xl text-white">
-            {step === 'google' ? 'Continue with Google' : 'Enter your name & number'}
-          </h3>
-          <p className="text-xs text-slate-300 mt-1">
-            {step === 'google'
-              ? 'Sign in with Google to continue'
-              : 'Required for COD orders and WhatsApp delivery updates'}
+          <h2 className="text-xl font-black tracking-tight">Blessing Power Guide</h2>
+          <p className="text-xs text-blue-100 mt-1">
+            {mode === 'otp_register' ? 'WhatsApp OTP Fast Registration' : mode === 'phone_login' ? 'Phone & Password Sign In' : 'Google Sign In'}
           </p>
         </div>
 
+        {/* Mode Selector Tabs */}
+        <div className="flex border-b border-slate-200 bg-slate-50 text-xs font-bold text-slate-600">
+          <button
+            type="button"
+            onClick={() => { setMode('otp_register'); setAuthError(null); }}
+            className={`flex-1 py-3 text-center border-b-2 transition-all ${
+              mode === 'otp_register' ? 'border-[#0044AA] text-[#0044AA] bg-white' : 'border-transparent hover:text-slate-900'
+            }`}
+          >
+            💬 WhatsApp OTP
+          </button>
+          <button
+            type="button"
+            onClick={() => { setMode('phone_login'); setAuthError(null); }}
+            className={`flex-1 py-3 text-center border-b-2 transition-all ${
+              mode === 'phone_login' ? 'border-[#0044AA] text-[#0044AA] bg-white' : 'border-transparent hover:text-slate-900'
+            }`}
+          >
+            🔑 Phone Login
+          </button>
+          <button
+            type="button"
+            onClick={() => { setMode('google'); setAuthError(null); }}
+            className={`flex-1 py-3 text-center border-b-2 transition-all ${
+              mode === 'google' ? 'border-[#0044AA] text-[#0044AA] bg-white' : 'border-transparent hover:text-slate-900'
+            }`}
+          >
+            🌐 Google
+          </button>
+        </div>
+
+        {/* Form Body */}
         <div className="p-6 space-y-4">
           {authError && (
-            <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-[11px] text-red-600 font-semibold flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0 text-red-500 mt-0.5" />
+            <div className="flex items-start gap-2.5 p-3 text-xs text-red-700 bg-red-50 border border-red-200 rounded-xl">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
               <span>{authError}</span>
             </div>
           )}
 
-          {step === 'google' ? (
+          {/* Mode 1: WhatsApp OTP Registration */}
+          {mode === 'otp_register' && (
             <>
-              {!clientId ? (
-                <div className="text-center text-sm text-slate-600 bg-amber-50 border border-amber-200 rounded-xl p-4">
-                  Google Sign-In is not configured. Contact support or set{' '}
-                  <code className="text-[10px]">NEXT_PUBLIC_GOOGLE_CLIENT_ID</code>.
-                </div>
+              {!otpSent ? (
+                <form onSubmit={handleSendOtp} className="space-y-3.5">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Full Name</label>
+                    <div className="relative">
+                      <User className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
+                      <input
+                        type="text"
+                        required
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        placeholder="e.g. Ramesh Kumar"
+                        className="w-full pl-9 pr-3 py-2.5 text-xs border border-slate-300 rounded-xl outline-none focus:border-[#0044AA]"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">WhatsApp Mobile Number</label>
+                    <div className="relative">
+                      <Phone className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
+                      <input
+                        type="tel"
+                        required
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                        placeholder="10-digit mobile number"
+                        className="w-full pl-9 pr-3 py-2.5 text-xs border border-slate-300 rounded-xl outline-none focus:border-[#0044AA]"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="w-full bg-[#0044AA] hover:bg-[#003388] active:bg-[#002266] text-white font-extrabold text-xs py-3 rounded-xl uppercase tracking-wider flex items-center justify-center gap-2 shadow-md disabled:opacity-50"
+                  >
+                    <MessageSquare className="w-4 h-4" />
+                    <span>{isSubmitting ? 'Sending OTP…' : 'Send WhatsApp OTP'}</span>
+                  </button>
+                </form>
               ) : (
-                <div className="flex flex-col items-center gap-3 py-2">
-                  <div ref={googleBtnRef} className="min-h-[44px] flex items-center justify-center" />
-                  {isSubmitting && (
-                    <p className="text-xs text-slate-500 font-medium">Signing in with Google…</p>
-                  )}
-                </div>
+                <form onSubmit={handleVerifyOtp} className="space-y-3.5">
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs flex items-center gap-2">
+                    <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>OTP sent to <strong>+91 {phone}</strong> on WhatsApp.</span>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">6-Digit WhatsApp OTP Code</label>
+                    <div className="relative">
+                      <ShieldCheck className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
+                      <input
+                        type="text"
+                        required
+                        maxLength={6}
+                        value={otpCode}
+                        onChange={(e) => setOtpCode(e.target.value)}
+                        placeholder="Enter 6-digit code"
+                        className="w-full pl-9 pr-3 py-2.5 text-xs font-mono text-center tracking-widest text-lg border border-slate-300 rounded-xl outline-none focus:border-[#0044AA]"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Set Password</label>
+                    <div className="relative">
+                      <KeyRound className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
+                      <input
+                        type="password"
+                        required
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="Min 4 characters"
+                        className="w-full pl-9 pr-3 py-2.5 text-xs border border-slate-300 rounded-xl outline-none focus:border-[#0044AA]"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="w-full bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-extrabold text-xs py-3 rounded-xl uppercase tracking-wider flex items-center justify-center gap-2 shadow-md disabled:opacity-50"
+                  >
+                    <span>{isSubmitting ? 'Verifying…' : 'Verify & Register Account'}</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setOtpSent(false)}
+                    className="w-full text-center text-xs text-slate-500 hover:text-slate-800"
+                  >
+                    Change phone number
+                  </button>
+                </form>
               )}
-              <ul className="text-[11px] text-slate-500 space-y-1.5 bg-slate-50 rounded-xl p-3 border border-slate-100">
-                <li>• Sign in with your Google account</li>
-                <li>• First time only: enter name &amp; WhatsApp number</li>
-                <li>• You stay signed in — cart &amp; orders saved</li>
-              </ul>
             </>
-          ) : (
-            <form onSubmit={submitProfile} className="space-y-3.5 text-xs">
+          )}
+
+          {/* Mode 2: Phone & Password Login */}
+          {mode === 'phone_login' && (
+            <form onSubmit={handlePhonePasswordLogin} className="space-y-3.5">
               <div>
-                <label className="block font-bold text-slate-700 mb-1" htmlFor="profile-name">
-                  Full name *
-                </label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Mobile Number</label>
                 <div className="relative">
+                  <Phone className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
                   <input
-                    id="profile-name"
-                    type="text"
-                    required
-                    value={profileName}
-                    onChange={(e) => setProfileName(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-600 font-medium"
-                  />
-                  <User className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                </div>
-              </div>
-              <div>
-                <label className="block font-bold text-slate-700 mb-1" htmlFor="profile-phone">
-                  Mobile number (WhatsApp) *
-                </label>
-                <div className="relative">
-                  <input
-                    id="profile-phone"
                     type="tel"
                     required
-                    placeholder="e.g. 9840418228"
-                    value={profilePhone}
-                    onChange={(e) => setProfilePhone(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-600 font-medium"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="10-digit mobile number"
+                    className="w-full pl-9 pr-3 py-2.5 text-xs border border-slate-300 rounded-xl outline-none focus:border-[#0044AA]"
                   />
-                  <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                 </div>
-                <p className="text-[10px] text-slate-500 mt-1">
-                  For order updates &amp; delivery — not used for login OTP.
-                </p>
               </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Password</label>
+                <div className="relative">
+                  <KeyRound className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
+                  <input
+                    type="password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Enter password"
+                    className="w-full pl-9 pr-3 py-2.5 text-xs border border-slate-300 rounded-xl outline-none focus:border-[#0044AA]"
+                  />
+                </div>
+              </div>
+
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="w-full bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-[#001B3A] font-extrabold text-xs py-3.5 rounded-xl shadow-md uppercase tracking-wider disabled:opacity-50"
+                className="w-full bg-[#0044AA] hover:bg-[#003388] active:bg-[#002266] text-white font-extrabold text-xs py-3 rounded-xl uppercase tracking-wider flex items-center justify-center gap-2 shadow-md disabled:opacity-50"
               >
-                {isSubmitting ? 'SAVING…' : 'SAVE & CONTINUE SHOPPING'}
+                <span>{isSubmitting ? 'Signing In…' : 'Sign In'}</span>
+                <ArrowRight className="w-4 h-4" />
               </button>
             </form>
           )}
 
-          <div className="pt-2 border-t border-slate-100 flex items-center justify-center gap-1.5 text-[10px] text-slate-400 font-semibold">
+          {/* Mode 3: Google Sign-In */}
+          {mode === 'google' && (
+            <div className="flex flex-col items-center justify-center py-4 space-y-4">
+              <p className="text-xs text-slate-500 text-center">Sign in using your Google Account for fast 1-tap authentication.</p>
+              <div ref={googleBtnRef} className="min-h-[44px]" />
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="p-4 bg-slate-50 border-t border-slate-200 text-center">
+          <p className="text-[11px] text-slate-500 flex items-center justify-center gap-1">
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-            <span>Secured sign-in via Google only</span>
-          </div>
+            <span>256-Bit Encrypted & Verified Authentication</span>
+          </p>
         </div>
       </motion.div>
     </div>
