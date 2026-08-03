@@ -1385,27 +1385,12 @@ async function ensureAdminUser(client: any) {
     }
 
     const id = targetRow.id;
-    const canSetEmail = !targetRow.email || String(targetRow.email).toLowerCase() === email;
-    const forcePassword = Boolean(process.env.ADMIN_PASSWORD);
-
-    if (canSetEmail && forcePassword) {
-      await client.query(
-        `UPDATE users SET name = $1, email = $2, phone = $3, password_hash = $4,
-         role = 'admin', status = 'active', updated_at = NOW() WHERE id = $5`,
-        [name, email, phone, passwordHash, id]
-      );
-    } else if (forcePassword) {
-      await client.query(
-        `UPDATE users SET name = $1, phone = $2, password_hash = $3,
-         role = 'admin', status = 'active', updated_at = NOW() WHERE id = $4`,
-        [name, phone, passwordHash, id]
-      );
-    } else {
-      await client.query(
-        `UPDATE users SET role = 'admin', status = 'active', updated_at = NOW() WHERE id = $1`,
-        [id]
-      );
-    }
+    await client.query(
+      `UPDATE users SET name = $1, email = $2, phone = $3, password_hash = $4,
+       role = 'admin', status = 'active', updated_at = NOW() WHERE id = $5`,
+      [name, email, phone, passwordHash, id]
+    );
+    console.log(`[db] admin account updated: ${email} -> role: admin`);
   } catch (e: any) {
     console.warn('[db] ensureAdminUser skipped:', e?.message || e);
   }

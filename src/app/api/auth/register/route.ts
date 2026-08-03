@@ -1,12 +1,7 @@
 import { NextResponse } from 'next/server';
-import crypto from 'crypto';
 import { queryDb } from '@/lib/db';
 import { applyRateLimitAsync } from '@/lib/serverSecurity';
-import { createSessionToken } from '@/lib/auth';
-
-function hashPassword(password: string): string {
-  return crypto.createHash('sha256').update(`blessing_salt_${password}`).digest('hex');
-}
+import { createSessionToken, hashPassword } from '@/lib/auth';
 
 export async function POST(request: Request) {
   try {
@@ -71,10 +66,7 @@ export async function POST(request: Request) {
       token,
     };
 
-    const response = NextResponse.json({
-      success: true,
-      user: userObj,
-    });
+    const response = NextResponse.json({ success: true, user: userObj });
 
     response.cookies.set('bpg_session', token, {
       httpOnly: true,
@@ -87,6 +79,6 @@ export async function POST(request: Request) {
     return response;
   } catch (err: any) {
     console.error('[register] error:', err?.message || err);
-    return NextResponse.json({ error: 'Registration failed. Please try again.' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to create account. Please try again.' }, { status: 500 });
   }
 }
