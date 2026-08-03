@@ -288,7 +288,7 @@ function OrdersContent() {
             onClick={() => setIsAuthOpen(true)}
             className="inline-flex items-center justify-center gap-2 bg-[#0044AA] hover:bg-[#003388] text-white font-extrabold text-sm px-8 py-3.5 rounded-xl shadow-md cursor-pointer uppercase tracking-wider"
           >
-            Sign In with WhatsApp
+            Sign In / Register
           </button>
         <p className="text-[11px] text-slate-400">
           Need AWB tracking without login? Use the Track page with your docket number.

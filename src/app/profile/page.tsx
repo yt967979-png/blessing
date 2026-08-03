@@ -206,13 +206,13 @@ export default function ProfilePage() {
           </div>
           <h2 className="font-heading font-black text-xl text-[#001B3A]">Sign In to Your Account</h2>
           <p className="text-xs text-slate-500 leading-relaxed">
-            Access your order history, delivery addresses, and WhatsApp notifications.
+            Access your order history, delivery addresses, and saved guides.
           </p>
           <button
             onClick={() => setIsAuthOpen(true)}
             className="w-full bg-[#0044AA] hover:bg-[#003388] text-white font-extrabold text-xs py-3.5 rounded-xl uppercase tracking-wider shadow-md transition-all flex items-center justify-center gap-2"
           >
-            <span>SIGN IN WITH WHATSAPP</span>
+            <span>SIGN IN / REGISTER</span>
           </button>
         </div>
         <Footer />

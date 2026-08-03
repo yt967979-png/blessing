@@ -33,7 +33,7 @@ export default function WishlistPage() {
             onClick={() => setIsAuthOpen(true)}
             className="w-full bg-[#0044AA] hover:bg-[#003388] text-white font-extrabold text-xs py-3 rounded-xl uppercase tracking-wider shadow-md"
           >
-            Sign In with WhatsApp
+            Sign In / Register
           </button>
         </div>
         <Footer />

@@ -285,8 +285,8 @@ export async function POST(request: Request) {
     const orderNumber = 'BPG-' + Math.floor(1000 + Math.random() * 9000);
     const ymd = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     const internalShipmentId = `SHP-${ymd}-${Math.floor(100000 + Math.random() * 900000)}`;
-    // Hold until customer replies YES on WhatsApp (AWB/pack blocked until then)
-    const initialStatus = 'Awaiting Confirmation';
+    // Direct order placement (Confirmed upon checkout)
+    const initialStatus = 'Confirmed';
 
     const shippingAddressObj = JSON.stringify({
       name: customerName,
@@ -378,7 +378,7 @@ export async function POST(request: Request) {
     }
 
     await client.query(
-      `INSERT INTO order_timeline (id, order_id, status, remarks) VALUES ($1, $2, 'Awaiting Confirmation', 'Order placed — waiting WhatsApp YES/NO')`,
+      `INSERT INTO order_timeline (id, order_id, status, remarks) VALUES ($1, $2, 'Confirmed', 'Order placed successfully')`,
       [`tl-${Date.now()}`, id]
     );
 
@@ -402,49 +402,7 @@ export async function POST(request: Request) {
       await notifyOrderChanged(event);
     } catch (_) {}
 
-    try {
-      const phone = String(customerPhone || '').replace(/\D/g, '');
-      if (phone.length >= 10) {
-        const bookTitle =
-          verifiedItems.map((i: { title?: string }) => i.title).filter(Boolean).join(', ') ||
-          'Blessing Power Guide';
 
-        if (isRazorpay) {
-          await notify('payment.confirmed', {
-            customerPhone: phone,
-            customerName,
-            orderId: orderNumber,
-            totalAmount,
-          }).catch((e) => console.warn('[orders] payment WhatsApp:', e?.message || e));
-        }
-
-        const notifyRes = await notify('order.confirm_request', {
-          customerPhone: phone,
-          customerName,
-          orderId: orderNumber,
-          totalAmount,
-          bookTitle,
-          itemsSummary: bookTitle,
-        });
-
-        console.log(`[orders] WhatsApp confirm request dispatched to +${phone}:`, notifyRes.ok ? 'SUCCESS' : notifyRes.error);
-
-        // Also alert admin of new order
-        void notify('admin.new_order', {
-          customerPhone: phone,
-          customerName,
-          orderId: orderNumber,
-          totalAmount,
-          bookTitle,
-          itemsSummary: bookTitle,
-          adminPhones: getEnvAdminNotifyPhones(),
-        }).catch(() => {});
-      } else {
-        console.warn('[orders] confirm WhatsApp skipped — missing customer phone');
-      }
-    } catch (e: any) {
-      console.warn('[orders] confirm WhatsApp failed:', e?.message || e);
-    }
 
     return NextResponse.json(
       {
@@ -496,15 +454,7 @@ export async function PATCH(request: NextRequest) {
         { status: 409 }
       );
     }
-    if (currentStatus.includes('awaiting confirmation')) {
-      return NextResponse.json(
-        {
-          error:
-            'Customer has not confirmed yet (Awaiting Confirmation). Wait for WhatsApp YES before packing or adding AWB.',
-        },
-        { status: 409 }
-      );
-    }
+
 
     const newStatus = status || 'Handed to ST Courier';
     if (String(newStatus).toLowerCase().includes('cancel')) {

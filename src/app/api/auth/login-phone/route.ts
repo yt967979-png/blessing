@@ -14,23 +14,26 @@ export async function POST(request: Request) {
     if (!rateLimit.success && rateLimit.response) return rateLimit.response;
 
     const body = await request.json();
-    const rawPhone = String(body.phone || '').trim();
+    const rawInput = String(body.phone || body.email || '').trim();
     const passwordInput = String(body.password || '').trim();
 
-    const cleanPhone = rawPhone.replace(/\D/g, '');
-    const phoneWithCc = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
-
-    if (!cleanPhone || !passwordInput) {
-      return NextResponse.json({ error: 'Please enter your phone number and password.' }, { status: 400 });
+    if (!rawInput || !passwordInput) {
+      return NextResponse.json({ error: 'Please enter your email/phone and password.' }, { status: 400 });
     }
 
+    const cleanPhone = rawInput.replace(/\D/g, '');
+    const phoneWithCc = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+    const emailInput = rawInput.toLowerCase();
+
     const res = await queryDb(
-      `SELECT id, name, email, phone, role, status, password_hash FROM users WHERE phone = $1 OR phone = $2 LIMIT 1`,
-      [phoneWithCc, cleanPhone]
+      `SELECT id, name, email, phone, role, status, password_hash 
+       FROM users 
+       WHERE (phone = $1 OR phone = $2 OR (email = $3 AND email != '')) LIMIT 1`,
+      [phoneWithCc, cleanPhone, emailInput]
     );
 
     if (res.rows.length === 0) {
-      return NextResponse.json({ error: 'No account found with this phone number. Please register using WhatsApp OTP.' }, { status: 404 });
+      return NextResponse.json({ error: 'No account found matching these credentials. Please check or register.' }, { status: 404 });
     }
 
     const user = res.rows[0];
@@ -53,6 +56,7 @@ export async function POST(request: Request) {
         email: user.email,
         phone: user.phone,
         role: user.role || 'customer',
+        needsProfile: false,
         token,
       },
     });
