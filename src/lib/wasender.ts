@@ -38,8 +38,17 @@ export async function sendViaWasender(to: string, message: string): Promise<{ ok
     message: message,
     text: message,
   };
-  if (buttonsPayload) {
-    bodyData.buttons = buttonsPayload;
+
+  if (isConfirmMsg) {
+    bodyData.type = 'buttons';
+    bodyData.buttons = [
+      { id: 'yes', text: '✅ YES - CONFIRM ORDER', buttonId: 'yes', buttonText: { displayText: '✅ YES - CONFIRM ORDER' } },
+      { id: 'no', text: '❌ NO - CANCEL ORDER', buttonId: 'no', buttonText: { displayText: '❌ NO - CANCEL ORDER' } },
+    ];
+    bodyData.templateButtons = [
+      { index: 1, quickReplyButton: { displayText: '✅ YES - CONFIRM ORDER', id: 'yes' } },
+      { index: 2, quickReplyButton: { displayText: '❌ NO - CANCEL ORDER', id: 'no' } },
+    ];
   }
 
   try {
