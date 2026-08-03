@@ -210,35 +210,11 @@ export async function POST(request: Request) {
     }
 
     if (!isRazorpay) {
-      const cartFingerprint = verifiedItems
-        .map((i: { id: string; qty: number }) => `${i.id}:${i.qty}`)
-        .sort()
-        .join('|');
-      const dupCod = await client.query(
-        `SELECT o.order_number, o.total_amount
-         FROM orders o
-         WHERE o.user_id = $1
-           AND o.ordered_at > NOW() - INTERVAL '5 minutes'
-           AND ABS(o.total_amount - $2) < 0.01
-           AND (o.payment_method ILIKE '%cod%' OR o.payment_method ILIKE '%cash%')
-           AND (
-             SELECT COALESCE(string_agg(oi.book_id || ':' || oi.quantity::text, '|' ORDER BY oi.book_id), '')
-             FROM order_items oi WHERE oi.order_id = o.id
-           ) = $3
-         ORDER BY o.ordered_at DESC
-         LIMIT 1`,
-        [userId, totalAmount, cartFingerprint]
+      await client.query('ROLLBACK');
+      return NextResponse.json(
+        { error: 'Only Razorpay online payments are accepted. Cash on Delivery is disabled.' },
+        { status: 400 }
       );
-      if (dupCod.rows.length) {
-        await client.query('ROLLBACK');
-        const existing = dupCod.rows[0];
-        return NextResponse.json({
-          orderId: existing.order_number,
-          duplicate: true,
-          totalAmount: Number(existing.total_amount || totalAmount),
-          message: 'Duplicate order blocked — returning your existing order.',
-        });
-      }
     }
 
     if (appliedCouponId && coupon) {

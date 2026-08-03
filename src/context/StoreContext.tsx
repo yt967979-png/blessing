@@ -123,6 +123,7 @@ interface StoreContextType {
   publicCoupons: PublicCoupon[];
   appliedCoupon: AppliedCoupon | null;
   couponDiscount: number;
+  shippingFee: number;
   cartGrandTotal: number;
   applyCouponCode: (code: string, freeBookId?: string) => Promise<boolean>;
   clearAppliedCoupon: () => void;
@@ -701,16 +702,16 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const cartTotal = cart.reduce((acc, item) => acc + item.price * item.qty, 0);
   const cartCount = cart.reduce((acc, item) => acc + item.qty, 0);
+  // Free shipping for 5+ books, ₹150 for <5 books
+  const shippingFee = cartCount >= 5 ? 0 : (cartCount > 0 ? 150 : 0);
   const [checkoutTotal, setCheckoutTotal] = useState(0);
   const [publicCoupons, setPublicCoupons] = useState<PublicCoupon[]>([]);
   const [appliedCoupon, setAppliedCoupon] = useState<AppliedCoupon | null>(null);
   const [pendingCouponCode, setPendingCouponCode] = useState('');
 
   const couponDiscount = appliedCoupon?.discountAmount ?? 0;
-  const cartGrandTotal =
-    appliedCoupon?.offerType === 'discount' && appliedCoupon.total > 0
-      ? appliedCoupon.total
-      : cartTotal;
+  const baseDiscounted = Math.max(0, cartTotal - couponDiscount);
+  const cartGrandTotal = cartCount > 0 ? baseDiscounted + shippingFee : 0;
 
   const refreshPublicCoupons = () => {
     fetch('/api/coupons')
@@ -874,6 +875,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         publicCoupons,
         appliedCoupon,
         couponDiscount,
+        shippingFee,
         cartGrandTotal,
         applyCouponCode,
         clearAppliedCoupon,

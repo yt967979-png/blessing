@@ -15,6 +15,7 @@ export type CheckoutPricingResult =
       ok: true;
       subtotal: number;
       discountAmount: number;
+      shippingFee: number;
       totalAmount: number;
       verifiedItems: any[];
       appliedCouponId: string | null;
@@ -33,7 +34,7 @@ async function execQuery(client: any, sql: string, params?: any[]): Promise<any>
   return queryDb(sql, params);
 }
 
-/** Server-side cart + optional coupon total (shared by Razorpay + order create). */
+/** Server-side cart + minimum quantity check + shipping fee + optional coupon total. */
 export async function priceCheckoutOrder(
   client: any,
   opts: {
@@ -47,8 +48,22 @@ export async function priceCheckoutOrder(
   const priced = await priceCartItems(client, opts.items);
   if (!priced.ok) return priced;
 
-  let { total: totalAmount, verifiedItems } = priced;
-  const calculatedSubtotal = totalAmount;
+  let { total: subtotalAmount, verifiedItems } = priced;
+  const calculatedSubtotal = subtotalAmount;
+
+  // Enforce Minimum Order Quantity of 4 books
+  const cartQty = verifiedItems.reduce((s, i) => s + Number(i.qty || 0), 0);
+  if (cartQty < 4) {
+    return {
+      ok: false,
+      error: `Minimum order quantity is 4 books. You currently have ${cartQty} book(s) in your cart.`,
+      status: 400,
+    };
+  }
+
+  // Shipping Fee Calculation: Free delivery for 5+ books, ₹150 for 4 books
+  const shippingFee = cartQty >= 5 ? 0 : 150;
+
   let discountAmount = 0;
   let appliedCouponId: string | null = null;
   let appliedCouponCode: string | null = null;
@@ -56,11 +71,13 @@ export async function priceCheckoutOrder(
 
   const normalizedCoupon = opts.couponCode ? normalizeCouponCode(String(opts.couponCode)) : '';
   if (!normalizedCoupon) {
+    const finalTotal = Math.max(0, calculatedSubtotal + shippingFee);
     return {
       ok: true,
       subtotal: calculatedSubtotal,
       discountAmount: 0,
-      totalAmount,
+      shippingFee,
+      totalAmount: finalTotal,
       verifiedItems,
       appliedCouponId: null,
       appliedCouponCode: null,
@@ -73,7 +90,6 @@ export async function priceCheckoutOrder(
     return { ok: false, error: 'Invalid coupon code.', status: 400 };
   }
 
-  const cartQty = verifiedItems.reduce((s, i) => s + Number(i.qty || 0), 0);
   const cartBookIds = verifiedItems.map((i) => String(i.id));
 
   const eligible = checkCouponEligibility(coupon, calculatedSubtotal, cartQty);
@@ -145,7 +161,7 @@ export async function priceCheckoutOrder(
     discountAmount = computeDiscountAmount(coupon, calculatedSubtotal);
   }
 
-  totalAmount = Math.max(0, calculatedSubtotal - (coupon.offer_type === 'free_book' ? 0 : discountAmount));
+  const finalTotal = Math.max(0, calculatedSubtotal - (coupon.offer_type === 'free_book' ? 0 : discountAmount)) + shippingFee;
   appliedCouponId = coupon.id;
   appliedCouponCode = coupon.code;
 
@@ -153,7 +169,8 @@ export async function priceCheckoutOrder(
     ok: true,
     subtotal: calculatedSubtotal,
     discountAmount,
-    totalAmount,
+    shippingFee,
+    totalAmount: finalTotal,
     verifiedItems,
     appliedCouponId,
     appliedCouponCode,

@@ -13,6 +13,8 @@ import {
   Truck,
   ChevronRight,
   Check,
+  AlertTriangle,
+  CreditCard,
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { createUserAddress, migrateLocalAddressesToDb, type SavedAddress } from '@/lib/addresses';
@@ -31,7 +33,10 @@ export default function CheckoutPage() {
   const {
     user,
     cart,
+    cartCount,
     cartTotal,
+    shippingFee,
+    couponDiscount,
     cartGrandTotal,
     checkoutTotal,
     appliedCoupon,
@@ -51,7 +56,7 @@ export default function CheckoutPage() {
   const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
   const [selectedAddrId, setSelectedAddrId] = useState('new');
   const [savingAddress, setSavingAddress] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<'razorpay' | 'cod'>('cod');
+  const [paymentMethod] = useState<'razorpay'>('razorpay');
   const [couponInput, setCouponInput] = useState('');
   const [couponBusy, setCouponBusy] = useState(false);
   const [freeBookPickId, setFreeBookPickId] = useState('');
@@ -75,7 +80,7 @@ export default function CheckoutPage() {
   useEffect(() => {
     if (!user?.id) {
       setIsAuthOpen(true);
-      showToast('Please sign in with Google');
+      showToast('Please sign in to proceed to checkout');
       router.replace('/cart');
       return;
     }
@@ -148,57 +153,46 @@ export default function CheckoutPage() {
     }
     setSavingAddress(true);
     try {
-      const created = await createUserAddress(user, {
-        type: newAddr.type || 'HOME',
+      const added = await createUserAddress(user, {
+        type: newAddr.type,
         name: newAddr.name,
-        phone: newAddr.phone || user.phone || '',
-        alternatePhone: newAddr.alternatePhone || '',
+        phone: newAddr.phone,
+        alternatePhone: newAddr.alternatePhone,
         address: newAddr.address,
         city: newAddr.city || 'Chennai',
-        pincode: newAddr.pincode,
-        isDefault: savedAddresses.length === 0,
+        pincode: String(newAddr.pincode),
+        isDefault: true,
       });
-      if (!created) {
-        showToast('❌ Failed to save address');
-        return false;
+      if (added) {
+        setSavedAddresses((prev) => [added, ...prev.map((a) => ({ ...a, isDefault: false }))]);
+        setSelectedAddrId(added.id);
+        showToast('Address saved');
+        return true;
       }
-      setSavedAddresses([created, ...savedAddresses]);
-      setSelectedAddrId(created.id);
-      setNewAddr({
-        type: 'HOME',
-        name: user.name || '',
-        phone: user.phone || '',
-        alternatePhone: '',
-        address: '',
-        city: '',
-        pincode: '',
-      });
-      showToast('✓ Address saved');
-      return true;
     } finally {
       setSavingAddress(false);
     }
+    return false;
   };
 
   const goToReview = async () => {
+    if (cartCount < 4) {
+      showToast('Minimum order quantity is 4 books.');
+      return;
+    }
     if (selectedAddrId === 'new') {
       const ok = await handleSaveInlineAddress();
       if (!ok) return;
-    }
-    if (!selectedAddress?.address || !selectedAddress?.pincode) {
-      showToast('Select or add a delivery address');
-      return;
-    }
-    const pinCheck = pincodeDeliveryMessage(String(selectedAddress.pincode));
-    if (!pinCheck.ok) {
-      showToast(pinCheck.message);
-      return;
     }
     setStep(2);
   };
 
   const handlePlaceOrder = async () => {
     if (orderSubmitLock.current || isPlacingOrder || !user) return;
+    if (cartCount < 4) {
+      showToast('Minimum order quantity is 4 books.');
+      return;
+    }
     orderSubmitLock.current = true;
     setIsPlacingOrder(true);
     const release = () => {
@@ -228,7 +222,7 @@ export default function CheckoutPage() {
             city: selectedAddress.city || 'Chennai',
             pincode: selectedAddress.pincode || '600012',
             items: cart.map((i) => ({ id: i.id, qty: i.qty, price: i.price })),
-            paymentMethod: paymentMethod === 'razorpay' ? 'Razorpay UPI / Cards' : 'Cash on Delivery (COD)',
+            paymentMethod: 'Razorpay UPI / Online',
             razorpayPaymentId: payId || null,
             razorpayOrderId: rzpOrderId || null,
             razorpaySignature: rzpSignature || null,
@@ -257,113 +251,92 @@ export default function CheckoutPage() {
           address: selectedAddress.address,
           city: selectedAddress.city || 'Chennai',
           phone: selectedAddress.phone || user.phone || '',
-          paymentMethod: paymentMethod === 'razorpay' ? 'Razorpay UPI' : 'Cash on Delivery (COD)',
-          paymentStatus: paymentMethod === 'razorpay' ? 'Payment Confirmed' : 'Pending COD',
+          paymentMethod: 'Razorpay UPI / Online',
+          paymentStatus: 'Payment Confirmed',
         });
-        if (!orderData.duplicate) showToast(`🎉 Order #${serverOrderId} placed!`);
+        if (!orderData.duplicate) showToast(`🎉 Order #${serverOrderId} placed successfully!`);
         router.push('/orders');
         return true;
       };
 
-      if (paymentMethod === 'razorpay') {
-        const cartPayload = cart.map((i) => ({ id: i.id, qty: i.qty }));
-        const res = await fetch('/api/razorpay', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(user.token ? { Authorization: `Bearer ${user.token}` } : {}),
-          },
-          body: JSON.stringify({
-            items: cartPayload,
-            receipt: `rcpt-${Date.now()}`,
-            couponCode: appliedCoupon?.code || null,
-            freeBookId: appliedCoupon?.freeBookId || null,
-          }),
-        });
-        const rzpData = await res.json();
-        if (!res.ok || !rzpData.id) {
-          showToast(rzpData.needsConfig ? 'Use Cash on Delivery for now' : `❌ ${rzpData.error || 'Payment failed'}`);
-          if (rzpData.needsConfig) setPaymentMethod('cod');
-          release();
-          return;
-        }
-        if (!(window as any).Razorpay) {
-          showToast('Payment script not loaded — try COD or refresh');
-          release();
-          return;
-        }
-        const rzp = new (window as any).Razorpay({
-          key: rzpData.key,
-          amount: rzpData.amount,
-          currency: 'INR',
-          name: 'BLESSING POWER GUIDE',
-          description: 'Educational Guide Books Order',
-          order_id: rzpData.id,
-          prefill: {
-            name: selectedAddress.name || user.name || '',
-            email: user.email || '',
-            contact: selectedAddress.phone || user.phone || '',
-          },
-          theme: { color: '#001B3A' },
-          handler: async (response: any) => {
-            const verifyRes = await fetch('/api/razorpay', {
-              method: 'PUT',
-              headers: {
-                'Content-Type': 'application/json',
-                ...(user.token ? { Authorization: `Bearer ${user.token}` } : {}),
-              },
-              body: JSON.stringify({
-                razorpay_order_id: response.razorpay_order_id,
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_signature: response.razorpay_signature,
-                items: cartPayload,
-                expectedRupees: rzpData.expectedRupees,
-                couponCode: appliedCoupon?.code || null,
-                freeBookId: appliedCoupon?.freeBookId || null,
-              }),
-            });
-            const verifyData = await verifyRes.json();
-            if (!verifyData.verified) {
-              showToast(`❌ ${verifyData.error || 'Payment verification failed'}`);
-              router.push('/payment/failed?reason=verify_failed');
-              release();
-              return;
-            }
-            await processOrderCompletion(
-              response.razorpay_payment_id,
-              response.razorpay_order_id,
-              response.razorpay_signature
-            );
-            release();
-          },
-          modal: {
-            ondismiss: () => {
-              release();
-              router.push('/payment/failed?reason=dismissed');
-            },
-          },
-        });
-        rzp.on('payment.failed', () => {
-          release();
-          router.push('/payment/failed?reason=failed');
-        });
-        rzp.open();
+      // Online Razorpay Payment Flow
+      const cartPayload = cart.map((i) => ({ id: i.id, qty: i.qty }));
+      const res = await fetch('/api/razorpay', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(user.token ? { Authorization: `Bearer ${user.token}` } : {}),
+        },
+        body: JSON.stringify({
+          items: cartPayload,
+          receipt: `rcpt-${Date.now()}`,
+          couponCode: appliedCoupon?.code || null,
+          freeBookId: appliedCoupon?.freeBookId || null,
+        }),
+      });
+
+      const rzpData = await res.json();
+      if (!res.ok) {
+        showToast(`❌ ${rzpData.error || 'Payment initialization failed'}`);
+        release();
         return;
       }
 
-      await processOrderCompletion();
-      release();
-    } catch {
-      showToast('❌ Could not place order');
+      if (!(window as any).Razorpay) {
+        await new Promise<void>((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+          script.onload = () => resolve();
+          script.onerror = () => reject(new Error('Razorpay SDK script failed to load.'));
+          document.body.appendChild(script);
+        });
+      }
+
+      const options = {
+        key: rzpData.key,
+        amount: rzpData.amount,
+        currency: rzpData.currency || 'INR',
+        name: 'Blessing Power Guide',
+        description: 'Quality Educational Guides Purchase',
+        image: '/logo.png',
+        order_id: rzpData.orderId,
+        prefill: {
+          name: selectedAddress.name || user.name || '',
+          contact: selectedAddress.phone || user.phone || '',
+          email: user.email || '',
+        },
+        notes: {
+          userId: String(user.id),
+          customerPhone: selectedAddress.phone || user.phone || '',
+        },
+        theme: { color: '#0044AA' },
+        handler: async function (response: any) {
+          const verified = await processOrderCompletion(
+            response.razorpay_payment_id,
+            response.razorpay_order_id,
+            response.razorpay_signature
+          );
+          if (!verified) release();
+        },
+        modal: {
+          ondismiss: function () {
+            showToast('Payment window closed.');
+            release();
+          },
+        },
+      };
+
+      const rzp = new (window as any).Razorpay(options);
+      rzp.on('payment.failed', function (resp: any) {
+        showToast(`❌ Payment Failed: ${resp.error?.description || 'Declined'}`);
+        release();
+      });
+      rzp.open();
+    } catch (e: any) {
+      showToast(`❌ ${e?.message || 'Order failed'}`);
       release();
     }
   };
-
-  const steps = [
-    { n: 1 as Step, label: 'Address' },
-    { n: 2 as Step, label: 'Order summary' },
-    { n: 3 as Step, label: 'Payment' },
-  ];
 
   return (
     <main className="min-h-screen bg-slate-50 flex flex-col page-mobile-nav">
@@ -371,148 +344,133 @@ export default function CheckoutPage() {
       <Header />
       <NavBar />
 
-      <div className="max-w-3xl mx-auto px-4 py-8 flex-1 w-full">
-        <div className="flex items-center gap-2 mb-6 text-xs font-bold text-slate-500">
-          <Link href="/cart" className="hover:text-blue-600">
-            Cart
-          </Link>
-          <ChevronRight className="w-3.5 h-3.5" />
-          <span className="text-[#001B3A]">Checkout</span>
-        </div>
-
-        <div className="flex items-center gap-2 mb-8">
-          {steps.map((s, i) => (
-            <React.Fragment key={s.n}>
-              <button
-                type="button"
-                onClick={() => {
-                  if (s.n < step) setStep(s.n);
-                }}
-                className={`flex items-center gap-2 text-xs font-extrabold ${
-                  step === s.n ? 'text-[#2874f0]' : step > s.n ? 'text-emerald-600' : 'text-slate-400'
-                }`}
-              >
-                <span
-                  className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] ${
-                    step > s.n
-                      ? 'bg-emerald-500 text-white'
-                      : step === s.n
-                        ? 'bg-[#2874f0] text-white'
-                        : 'bg-slate-200 text-slate-500'
-                  }`}
-                >
-                  {step > s.n ? <Check className="w-3.5 h-3.5" /> : s.n}
-                </span>
-                {s.label}
-              </button>
-              {i < steps.length - 1 && <div className="flex-1 h-0.5 bg-slate-200 max-w-12" />}
-            </React.Fragment>
-          ))}
-        </div>
-
-        <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 shadow-xs space-y-5">
-          <div className="flex items-center gap-2">
-            <Lock className="w-5 h-5 text-amber-500" />
-            <h1 className="font-heading font-black text-xl text-[#001B3A]">
-              {step === 1 ? 'Delivery address' : step === 2 ? 'Review order' : 'Payment'}
-            </h1>
+      <div className="max-w-4xl mx-auto px-4 py-8 w-full flex-1">
+        {/* Step Indicator */}
+        <div className="flex items-center justify-between max-w-md mx-auto mb-8 text-xs font-bold">
+          <div className={`flex items-center gap-1.5 ${step >= 1 ? 'text-[#0044AA]' : 'text-slate-400'}`}>
+            <span className="w-6 h-6 rounded-full bg-current text-white flex items-center justify-center text-[10px]">
+              1
+            </span>
+            <span>Address</span>
           </div>
+          <ChevronRight className="w-4 h-4 text-slate-300" />
+          <div className={`flex items-center gap-1.5 ${step >= 2 ? 'text-[#0044AA]' : 'text-slate-400'}`}>
+            <span className="w-6 h-6 rounded-full bg-current text-white flex items-center justify-center text-[10px]">
+              2
+            </span>
+            <span>Summary</span>
+          </div>
+          <ChevronRight className="w-4 h-4 text-slate-300" />
+          <div className={`flex items-center gap-1.5 ${step >= 3 ? 'text-[#0044AA]' : 'text-slate-400'}`}>
+            <span className="w-6 h-6 rounded-full bg-current text-white flex items-center justify-center text-[10px]">
+              3
+            </span>
+            <span>Payment</span>
+          </div>
+        </div>
 
+        {/* Minimum 4 Books Alert Banner */}
+        {cartCount < 4 && (
+          <div className="max-w-2xl mx-auto mb-6 p-4 bg-amber-50 border-2 border-amber-300 rounded-2xl flex items-start gap-3 text-amber-900 text-xs font-medium shadow-sm">
+            <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-extrabold text-sm mb-0.5">Minimum Order Quantity: 4 Books</p>
+              <p>
+                You currently have <strong>{cartCount} book(s)</strong> in your cart. Please add{' '}
+                <strong>{4 - cartCount} more guide(s)</strong> to complete your order.
+              </p>
+              <Link href="/shop" className="inline-block mt-2 font-bold text-[#0044AA] underline">
+                + Browse Guides & Add to Cart →
+              </Link>
+            </div>
+          </div>
+        )}
+
+        <div className="max-w-2xl mx-auto bg-white rounded-3xl p-6 border border-slate-200 shadow-xl">
           {step === 1 && (
-            <div className="space-y-3 text-xs">
-              {savedAddresses.map((addr) => (
-                <button
-                  type="button"
-                  key={addr.id}
-                  onClick={() => setSelectedAddrId(addr.id)}
-                  className={`w-full text-left p-3.5 border-2 rounded-xl transition-all flex items-start gap-3 ${
-                    selectedAddrId === addr.id
-                      ? 'border-blue-600 bg-blue-50/50'
-                      : 'border-slate-200 hover:border-slate-300'
-                  }`}
-                >
-                  <input type="radio" checked={selectedAddrId === addr.id} readOnly className="mt-1" />
-                  <div className="flex-1">
-                    <div className="flex flex-wrap items-center gap-2 mb-0.5">
-                      <span className="bg-slate-900 text-amber-400 font-black text-[9px] px-2 py-0.5 rounded uppercase">
-                        {addr.type}
-                      </span>
-                      {addr.isDefault && (
-                        <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
-                          DEFAULT
-                        </span>
-                      )}
-                      <span className="font-extrabold text-slate-900">{addr.name}</span>
-                      <span className="text-slate-500">• {addr.phone}</span>
-                      {addr.alternatePhone ? (
-                        <span className="text-slate-400">/ alt {addr.alternatePhone}</span>
-                      ) : null}
-                    </div>
-                    <p className="text-slate-600 font-medium">
-                      {addr.address}, {addr.city} — {addr.pincode}
-                    </p>
-                  </div>
-                </button>
-              ))}
+            <div className="space-y-4 text-xs">
+              <h2 className="font-heading font-black text-lg text-[#001B3A]">Shipping Address</h2>
+              {savedAddresses.length > 0 && (
+                <div className="space-y-2">
+                  {savedAddresses.map((a) => (
+                    <label
+                      key={a.id}
+                      className={`block p-3 border-2 rounded-xl cursor-pointer ${
+                        selectedAddrId === a.id ? 'border-blue-600 bg-blue-50/50' : 'border-slate-200'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="addr"
+                        checked={selectedAddrId === a.id}
+                        onChange={() => setSelectedAddrId(a.id)}
+                        className="sr-only"
+                      />
+                      <span className="font-bold text-slate-900">{a.name}</span> · {a.phone}
+                      <p className="text-slate-600 text-[11px] mt-0.5">
+                        {a.address}, {a.city} — {a.pincode}
+                      </p>
+                    </label>
+                  ))}
+                  <label
+                    className={`block p-3 border-2 rounded-xl cursor-pointer ${
+                      selectedAddrId === 'new' ? 'border-blue-600 bg-blue-50/50' : 'border-slate-200'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="addr"
+                      checked={selectedAddrId === 'new'}
+                      onChange={() => setSelectedAddrId('new')}
+                      className="sr-only"
+                    />
+                    <span className="font-bold text-blue-600 flex items-center gap-1">
+                      <Plus className="w-3.5 h-3.5" /> Add a new address
+                    </span>
+                  </label>
+                </div>
+              )}
 
-              <button
-                type="button"
-                onClick={() => setSelectedAddrId('new')}
-                className={`w-full p-3.5 border-2 border-dashed rounded-xl flex items-center gap-2 font-bold ${
-                  selectedAddrId === 'new'
-                    ? 'border-blue-600 bg-blue-50/50 text-blue-700'
-                    : 'border-slate-300 text-slate-700'
-                }`}
-              >
-                <Plus className="w-4 h-4 text-blue-600" />
-                Add new address
-              </button>
-
-              {selectedAddrId === 'new' && (
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+              {(selectedAddrId === 'new' || savedAddresses.length === 0) && (
+                <div className="space-y-3 pt-2">
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block font-bold text-slate-700 mb-1">Full name *</label>
+                      <label className="block font-bold text-slate-700 mb-1">Full Name *</label>
                       <input
                         value={newAddr.name}
                         onChange={(e) => setNewAddr({ ...newAddr, name: e.target.value })}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white outline-none focus:border-blue-600"
+                        placeholder="Recipient name"
                       />
                     </div>
                     <div>
-                      <label className="block font-bold text-slate-700 mb-1">Mobile *</label>
+                      <label className="block font-bold text-slate-700 mb-1">Mobile Phone *</label>
                       <input
+                        maxLength={10}
                         value={newAddr.phone}
-                        onChange={(e) => setNewAddr({ ...newAddr, phone: e.target.value })}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"
-                        placeholder="Primary WhatsApp / COD"
+                        onChange={(e) => setNewAddr({ ...newAddr, phone: e.target.value.replace(/\D/g, '') })}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white outline-none focus:border-blue-600"
+                        placeholder="10-digit mobile"
                       />
                     </div>
-                  </div>
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Alternate mobile (optional)</label>
-                    <input
-                      value={newAddr.alternatePhone}
-                      onChange={(e) => setNewAddr({ ...newAddr, alternatePhone: e.target.value })}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"
-                      placeholder="Second number for delivery person"
-                    />
                   </div>
                   <div>
                     <label className="block font-bold text-slate-700 mb-1">Address *</label>
                     <input
                       value={newAddr.address}
                       onChange={(e) => setNewAddr({ ...newAddr, address: e.target.value })}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white outline-none focus:border-blue-600"
+                      placeholder="Door no., Street name, Landmark"
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block font-bold text-slate-700 mb-1">City *</label>
+                      <label className="block font-bold text-slate-700 mb-1">City / District *</label>
                       <input
                         value={newAddr.city}
                         onChange={(e) => setNewAddr({ ...newAddr, city: e.target.value })}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white outline-none focus:border-blue-600"
+                        placeholder="City"
                       />
                     </div>
                     <div>
@@ -521,7 +479,8 @@ export default function CheckoutPage() {
                         maxLength={6}
                         value={newAddr.pincode}
                         onChange={(e) => setNewAddr({ ...newAddr, pincode: e.target.value.replace(/\D/g, '') })}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white outline-none focus:border-blue-600"
+                        placeholder="6-digit pincode"
                       />
                     </div>
                   </div>
@@ -529,39 +488,39 @@ export default function CheckoutPage() {
                     type="button"
                     disabled={savingAddress}
                     onClick={() => void handleSaveInlineAddress()}
-                    className="w-full bg-blue-600 text-white font-extrabold py-2.5 rounded-lg disabled:opacity-60"
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold py-2.5 rounded-lg disabled:opacity-60 transition-all"
                   >
-                    {savingAddress ? 'Saving…' : 'Save address'}
+                    {savingAddress ? 'Saving Address…' : 'Save Address'}
                   </button>
                 </div>
               )}
 
               <button
                 type="button"
+                disabled={cartCount < 4}
                 onClick={() => void goToReview()}
-                className="w-full bg-gradient-to-r from-amber-400 to-amber-500 text-[#001B3A] font-extrabold text-sm py-3.5 rounded-xl uppercase tracking-wider"
+                className="w-full bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-[#001B3A] font-extrabold text-sm py-3.5 rounded-xl uppercase tracking-wider disabled:opacity-50 transition-all"
               >
-                Deliver here →
+                Deliver Here →
               </button>
             </div>
           )}
 
           {step === 2 && (
             <div className="space-y-4 text-xs">
-              <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
-                <p className="font-bold text-slate-800 mb-1 flex items-center gap-1">
-                  <MapPin className="w-3.5 h-3.5 text-blue-600" /> Deliver to
-                </p>
-                <p className="text-slate-600">
-                  {selectedAddress?.name} · {selectedAddress?.phone}
-                  {(selectedAddress as any)?.alternatePhone
-                    ? ` · alt ${(selectedAddress as any).alternatePhone}`
-                    : ''}
-                  <br />
-                  {selectedAddress?.address}, {selectedAddress?.city} — {selectedAddress?.pincode}
-                </p>
-                <button type="button" onClick={() => setStep(1)} className="text-blue-600 font-bold mt-2">
-                  Change
+              <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 flex items-center justify-between">
+                <div>
+                  <p className="font-bold text-slate-800 flex items-center gap-1">
+                    <MapPin className="w-3.5 h-3.5 text-blue-600" /> Deliver to
+                  </p>
+                  <p className="text-slate-600 mt-0.5">
+                    {selectedAddress?.name} · {selectedAddress?.phone}
+                    <br />
+                    {selectedAddress?.address}, {selectedAddress?.city} — {selectedAddress?.pincode}
+                  </p>
+                </div>
+                <button type="button" onClick={() => setStep(1)} className="text-blue-600 font-bold hover:underline">
+                  Edit
                 </button>
               </div>
 
@@ -586,9 +545,24 @@ export default function CheckoutPage() {
                 ))}
               </div>
 
+              {/* Delivery Fee Notice */}
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-blue-900 text-xs">
+                {cartCount >= 5 ? (
+                  <p className="font-bold flex items-center gap-1 text-emerald-700">
+                    <Check className="w-4 h-4 text-emerald-600" /> 🎉 FREE Delivery Offer applied ({cartCount} books)!
+                  </p>
+                ) : (
+                  <p className="font-medium">
+                    📦 Delivery Charge: <strong>₹150</strong> ({cartCount} books). Add{' '}
+                    <strong>{5 - cartCount} more guide(s)</strong> for <strong>FREE Delivery</strong>!
+                  </p>
+                )}
+              </div>
+
+              {/* Coupon input */}
               <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-3 space-y-2">
                 <label className="font-black text-slate-800 uppercase tracking-wider text-[10px] flex items-center gap-1">
-                  <Tag className="w-3.5 h-3.5 text-amber-600" /> Coupon
+                  <Tag className="w-3.5 h-3.5 text-amber-600" /> Apply Coupon
                 </label>
                 <div className="flex gap-2">
                   <input
@@ -618,48 +592,39 @@ export default function CheckoutPage() {
                     </button>
                   </p>
                 )}
-                {(pendingCouponCode && !appliedCoupon) ||
-                (appliedCoupon?.offerType === 'free_book' && !appliedCoupon?.freeBookId) ? (
-                  <div>
-                    <select
-                      value={freeBookPickId}
-                      onChange={(e) => setFreeBookPickId(e.target.value)}
-                      className="w-full px-3 py-2 border rounded-lg bg-white"
-                    >
-                      <option value="">Select free book…</option>
-                      {freeBookOptions.map((p) => (
-                        <option key={p.id} value={String(p.id)}>
-                          {p.title}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      disabled={!freeBookPickId || couponBusy}
-                      onClick={async () => {
-                        setCouponBusy(true);
-                        await applyCouponCode(couponInput || pendingCouponCode, freeBookPickId);
-                        setCouponBusy(false);
-                      }}
-                      className="mt-2 w-full py-2 bg-emerald-600 text-white font-bold rounded-lg disabled:opacity-60"
-                    >
-                      Confirm free book
-                    </button>
-                  </div>
-                ) : null}
               </div>
 
-              <div className="flex justify-between font-black text-base text-[#001B3A] pt-2 border-t">
-                <span>Total</span>
-                <span>₹{cartGrandTotal}</span>
+              {/* Breakdown */}
+              <div className="space-y-1.5 pt-2 border-t text-slate-600">
+                <div className="flex justify-between">
+                  <span>Books Subtotal ({cartCount} qty)</span>
+                  <span>₹{cartTotal}</span>
+                </div>
+                {couponDiscount > 0 && (
+                  <div className="flex justify-between text-emerald-600 font-semibold">
+                    <span>Coupon Discount</span>
+                    <span>-₹{couponDiscount}</span>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <span>Delivery Charge</span>
+                  <span className={shippingFee === 0 ? 'text-emerald-600 font-bold' : ''}>
+                    {shippingFee === 0 ? 'FREE' : `₹${shippingFee}`}
+                  </span>
+                </div>
+                <div className="flex justify-between font-black text-base text-[#001B3A] pt-2 border-t">
+                  <span>Total Pay</span>
+                  <span>₹{cartGrandTotal}</span>
+                </div>
               </div>
 
               <button
                 type="button"
+                disabled={cartCount < 4}
                 onClick={() => setStep(3)}
-                className="w-full bg-gradient-to-r from-amber-400 to-amber-500 text-[#001B3A] font-extrabold text-sm py-3.5 rounded-xl uppercase"
+                className="w-full bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-[#001B3A] font-extrabold text-sm py-3.5 rounded-xl uppercase tracking-wider disabled:opacity-50 transition-all"
               >
-                Continue to payment →
+                Continue to Payment →
               </button>
             </div>
           )}
@@ -668,50 +633,65 @@ export default function CheckoutPage() {
             <div className="space-y-4 text-xs">
               <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-center justify-between">
                 <div className="flex items-center gap-2 text-emerald-800 font-bold">
-                  <ShieldCheck className="w-4 h-4" />
-                  100% original books
+                  <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                  100% Secure Official Order
                 </div>
                 <span className="text-[10px] bg-emerald-600 text-white font-extrabold px-2 py-0.5 rounded flex items-center gap-1">
-                  <Truck className="w-3 h-3" /> FREE delivery
+                  <Truck className="w-3 h-3" /> {shippingFee === 0 ? 'FREE Delivery' : 'Fast ST Courier'}
                 </span>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setPaymentMethod('cod')}
-                  className={`p-3 border-2 rounded-xl font-bold text-left ${
-                    paymentMethod === 'cod' ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-slate-200'
-                  }`}
-                >
-                  Cash on Delivery
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPaymentMethod('razorpay')}
-                  className={`p-3 border-2 rounded-xl font-bold text-left ${
-                    paymentMethod === 'razorpay' ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-slate-200'
-                  }`}
-                >
-                  UPI / Cards
-                </button>
+              {/* Payment Method Selector (Razorpay Only) */}
+              <div>
+                <label className="block font-extrabold text-slate-800 mb-2">Select Payment Method</label>
+                <div className="p-4 border-2 border-[#0044AA] bg-blue-50/50 rounded-2xl flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-[#0044AA] text-white rounded-xl flex items-center justify-center">
+                      <CreditCard className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <p className="font-black text-slate-900 text-sm">Razorpay Online Payment</p>
+                      <p className="text-[11px] text-slate-500">UPI (GPay, PhonePe, Paytm), Debit & Credit Cards, NetBanking</p>
+                    </div>
+                  </div>
+                  <Check className="w-5 h-5 text-[#0044AA]" />
+                </div>
               </div>
 
-              <div className="flex justify-between font-black text-lg text-[#001B3A]">
-                <span>Pay</span>
-                <span>₹{cartGrandTotal}</span>
+              {/* Price Breakdown */}
+              <div className="space-y-1.5 p-4 bg-slate-50 rounded-2xl border border-slate-200">
+                <div className="flex justify-between text-slate-600">
+                  <span>Subtotal ({cartCount} guides)</span>
+                  <span>₹{cartTotal}</span>
+                </div>
+                {couponDiscount > 0 && (
+                  <div className="flex justify-between text-emerald-600 font-semibold">
+                    <span>Coupon Savings</span>
+                    <span>-₹{couponDiscount}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-slate-600">
+                  <span>Delivery Charge</span>
+                  <span className={shippingFee === 0 ? 'text-emerald-600 font-bold' : ''}>
+                    {shippingFee === 0 ? 'FREE' : `₹${shippingFee}`}
+                  </span>
+                </div>
+                <div className="flex justify-between font-black text-lg text-[#001B3A] pt-2 border-t border-slate-200">
+                  <span>Total Amount</span>
+                  <span>₹{cartGrandTotal}</span>
+                </div>
               </div>
 
               <button
                 type="button"
-                disabled={isPlacingOrder || cart.length === 0}
+                disabled={isPlacingOrder || cart.length === 0 || cartCount < 4}
                 onClick={() => void handlePlaceOrder()}
-                className="w-full bg-gradient-to-r from-amber-400 to-amber-500 text-[#001B3A] font-extrabold text-sm py-3.5 rounded-xl uppercase disabled:opacity-60"
+                className="w-full bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 hover:from-amber-500 hover:to-amber-700 text-[#001B3A] font-black text-sm py-4 rounded-xl uppercase tracking-wider shadow-lg shadow-amber-500/20 disabled:opacity-60 transition-all hover:scale-[1.01]"
               >
-                {isPlacingOrder ? 'Placing order…' : `Place order · ₹${cartGrandTotal}`}
+                {isPlacingOrder ? 'Processing Payment…' : `Pay ₹${cartGrandTotal} via Razorpay →`}
               </button>
-              <button type="button" onClick={() => setStep(2)} className="w-full text-slate-500 font-semibold">
-                ← Back to summary
+              <button type="button" onClick={() => setStep(2)} className="w-full text-slate-500 font-semibold text-center pt-1">
+                ← Back to Order Summary
               </button>
             </div>
           )}

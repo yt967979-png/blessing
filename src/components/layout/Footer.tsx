@@ -28,9 +28,9 @@ export const Footer = () => {
           <p className="text-slate-400 leading-relaxed mb-4">
             Quality Guides for Better Preparation and Brighter Results for 6th to 12th Standard Students.
           </p>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <a
-              href="https://facebook.com"
+              href="https://www.facebook.com/share/1KRUWogPcN/?mibextid=wwXIfr"
               target="_blank"
               rel="noreferrer"
               className="bg-white/5 border border-white/10 px-2.5 py-1 rounded text-[10px] text-slate-300 font-medium cursor-pointer hover:bg-blue-600 hover:text-white transition-colors"
@@ -38,7 +38,7 @@ export const Footer = () => {
               📘 Facebook
             </a>
             <a
-              href="https://instagram.com"
+              href="https://www.instagram.com/blessingtuition_centre?igsh=N2czeThwbDE2ZHBm&utm_source=qr"
               target="_blank"
               rel="noreferrer"
               className="bg-white/5 border border-white/10 px-2.5 py-1 rounded text-[10px] text-slate-300 font-medium cursor-pointer hover:bg-pink-600 hover:text-white transition-colors"
@@ -46,7 +46,7 @@ export const Footer = () => {
               📸 Instagram
             </a>
             <a
-              href="https://youtube.com"
+              href="https://youtube.com/@blessingtuitioncentre?si=QlOx5IxcCoabTAMl"
               target="_blank"
               rel="noreferrer"
               className="bg-white/5 border border-white/10 px-2.5 py-1 rounded text-[10px] text-slate-300 font-medium cursor-pointer hover:bg-red-600 hover:text-white transition-colors"
