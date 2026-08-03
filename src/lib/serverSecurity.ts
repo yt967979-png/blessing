@@ -1,82 +1,84 @@
 import { NextResponse } from 'next/server';
-import { getTokenFromRequest, verifySessionToken } from '@/lib/auth';
-
-/** In-memory rate limit (Free default — avoids a DB round-trip on every request) */
-const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
-
-/**
- * Rate limit. Free/soft: memory-first (no Postgres per request).
- * Set RATE_LIMIT_USE_DB=true for durable multi-replica limits.
- */
-export async function applyRateLimitAsync(
-  key: string,
-  limit: number = 30,
-  windowMs: number = 60000
-): Promise<{ allowed: boolean; remaining: number }> {
-  const useDb = String(process.env.RATE_LIMIT_USE_DB || '').toLowerCase() === 'true';
-  if (!useDb) {
-    return applyRateLimit(key, limit, windowMs);
-  }
-
-  const now = Date.now();
-  let client: any = null;
-  try {
-    const { getDbClient, releaseDbClient } = await import('@/lib/db');
-    client = await getDbClient();
-    const res = await client.query(`SELECT count, reset_at FROM rate_limits WHERE key = $1`, [key]);
-    if (res.rows.length === 0 || new Date(res.rows[0].reset_at).getTime() <= now) {
-      const resetAt = new Date(now + windowMs);
-      await client.query(
-        `INSERT INTO rate_limits (key, count, reset_at) VALUES ($1, 1, $2)
-         ON CONFLICT (key) DO UPDATE SET count = 1, reset_at = EXCLUDED.reset_at`,
-        [key, resetAt.toISOString()]
-      );
-      return { allowed: true, remaining: limit - 1 };
-    }
-    const count = Number(res.rows[0].count);
-    if (count >= limit) {
-      return { allowed: false, remaining: 0 };
-    }
-    await client.query(`UPDATE rate_limits SET count = count + 1 WHERE key = $1`, [key]);
-    return { allowed: true, remaining: limit - count - 1 };
-  } catch {
-    return applyRateLimit(key, limit, windowMs);
-  } finally {
-    if (client) {
-      const { releaseDbClient } = await import('@/lib/db');
-      releaseDbClient(client);
-    }
-  }
-}
-
-/** Sync in-memory limiter (kept for backward-compatible call sites) */
-export function applyRateLimit(
-  ip: string,
-  limit: number = 30,
-  windowMs: number = 60000
-): { allowed: boolean; remaining: number } {
-  const now = Date.now();
-  const entry = rateLimitMap.get(ip);
-
-  if (!entry || now > entry.resetTime) {
-    rateLimitMap.set(ip, { count: 1, resetTime: now + windowMs });
-    return { allowed: true, remaining: limit - 1 };
-  }
-
-  if (entry.count >= limit) {
-    return { allowed: false, remaining: 0 };
-  }
-
-  entry.count += 1;
-  return { allowed: true, remaining: limit - entry.count };
-}
+import { verifySessionToken, getTokenFromRequest } from '@/lib/auth';
 
 export function clientIp(request: Request): string {
-  return (
-    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-    request.headers.get('x-real-ip') ||
-    'unknown'
-  );
+  const xForwardedFor = request.headers.get('x-forwarded-for');
+  if (xForwardedFor) {
+    const ip = xForwardedFor.split(',')[0].trim();
+    if (ip) return ip;
+  }
+  const xRealIp = request.headers.get('x-real-ip');
+  if (xRealIp) return xRealIp.trim();
+  return '127.0.0.1';
+}
+
+/** Rate limit memory store */
+const rateLimits = new Map<string, { count: number; resetAt: number }>();
+
+export function checkRateLimit(
+  key: string,
+  limit: number,
+  windowMs: number
+): { success: boolean; remaining: number } {
+  const now = Date.now();
+  const existing = rateLimits.get(key);
+
+  if (!existing || now > existing.resetAt) {
+    rateLimits.set(key, { count: 1, resetAt: now + windowMs });
+    return { success: true, remaining: limit - 1 };
+  }
+
+  if (existing.count >= limit) {
+    return { success: false, remaining: 0 };
+  }
+
+  existing.count += 1;
+  return { success: true, remaining: limit - existing.count };
+}
+
+export function applyRateLimit(
+  keyOrReq: string | Request,
+  limit = 20,
+  windowMs = 60_000
+): { allowed: boolean } {
+  const key = typeof keyOrReq === 'string' ? keyOrReq : clientIp(keyOrReq);
+  const res = checkRateLimit(key, limit, windowMs);
+  return { allowed: res.success };
+}
+
+export async function applyRateLimitAsync(
+  requestOrKey: Request | string,
+  actionOrLimit: string | number = 'action',
+  limitOrWindow: number = 20,
+  windowMs = 60_000
+): Promise<{ success: boolean; allowed: boolean; response?: NextResponse }> {
+  let key = '';
+  let limit = 20;
+  let win = 60_000;
+
+  if (typeof requestOrKey === 'string') {
+    key = requestOrKey;
+    limit = typeof actionOrLimit === 'number' ? actionOrLimit : 20;
+    win = limitOrWindow;
+  } else {
+    const action = typeof actionOrLimit === 'string' ? actionOrLimit : 'action';
+    key = `${action}:${clientIp(requestOrKey)}`;
+    limit = limitOrWindow;
+    win = windowMs;
+  }
+
+  const res = checkRateLimit(key, limit, win);
+  if (!res.success) {
+    return {
+      success: false,
+      allowed: false,
+      response: NextResponse.json(
+        { error: 'Too many requests. Please try again in a minute.' },
+        { status: 429 }
+      ),
+    };
+  }
+  return { success: true, allowed: true };
 }
 
 export async function getAuthenticatedUser(
@@ -87,19 +89,23 @@ export async function getAuthenticatedUser(
   return verifySessionToken(token);
 }
 
-/** Admin only — verifies signed session then re-checks role+status in DB (no stale JWT admin). */
+export interface AdminVerifyResult {
+  isAdmin: boolean;
+  isSuperAdmin: boolean;
+  error?: string;
+  user?: { userId: string; role: string; isSuperAdmin: boolean };
+}
+
+/** Admin or Super Admin verify helper */
 export async function verifyAdminRequest(
   request: Request
-): Promise<{ isAdmin: boolean; error?: string; user?: { userId: string; role: string } }> {
+): Promise<AdminVerifyResult> {
   try {
     const session = await getAuthenticatedUser(request);
     if (!session) {
-      return { isAdmin: false, error: 'Unauthorized: Missing session' };
+      return { isAdmin: false, isSuperAdmin: false, error: 'Unauthorized: Missing session' };
     }
 
-    // Always re-validate against DB so demoted/banned users lose admin immediately.
-    // Use ephemeral Client — never wait on a wedged shared-pool acquire queue (admin analytics
-    // used to abort at 12s while getDbClient retried ~30s before the route budget even started).
     try {
       const { queryEphemeral } = await import('@/lib/db');
       const res = await queryEphemeral(
@@ -108,23 +114,47 @@ export async function verifyAdminRequest(
         { budgetMs: 5_000, statementTimeoutMs: 3_000, label: 'adminCheck' }
       );
       if (res.rows.length === 0) {
-        return { isAdmin: false, error: 'Unauthorized: User not found' };
+        return { isAdmin: false, isSuperAdmin: false, error: 'Unauthorized: User not found' };
       }
       const row = res.rows[0];
-      if (String(row.status || '').toLowerCase() === 'banned') {
-        return { isAdmin: false, error: 'Forbidden: Account disabled' };
+      const roleStr = String(row.role || '').toLowerCase();
+      const statusStr = String(row.status || '').toLowerCase();
+
+      if (statusStr === 'banned') {
+        return { isAdmin: false, isSuperAdmin: false, error: 'Forbidden: Account disabled' };
       }
-      if (String(row.role || '').toLowerCase() !== 'admin') {
-        return { isAdmin: false, error: 'Forbidden: Admin privilege required' };
+      
+      const isSuperAdmin = roleStr === 'super_admin';
+      const isAdmin = isSuperAdmin || roleStr === 'admin';
+
+      if (!isAdmin) {
+        return { isAdmin: false, isSuperAdmin: false, error: 'Forbidden: Admin privilege required' };
       }
-      return { isAdmin: true, user: { userId: session.userId, role: 'admin' } };
+      return {
+        isAdmin: true,
+        isSuperAdmin,
+        user: { userId: session.userId, role: isSuperAdmin ? 'super_admin' : 'admin', isSuperAdmin },
+      };
     } catch {
-      // Fail closed if DB unavailable for admin checks
-      return { isAdmin: false, error: 'Admin check unavailable — try again' };
+      return { isAdmin: false, isSuperAdmin: false, error: 'Admin check unavailable — try again' };
     }
   } catch {
-    return { isAdmin: false, error: 'Server authentication check error' };
+    return { isAdmin: false, isSuperAdmin: false, error: 'Server authentication check error' };
   }
+}
+
+/** Super Admin ONLY — required for WhatsApp QR connect/disconnect and changing alternative alert numbers */
+export async function verifySuperAdminRequest(
+  request: Request
+): Promise<{ isSuperAdmin: boolean; error?: string; user?: { userId: string; role: string } }> {
+  const check = await verifyAdminRequest(request);
+  if (!check.isAdmin) {
+    return { isSuperAdmin: false, error: check.error };
+  }
+  if (!check.isSuperAdmin) {
+    return { isSuperAdmin: false, error: 'Forbidden: Super Admin privilege required for WhatsApp control' };
+  }
+  return { isSuperAdmin: true, user: check.user };
 }
 
 export function unauthorizedResponse(message = 'Unauthorized') {

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { queryDb } from '@/lib/db';
-import { forbiddenResponse, verifyAdminRequest } from '@/lib/serverSecurity';
+import { forbiddenResponse, verifyAdminRequest, verifySuperAdminRequest } from '@/lib/serverSecurity';
 
 /** Admin: list customers + low-stock books */
 export async function GET(request: NextRequest) {
@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
     }
 
     const res = await queryDb(
-      `SELECT u.id, u.name, u.email, u.phone, u.status, u.created_at,
+      `SELECT u.id, u.name, u.email, u.phone, u.role, u.status, u.created_at,
               COUNT(DISTINCT o.id) FILTER (
                 WHERE o.id IS NOT NULL AND COALESCE(o.order_status, '') NOT ILIKE '%cancel%'
               )::int AS order_count,
@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
               ), 0)::numeric AS total_spent
        FROM users u
        LEFT JOIN orders o ON o.user_id = u.id
-       WHERE COALESCE(u.role, 'customer') != 'admin'
+       WHERE COALESCE(u.role, 'customer') != 'super_admin'
        GROUP BY u.id
        ORDER BY u.created_at DESC
        LIMIT 500`
@@ -52,6 +52,7 @@ export async function GET(request: NextRequest) {
         name: u.name || '—',
         email: u.email || '—',
         phone: u.phone || '—',
+        role: u.role || 'customer',
         status: u.status || 'active',
         orderCount: Number(u.order_count || 0),
         totalSpent: Number(u.total_spent || 0),
@@ -70,6 +71,31 @@ export async function GET(request: NextRequest) {
   }
 }
 
+/** Super Admin ONLY — Promote to Sub-Admin (admin) or Revoke */
+export async function POST(request: NextRequest) {
+  const superAdmin = await verifySuperAdminRequest(request);
+  if (!superAdmin.isSuperAdmin) return forbiddenResponse(superAdmin.error);
+
+  try {
+    const body = await request.json();
+    const userId = String(body.userId || '').trim();
+    const newRole = String(body.role || '').trim().toLowerCase();
+
+    if (!userId || !['admin', 'customer'].includes(newRole)) {
+      return NextResponse.json({ error: 'userId and valid role (admin | customer) required.' }, { status: 400 });
+    }
+
+    await queryDb(
+      `UPDATE users SET role = $1, updated_at = NOW() WHERE id = $2 AND COALESCE(role, 'customer') != 'super_admin'`,
+      [newRole, userId]
+    );
+
+    return NextResponse.json({ success: true, userId, role: newRole });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}
+
 export async function PATCH(request: NextRequest) {
   const admin = await verifyAdminRequest(request);
   if (!admin.isAdmin) return forbiddenResponse(admin.error);
@@ -82,7 +108,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'userId and status (active|banned) required.' }, { status: 400 });
     }
 
-    await queryDb(`UPDATE users SET status = $1 WHERE id = $2 AND COALESCE(role, 'customer') != 'admin'`, [
+    await queryDb(`UPDATE users SET status = $1 WHERE id = $2 AND COALESCE(role, 'customer') != 'super_admin'`, [
       status,
       userId,
     ]);

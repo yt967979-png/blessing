@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { Users, Ban, CheckCircle2, Download, AlertTriangle, Package } from 'lucide-react';
+import { Users, Ban, CheckCircle2, Download, AlertTriangle, Package, Shield, UserCheck, ShieldAlert } from 'lucide-react';
 import { authHeaders } from '@/lib/clientAuth';
 import type { UserData } from '@/context/StoreContext';
 
@@ -10,6 +10,7 @@ type Customer = {
   name: string;
   email: string;
   phone: string;
+  role: string;
   status: string;
   orderCount: number;
   totalSpent: number;
@@ -37,6 +38,8 @@ export default function AdminUsersTab({
   const [search, setSearch] = useState('');
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
+  const isSuperAdmin = user?.role === 'super_admin';
+
   const load = useCallback(async () => {
     if (!user?.token) {
       setLoading(false);
@@ -54,11 +57,10 @@ export default function AdminUsersTab({
         if (Array.isArray(data)) setCustomers(data);
       } else {
         const err = await usersRes.json().catch(() => ({}));
-        showToast(`❌ ${err.error || 'Could not load customers'}`);
+        showToast(`❌ ${err.error || 'Could not load users'}`);
         setCustomers([]);
       }
 
-      // Low-stock alerts — non-blocking so customer list loads first
       void fetch('/api/admin/users?view=low_stock', {
         headers,
         signal: AbortSignal.timeout(15000),
@@ -69,7 +71,7 @@ export default function AdminUsersTab({
         })
         .catch(() => {});
     } catch {
-      showToast('❌ Could not load customers');
+      showToast('❌ Could not load users');
       setCustomers([]);
     } finally {
       setLoading(false);
@@ -80,6 +82,29 @@ export default function AdminUsersTab({
     void load();
   }, [load]);
 
+  const toggleSubAdminRole = async (userId: string, currentRole: string) => {
+    const targetRole = currentRole === 'admin' ? 'customer' : 'admin';
+    setUpdatingId(userId);
+    try {
+      const r = await fetch('/api/admin/users', {
+        method: 'POST',
+        headers: authHeaders(user),
+        body: JSON.stringify({ userId, role: targetRole }),
+      });
+      if (r.ok) {
+        showToast(targetRole === 'admin' ? '🛡️ User granted Sub-Admin privileges' : '👤 Sub-Admin privileges removed');
+        setCustomers((prev) => prev.map((c) => (c.id === userId ? { ...c, role: targetRole } : c)));
+      } else {
+        const d = await r.json();
+        showToast(`❌ ${d.error || 'Role update failed'}`);
+      }
+    } catch {
+      showToast('❌ Role update failed');
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
   const setStatus = async (userId: string, status: 'active' | 'banned') => {
     setUpdatingId(userId);
     try {
@@ -89,7 +114,7 @@ export default function AdminUsersTab({
         body: JSON.stringify({ userId, status }),
       });
       if (r.ok) {
-        showToast(status === 'banned' ? '🚫 Customer banned' : '✅ Customer reactivated');
+        showToast(status === 'banned' ? '🚫 User banned' : '✅ User reactivated');
         setCustomers((prev) => prev.map((c) => (c.id === userId ? { ...c, status } : c)));
       } else {
         const d = await r.json();
@@ -104,11 +129,12 @@ export default function AdminUsersTab({
 
   const exportCsv = () => {
     const rows = [
-      ['Name', 'Email', 'Phone', 'Status', 'Orders', 'Total Spent', 'Joined'],
+      ['Name', 'Email', 'Phone', 'Role', 'Status', 'Orders', 'Total Spent', 'Joined'],
       ...filtered.map((c) => [
         c.name,
         c.email,
         c.phone,
+        c.role || 'customer',
         c.status,
         String(c.orderCount),
         String(c.totalSpent),
@@ -120,10 +146,10 @@ export default function AdminUsersTab({
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `customers-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `users-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-    showToast('📥 Customer CSV downloaded');
+    showToast('📥 Users CSV downloaded');
   };
 
   const filtered = customers.filter((c) => {
@@ -162,9 +188,11 @@ export default function AdminUsersTab({
         <div>
           <h2 className="text-base font-bold text-gray-900 flex items-center gap-2">
             <Users className="w-4 h-4 text-[#2874f0]" />
-            Customers
+            User Management & Sub-Admin Roles
           </h2>
-          <p className="text-xs text-gray-400 mt-0.5">{customers.length} registered — ban abusive accounts</p>
+          <p className="text-xs text-gray-400 mt-0.5">
+            {customers.length} registered users — {isSuperAdmin ? 'Super Admin can grant Sub-Admin access' : 'View users & packing privileges'}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <input
@@ -187,15 +215,15 @@ export default function AdminUsersTab({
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         {loading ? (
-          <p className="text-center text-sm text-gray-400 py-12">Loading customers…</p>
+          <p className="text-center text-sm text-gray-400 py-12">Loading users…</p>
         ) : filtered.length === 0 ? (
-          <p className="text-center text-sm text-gray-400 py-12">No customers found</p>
+          <p className="text-center text-sm text-gray-400 py-12">No users found</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
                 <tr className="bg-[#f8f9fa] border-b border-gray-200">
-                  {['Customer', 'Phone', 'Orders', 'Spent', 'Status', 'Actions'].map((h) => (
+                  {['User Details', 'Phone', 'Role', 'Orders / Spent', 'Status', 'Actions'].map((h) => (
                     <th
                       key={h}
                       className={`py-3 px-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide ${
@@ -215,8 +243,24 @@ export default function AdminUsersTab({
                       <p className="text-[10px] text-gray-400">{c.email}</p>
                     </td>
                     <td className="py-3 px-3 text-gray-600 whitespace-nowrap">{c.phone}</td>
-                    <td className="py-3 px-3 font-semibold">{c.orderCount}</td>
-                    <td className="py-3 px-3 font-semibold">₹{c.totalSpent.toLocaleString('en-IN')}</td>
+                    <td className="py-3 px-3">
+                      {c.role === 'super_admin' ? (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 rounded-md">
+                          ⭐ Super Admin
+                        </span>
+                      ) : c.role === 'admin' ? (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-extrabold bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-md">
+                          🛡️ Sub-Admin
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-semibold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-md">
+                          Customer
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-3 px-3 font-semibold">
+                      {c.orderCount} orders <span className="text-gray-400 font-normal">|</span> ₹{c.totalSpent.toLocaleString('en-IN')}
+                    </td>
                     <td className="py-3 px-3">
                       <span
                         className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
@@ -228,7 +272,23 @@ export default function AdminUsersTab({
                         {c.status || 'active'}
                       </span>
                     </td>
-                    <td className="py-3 px-3 text-right">
+                    <td className="py-3 px-3 text-right space-x-1 whitespace-nowrap">
+                      {isSuperAdmin && c.role !== 'super_admin' && (
+                        <button
+                          type="button"
+                          disabled={updatingId === c.id}
+                          onClick={() => toggleSubAdminRole(c.id, c.role)}
+                          className={`inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold rounded-lg cursor-pointer disabled:opacity-50 ${
+                            c.role === 'admin'
+                              ? 'text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200'
+                              : 'text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200'
+                          }`}
+                        >
+                          <Shield className="w-3 h-3" />
+                          {c.role === 'admin' ? 'Remove Sub-Admin' : 'Make Sub-Admin'}
+                        </button>
+                      )}
+
                       {c.status === 'banned' ? (
                         <button
                           type="button"

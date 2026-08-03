@@ -29,6 +29,7 @@ export default function AdminWhatsAppTab({
   onRequestPairing,
   onRefreshQr,
   authToken,
+  isSuperAdmin = false,
 }: {
   waStatus: WaStatus;
   waPhoneInput: string;
@@ -39,6 +40,7 @@ export default function AdminWhatsAppTab({
   onRefreshQr?: () => void;
   /** Stable bearer token — avoid passing a new headers object each render. */
   authToken?: string | null;
+  isSuperAdmin?: boolean;
 }) {
   const showCode = isRealPairingCode(waPairingCode);
   const [alertPhones, setAlertPhones] = useState('');
@@ -135,12 +137,17 @@ export default function AdminWhatsAppTab({
         />
         <button
           type="button"
-          disabled={alertSaving || !authToken}
+          disabled={alertSaving || !authToken || isSuperAdmin === false}
           onClick={() => void saveAlertPhones()}
           className="px-3 py-2 text-xs font-semibold text-white bg-[#2874f0] hover:bg-[#1a5dc8] disabled:opacity-50 rounded-lg cursor-pointer"
         >
           {alertSaving ? 'Saving…' : 'Save alert phones'}
         </button>
+        {isSuperAdmin === false && (
+          <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 p-2 rounded-lg font-medium mt-1">
+            🔒 WhatsApp session & alert phone settings are controlled exclusively by the Super Admin (Store Owner).
+          </p>
+        )}
         {alertMsg && <p className="text-[11px] text-gray-600">{alertMsg}</p>}
       </div>
 
@@ -166,13 +173,15 @@ export default function AdminWhatsAppTab({
               </div>
             ))}
           </div>
-          <button
-            type="button"
-            onClick={onUnlink}
-            className="text-xs font-semibold text-red-500 hover:text-red-600 hover:bg-red-50 px-4 py-2 rounded-lg transition-colors cursor-pointer"
-          >
-            Unlink Session
-          </button>
+          {isSuperAdmin !== false && (
+            <button
+              type="button"
+              onClick={onUnlink}
+              className="text-xs font-semibold text-red-500 hover:text-red-600 hover:bg-red-50 px-4 py-2 rounded-lg transition-colors cursor-pointer"
+            >
+              Unlink Session
+            </button>
+          )}
         </div>
       ) : (
         <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">

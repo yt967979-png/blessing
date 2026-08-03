@@ -8,7 +8,7 @@ import {
   getWhatsAppConnectionState,
 } from '@/lib/whatsapp';
 import { isBackgroundLeader, tryAcquireBackgroundLeader } from '@/lib/backgroundLeader';
-import { verifyAdminRequest, forbiddenResponse } from '@/lib/serverSecurity';
+import { verifyAdminRequest, verifySuperAdminRequest, forbiddenResponse } from '@/lib/serverSecurity';
 
 function looksLikePairingCode(code: string | null | undefined): boolean {
   const c = String(code || '').replace(/\s/g, '');
@@ -193,8 +193,8 @@ export async function GET(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const auth = await verifyAdminRequest(request);
-  if (!auth.isAdmin) return forbiddenResponse(auth.error);
+  const auth = await verifySuperAdminRequest(request);
+  if (!auth.isSuperAdmin) return forbiddenResponse(auth.error || 'Super Admin privilege required to disconnect WhatsApp');
 
   await tryAcquireBackgroundLeader();
   await resetWhatsAppSession();

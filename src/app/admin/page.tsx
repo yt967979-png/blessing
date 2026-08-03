@@ -1588,6 +1588,7 @@ export default function AdminPage() {
             onRequestPairing={handleRequestPairingCode}
             onRefreshQr={handleRefreshWhatsAppQr}
             authToken={user?.token || null}
+            isSuperAdmin={user?.role === 'super_admin'}
           />
         )}
 
