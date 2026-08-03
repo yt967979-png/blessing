@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getDbClient, releaseDbClient } from '@/lib/db';
-import { applyRateLimitAsync, clientIp } from '@/lib/serverSecurity';
+import { applyRateLimitAsync, clientIp, getAuthenticatedUser } from '@/lib/serverSecurity';
 import { isOfficialAwb, syncOrderByAwb } from '@/lib/stCourier';
 import { isOrderCancelled, isAwaitingConfirmation } from '@/lib/orderStatus';
 
@@ -22,7 +22,6 @@ function phonesMatch(input: string, stored: string): boolean {
   const a = normalizePhone(input);
   const b = normalizePhone(stored);
   if (!a || !b) return false;
-  // Require full 10-digit match (last-4 is too weak for order oracle attacks)
   const a10 = a.length >= 10 ? a.slice(-10) : a;
   const b10 = b.length >= 10 ? b.slice(-10) : b;
   return a10.length === 10 && a10 === b10;
@@ -37,7 +36,7 @@ function stepIndex(status: string): number {
   if (s.includes('handed to st courier')) return 3;
   if (s.includes('packed')) return 2;
   if (isAwaitingConfirmation(s)) return 0;
-  return 1; // Order Placed / confirmed
+  return 1;
 }
 
 function maskPhone(phone: string): string {
@@ -52,23 +51,13 @@ function maskName(name: string): string {
   return n[0] + '*'.repeat(Math.min(n.length - 1, 6));
 }
 
-/**
- * Public Flipkart-style tracking.
- * POST/GET: orderId + full 10-digit checkout phone
- */
-async function handleTrack(orderIdRaw: string, phoneRaw: string) {
+async function handleTrack(orderIdRaw: string, phoneRaw: string, request?: Request) {
   const orderId = String(orderIdRaw || '').trim().toUpperCase();
   const phone = String(phoneRaw || '').trim();
   const phoneDigits = normalizePhone(phone);
 
   if (!orderId || orderId.length < 4) {
     return NextResponse.json({ error: 'Enter a valid Order ID (e.g. BPG-1234).' }, { status: 400 });
-  }
-  if (phoneDigits.length < 10) {
-    return NextResponse.json(
-      { error: 'Enter the full 10-digit mobile number used at checkout.' },
-      { status: 400 }
-    );
   }
 
   const client = await getDbClient();
@@ -82,7 +71,7 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string) {
     const res = await client.query(
       `SELECT o.id, o.order_number, o.order_status, o.awb_number, o.shipment_id, o.tracking_url,
               o.courier_name, o.total_amount, o.ordered_at, o.packed_at, o.shipped_at, o.delivered_at,
-              o.shipping_address, o.payment_status,
+              o.shipping_address, o.payment_status, o.user_id,
               COALESCE(
                 json_agg(
                   json_build_object(
@@ -116,10 +105,24 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string) {
       addr = typeof o.shipping_address === 'string' ? JSON.parse(o.shipping_address) : o.shipping_address || {};
     } catch (_) {}
 
-    if (
-      !phonesMatch(phone, addr.phone || '') &&
-      !phonesMatch(phone, addr.alternatePhone || addr.alternate_phone || '')
-    ) {
+    // Check if session user matches
+    let isAuthorized = false;
+    if (request) {
+      const session = await getAuthenticatedUser(request);
+      if (session?.userId && session.userId === o.user_id) {
+        isAuthorized = true;
+      }
+    }
+
+    if (!isAuthorized && (phoneDigits.length >= 10 || phoneDigits.length === 0)) {
+      if (phoneDigits.length === 0 && isAuthorized) {
+        // Authorized session
+      } else if (phonesMatch(phone, addr.phone || '') || phonesMatch(phone, addr.alternatePhone || addr.alternate_phone || '')) {
+        isAuthorized = true;
+      }
+    }
+
+    if (!isAuthorized) {
       releaseDbClient(client);
       return deny();
     }
@@ -140,7 +143,7 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string) {
       }));
     } catch (_) {}
 
-    // Courier scan history if any (supports event-row schema + legacy columns)
+    // Courier scan history
     let scans: any[] = [];
     try {
       const ct = await client.query(
@@ -170,7 +173,7 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string) {
     const cancelled = isOrderCancelled(o.order_status);
     const awaiting = isAwaitingConfirmation(o.order_status);
 
-    // Live refresh from ST Courier when official AWB exists (never for cancelled / awaiting)
+    // Live refresh from ST Courier
     let live: any = null;
     if (!cancelled && !awaiting && isOfficialAwb(o.awb_number)) {
       try {
@@ -210,8 +213,8 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string) {
         paymentStatus: o.payment_status,
         placedAt: o.ordered_at,
         customer: {
-          name: maskName(addr.name || 'Customer'),
-          phone: maskPhone(addr.phone || ''),
+          name: isAuthorized ? (addr.name || 'Customer') : maskName(addr.name || 'Customer'),
+          phone: isAuthorized ? (addr.phone || '') : maskPhone(addr.phone || ''),
           city: addr.city || '',
           pincode: addr.pincode || '',
         },
@@ -236,7 +239,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Too many track attempts. Wait a minute.' }, { status: 429 });
   }
   const body = await request.json().catch(() => ({}));
-  return handleTrack(body.orderId, body.phone);
+  return handleTrack(body.orderId, body.phone, request);
 }
 
 export async function GET(request: Request) {
@@ -245,5 +248,5 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Too many track attempts. Wait a minute.' }, { status: 429 });
   }
   const { searchParams } = new URL(request.url);
-  return handleTrack(searchParams.get('orderId') || '', searchParams.get('phone') || '');
+  return handleTrack(searchParams.get('orderId') || '', searchParams.get('phone') || '', request);
 }

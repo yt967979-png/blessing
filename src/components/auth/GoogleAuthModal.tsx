@@ -11,12 +11,20 @@ type AuthMode = 'otp_register' | 'phone_login';
 
 export function GoogleAuthModal({
   onClose,
+  forceProfileStep = false,
 }: {
   onClose: () => void;
   forceProfileStep?: boolean;
 }) {
   const router = useRouter();
-  const { loginUser, showToast } = useStore();
+  const { loginUser, showToast, user } = useStore();
+
+  // Auto-close modal if user is already logged in
+  useEffect(() => {
+    if (user && !user.needsProfile && !forceProfileStep) {
+      onClose();
+    }
+  }, [user, forceProfileStep, onClose]);
 
   const [mode, setMode] = useState<AuthMode>('otp_register');
   const [authError, setAuthError] = useState<string | null>(null);
