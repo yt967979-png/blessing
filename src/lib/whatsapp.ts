@@ -332,7 +332,6 @@ export async function initWhatsAppInProcess(opts?: { requireLeader?: boolean }) 
 
     sock.ev.on('messages.upsert', async (upsert: any) => {
       try {
-        if (upsert?.type !== 'notify' && upsert?.type !== 'append') return;
         const messages = upsert?.messages || [];
         for (const msg of messages) {
           if (!msg?.message || msg.key?.fromMe) continue;
@@ -344,22 +343,32 @@ export async function initWhatsAppInProcess(opts?: { requireLeader?: boolean }) 
             msg.message?.extendedTextMessage?.text ||
             msg.message?.buttonsResponseMessage?.selectedDisplayText ||
             msg.message?.listResponseMessage?.title ||
+            msg.message?.ephemeralMessage?.message?.conversation ||
+            msg.message?.ephemeralMessage?.message?.extendedTextMessage?.text ||
+            msg.message?.templateButtonReplyMessage?.selectedId ||
             '';
           if (!text || !fromPhone) continue;
+
+          console.log(`[whatsapp] 💬 Inbound text from +${fromPhone}: "${text}"`);
+
           const { handleInboundYesNo } = await import('@/lib/orderConfirm');
           const result = await handleInboundYesNo(fromPhone, String(text));
           if (result.handled) {
-            console.log(`[whatsapp] Handled command from +${fromPhone}:`, result.answer);
+            console.log(`[whatsapp] ✅ Handled command from +${fromPhone}:`, result.answer);
             const replyMsg = (result as any).result?.message;
             if (replyMsg && sock) {
               try {
                 await sock.sendMessage(jid, { text: replyMsg });
-              } catch (_) {}
+              } catch (err: any) {
+                console.warn('[whatsapp] Reply dispatch warning:', err?.message);
+              }
             }
+          } else {
+            console.log(`[whatsapp] ℹ️ Unhandled text from +${fromPhone}: "${text}" (reason: ${(result as any)?.reason || 'no_match'})`);
           }
         }
       } catch (e: any) {
-        console.warn('[whatsapp] inbound handler:', e?.message || e);
+        console.warn('[whatsapp] inbound handler exception:', e?.message || e);
       }
     });
 
