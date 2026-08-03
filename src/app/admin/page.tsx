@@ -8,7 +8,7 @@ import {
   Plus, Trash2, MessageSquare, Truck, Send, ShieldCheck,
   Download, X, Search, RefreshCw, TrendingUp, IndianRupee,
   Box, Clock, CheckCircle2, LogOut, BarChart2,
-  CreditCard, Banknote, Smartphone, Star, AlertCircle, Tag, Gift, Upload,
+  CreditCard, Banknote, Smartphone, Star, AlertCircle, Tag, Gift, Upload, Bell,
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { authHeaders } from '@/lib/clientAuth';
@@ -302,11 +302,13 @@ export default function AdminPage() {
     }
   }, [user, analyticsRange]);
 
+  const [notifGranted, setNotifGranted] = useState(false);
+
   // ── Initial load + SSE stream
   useEffect(() => {
     if (!user?.id) return;
-    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission().catch(() => {});
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      setNotifGranted(Notification.permission === 'granted');
     }
     void loadLiveOrders();
     void loadAnalytics();
@@ -834,6 +836,41 @@ export default function AdminPage() {
             </nav>
 
             <div className="flex items-center gap-2">
+              {!notifGranted && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if ('Notification' in window) {
+                      const res = await Notification.requestPermission();
+                      if (res === 'granted') {
+                        setNotifGranted(true);
+                        showToast('🔔 PC Audio Chime & Desktop Alerts Enabled!');
+                        try {
+                          const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+                          const osc = ctx.createOscillator();
+                          const gain = ctx.createGain();
+                          osc.type = 'sine';
+                          osc.frequency.setValueAtTime(880, ctx.currentTime);
+                          osc.frequency.setValueAtTime(1320, ctx.currentTime + 0.15);
+                          gain.gain.setValueAtTime(0.15, ctx.currentTime);
+                          gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+                          osc.connect(gain);
+                          gain.connect(ctx.destination);
+                          osc.start();
+                          osc.stop(ctx.currentTime + 0.4);
+                        } catch (_) {}
+                      } else {
+                        showToast('⚠️ Desktop notifications blocked in browser settings');
+                      }
+                    }
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1 bg-amber-400 hover:bg-amber-500 text-[#001B3A] text-xs font-black rounded-lg shadow-sm animate-pulse cursor-pointer shrink-0"
+                >
+                  <Bell className="w-3.5 h-3.5" />
+                  <span>Enable PC Sound & Alerts</span>
+                </button>
+              )}
+
               <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 bg-green-50 border border-green-200 rounded-full">
                 <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
                 <span className="text-[10px] font-semibold text-green-700">Live</span>
