@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { queryDb } from '@/lib/db';
 import { applyRateLimitAsync } from '@/lib/serverSecurity';
-import { notifyWhatsApp } from '@/lib/notify/send';
+import { sendViaWasender } from '@/lib/wasender';
 
 export async function POST(request: Request) {
   try {
@@ -36,9 +36,13 @@ export async function POST(request: Request) {
       [phoneWithCc, otpCode, expiresAt]
     );
 
-    // Send OTP via WhatsApp Baileys Outbox
+    // Send OTP exclusively via WasenderAPI
     const text = `🔐 Your Blessing Power Guide Verification Code is *${otpCode}*.\n\nValid for 10 minutes. Do not share this OTP with anyone.`;
-    await notifyWhatsApp(phoneWithCc, text);
+    const wasenderResult = await sendViaWasender(phoneWithCc, text);
+
+    if (!wasenderResult.ok) {
+      console.warn('[send-otp] WasenderAPI dispatch warning:', wasenderResult.error);
+    }
 
     return NextResponse.json({
       success: true,

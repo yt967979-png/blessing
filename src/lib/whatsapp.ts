@@ -791,51 +791,12 @@ export async function shutdownWhatsAppInProcess() {
 }
 
 export async function sendWhatsAppMessageInProcess(to: string, message: string) {
-  const digits = String(to || '').replace(/\D/g, '');
-  if (digits.length < 10) {
-    throw new Error('Customer phone number is missing or invalid');
+  const { sendViaWasender } = await import('@/lib/wasender');
+  const res = await sendViaWasender(to, message);
+  if (!res.ok) {
+    throw new Error(res.error || 'WasenderAPI send failed');
   }
-
-  // Prefer live socket on this process; otherwise queue for the leader outbox worker.
-  if (isConnected && sock) {
-    const task = sendQueue.then(async () => {
-      try {
-        return await sendWhatsAppDirect(digits, message);
-      } catch (err: any) {
-        console.error('Failed to send WhatsApp message in-process:', err.message);
-        try {
-          await enqueueWhatsAppOutbox(digits, message);
-          return { success: true, queued: true, recipient: digits, deferred: true };
-        } catch (qErr: any) {
-          throw err;
-        }
-      }
-    });
-    sendQueue = task.catch(() => {});
-    return task;
-  }
-
-  // Not linked here — queue so outbox worker / other replica can send when WA is up
-  try {
-    await enqueueWhatsAppOutbox(digits, message);
-    // Kick Baileys on leader so pending outbox drains soon
-    if (isBackgroundLeader()) {
-      void initWhatsAppInProcess().catch(() => {});
-    }
-    return { success: true, queued: true, recipient: digits };
-  } catch (queueErr: any) {
-    // Last resort: try open socket anyway (may reconnect)
-    if (isBackgroundLeader()) {
-      const task = sendQueue.then(() => sendWhatsAppDirect(digits, message));
-      sendQueue = task.catch(() => {});
-      return task;
-    }
-    throw queueErr instanceof Error
-      ? queueErr
-      : new Error(
-          'WhatsApp not linked and outbox unavailable. Open Admin → WhatsApp and scan QR; fix DATABASE_URL if DB is down.'
-        );
-  }
+  return { success: true, recipient: to };
 }
 
 export function getWhatsAppConnectionState() {
