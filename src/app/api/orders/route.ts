@@ -410,7 +410,7 @@ export async function POST(request: Request) {
           'Blessing Power Guide';
 
         if (isRazorpay) {
-          void notify('payment.confirmed', {
+          await notify('payment.confirmed', {
             customerPhone: phone,
             customerName,
             orderId: orderNumber,
@@ -418,16 +418,27 @@ export async function POST(request: Request) {
           }).catch((e) => console.warn('[orders] payment WhatsApp:', e?.message || e));
         }
 
-        void notify('order.confirm_request', {
+        const notifyRes = await notify('order.confirm_request', {
           customerPhone: phone,
           customerName,
           orderId: orderNumber,
           totalAmount,
           bookTitle,
           itemsSummary: bookTitle,
-        }).then((r) => {
-          if (!r.ok) console.warn('[orders] confirm WhatsApp:', r.error);
         });
+
+        console.log(`[orders] WhatsApp confirm request dispatched to +${phone}:`, notifyRes.ok ? 'SUCCESS' : notifyRes.error);
+
+        // Also alert admin of new order
+        void notify('admin.new_order', {
+          customerPhone: phone,
+          customerName,
+          orderId: orderNumber,
+          totalAmount,
+          bookTitle,
+          itemsSummary: bookTitle,
+          adminPhones: getEnvAdminNotifyPhones(),
+        }).catch(() => {});
       } else {
         console.warn('[orders] confirm WhatsApp skipped — missing customer phone');
       }
