@@ -17,6 +17,7 @@ export async function POST(request: Request) {
     const rawPhone = String(body.phone || '').trim();
     const otpInput = String(body.otp || '').trim();
     const nameInput = String(body.name || '').trim() || 'Verified Student';
+    const emailInput = String(body.email || '').trim().toLowerCase();
     const passwordInput = String(body.password || '').trim();
 
     const cleanPhone = rawPhone.replace(/\D/g, '');
@@ -56,23 +57,28 @@ export async function POST(request: Request) {
 
     let userId = '';
     let userRole = 'customer';
+    const finalEmail = emailInput || `${phoneWithCc}@blessingpowerguide.internal`;
 
     if (existingUserRes.rows.length > 0) {
       const u = existingUserRes.rows[0];
       userId = u.id;
       userRole = u.role || 'customer';
 
-      if (passwordInput) {
-        const passHash = hashPassword(passwordInput);
+      const passHash = passwordInput ? hashPassword(passwordInput) : null;
+      if (passHash) {
         await queryDb(
-          `UPDATE users SET name = COALESCE($1, name), password_hash = $2, updated_at = NOW() WHERE id = $3`,
-          [nameInput, passHash, userId]
+          `UPDATE users SET name = COALESCE($1, name), email = COALESCE(NULLIF($2, ''), email), password_hash = $3, updated_at = NOW() WHERE id = $4`,
+          [nameInput, emailInput, passHash, userId]
+        );
+      } else {
+        await queryDb(
+          `UPDATE users SET name = COALESCE($1, name), email = COALESCE(NULLIF($2, ''), email), updated_at = NOW() WHERE id = $3`,
+          [nameInput, emailInput, userId]
         );
       }
     } else {
       userId = `user_wa_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
       const passHash = passwordInput ? hashPassword(passwordInput) : hashPassword('default123');
-      const placeholderEmail = `${phoneWithCc}@blessingpowerguide.internal`;
 
       // If first registered user in DB, assign super_admin!
       const totalUsersRes = await queryDb(`SELECT COUNT(*)::int AS total FROM users`);
@@ -83,7 +89,7 @@ export async function POST(request: Request) {
       await queryDb(
         `INSERT INTO users (id, name, email, phone, password_hash, role, status)
          VALUES ($1, $2, $3, $4, $5, $6, 'active')`,
-        [userId, nameInput, placeholderEmail, phoneWithCc, passHash, userRole]
+        [userId, nameInput, finalEmail, phoneWithCc, passHash, userRole]
       );
     }
 
@@ -93,6 +99,7 @@ export async function POST(request: Request) {
       user: {
         id: userId,
         name: nameInput,
+        email: finalEmail,
         phone: phoneWithCc,
         role: userRole,
         token,
@@ -103,13 +110,13 @@ export async function POST(request: Request) {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 30 * 24 * 60 * 60, // 30 days
+      maxAge: 30 * 24 * 60 * 60,
       path: '/',
     });
 
     return response;
   } catch (err: any) {
-    console.error('[verify-otp] error:', err?.message || err);
-    return NextResponse.json({ error: 'OTP verification failed.' }, { status: 500 });
+    console.error('[verify-otp error]', err);
+    return NextResponse.json({ error: err.message || 'OTP verification failed.' }, { status: 500 });
   }
 }

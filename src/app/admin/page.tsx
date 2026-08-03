@@ -352,7 +352,7 @@ export default function AdminPage() {
         } catch { /* ignore parse errors */ }
       };
     } catch { /* SSE not supported */ }
-    const interval = setInterval(() => { void loadLiveOrders(); }, 45000);
+    const interval = setInterval(() => { void loadLiveOrders(); }, 5000);
     // Auto-pull ST Courier live status for all open AWB orders (Out for Delivery → auto update)
     const runCourierSync = () => {
       if (!user?.token) return;

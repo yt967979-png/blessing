@@ -95,16 +95,30 @@ export async function findAwaitingOrderByPhone(phone: string) {
   const dig = last10(phone);
   if (dig.length !== 10) return null;
 
+  // Direct SQL search for phone number in shipping_address with awaiting/pending confirmation
   const res = await queryDb(
     `SELECT id, order_number, order_status, total_amount, shipping_address, ordered_at
      FROM orders
-     WHERE order_status ILIKE '%Awaiting Confirmation%'
+     WHERE (order_status ILIKE '%awaiting%' OR order_status ILIKE '%pending%' OR order_status ILIKE '%placed%')
+       AND (shipping_address ILIKE $1 OR shipping_address ILIKE $2)
      ORDER BY ordered_at DESC NULLS LAST
-     LIMIT 40`
+     LIMIT 1`,
+    [`%${dig}%`, `%${dig.slice(0, 5)}%${dig.slice(5)}%`]
   );
-  for (const row of res.rows) {
-    const addr = parseAddr(row.shipping_address);
-    if (last10(addr.phone) === dig || last10(addr.alternatePhone || '') === dig) return row;
+  if (res.rows.length > 0) return res.rows[0];
+
+  // Fallback: search last 50 orders of any awaiting confirmation status
+  const fallback = await queryDb(
+    `SELECT id, order_number, order_status, total_amount, shipping_address, ordered_at
+     FROM orders
+     ORDER BY ordered_at DESC NULLS LAST
+     LIMIT 50`
+  );
+  for (const row of fallback.rows) {
+    if (isAwaitingConfirmation(row.order_status)) {
+      const addr = parseAddr(row.shipping_address);
+      if (last10(addr.phone) === dig || last10(addr.alternatePhone || '') === dig) return row;
+    }
   }
   return null;
 }

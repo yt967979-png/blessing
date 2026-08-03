@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { X, User, Phone, ShieldCheck, AlertCircle, KeyRound, MessageSquare, ArrowRight, Check, RefreshCw } from 'lucide-react';
+import { X, User, Phone, ShieldCheck, AlertCircle, KeyRound, MessageSquare, ArrowRight, Check, RefreshCw, Mail } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useStore } from '@/context/StoreContext';
 import { BrandLogo } from '@/components/ui/BrandLogo';
@@ -25,6 +25,7 @@ export function GoogleAuthModal({
   // Form State
   const [phone, setPhone] = useState('');
   const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [otpCode, setOtpCode] = useState('');
@@ -103,6 +104,7 @@ export function GoogleAuthModal({
           phone,
           otp: code,
           name: name || 'Verified Student',
+          email,
           password,
         }),
       });
@@ -244,7 +246,7 @@ export function GoogleAuthModal({
           {mode === 'otp_register' && (
             <>
               {!otpSent ? (
-                <form onSubmit={handleSendOtp} className="space-y-3.5">
+                <form onSubmit={handleSendOtp} className="space-y-3">
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">Full Name</label>
                     <div className="relative">
@@ -255,7 +257,21 @@ export function GoogleAuthModal({
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         placeholder="Enter your full name"
-                        className="w-full pl-9 pr-3 py-2.5 text-xs border border-slate-300 rounded-xl outline-none focus:border-[#0044AA] focus:ring-2 focus:ring-blue-100"
+                        className="w-full pl-9 pr-3 py-2 text-xs border border-slate-300 rounded-xl outline-none focus:border-[#0044AA] focus:ring-2 focus:ring-blue-100"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Email Address</label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
+                      <input
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="e.g. ramesh@gmail.com"
+                        className="w-full pl-9 pr-3 py-2 text-xs border border-slate-300 rounded-xl outline-none focus:border-[#0044AA] focus:ring-2 focus:ring-blue-100"
                       />
                     </div>
                   </div>
@@ -270,7 +286,7 @@ export function GoogleAuthModal({
                         value={phone}
                         onChange={(e) => setPhone(e.target.value)}
                         placeholder="Enter 10-digit mobile number"
-                        className="w-full pl-9 pr-3 py-2.5 text-xs border border-slate-300 rounded-xl outline-none focus:border-[#0044AA] focus:ring-2 focus:ring-blue-100"
+                        className="w-full pl-9 pr-3 py-2 text-xs border border-slate-300 rounded-xl outline-none focus:border-[#0044AA] focus:ring-2 focus:ring-blue-100"
                       />
                     </div>
                   </div>
@@ -286,7 +302,7 @@ export function GoogleAuthModal({
                           value={password}
                           onChange={(e) => setPassword(e.target.value)}
                           placeholder="Enter password"
-                          className="w-full pl-9 pr-3 py-2.5 text-xs border border-slate-300 rounded-xl outline-none focus:border-[#0044AA] focus:ring-2 focus:ring-blue-100"
+                          className="w-full pl-9 pr-3 py-2 text-xs border border-slate-300 rounded-xl outline-none focus:border-[#0044AA] focus:ring-2 focus:ring-blue-100"
                         />
                       </div>
                     </div>
@@ -301,7 +317,7 @@ export function GoogleAuthModal({
                           value={confirmPassword}
                           onChange={(e) => setConfirmPassword(e.target.value)}
                           placeholder="Re-enter password"
-                          className="w-full pl-9 pr-3 py-2.5 text-xs border border-slate-300 rounded-xl outline-none focus:border-[#0044AA] focus:ring-2 focus:ring-blue-100"
+                          className="w-full pl-9 pr-3 py-2 text-xs border border-slate-300 rounded-xl outline-none focus:border-[#0044AA] focus:ring-2 focus:ring-blue-100"
                         />
                       </div>
                     </div>
