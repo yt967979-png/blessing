@@ -1352,9 +1352,9 @@ export async function ensureDefaultCategories(client: any) {
 async function ensureAdminUser(client: any) {
   try {
     const phone = String(process.env.ADMIN_PHONE || '9840418228').replace(/\D/g, '').slice(-10);
-    const email = String(process.env.ADMIN_EMAIL || 'admin@blessingpowerguide.com').toLowerCase().trim();
-    const name = process.env.ADMIN_NAME || 'Admin';
-    const password = process.env.ADMIN_PASSWORD || 'ChangeMe@BPG2026';
+    const email = String(process.env.ADMIN_EMAIL || 'yogesh234456@gmail.com').toLowerCase().trim();
+    const name = process.env.ADMIN_NAME || 'Yogesh Admin';
+    const password = process.env.ADMIN_PASSWORD || '123456';
     const passwordHash = hashPassword(password);
     const userId = 'admin-bpg-001';
 

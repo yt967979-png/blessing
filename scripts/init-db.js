@@ -425,10 +425,10 @@ function hashPassword(password) {
 const ADMIN_USERS = [
   {
     id: 'admin-bpg-001',
-    name: process.env.ADMIN_NAME || 'Admin',
-    email: process.env.ADMIN_EMAIL || 'admin@blessingpowerguide.com',
+    name: process.env.ADMIN_NAME || 'Yogesh Admin',
+    email: process.env.ADMIN_EMAIL || 'yogesh234456@gmail.com',
     phone: process.env.ADMIN_PHONE || '9840418228',
-    password: process.env.ADMIN_PASSWORD || 'ChangeMe@BPG2026',
+    password: process.env.ADMIN_PASSWORD || '123456',
     role: 'admin',
   },
 ];
