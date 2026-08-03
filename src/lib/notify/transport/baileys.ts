@@ -1,44 +1,40 @@
 import { sendViaWasender } from '@/lib/wasender';
-import { sendWhatsAppMessageInProcess } from '@/lib/whatsapp';
+import { sendViaMetaCloud } from '@/lib/metaCloud';
 
 /**
- * High-Availability Dual WhatsApp Transport:
- * 1. WasenderAPI Cloud Gateway (Primary)
- * 2. Native Baileys Direct Socket (Automatic Fallback if WasenderAPI rate-limits or fails)
+ * Universal WhatsApp Transport Engine:
+ * 1. Meta Official Cloud API (1,000 FREE messages/mo + Native Green Buttons)
+ * 2. WasenderAPI Cloud Gateway
  */
 export async function sendViaBaileys(to: string, message: string) {
   const digits = String(to || '').replace(/\D/g, '');
   if (digits.length < 10) {
-    return { ok: false as const, error: 'invalid phone' };
+    return { ok: false as const, queued: false, error: 'invalid phone' };
   }
 
-  // 1. Try WasenderAPI primary dispatch
+  // Priority 1: Meta Official Cloud API (if META_WA_TOKEN & META_WA_PHONE_ID exist)
+  if (process.env.META_WA_TOKEN && process.env.META_WA_PHONE_ID) {
+    const metaResult = await sendViaMetaCloud(digits, message);
+    if (metaResult.ok) {
+      return {
+        ok: true as const,
+        queued: false,
+        provider: 'meta_cloud_api',
+        recipient: digits.length === 10 ? `91${digits}` : digits,
+      };
+    }
+  }
+
+  // Priority 2: WasenderAPI Gateway
   const wasenderResult = await sendViaWasender(digits, message);
   if (wasenderResult.ok) {
     return {
       ok: true as const,
+      queued: false,
       provider: 'wasenderapi',
       recipient: digits.length === 10 ? `91${digits}` : digits,
     };
   }
 
-  console.warn(`[notify/wasender] WasenderAPI fallback engaged (${wasenderResult.error || 'rate limited'}). Attempting Baileys direct dispatch...`);
-
-  // 2. High-Availability Automatic Fallback to Native Baileys Direct Dispatch
-  try {
-    const result = await sendWhatsAppMessageInProcess(digits, message);
-    if ((result as any)?.success) {
-      return {
-        ok: true as const,
-        provider: 'baileys_fallback',
-        queued: Boolean((result as { queued?: boolean })?.queued),
-        recipient: digits.length === 10 ? `91${digits}` : digits,
-      };
-    }
-  } catch (err: unknown) {
-    const errText = err instanceof Error ? err.message : String(err);
-    console.warn('[notify/baileys fallback error]', errText);
-  }
-
-  return { ok: false as const, error: wasenderResult.error || 'WhatsApp message dispatch failed' };
+  return { ok: false as const, queued: false, error: wasenderResult.error || 'WhatsApp send failed' };
 }
