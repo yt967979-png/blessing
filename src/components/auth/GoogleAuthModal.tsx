@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { X, User, Phone, ShieldCheck, AlertCircle, KeyRound, MessageSquare, ArrowRight, Check } from 'lucide-react';
+import { X, User, Phone, ShieldCheck, AlertCircle, KeyRound, MessageSquare, ArrowRight, Check, RefreshCw } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useStore } from '@/context/StoreContext';
 import { BrandLogo } from '@/components/ui/BrandLogo';
@@ -30,9 +30,22 @@ export function GoogleAuthModal({
   const [otpCode, setOtpCode] = useState('');
   const [otpSent, setOtpSent] = useState(false);
 
+  // Resend Timer State
+  const [resendTimer, setResendTimer] = useState(30);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (otpSent && resendTimer > 0) {
+      interval = setInterval(() => {
+        setResendTimer((prev) => prev - 1);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [otpSent, resendTimer]);
+
   // Request WhatsApp OTP
-  const handleSendOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSendOtp = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     setAuthError(null);
 
     const clean = phone.replace(/\D/g, '');
@@ -62,6 +75,7 @@ export function GoogleAuthModal({
         return;
       }
       setOtpSent(true);
+      setResendTimer(30);
       showToast('📩 Verification code dispatched to your WhatsApp number.');
     } catch {
       setAuthError('Network error while requesting verification code.');
@@ -146,6 +160,13 @@ export function GoogleAuthModal({
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleEditDetails = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setOtpSent(false);
+    setAuthError(null);
   };
 
   return (
@@ -313,13 +334,25 @@ export function GoogleAuthModal({
                     <ArrowRight className="w-4 h-4" />
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={() => setOtpSent(false)}
-                    className="w-full text-center text-xs text-slate-500 hover:text-slate-800 font-medium"
-                  >
-                    Edit mobile number or password
-                  </button>
+                  <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100">
+                    <button
+                      type="button"
+                      disabled={resendTimer > 0 || isSubmitting}
+                      onClick={() => void handleSendOtp()}
+                      className="inline-flex items-center gap-1 font-semibold text-[#0044AA] hover:text-[#002266] disabled:text-slate-400 disabled:cursor-not-allowed"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isSubmitting ? 'animate-spin' : ''}`} />
+                      <span>{resendTimer > 0 ? `Resend Code (${resendTimer}s)` : 'Resend Code'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleEditDetails}
+                      className="font-medium text-slate-500 hover:text-slate-800 underline underline-offset-2"
+                    >
+                      Edit details
+                    </button>
+                  </div>
                 </form>
               )}
             </>
