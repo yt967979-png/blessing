@@ -39,12 +39,12 @@ export async function POST(request: Request) {
 
     const text = `🔐 Your Blessing Power Guide Verification Code is *${otpCode}*.\n\nValid for 10 minutes. Do not share this OTP with anyone.`;
     
-    // Priority 1: Meta Official Cloud API
-    let sendResult = await sendViaMetaCloud(phoneWithCc, text);
+    // Priority 1: WasenderAPI Gateway
+    let sendResult = await sendViaWasender(phoneWithCc, text);
     if (!sendResult.ok) {
-      console.warn('[send-otp] Meta Cloud API failed, trying WasenderAPI fallback:', sendResult.error);
-      // Priority 2: WasenderAPI Fallback
-      sendResult = await sendViaWasender(phoneWithCc, text);
+      console.warn('[send-otp] WasenderAPI failed, trying Meta Cloud API fallback:', sendResult.error);
+      // Priority 2: Meta Official Cloud API Fallback
+      sendResult = await sendViaMetaCloud(phoneWithCc, text);
     }
 
     if (!sendResult.ok) {
