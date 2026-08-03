@@ -379,7 +379,7 @@ export default function CheckoutPage() {
                 You currently have <strong>{cartCount} book(s)</strong> in your cart. Please add{' '}
                 <strong>{4 - cartCount} more guide(s)</strong> to complete your order.
               </p>
-              <Link href="/shop" className="inline-block mt-2 font-bold text-[#0044AA] underline">
+              <Link href="/search" className="inline-block mt-2 font-bold text-[#0044AA] hover:underline cursor-pointer">
                 + Browse Guides & Add to Cart →
               </Link>
             </div>

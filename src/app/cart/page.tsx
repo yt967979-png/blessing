@@ -28,6 +28,9 @@ export default function CartPage() {
     saveForLater,
     savedForLater,
     moveToCartFromSaved,
+    cartCount,
+    shippingFee,
+    cartGrandTotal,
   } = useStore();
   const [pincode, setPincode] = useState('600012');
   const [pincodeMsg, setPincodeMsg] = useState('✓ Deliverable via ST Courier — usually 2–3 days in Tamil Nadu.');
@@ -35,7 +38,6 @@ export default function CartPage() {
 
   const totalMrp = cart.reduce((sum, item) => sum + (item.mrp || item.price + 40) * item.qty, 0);
   const totalDiscount = totalMrp - cartTotal;
-  const grandTotal = cartTotal;
 
   const handleCheckPincode = (e: React.FormEvent) => {
     e.preventDefault();
@@ -245,13 +247,15 @@ export default function CartPage() {
                     </div>
                     <div className="flex justify-between text-slate-600">
                       <span>Delivery Charges:</span>
-                      <span className="font-bold text-emerald-600">FREE</span>
+                      <span className={shippingFee === 0 ? 'font-bold text-emerald-600' : 'font-bold text-slate-800'}>
+                        {shippingFee === 0 ? 'FREE' : `₹${shippingFee}`}
+                      </span>
                     </div>
                   </div>
 
                   <div className="flex justify-between items-baseline font-black text-lg text-[#001B3A]">
                     <span>Total Amount:</span>
-                    <span>₹{grandTotal}</span>
+                    <span>₹{cartGrandTotal}</span>
                   </div>
 
                   {totalDiscount > 0 && (
@@ -270,7 +274,7 @@ export default function CartPage() {
                       if (!pincodeOk) {
                         return;
                       }
-                      setCheckoutTotal(grandTotal);
+                      setCheckoutTotal(cartGrandTotal);
                       setIsCheckoutOpen(true);
                       router.push('/checkout');
                     }}
