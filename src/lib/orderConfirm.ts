@@ -115,7 +115,7 @@ export async function confirmAwaitingOrder(orderId: string): Promise<
 > {
   try {
     const ord = await queryDb(
-      `SELECT id, order_number, order_status, total_amount, shipping_address, payment_method
+      `SELECT id, order_number, order_status, total_amount, shipping_address, payment_method, items
        FROM orders WHERE order_number = $1 OR id = $1 LIMIT 1`,
       [orderId]
     );
@@ -148,6 +148,14 @@ export async function confirmAwaitingOrder(orderId: string): Promise<
 
     const { phone, name, city } = parseAddr(row.shipping_address);
 
+    let itemsSummary = '';
+    try {
+      const rawItems = typeof row.items === 'string' ? JSON.parse(row.items) : row.items;
+      if (Array.isArray(rawItems)) {
+        itemsSummary = rawItems.map((i: any) => `${i.title || 'Guide'} (x${i.qty || i.quantity || 1})`).join(', ');
+      }
+    } catch (_) {}
+
     if (phone) {
       await notify('order.confirmed', {
         customerPhone: phone,
@@ -164,6 +172,7 @@ export async function confirmAwaitingOrder(orderId: string): Promise<
       totalAmount: row.total_amount,
       city,
       paymentMethod: row.payment_method,
+      itemsSummary,
       adminPhones: admins,
     });
 
