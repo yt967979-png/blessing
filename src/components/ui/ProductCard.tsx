@@ -32,10 +32,6 @@ export const ProductCard = ({ product }: { product: Product }) => {
   };
 
   const handleAddToCart = () => {
-    if (!user) {
-      setIsAuthOpen(true);
-      return;
-    }
     addToCart(product);
     setIsAdded(true);
     setTimeout(() => setIsAdded(false), 1800);

@@ -572,7 +572,6 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
                   <button
                     type="button"
                     onClick={() => {
-                      if (!user) { setIsAuthOpen(true); return; }
                       addToCart(product);
                     }}
                     className="flex-1 bg-[#0044AA] text-white font-extrabold text-sm py-3.5 px-4 rounded-xl shadow-md flex items-center justify-center gap-2 uppercase tracking-wider"
@@ -583,7 +582,6 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
                   <button
                     type="button"
                     onClick={() => {
-                      if (!user) { setIsAuthOpen(true); return; }
                       addToCart(product);
                       setIsCheckoutOpen(true);
                       router.push('/checkout');
