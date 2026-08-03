@@ -124,9 +124,7 @@ async function migrateDatabase(connStr, dbName) {
     await client.connect();
     console.log(`🔒 Executing 17-Table Schema Migration in [${dbName}]...`);
 
-    try {
-      await client.query(`CREATE EXTENSION IF NOT EXISTS pg_stat_statements;`);
-    } catch (e) {}
+
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
