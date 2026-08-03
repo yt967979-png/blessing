@@ -666,6 +666,26 @@ async function sendWhatsAppDirect(to: string, message: string) {
   const phoneWithCountry = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
   const jid = `${phoneWithCountry}@s.whatsapp.net`;
 
+  // Send interactive buttons for order confirmation messages if supported
+  if (message.includes('CONFIRM YOUR ORDER') || message.includes('Reply YES') || message.includes('1️⃣ Reply *YES*')) {
+    try {
+      await activeSock.sendMessage(jid, {
+        text: message,
+        footer: 'Blessing Power Guide • Tap button or reply YES / NO',
+        buttons: [
+          { buttonId: 'yes', buttonText: { displayText: '✅ YES - CONFIRM ORDER' }, type: 1 },
+          { buttonId: 'no', buttonText: { displayText: '❌ NO - CANCEL ORDER' }, type: 1 },
+        ],
+        headerType: 1,
+      } as any);
+      console.log(`✅ [IN-PROCESS BAILEYS BUTTONS SENT] Interactive message sent to +${phoneWithCountry}`);
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      return { success: true, recipient: phoneWithCountry };
+    } catch (_) {
+      // Fallback to text send if buttons payload fails on recipient device
+    }
+  }
+
   await activeSock.sendMessage(jid, { text: message });
   console.log(`✅ [IN-PROCESS BAILEYS SENT] Message sent to +${phoneWithCountry}`);
   await new Promise((resolve) => setTimeout(resolve, 500));
