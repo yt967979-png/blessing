@@ -4,8 +4,15 @@
  */
 
 export async function sendViaMetaCloud(to: string, message: string): Promise<{ ok: boolean; error?: string }> {
-  const token = process.env.META_WA_TOKEN || process.env.WHATSAPP_TOKEN || '';
-  const phoneId = process.env.META_WA_PHONE_ID || process.env.WHATSAPP_PHONE_ID || '';
+  const token =
+    process.env.META_WA_TOKEN ||
+    process.env.WHATSAPP_TOKEN ||
+    'EAAZCN9qRzrZC8BSNZAqWox0pC0ZATiYYlW77ZAcoUZATDywdZBVhZATqJxYD9FRn90VPF1LBmcRqFZBwX6C7ZBAcvz6xgTZAQQduSZCFrpZCTHZC2QEubKGvnQNcoZBvoWXYWwZBnqugOuLWZAUPTZBTkSGaeIfFLiEwGZCTrzo17n6sd5MQIGO9cJfVkPnaFXnJraQhxpxN13CuAAuMIEjEZCIHkM9EFs07lq8EZC8fJKlfCQd4rjDjVNWTZCZCcYSFkaqeoavsXDthske974AsGXnCxprnHZBgC94lJZABIUvArTDZB4QCo1ZAcYZD';
+
+  const phoneId =
+    process.env.META_WA_PHONE_ID ||
+    process.env.WHATSAPP_PHONE_ID ||
+    '1253210304535554';
 
   if (!token || !phoneId) {
     return { ok: false, error: 'Meta Cloud API credentials not configured in env (META_WA_TOKEN & META_WA_PHONE_ID).' };
@@ -25,7 +32,7 @@ export async function sendViaMetaCloud(to: string, message: string): Promise<{ o
   let bodyData: any;
 
   if (isConfirmMsg) {
-    // Official Meta Interactive Buttons Payload (Exact Chennai Metro Rail format)
+    // Official Meta Interactive Buttons Payload (Native Clickable Quick Reply Buttons)
     bodyData = {
       messaging_product: 'whatsapp',
       recipient_type: 'individual',

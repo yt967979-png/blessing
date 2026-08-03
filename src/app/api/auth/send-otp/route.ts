@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { queryDb } from '@/lib/db';
 import { applyRateLimitAsync } from '@/lib/serverSecurity';
 import { sendViaWasender } from '@/lib/wasender';
+import { sendViaMetaCloud } from '@/lib/metaCloud';
 
 export async function POST(request: Request) {
   try {
@@ -36,12 +37,18 @@ export async function POST(request: Request) {
       [phoneWithCc, otpCode, expiresAt]
     );
 
-    // Send OTP exclusively via WasenderAPI
     const text = `🔐 Your Blessing Power Guide Verification Code is *${otpCode}*.\n\nValid for 10 minutes. Do not share this OTP with anyone.`;
-    const wasenderResult = await sendViaWasender(phoneWithCc, text);
+    
+    // Priority 1: Meta Official Cloud API
+    let sendResult = await sendViaMetaCloud(phoneWithCc, text);
+    if (!sendResult.ok) {
+      console.warn('[send-otp] Meta Cloud API failed, trying WasenderAPI fallback:', sendResult.error);
+      // Priority 2: WasenderAPI Fallback
+      sendResult = await sendViaWasender(phoneWithCc, text);
+    }
 
-    if (!wasenderResult.ok) {
-      console.warn('[send-otp] WasenderAPI dispatch warning:', wasenderResult.error);
+    if (!sendResult.ok) {
+      console.warn('[send-otp] Dispatch warning:', sendResult.error);
     }
 
     return NextResponse.json({
