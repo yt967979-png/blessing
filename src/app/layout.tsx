@@ -55,6 +55,18 @@ export default function RootLayout({
         <StoreProvider>
           <ClientChrome>{children}</ClientChrome>
         </StoreProvider>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              window.addEventListener('error', function(e) {
+                if (e && e.message && (e.message.indexOf('Loading chunk') !== -1 || e.message.indexOf('ChunkLoadError') !== -1 || e.message.indexOf('Refused to execute script') !== -1)) {
+                  console.warn('New deployment detected — refreshing page for latest bundle...');
+                  window.location.reload();
+                }
+              }, true);
+            `,
+          }}
+        />
         <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
         <Script
           id="register-sw"
