@@ -365,8 +365,6 @@ export const ModalsBundle = () => {
                     razorpay_signature: response.razorpay_signature,
                     items: cartPayload,
                     expectedRupees: rzpData.expectedRupees,
-                    couponCode: appliedCoupon?.code || null,
-                    freeBookId: appliedCoupon?.freeBookId || null,
                   }),
                 });
                 const verifyData = await verifyRes.json();

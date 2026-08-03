@@ -559,40 +559,7 @@ export default function CheckoutPage() {
                 )}
               </div>
 
-              {/* Coupon input */}
-              <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-3 space-y-2">
-                <label className="font-black text-slate-800 uppercase tracking-wider text-[10px] flex items-center gap-1">
-                  <Tag className="w-3.5 h-3.5 text-amber-600" /> Apply Coupon
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    value={couponInput}
-                    onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
-                    className="flex-1 px-3 py-2 border rounded-lg font-bold uppercase bg-white"
-                    placeholder="CODE"
-                  />
-                  <button
-                    type="button"
-                    disabled={couponBusy}
-                    onClick={async () => {
-                      setCouponBusy(true);
-                      await applyCouponCode(couponInput, freeBookPickId || undefined);
-                      setCouponBusy(false);
-                    }}
-                    className="px-4 py-2 bg-[#001B3A] text-white font-bold rounded-lg"
-                  >
-                    Apply
-                  </button>
-                </div>
-                {appliedCoupon && (
-                  <p className="font-bold text-emerald-700">
-                    ✓ {appliedCoupon.label}{' '}
-                    <button type="button" onClick={clearAppliedCoupon} className="text-red-600 ml-2">
-                      Remove
-                    </button>
-                  </p>
-                )}
-              </div>
+
 
               {/* Breakdown */}
               <div className="space-y-1.5 pt-2 border-t text-slate-600">

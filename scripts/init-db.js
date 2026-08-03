@@ -2,7 +2,7 @@ const { Client } = require('pg');
 
 try {
   require('dotenv').config();
-} catch (e) {}
+} catch (e) { }
 
 /** Prefer public *.rlwy.net over broken postgres.railway.internal (matches src/lib/db.ts). */
 function getConnectionCandidates() {
@@ -103,7 +103,7 @@ async function connectWithFallback(label) {
       console.error(`❌ [${host}] ${err.message}`);
       try {
         await client.end();
-      } catch (_) {}
+      } catch (_) { }
       if (err.message?.includes('ENOTFOUND') && connStr.includes('railway.internal')) {
         console.warn('   → private hostname failed, trying next URL…');
         continue;
@@ -124,7 +124,9 @@ async function migrateDatabase(connStr, dbName) {
     await client.connect();
     console.log(`🔒 Executing 17-Table Schema Migration in [${dbName}]...`);
 
-
+    try {
+      await client.query(`CREATE EXTENSION IF NOT EXISTS pg_stat_statements;`);
+    } catch (e) { }
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
@@ -481,7 +483,7 @@ async function seedAdmin(connStr, dbName) {
 
     try {
       await client.query(`ALTER TABLE users DROP COLUMN IF EXISTS email_verified`);
-    } catch (_) {}
+    } catch (_) { }
 
     for (const admin of ADMIN_USERS) {
       const phone = String(admin.phone).replace(/\D/g, '').slice(-10);
@@ -631,7 +633,7 @@ async function main() {
     const connected = await connectWithFallback('migration');
     connectionString = connected.connStr;
     await connected.client.end();
-    
+
     const targetDbName = connectionString.split('/').pop().split('?')[0] || 'target_db';
     await migrateDatabase(connectionString, targetDbName);
 
@@ -640,7 +642,7 @@ async function main() {
       await migrateDatabase(postgresConnStr, 'postgres');
     }
 
-    console.log('✅ Database schema migration complete.');
+    console.log('✅ Database schema initialization complete.');
   } catch (err) {
     console.warn('⚠️ Build phase DB migration notice:', err.message);
     console.warn('   Schema initialization will automatically run on runtime startup.');

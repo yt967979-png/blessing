@@ -8,22 +8,14 @@ import {
   Plus, Trash2, MessageSquare, Truck, Send, ShieldCheck,
   Download, X, Search, RefreshCw, TrendingUp, IndianRupee,
   Box, Clock, CheckCircle2, LogOut, BarChart2,
-  CreditCard, Banknote, Smartphone, Star, AlertCircle, Tag, Gift, Upload, Bell,
+  CreditCard, Banknote, Smartphone, Star, AlertCircle, Tag, Gift, Upload,
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { authHeaders } from '@/lib/clientAuth';
 import { BrandLogo } from '@/components/ui/BrandLogo';
 import { openShippingLabelPrint } from '@/lib/shippingLabel';
 
-const AdminWhatsAppTab = dynamic(() => import('@/components/admin/AdminWhatsAppTab'), {
-  ssr: false,
-  loading: () => <p className="text-center text-sm text-gray-500 py-12">Loading WhatsApp…</p>,
-});
 
-const AdminCouponsTab = dynamic(() => import('@/components/admin/AdminCouponsTab'), {
-  ssr: false,
-  loading: () => <p className="text-center text-sm text-gray-500 py-12">Loading coupons…</p>,
-});
 
 const AdminUsersTab = dynamic(() => import('@/components/admin/AdminUsersTab'), {
   ssr: false,
@@ -125,13 +117,9 @@ export default function AdminPage() {
   const { user, setIsAuthOpen, products: storeProducts, updateProductInDb, addNewProductToDb, deleteProductFromDb, showToast, logoutUser } = useStore();
   const products = storeProducts || [];
 
-  type Tab = 'analytics' | 'orders' | 'catalog' | 'coupons' | 'users' | 'reviews' | 'content' | 'whatsapp';
+  type Tab = 'analytics' | 'orders' | 'catalog' | 'users' | 'reviews' | 'content';
   const [activeTab, setActiveTab] = useState<Tab>('analytics');
 
-  // ── WhatsApp state
-  const [waStatus, setWaStatus] = useState<{ status: string; connected?: boolean; qrImage?: string; pairingCode?: string; message?: string; linkedPhone?: string }>({ status: 'LOADING', connected: false });
-  const [waPhoneInput, setWaPhoneInput] = useState('');
-  const [waPairingCode, setWaPairingCode] = useState<string | null>(null);
   const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null);
 
   // ── Orders state
@@ -302,14 +290,9 @@ export default function AdminPage() {
     }
   }, [user, analyticsRange]);
 
-  const [notifGranted, setNotifGranted] = useState(false);
-
   // ── Initial load + SSE stream
   useEffect(() => {
-    if (!user?.id) return;
-    if (typeof window !== 'undefined' && 'Notification' in window) {
-      setNotifGranted(Notification.permission === 'granted');
-    }
+    if (!user?.id || user.role !== 'admin') return;
     void loadLiveOrders();
     void loadAnalytics();
     void loadLowStock();
@@ -319,40 +302,15 @@ export default function AdminPage() {
       es = new EventSource('/api/orders/stream');
       es.onmessage = (e) => {
         try {
-          const p = JSON.parse(e.data) as { type: string; orderId?: string };
+          const p = JSON.parse(e.data) as { type: string };
           if (p.type === 'ORDER_UPDATED') {
             void loadLiveOrders();
             void loadAnalytics();
-            showToast(`🛒 New Order Received ${p.orderId ? '#' + p.orderId : ''}`);
-            
-            // 🔊 Audio Chime for PC/Laptop
-            try {
-              const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-              const osc = ctx.createOscillator();
-              const gain = ctx.createGain();
-              osc.type = 'sine';
-              osc.frequency.setValueAtTime(880, ctx.currentTime); // A5 note
-              osc.frequency.setValueAtTime(1320, ctx.currentTime + 0.15); // E6 note
-              gain.gain.setValueAtTime(0.15, ctx.currentTime);
-              gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
-              osc.connect(gain);
-              gain.connect(ctx.destination);
-              osc.start();
-              osc.stop(ctx.currentTime + 0.4);
-            } catch (_) {}
-
-            // 💻 PC Desktop Notification
-            if ('Notification' in window && Notification.permission === 'granted') {
-              new Notification('🛒 New Order Received!', {
-                body: `Order ${p.orderId ? '#' + p.orderId : ''} is ready in your packing queue.`,
-                icon: '/logo.png',
-              });
-            }
           }
         } catch { /* ignore parse errors */ }
       };
     } catch { /* SSE not supported */ }
-    const interval = setInterval(() => { void loadLiveOrders(); }, 5000);
+    const interval = setInterval(() => { void loadLiveOrders(); }, 45000);
     // Auto-pull ST Courier live status for all open AWB orders (Out for Delivery → auto update)
     const runCourierSync = () => {
       if (!user?.token) return;
@@ -391,88 +349,7 @@ export default function AdminPage() {
     if (activeTab === 'content') void loadContent();
   }, [activeTab, loadContent]);
 
-  // WhatsApp polling — only while WhatsApp tab is open.
-  // Never auto ?refresh=1 — that wiped the QR while scanning and made link fail.
-  useEffect(() => {
-    if (activeTab !== 'whatsapp') return;
-    const fetchWa = async () => {
-      try {
-        const r = await fetch('/api/whatsapp/qr', { headers: authHeaders(user) });
-        if (r.ok) {
-          const data = await r.json();
-          setWaStatus((prev) => {
-            // During reconnect after scan, API may briefly clear qrImage — keep showing until linked
-            if (prev.qrImage && !data.connected && !data.qrImage && data.status !== 'CONNECTED') {
-              return { ...data, qrImage: prev.qrImage, status: prev.status === 'QR_READY' ? 'QR_READY' : data.status };
-            }
-            return data;
-          });
-          if (data.pairingCode && /[A-Za-z0-9]{4}-[A-Za-z0-9]{4}/.test(String(data.pairingCode))) {
-            setWaPairingCode(data.pairingCode);
-          }
-        }
-      } catch {
-        setWaStatus({ status: 'INITIALIZING', message: 'Starting WhatsApp…' });
-      }
-    };
-    void fetchWa();
-    const iv = setInterval(() => void fetchWa(), 4000);
-    return () => clearInterval(iv);
-  }, [activeTab, user]);
 
-  const handleUnlinkWhatsApp = async () => {
-    if (!confirm('Unlink WhatsApp session? A new QR will be generated.')) return;
-    try {
-      const r = await fetch('/api/whatsapp/qr', { method: 'DELETE', headers: authHeaders(user) });
-      if (r.ok) {
-        showToast('✅ Unlinked — wait for new QR');
-        setWaStatus({ status: 'INITIALIZING', message: 'Generating new QR…' });
-        setWaPairingCode(null);
-      }
-    } catch (_) {
-      showToast('❌ Unlink failed');
-    }
-  };
-
-  const handleRefreshWhatsAppQr = async () => {
-    showToast('⏳ Generating new QR…');
-    setWaPairingCode(null);
-    try {
-      const r = await fetch('/api/whatsapp/qr?refresh=1', { headers: authHeaders(user) });
-      const d = await r.json();
-      if (r.ok) {
-        setWaStatus(d);
-        showToast(d.qrImage ? '✅ Scan the QR now' : '⏳ QR loading — keep tab open');
-      } else {
-        showToast(`⚠️ ${d.error || 'Could not refresh QR'}`);
-      }
-    } catch (_) {
-      showToast('❌ QR refresh failed');
-    }
-  };
-
-  const handleRequestPairingCode = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!waPhoneInput) return;
-    showToast('⏳ Generating pairing code...');
-    try {
-      const r = await fetch(`/api/whatsapp/qr?phone=${encodeURIComponent(waPhoneInput)}`, {
-        headers: authHeaders(user),
-      });
-      const d = await r.json();
-      const code = String(d.pairingCode || '');
-      const ok = d.success && code && !/^\d{10,15}$/.test(code.replace(/-/g, ''));
-      if (ok) {
-        setWaPairingCode(code);
-        showToast(`✅ Enter code on phone: ${code}`);
-      } else {
-        setWaPairingCode(null);
-        showToast(`⚠️ ${d.error || 'Use QR scan instead'}`);
-      }
-    } catch (_) {
-      showToast('❌ Error');
-    }
-  };
 
   // ── Filtered orders
   const filteredOrders = useMemo(() => {
@@ -796,11 +673,9 @@ export default function AdminPage() {
     { id: 'analytics' as Tab, label: 'Analytics', icon: BarChart2 },
     { id: 'orders' as Tab, label: 'Orders', icon: ShoppingCart, count: orders.length },
     { id: 'catalog' as Tab, label: 'Products', icon: Package, count: products.length },
-    { id: 'coupons' as Tab, label: 'Coupons', icon: Gift },
     { id: 'users' as Tab, label: 'Customers', icon: Users },
     { id: 'reviews' as Tab, label: 'Reviews', icon: Star },
     { id: 'content' as Tab, label: 'Content', icon: Tag },
-    { id: 'whatsapp' as Tab, label: 'WhatsApp', icon: MessageSquare },
   ];
 
   return (
@@ -836,41 +711,6 @@ export default function AdminPage() {
             </nav>
 
             <div className="flex items-center gap-2">
-              {!notifGranted && (
-                <button
-                  type="button"
-                  onClick={async () => {
-                    if ('Notification' in window) {
-                      const res = await Notification.requestPermission();
-                      if (res === 'granted') {
-                        setNotifGranted(true);
-                        showToast('🔔 PC Audio Chime & Desktop Alerts Enabled!');
-                        try {
-                          const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-                          const osc = ctx.createOscillator();
-                          const gain = ctx.createGain();
-                          osc.type = 'sine';
-                          osc.frequency.setValueAtTime(880, ctx.currentTime);
-                          osc.frequency.setValueAtTime(1320, ctx.currentTime + 0.15);
-                          gain.gain.setValueAtTime(0.15, ctx.currentTime);
-                          gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
-                          osc.connect(gain);
-                          gain.connect(ctx.destination);
-                          osc.start();
-                          osc.stop(ctx.currentTime + 0.4);
-                        } catch (_) {}
-                      } else {
-                        showToast('⚠️ Desktop notifications blocked in browser settings');
-                      }
-                    }
-                  }}
-                  className="flex items-center gap-1.5 px-3 py-1 bg-amber-400 hover:bg-amber-500 text-[#001B3A] text-xs font-black rounded-lg shadow-sm animate-pulse cursor-pointer shrink-0"
-                >
-                  <Bell className="w-3.5 h-3.5" />
-                  <span>Enable PC Sound & Alerts</span>
-                </button>
-              )}
-
               <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 bg-green-50 border border-green-200 rounded-full">
                 <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
                 <span className="text-[10px] font-semibold text-green-700">Live</span>
@@ -1313,19 +1153,19 @@ export default function AdminPage() {
                           ) : isAwaiting ? (
                             <p className="text-[11px] text-amber-800 font-medium">Waiting for customer WhatsApp YES. Pack / AWB locked until confirmed (or Cancel).</p>
                           ) : (
-                          <>
-                          <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                            <div className={`h-full rounded-full transition-all duration-500 ${isDelivered ? 'bg-green-500' : 'bg-[#2874f0]'}`} style={{ width: `${((stepIdx + 1) / allSteps.length) * 100}%` }} />
-                          </div>
-                          <div className="flex justify-between mt-2">
-                            {allSteps.map((s, idx) => (
-                              <div key={s} className="flex flex-col items-center" style={{ width: `${100 / allSteps.length}%` }}>
-                                <div className={`w-2 h-2 rounded-full border-2 bg-white transition-colors ${idx <= stepIdx ? (isDelivered ? 'border-green-500 bg-green-500' : 'border-[#2874f0] bg-[#2874f0]') : 'border-gray-300'}`} />
-                                <span className={`text-[7px] mt-1 text-center leading-tight hidden xl:block ${idx <= stepIdx ? 'text-gray-600 font-semibold' : 'text-gray-400'}`}>{s}</span>
+                            <>
+                              <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                                <div className={`h-full rounded-full transition-all duration-500 ${isDelivered ? 'bg-green-500' : 'bg-[#2874f0]'}`} style={{ width: `${((stepIdx + 1) / allSteps.length) * 100}%` }} />
                               </div>
-                            ))}
-                          </div>
-                          </>
+                              <div className="flex justify-between mt-2">
+                                {allSteps.map((s, idx) => (
+                                  <div key={s} className="flex flex-col items-center" style={{ width: `${100 / allSteps.length}%` }}>
+                                    <div className={`w-2 h-2 rounded-full border-2 bg-white transition-colors ${idx <= stepIdx ? (isDelivered ? 'border-green-500 bg-green-500' : 'border-[#2874f0] bg-[#2874f0]') : 'border-gray-300'}`} />
+                                    <span className={`text-[7px] mt-1 text-center leading-tight hidden xl:block ${idx <= stepIdx ? 'text-gray-600 font-semibold' : 'text-gray-400'}`}>{s}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </>
                           )}
                         </div>
 
@@ -1344,15 +1184,14 @@ export default function AdminPage() {
                                   key={a.statusKey}
                                   disabled={busy || isCurrent || (isCancelBtn && isCancelledBtn) || (!isCancelBtn && (isCancelledBtn || isAwaitingBtn))}
                                   onClick={() => handleUpdateOrderStatus(o, a.statusKey, a.orderStatus)}
-                                  className={`px-2.5 py-1.5 text-[11px] font-semibold rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
-                                    isCancelBtn
+                                  className={`px-2.5 py-1.5 text-[11px] font-semibold rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${isCancelBtn
                                       ? isCurrent || isCancelledBtn
                                         ? 'bg-red-100 text-red-700 border border-red-200'
                                         : 'bg-white text-red-700 border border-red-200 hover:bg-red-50'
                                       : isCurrent
                                         ? 'bg-green-100 text-green-700 border border-green-200'
                                         : 'bg-white text-gray-700 border border-gray-200 hover:border-[#2874f0] hover:text-[#2874f0]'
-                                  }`}
+                                    }`}
                                 >
                                   {busy ? '...' : a.label}
                                 </button>
@@ -1541,10 +1380,10 @@ export default function AdminPage() {
                                   type="button"
                                   onClick={() => toggleStock(p.id, !!p.inStock)}
                                   className={`text-[10px] font-bold px-2 py-1 rounded-md transition-colors cursor-pointer ${!p.inStock || (p.stock ?? 0) <= 0
-                                      ? 'bg-red-50 text-red-600 border border-red-200'
-                                      : (p.stock ?? 99) <= 5
-                                        ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                                        : 'bg-green-50 text-green-700 border border-green-200'
+                                    ? 'bg-red-50 text-red-600 border border-red-200'
+                                    : (p.stock ?? 99) <= 5
+                                      ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                      : 'bg-green-50 text-green-700 border border-green-200'
                                     }`}
                                 >
                                   {p.inStock ? `${p.stock ?? '—'} left` : 'Off'}
@@ -1575,10 +1414,6 @@ export default function AdminPage() {
         {/* ══════════════════════════════════════════════════════════
             COUPONS TAB
         ══════════════════════════════════════════════════════════ */}
-        {activeTab === 'coupons' && user && (
-          <AdminCouponsTab user={user} showToast={showToast} />
-        )}
-
         {activeTab === 'users' && user && (
           <AdminUsersTab user={user} showToast={showToast} />
         )}
@@ -1641,20 +1476,6 @@ export default function AdminPage() {
               </div>
             </div>
           </div>
-        )}
-
-        {activeTab === 'whatsapp' && (
-          <AdminWhatsAppTab
-            waStatus={waStatus}
-            waPhoneInput={waPhoneInput}
-            setWaPhoneInput={setWaPhoneInput}
-            waPairingCode={waPairingCode}
-            onUnlink={handleUnlinkWhatsApp}
-            onRequestPairing={handleRequestPairingCode}
-            onRefreshQr={handleRefreshWhatsAppQr}
-            authToken={user?.token || null}
-            isSuperAdmin={user?.role === 'super_admin'}
-          />
         )}
 
       </main>

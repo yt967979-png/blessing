@@ -162,60 +162,14 @@ export const CartDrawer = () => {
                   </span>
                 </div>
 
-                <div className="bg-white border border-slate-200 rounded-xl p-3 space-y-2">
-                  <label className="text-[10px] font-black uppercase text-slate-600 flex items-center gap-1">
-                    <Tag className="w-3.5 h-3.5" /> Coupon Code
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      value={couponInput}
-                      onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
-                      placeholder="e.g. POWER20"
-                      className="flex-1 px-3 py-2 border rounded-lg text-xs font-bold uppercase"
-                    />
-                    <button
-                      type="button"
-                      disabled={couponBusy}
-                      onClick={async () => {
-                        setCouponBusy(true);
-                        await applyCouponCode(couponInput);
-                        setCouponBusy(false);
-                      }}
-                      className="px-3 py-2 bg-[#001B3A] text-white text-xs font-bold rounded-lg disabled:opacity-60"
-                    >
-                      Apply
-                    </button>
-                  </div>
-                  {appliedCoupon && (
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-emerald-700 font-bold">
-                        {appliedCoupon.code} — {appliedCoupon.label}
-                        {appliedCoupon.freeBookTitle && ` (${appliedCoupon.freeBookTitle})`}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={clearAppliedCoupon}
-                        className="text-red-600 font-bold"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  )}
-                  <div className="flex justify-between text-xs font-bold pt-1 border-t border-slate-100">
+                  <div className="flex justify-between text-xs font-bold pt-1">
                     <span>Subtotal</span>
                     <span>₹{cartTotal}</span>
                   </div>
-                  {couponDiscount > 0 && appliedCoupon?.offerType === 'discount' && (
-                    <div className="flex justify-between text-xs font-bold text-emerald-700">
-                      <span>Discount</span>
-                      <span>-₹{couponDiscount}</span>
-                    </div>
-                  )}
                   <div className="flex justify-between text-sm font-black text-[#001B3A]">
                     <span>Total</span>
                     <span>₹{cartGrandTotal}</span>
                   </div>
-                </div>
 
                 <button
                   type="button"
