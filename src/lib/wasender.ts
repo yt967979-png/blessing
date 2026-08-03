@@ -1,19 +1,15 @@
 /**
  * WasenderAPI Gateway Provider (wasenderapi.com)
  * Enables dispatching WhatsApp messages & receiving webhook events via WasenderAPI REST API.
+ * Reads WASENDER_API_KEY & WASENDER_SESSION_ID strictly from environment variables for security.
  */
 
 export async function sendViaWasender(to: string, message: string): Promise<{ ok: boolean; error?: string }> {
-  const apiKey =
-    process.env.WASENDER_API_KEY ||
-    'ffe7fedeb4e8082e307825858ba70bf9249f2b38e240deb749853dbe6c549d59';
-  const sessionId =
-    process.env.WASENDER_SESSION_ID ||
-    process.env.WASENDER_SESSION_NAME ||
-    'a';
+  const apiKey = process.env.WASENDER_API_KEY || '';
+  const sessionId = process.env.WASENDER_SESSION_ID || process.env.WASENDER_SESSION_NAME || 'a';
 
   if (!apiKey || !sessionId) {
-    return { ok: false, error: 'WasenderAPI credentials not configured in env (WASENDER_API_KEY & WASENDER_SESSION_ID).' };
+    return { ok: false, error: 'WasenderAPI credentials not configured in environment (WASENDER_API_KEY).' };
   }
 
   const cleanPhone = String(to || '').replace(/\D/g, '');
