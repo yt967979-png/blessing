@@ -304,7 +304,10 @@ export default function AdminPage() {
 
   // ── Initial load + SSE stream
   useEffect(() => {
-    if (!user?.id || user.role !== 'admin') return;
+    if (!user?.id) return;
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => {});
+    }
     void loadLiveOrders();
     void loadAnalytics();
     void loadLowStock();
@@ -314,10 +317,35 @@ export default function AdminPage() {
       es = new EventSource('/api/orders/stream');
       es.onmessage = (e) => {
         try {
-          const p = JSON.parse(e.data) as { type: string };
+          const p = JSON.parse(e.data) as { type: string; orderId?: string };
           if (p.type === 'ORDER_UPDATED') {
             void loadLiveOrders();
             void loadAnalytics();
+            showToast(`🛒 New Order Received ${p.orderId ? '#' + p.orderId : ''}`);
+            
+            // 🔊 Audio Chime for PC/Laptop
+            try {
+              const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+              const osc = ctx.createOscillator();
+              const gain = ctx.createGain();
+              osc.type = 'sine';
+              osc.frequency.setValueAtTime(880, ctx.currentTime); // A5 note
+              osc.frequency.setValueAtTime(1320, ctx.currentTime + 0.15); // E6 note
+              gain.gain.setValueAtTime(0.15, ctx.currentTime);
+              gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+              osc.connect(gain);
+              gain.connect(ctx.destination);
+              osc.start();
+              osc.stop(ctx.currentTime + 0.4);
+            } catch (_) {}
+
+            // 💻 PC Desktop Notification
+            if ('Notification' in window && Notification.permission === 'granted') {
+              new Notification('🛒 New Order Received!', {
+                body: `Order ${p.orderId ? '#' + p.orderId : ''} is ready in your packing queue.`,
+                icon: '/logo.png',
+              });
+            }
           }
         } catch { /* ignore parse errors */ }
       };
