@@ -300,17 +300,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               if (dbUser?.user) {
                 const nextUser = {
                   ...dbUser.user,
-                  // Keep existing client token — server no longer re-mints on restore
                   token: u.token,
-                  needsProfile:
-                    dbUser.user.needsProfile ??
-                    userNeedsProfile(dbUser.user.phone),
+                  needsProfile: false,
                 };
                 setUser(nextUser);
                 localStorage.setItem('bpg_user_next', JSON.stringify(nextUser));
-                if (nextUser.needsProfile) {
-                  setIsAuthOpen(true);
-                }
                 // Prefer local cart; if empty, restore from DB (fixes refresh wipe)
                 if (!localCart.length && Array.isArray(dbUser.cart) && dbUser.cart.length > 0) {
                   setCart(dbUser.cart);
@@ -389,16 +383,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const addToCart = (product: Product, qty: number = 1) => {
-    if (!user) {
-      setIsAuthOpen(true);
-      showToast('Please sign in with Google to add items to cart');
-      return;
-    }
-    if (user.needsProfile || userNeedsProfile(user.phone)) {
-      setIsAuthOpen(true);
-      showToast('Please complete your profile (mobile number) to shop');
-      return;
-    }
     if (product.inStock === false) {
       showToast('❌ This book is out of stock');
       return;
@@ -420,16 +404,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const requestCheckout = (open: boolean) => {
-    if (open && !user) {
-      setIsAuthOpen(true);
-      showToast('Please sign in with Google to place an order');
-      return;
-    }
-    if (open && user && (user.needsProfile || userNeedsProfile(user.phone))) {
-      setIsAuthOpen(true);
-      showToast('Please complete your profile (mobile number) before checkout');
-      return;
-    }
     setIsCheckoutOpen(open);
   };
 
