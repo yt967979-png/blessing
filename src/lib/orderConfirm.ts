@@ -164,18 +164,6 @@ export async function confirmAwaitingOrder(orderId: string): Promise<
       });
     }
 
-    const admins = await getAdminAlertPhones();
-    await notify('admin.new_order', {
-      orderId: row.order_number,
-      customerName: name,
-      customerPhone: phone,
-      totalAmount: row.total_amount,
-      city,
-      paymentMethod: row.payment_method,
-      itemsSummary,
-      adminPhones: admins,
-    });
-
     const event = {
       type: 'ORDER_UPDATED',
       orderId: row.order_number,
