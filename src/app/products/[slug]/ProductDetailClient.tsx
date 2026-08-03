@@ -472,10 +472,16 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
             {/* Price Box */}
             <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-6 flex items-baseline gap-3">
               <span className="text-3xl font-black text-[#001B3A]">₹{product.price}</span>
-              <span className="text-sm text-slate-400 line-through">₹{product.mrp}</span>
-              <span className="text-xs font-extrabold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded">
-                Save {product.discount}% OFF
-              </span>
+              {product.mrp > product.price && (
+                <>
+                  <span className="text-sm text-slate-400 line-through">₹{product.mrp}</span>
+                  {product.discount > 0 && (
+                    <span className="text-xs font-extrabold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded">
+                      Save {product.discount}% OFF
+                    </span>
+                  )}
+                </>
+              )}
             </div>
 
             {/* Description */}

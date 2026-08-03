@@ -463,17 +463,23 @@ export const ModalsBundle = () => {
                   <p className="text-xs text-slate-500 mb-3 leading-relaxed">
                     {quickViewProduct.description}
                   </p>
-                  <div className="flex items-baseline gap-2 mb-4">
-                    <span className="text-xl font-black text-[#001B3A]">
-                      ₹{quickViewProduct.price}
-                    </span>
-                    <span className="text-xs text-slate-400 line-through">
-                      ₹{quickViewProduct.mrp}
-                    </span>
-                    <span className="text-xs font-bold text-emerald-600">
-                      {quickViewProduct.discount}% OFF
-                    </span>
-                  </div>
+                    <div className="flex items-baseline gap-2 mb-4">
+                      <span className="text-xl font-black text-[#001B3A]">
+                        ₹{quickViewProduct.price}
+                      </span>
+                      {quickViewProduct.mrp > quickViewProduct.price && (
+                        <>
+                          <span className="text-xs text-slate-400 line-through">
+                            ₹{quickViewProduct.mrp}
+                          </span>
+                          {quickViewProduct.discount > 0 && (
+                            <span className="text-xs font-bold text-emerald-600">
+                              {quickViewProduct.discount}% OFF
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </div>
                   <button
                     onClick={() => {
                       addToCart(quickViewProduct);

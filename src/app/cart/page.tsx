@@ -153,7 +153,9 @@ export default function CartPage() {
 
                     <div className="flex items-baseline gap-2 mt-1">
                       <span className="font-black text-base text-slate-900">₹{item.price}</span>
-                      <span className="text-xs text-slate-400 line-through">₹{item.mrp || item.price + 40}</span>
+                      {item.mrp && item.mrp > item.price && (
+                        <span className="text-xs text-slate-400 line-through">₹{item.mrp}</span>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-3 mt-3 flex-wrap">
