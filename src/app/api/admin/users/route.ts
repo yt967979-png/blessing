@@ -117,3 +117,24 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
+
+/** Admin: Permanently delete user from database */
+export async function DELETE(request: NextRequest) {
+  const admin = await verifyAdminRequest(request);
+  if (!admin.isAdmin) return forbiddenResponse(admin.error);
+
+  const { searchParams } = new URL(request.url);
+  const userId = searchParams.get('userId');
+
+  if (!userId) {
+    return NextResponse.json({ error: 'userId is required for deletion.' }, { status: 400 });
+  }
+
+  try {
+    await queryDb(`DELETE FROM users WHERE id = $1 AND COALESCE(role, 'customer') != 'super_admin'`, [userId]);
+    return NextResponse.json({ success: true, userId });
+  } catch (err: any) {
+    console.error('[admin/users DELETE]', err?.message || err);
+    return NextResponse.json({ error: err?.message || 'Delete user failed.' }, { status: 500 });
+  }
+}

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { Users, Ban, CheckCircle2, Download, AlertTriangle, Package, Shield, UserCheck, ShieldAlert } from 'lucide-react';
+import { Users, Ban, CheckCircle2, Download, AlertTriangle, Package, Shield, Trash2 } from 'lucide-react';
 import { authHeaders } from '@/lib/clientAuth';
 import type { UserData } from '@/context/StoreContext';
 
@@ -127,6 +127,28 @@ export default function AdminUsersTab({
     }
   };
 
+  const deleteUser = async (userId: string, userName: string) => {
+    if (!confirm(`Are you sure you want to permanently delete user "${userName}"? This will clear their record from the database.`)) return;
+    setUpdatingId(userId);
+    try {
+      const r = await fetch(`/api/admin/users?userId=${encodeURIComponent(userId)}`, {
+        method: 'DELETE',
+        headers: authHeaders(user),
+      });
+      if (r.ok) {
+        showToast('🗑️ User permanently deleted from database');
+        setCustomers((prev) => prev.filter((c) => c.id !== userId));
+      } else {
+        const d = await r.json();
+        showToast(`❌ ${d.error || 'Delete failed'}`);
+      }
+    } catch {
+      showToast('❌ Delete user error');
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
   const exportCsv = () => {
     const rows = [
       ['Name', 'Email', 'Phone', 'Role', 'Status', 'Orders', 'Total Spent', 'Joined'],
@@ -191,7 +213,7 @@ export default function AdminUsersTab({
             User Management & Sub-Admin Roles
           </h2>
           <p className="text-xs text-gray-400 mt-0.5">
-            {customers.length} registered users — {isSuperAdmin ? 'Super Admin can grant Sub-Admin access' : 'View users & packing privileges'}
+            {customers.length} registered users — {isSuperAdmin ? 'Super Admin can manage sub-admins & delete accounts' : 'View users & packing privileges'}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -272,7 +294,7 @@ export default function AdminUsersTab({
                         {c.status || 'active'}
                       </span>
                     </td>
-                    <td className="py-3 px-3 text-right space-x-1 whitespace-nowrap">
+                    <td className="py-3 px-3 text-right space-x-1.5 whitespace-nowrap">
                       {isSuperAdmin && c.role !== 'super_admin' && (
                         <button
                           type="button"
@@ -307,10 +329,23 @@ export default function AdminUsersTab({
                             if (!confirm(`Ban ${c.name}? They cannot log in.`)) return;
                             void setStatus(c.id, 'banned');
                           }}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-red-600 bg-red-50 hover:bg-red-100 rounded-lg cursor-pointer disabled:opacity-50"
+                          className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg cursor-pointer disabled:opacity-50"
                         >
                           <Ban className="w-3 h-3" />
                           Ban
+                        </button>
+                      )}
+
+                      {c.role !== 'super_admin' && (
+                        <button
+                          type="button"
+                          disabled={updatingId === c.id}
+                          onClick={() => deleteUser(c.id, c.name)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg cursor-pointer disabled:opacity-50"
+                          title="Delete user permanently"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          Delete
                         </button>
                       )}
                     </td>
