@@ -85,11 +85,11 @@ export function GoogleAuthModal({
   };
 
   // Verify OTP & Register
-  const handleVerifyOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const submitVerification = async (codeToVerify?: string) => {
+    const code = codeToVerify || otpCode;
     setAuthError(null);
 
-    if (!otpCode || otpCode.length !== 6) {
+    if (!code || code.length !== 6) {
       setAuthError('Please enter the valid 6-digit verification code.');
       return;
     }
@@ -101,7 +101,7 @@ export function GoogleAuthModal({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           phone,
-          otp: otpCode,
+          otp: code,
           name: name || 'Verified Student',
           password,
         }),
@@ -120,6 +120,20 @@ export function GoogleAuthModal({
       setAuthError('Network error during verification.');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await submitVerification();
+  };
+
+  // Instant Auto-Verification when 6 digits entered
+  const handleOtpChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value.replace(/\D/g, '');
+    setOtpCode(val);
+    if (val.length === 6 && !isSubmitting) {
+      void submitVerification(val);
     }
   };
 
@@ -318,7 +332,7 @@ export function GoogleAuthModal({
                         required
                         maxLength={6}
                         value={otpCode}
-                        onChange={(e) => setOtpCode(e.target.value)}
+                        onChange={handleOtpChange}
                         placeholder="Enter 6-digit code"
                         className="w-full pl-9 pr-3 py-2.5 text-xs font-mono text-center tracking-widest text-lg border border-slate-300 rounded-xl outline-none focus:border-[#0044AA] focus:ring-2 focus:ring-blue-100"
                       />
