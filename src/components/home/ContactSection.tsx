@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Send, Phone, Mail, MapPin, CheckCircle, Clock } from 'lucide-react';
+import { Send, Phone, Mail, MapPin, CheckCircle, Clock, MessageSquare } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import {
   OFFICE_ADDRESS_LINES,
@@ -19,6 +19,7 @@ export const ContactSection = () => {
 
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [lastWaUrl, setLastWaUrl] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,20 +30,25 @@ export const ContactSection = () => {
 
     setLoading(true);
     try {
-      const res = await fetch('/api/contact', {
+      // Save contact inquiry in DB
+      await fetch('/api/contact', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, email, phone, subject, message }),
-      });
+      }).catch(() => {});
 
-      const data = await res.json();
+      // Build pre-filled WhatsApp message
+      const formattedMessage = `Hello Blessing Power Guide Helpdesk,\n\n*Name:* ${name}\n*Phone:* ${phone}\n*Email:* ${email || 'N/A'}\n*Subject:* ${subject}\n\n*Message:* ${message}`;
+      const encodedMsg = encodeURIComponent(formattedMessage);
+      const waUrl = `https://wa.me/918148814326?text=${encodedMsg}`;
+      
+      setLastWaUrl(waUrl);
+      setSubmitted(true);
+      showToast('✅ Message pre-filled! Opening WhatsApp...');
 
-      if (res.ok && data.success) {
-        setSubmitted(true);
-        showToast('✅ Message sent successfully!');
-        setMessage('');
-      } else {
-        showToast(`❌ ${data.error || 'Failed to send message'}`);
+      // Direct 1-click open WhatsApp
+      if (typeof window !== 'undefined') {
+        window.open(waUrl, '_blank');
       }
     } catch (_) {
       showToast('❌ Network error sending message');
@@ -63,10 +69,10 @@ export const ContactSection = () => {
             NEED HELP OR HAVE QUESTIONS?
           </span>
           <h2 className="font-heading font-black text-2xl sm:text-4xl text-white tracking-tight">
-            Get in Touch with Our Team
+            Get in Touch with Our Helpdesk
           </h2>
           <p className="text-slate-400 text-xs sm:text-sm mt-2">
-            Have questions about 6th-12th standard guide books, combo offers, bulk school orders, or ST Courier shipment status? Send us a message!
+            Have questions about 6th-12th standard guide books, bulk school orders, or ST Courier shipment status? Send us a message directly to WhatsApp!
           </p>
         </div>
 
@@ -119,7 +125,7 @@ export const ContactSection = () => {
                   </div>
                   <div>
                     <h4 className="font-bold text-white mb-1">Phone & WhatsApp Support</h4>
-                    <p className="text-amber-400 font-bold text-sm">+91 98404 18228</p>
+                    <p className="text-amber-400 font-bold text-sm">+91 81488 14326 / +91 98404 18228</p>
                     <p className="text-slate-400 text-xs mt-0.5">Mon – Sat: 9:00 AM – 8:00 PM</p>
                   </div>
                 </div>
@@ -142,20 +148,31 @@ export const ContactSection = () => {
           <div className="lg:col-span-7">
             <div className="bg-slate-950/90 border border-slate-800 rounded-3xl p-6 sm:p-8 backdrop-blur-xl shadow-2xl">
               {submitted ? (
-                <div className="py-12 text-center">
+                <div className="py-10 text-center">
                   <div className="w-16 h-16 bg-emerald-500/20 border-2 border-emerald-500 rounded-full flex items-center justify-center mx-auto mb-4 text-emerald-400">
                     <CheckCircle className="w-8 h-8" />
                   </div>
-                  <h3 className="font-heading font-black text-xl text-white mb-2">Message Sent Successfully!</h3>
-                  <p className="text-slate-300 text-xs sm:text-sm max-w-md mx-auto mb-6">
-                    Thank you for reaching out to Blessing Power Guide. Our team has received your message and will contact you via WhatsApp/Phone shortly!
+                  <h3 className="font-heading font-black text-xl text-white mb-2">Message Pre-filled for WhatsApp!</h3>
+                  <p className="text-slate-300 text-xs sm:text-sm max-w-md mx-auto mb-6 leading-relaxed">
+                    Your inquiry is ready. Click below to send your message directly to our WhatsApp helpdesk in 1 click:
                   </p>
-                  <button
-                    onClick={() => setSubmitted(false)}
-                    className="bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs px-6 py-2.5 rounded-xl transition-all shadow-md"
-                  >
-                    SEND ANOTHER MESSAGE
-                  </button>
+                  <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+                    <a
+                      href={lastWaUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs px-6 py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2"
+                    >
+                      <MessageSquare className="w-4 h-4" />
+                      <span>OPEN WHATSAPP & SEND IN 1-CLICK</span>
+                    </a>
+                    <button
+                      onClick={() => setSubmitted(false)}
+                      className="w-full sm:w-auto bg-slate-800 hover:bg-slate-700 text-slate-300 font-extrabold text-xs px-5 py-3 rounded-xl transition-all"
+                    >
+                      WRITE ANOTHER MESSAGE
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <form onSubmit={handleSubmit} className="space-y-4">
@@ -205,7 +222,6 @@ export const ContactSection = () => {
                         className="w-full p-3 bg-slate-900 border border-slate-700 rounded-xl text-white outline-none focus:border-amber-400 cursor-pointer"
                       >
                         <option value="Guide Book Inquiry">Guide Book Inquiry</option>
-                        <option value="Combo Offer Inquiry">5-Subject Combo Offer Inquiry</option>
                         <option value="ST Courier Delivery Status">ST Courier Delivery Status</option>
                         <option value="Bulk School / Institution Order">Bulk School / Institution Order</option>
                         <option value="Other Assistance">Other Assistance</option>
@@ -228,17 +244,17 @@ export const ContactSection = () => {
                   <button
                     type="submit"
                     disabled={loading}
-                    className="w-full bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-[#001B3A] font-black text-xs sm:text-sm py-3.5 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer uppercase tracking-wider disabled:opacity-50"
+                    className="w-full bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white font-black text-xs sm:text-sm py-3.5 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer uppercase tracking-wider disabled:opacity-50"
                   >
                     {loading ? (
                       <>
-                        <span className="w-4 h-4 border-2 border-[#001B3A] border-t-transparent rounded-full animate-spin" />
-                        <span>SENDING MESSAGE...</span>
+                        <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        <span>PREPARING WHATSAPP...</span>
                       </>
                     ) : (
                       <>
-                        <Send className="w-4 h-4" />
-                        <span>SUBMIT MESSAGE TO HELPDESK</span>
+                        <MessageSquare className="w-4 h-4" />
+                        <span>SEND MESSAGE VIA WHATSAPP (1-CLICK)</span>
                       </>
                     )}
                   </button>

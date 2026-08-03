@@ -61,28 +61,12 @@ export const NavBar = () => {
           </button>
           <button
             type="button"
-            onClick={() => handleSelectFilter('all', 'combo')}
-            className={chip(selectedCategory === 'combo')}
-          >
-            Combos
-          </button>
-          <button
-            type="button"
             onClick={() => scrollToSection('why')}
             className={chip(false)}
           >
             Why Us
           </button>
         </div>
-
-        <button
-          type="button"
-          onClick={() => handleSelectFilter('10th', 'combo')}
-          className="hidden md:flex items-center gap-1.5 bg-gradient-to-r from-amber-400 to-amber-500 text-[#001226] px-3.5 py-1.5 rounded-full text-xs font-black shrink-0"
-        >
-          <Tag className="w-3.5 h-3.5" />
-          Combo Packs
-        </button>
       </div>
     </nav>
   );

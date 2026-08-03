@@ -541,22 +541,7 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
               )}
             </div>
 
-            {comboUpsell && (
-              <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50/80 p-4 flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
-                <div>
-                  <p className="text-[10px] font-extrabold text-amber-800 uppercase tracking-wider">Save more — combo</p>
-                  <p className="text-sm font-bold text-[#001B3A] mt-0.5">{comboUpsell.title}</p>
-                  <p className="text-xs text-slate-600">₹{comboUpsell.price} · often cheaper than buying subjects one by one</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => addToCart(comboUpsell)}
-                  className="shrink-0 px-4 py-2.5 bg-[#001B3A] text-white text-xs font-extrabold rounded-xl hover:bg-blue-800"
-                >
-                  Add combo
-                </button>
-              </div>
-            )}
+
 
             {/* Actions */}
             <div className="flex gap-3 mt-auto">

@@ -69,9 +69,6 @@ export const Footer = () => {
               <a href="/search" className="hover:text-amber-400 transition-colors">Search Catalog</a>
             </li>
             <li>
-              <a href="/search?category=combo" className="hover:text-amber-400 transition-colors">Combo Offers</a>
-            </li>
-            <li>
               <a href="/orders" className="hover:text-amber-400 transition-colors">My Orders & Tracking</a>
             </li>
           </ul>

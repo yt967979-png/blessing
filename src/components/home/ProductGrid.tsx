@@ -91,17 +91,6 @@ export const ProductGrid = () => {
                 {cls} Std
               </button>
             ))}
-
-            <button
-              onClick={() => setSelectedCategory('combo')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all shrink-0 min-h-[40px] ${
-                selectedCategory === 'combo'
-                  ? 'bg-[#001B3A] text-amber-400 shadow-md'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-              }`}
-            >
-              Combos
-            </button>
           </div>
         </div>
 

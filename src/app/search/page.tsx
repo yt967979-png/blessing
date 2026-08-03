@@ -179,7 +179,6 @@ function SearchContent() {
                 {[
                   { id: 'all', label: 'All Products' },
                   { id: 'guide', label: 'Single Subject Guides' },
-                  { id: 'combo', label: '5-Subject Combo Bundles' },
                 ].map((cat) => (
                   <button
                     key={cat.id}

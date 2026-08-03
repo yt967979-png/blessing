@@ -148,7 +148,7 @@ export default function AdminPage() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newCls, setNewCls] = useState('10th');
-  const [newCat, setNewCat] = useState<'guide' | 'combo'>('guide');
+  const [newCat, setNewCat] = useState<'guide'>('guide');
   const [newPrice, setNewPrice] = useState(190);
   const [newMrp, setNewMrp] = useState(240);
   const [newBadge, setNewBadge] = useState('BESTSELLER');
@@ -1295,9 +1295,8 @@ export default function AdminPage() {
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">Type</label>
-                    <select value={newCat} onChange={(e) => setNewCat(e.target.value as 'guide' | 'combo')} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:border-[#2874f0] cursor-pointer bg-white">
+                    <select value={newCat} onChange={(e) => setNewCat(e.target.value as 'guide')} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:border-[#2874f0] cursor-pointer bg-white">
                       <option value="guide">Single Guide</option>
-                      <option value="combo">5-Subject Combo</option>
                     </select>
                   </div>
                   <div>
