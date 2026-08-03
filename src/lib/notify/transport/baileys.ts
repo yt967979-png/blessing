@@ -1,36 +1,40 @@
-import { sendWhatsAppMessageInProcess } from '@/lib/whatsapp';
 import { sendViaWasender } from '@/lib/wasender';
+import { sendWhatsAppMessageInProcess } from '@/lib/whatsapp';
 
-/** Baileys & WasenderAPI transport — supports both native Baileys & WasenderAPI Cloud Gateway. */
+/**
+ * Primary WhatsApp Transport: WasenderAPI Gateway (wasenderapi.com)
+ * Native Baileys is disabled by default to run exclusively via WasenderAPI.
+ */
 export async function sendViaBaileys(to: string, message: string) {
   const digits = String(to || '').replace(/\D/g, '');
   if (digits.length < 10) {
     return { ok: false as const, error: 'invalid phone' };
   }
 
-  // If WasenderAPI credentials exist in env, try WasenderAPI first
-  if (process.env.WASENDER_API_KEY && (process.env.WASENDER_SESSION_ID || process.env.WASENDER_SESSION_NAME)) {
-    const wasenderResult = await sendViaWasender(digits, message);
-    if (wasenderResult.ok) {
+  // WasenderAPI primary dispatch
+  const wasenderResult = await sendViaWasender(digits, message);
+  if (wasenderResult.ok) {
+    return {
+      ok: true as const,
+      provider: 'wasenderapi',
+      recipient: digits.length === 10 ? `91${digits}` : digits,
+    };
+  }
+
+  // Baileys fallback only if explicitly enabled in environment
+  if (process.env.ENABLE_BAILEYS_FALLBACK === 'true') {
+    try {
+      const result = await sendWhatsAppMessageInProcess(digits, message);
       return {
         ok: true as const,
-        provider: 'wasenderapi',
+        provider: 'baileys_fallback',
+        queued: Boolean((result as { queued?: boolean })?.queued),
         recipient: digits.length === 10 ? `91${digits}` : digits,
       };
+    } catch (err: unknown) {
+      console.warn('[notify/baileys fallback failed]', err);
     }
   }
 
-  // Native Baileys in-process transport fallback
-  try {
-    const result = await sendWhatsAppMessageInProcess(digits, message);
-    return {
-      ok: true as const,
-      queued: Boolean((result as { queued?: boolean })?.queued),
-      recipient: digits.length === 10 ? `91${digits}` : digits,
-    };
-  } catch (err: unknown) {
-    const messageText = err instanceof Error ? err.message : String(err);
-    console.warn('[notify/baileys]', messageText);
-    return { ok: false as const, error: messageText };
-  }
+  return { ok: false as const, error: wasenderResult.error || 'WasenderAPI send failed' };
 }

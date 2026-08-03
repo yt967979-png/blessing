@@ -279,6 +279,9 @@ async function restoreSessionFromDb() {
 }
 
 export async function initWhatsAppInProcess(opts?: { requireLeader?: boolean }) {
+  if (process.env.DISABLE_LOCAL_BAILEYS !== 'false') {
+    return null;
+  }
   const requireLeader = opts?.requireLeader !== false;
   if (requireLeader && !isBackgroundLeader()) {
     console.warn('[whatsapp] init skipped — not background leader (set FORCE_BACKGROUND_LEADER=true if testing)');
