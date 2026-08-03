@@ -23,7 +23,7 @@ export function getEnvAdminNotifyPhones(): string[] {
   const raw =
     process.env.ADMIN_NOTIFY_PHONE ||
     process.env.ADMIN_PHONE ||
-    '9840418228';
+    '8248345770,9840418228';
   return [
     ...new Set(
       String(raw)
