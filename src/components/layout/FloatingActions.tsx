@@ -2,9 +2,10 @@
 
 import React from 'react';
 import { usePathname } from 'next/navigation';
-import { Phone } from 'lucide-react';
+import { MessageCircle } from 'lucide-react';
+import { shopWhatsAppChatUrl } from '@/lib/shopContact';
 
-/** Desktop-only floating phone support — mobile uses bottom nav + Help link */
+/** Desktop floating message icon → opens shop WhatsApp chat (wa.me only). */
 export const FloatingActions = () => {
   const pathname = usePathname();
   if (pathname?.startsWith('/admin')) return null;
@@ -12,12 +13,14 @@ export const FloatingActions = () => {
   return (
     <div className="hidden md:flex fixed bottom-6 right-6 z-40 flex-col gap-3">
       <a
-        href="tel:+919840418228"
-        className="w-12 h-12 rounded-full bg-[#0044AA] text-white flex items-center justify-center shadow-xl hover:scale-105 transition-transform"
-        title="Call Support"
-        aria-label="Call Support"
+        href={shopWhatsAppChatUrl('Hello Blessing Power Guide Support')}
+        target="_blank"
+        rel="noreferrer"
+        className="w-12 h-12 rounded-full bg-[#25D366] text-white flex items-center justify-center shadow-xl hover:scale-105 transition-transform"
+        title="Message shop on WhatsApp"
+        aria-label="Message shop on WhatsApp"
       >
-        <Phone className="w-6 h-6" />
+        <MessageCircle className="w-6 h-6" />
       </a>
     </div>
   );

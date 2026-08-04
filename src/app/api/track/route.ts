@@ -181,7 +181,7 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string, request?: Reque
     let live: any = null;
     if (!cancelled && !awaiting && isOfficialAwb(o.awb_number)) {
       try {
-        live = await syncOrderByAwb(o.awb_number, { sendWhatsApp: false });
+        live = await syncOrderByAwb(o.awb_number);
         if (live.updated && live.status) {
           o.order_status = live.status;
         }

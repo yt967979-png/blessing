@@ -532,10 +532,12 @@ function OrdersContent() {
                   ))}
 
                   <a
-                    href="tel:+919840418228"
-                    className="flex-1 sm:flex-initial bg-[#0044AA] hover:bg-blue-700 text-white font-extrabold text-xs px-5 py-3 rounded-xl transition-all shadow-md flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer"
+                    href={`https://wa.me/919840418228?text=${encodeURIComponent(`Hi Blessing Power Guide! I need help with my order #${searchedOrderData.orderId || ''}.`)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 sm:flex-initial bg-[#25D366] hover:bg-[#1fb855] text-white font-extrabold text-xs px-5 py-3 rounded-xl transition-all shadow-md flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer"
                   >
-                    <span>NEED HELP? CALL</span>
+                    <span>MESSAGE SHOP</span>
                   </a>
                 </div>
               </div>

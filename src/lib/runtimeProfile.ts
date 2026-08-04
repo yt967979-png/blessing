@@ -14,7 +14,6 @@ export type RuntimeTuning = {
   courierCronIntervalMs: number;
   courierCronStartDelayMs: number;
   leaderElectionIntervalMs: number;
-  whatsappOutboxIntervalMs: number;
   orderListenEnabled: boolean;
   orderListenPingMs: number;
 };
@@ -73,7 +72,6 @@ function baseTuningForTier(t: RuntimeTier): RuntimeTuning {
         courierCronIntervalMs: 20 * 60 * 1000,
         courierCronStartDelayMs: 120_000,
         leaderElectionIntervalMs: 60_000,
-        whatsappOutboxIntervalMs: 10_000,
         orderListenEnabled: true,
         orderListenPingMs: 120_000,
       };
@@ -90,7 +88,6 @@ function baseTuningForTier(t: RuntimeTier): RuntimeTuning {
         courierCronIntervalMs: 5 * 60 * 1000,
         courierCronStartDelayMs: 30_000,
         leaderElectionIntervalMs: 30_000,
-        whatsappOutboxIntervalMs: 5000,
         orderListenEnabled: true,
         orderListenPingMs: 45_000,
       };
@@ -105,7 +102,6 @@ function baseTuningForTier(t: RuntimeTier): RuntimeTuning {
         courierCronIntervalMs: 5 * 60 * 1000,
         courierCronStartDelayMs: 20_000,
         leaderElectionIntervalMs: 20_000,
-        whatsappOutboxIntervalMs: 2000,
         orderListenEnabled: true,
         orderListenPingMs: 30_000,
       };
@@ -120,7 +116,6 @@ function baseTuningForTier(t: RuntimeTier): RuntimeTuning {
         courierCronIntervalMs: 5 * 60 * 1000,
         courierCronStartDelayMs: 15_000,
         leaderElectionIntervalMs: 30_000,
-        whatsappOutboxIntervalMs: 3000,
         orderListenEnabled: true,
         orderListenPingMs: 45_000,
       };
@@ -131,17 +126,12 @@ function applyLoadAdjustments(base: RuntimeTuning, level: LoadLevel): RuntimeTun
   const t = { ...base, load: level };
   if (level === 'high') {
     t.courierCronIntervalMs = Math.round(t.courierCronIntervalMs * 1.5);
-    t.whatsappOutboxIntervalMs = Math.round(t.whatsappOutboxIntervalMs * 1.5);
     t.dbHeartbeatMs = Math.round(t.dbHeartbeatMs * 1.25);
   }
   if (level === 'critical') {
     t.courierCronEnabled = false;
-    t.whatsappOutboxIntervalMs = Math.max(t.whatsappOutboxIntervalMs * 2, 10_000);
     t.dbHeartbeatMs = Math.max(t.dbHeartbeatMs * 1.5, 120_000);
     t.orderListenPingMs = Math.max(t.orderListenPingMs * 1.5, 60_000);
-  }
-  if (level === 'low' && base.tier !== 'free') {
-    t.whatsappOutboxIntervalMs = Math.max(2000, Math.round(t.whatsappOutboxIntervalMs * 0.85));
   }
   return t;
 }

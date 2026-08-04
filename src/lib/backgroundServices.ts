@@ -1,10 +1,9 @@
 import { isBackgroundLeader } from '@/lib/backgroundLeader';
 
 let leaderServicesRunning = false;
-let abandonCartTimer: ReturnType<typeof setInterval> | null = null;
 let confirmExpireTimer: ReturnType<typeof setInterval> | null = null;
 
-/** Courier cron (+ legacy heal timers). WhatsApp workers are product-disabled. */
+/** Courier cron + legacy awaiting-confirm heal — leader replica only. */
 export async function startLeaderBackgroundServices() {
   if (!isBackgroundLeader() || leaderServicesRunning) return;
   leaderServicesRunning = true;
@@ -12,32 +11,10 @@ export async function startLeaderBackgroundServices() {
   const { startCourierSyncCron } = await import('@/lib/courierCron');
   startCourierSyncCron();
 
-  const waEnabled = process.env.DISABLE_WHATSAPP === 'false';
-  if (waEnabled) {
-    const { startWhatsAppOutboxWorker } = await import('@/lib/whatsapp');
-    startWhatsAppOutboxWorker();
-
-    if (!abandonCartTimer) {
-      const drain = async () => {
-        try {
-          const { drainAbandonedCarts } = await import('@/app/api/cart/abandon/route');
-          const result = await drainAbandonedCarts();
-          if (result.sent > 0) {
-            console.log(`[abandon-cart] reminded ${result.sent} cart(s)`);
-          }
-        } catch (e: any) {
-          console.warn('[abandon-cart]', e?.message || e);
-        }
-      };
-      setTimeout(() => void drain(), 5 * 60 * 1000);
-      abandonCartTimer = setInterval(() => void drain(), 30 * 60 * 1000);
-    }
-  }
-
   if (!confirmExpireTimer) {
     const expire = async () => {
       try {
-        const { expireAwaitingConfirmations } = await import('@/lib/orderConfirm');
+        const { expireAwaitingConfirmations } = await import('@/lib/orderCancel');
         const n = await expireAwaitingConfirmations(24);
         if (n > 0) console.log(`[confirm-timeout] auto-cancelled ${n} awaiting order(s)`);
       } catch (e: any) {
@@ -48,9 +25,7 @@ export async function startLeaderBackgroundServices() {
     confirmExpireTimer = setInterval(() => void expire(), 30 * 60 * 1000);
   }
 
-  console.log(
-    `[background] leader services started (courier cron${waEnabled ? ', WhatsApp' : ', WhatsApp off'}, confirm-timeout)`
-  );
+  console.log('[background] leader services started (courier cron, confirm-timeout)');
 }
 
 /** Release leader-only resources when another replica takes over. */
@@ -58,10 +33,6 @@ export async function stopLeaderBackgroundServices() {
   if (!leaderServicesRunning) return;
   leaderServicesRunning = false;
 
-  if (abandonCartTimer) {
-    clearInterval(abandonCartTimer);
-    abandonCartTimer = null;
-  }
   if (confirmExpireTimer) {
     clearInterval(confirmExpireTimer);
     confirmExpireTimer = null;
@@ -69,10 +40,6 @@ export async function stopLeaderBackgroundServices() {
 
   const { stopCourierSyncCron } = await import('@/lib/courierCron');
   stopCourierSyncCron();
-
-  const { stopWhatsAppOutboxWorker, shutdownWhatsAppInProcess } = await import('@/lib/whatsapp');
-  stopWhatsAppOutboxWorker();
-  await shutdownWhatsAppInProcess();
 
   console.log('[background] leader services stopped — standby mode');
 }

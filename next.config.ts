@@ -4,15 +4,6 @@ const nextConfig: NextConfig = {
   compress: true,
   poweredByHeader: false,
 
-  // Belt-and-suspenders: never file-trace leftover local Baileys session dirs.
-  outputFileTracingExcludes: {
-    "*": [
-      "./whatsapp_session/**",
-      "./whatsapp_session_*/**",
-      "**/whatsapp_session/**",
-    ],
-  },
-
   experimental: {
     optimizePackageImports: ["lucide-react", "framer-motion"],
   },

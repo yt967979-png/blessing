@@ -28,7 +28,7 @@ export async function POST(request: Request) {
   } catch (_) {}
 
   if (body?.docket) {
-    const one = await syncOrderByAwb(String(body.docket), { sendWhatsApp: true });
+    const one = await syncOrderByAwb(String(body.docket));
     return NextResponse.json({ success: true, ...one });
   }
 

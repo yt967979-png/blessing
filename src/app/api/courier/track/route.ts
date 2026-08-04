@@ -10,8 +10,8 @@ import { cleanDocket, fetchStCourierTrack, syncOrderByAwb, VALID_DOCKET_PATTERN 
 
 /**
  * GET /api/courier/track?docket=XXX
- * - Public (docket only): verify on ST Courier (read-only). May sync status without WhatsApp.
- * - Admin + orderId: assign AWB to order, then sync (may send WhatsApp).
+ * - Public (docket only): verify on ST Courier; may sync status onto matching order.
+ * - Admin + orderId: assign AWB to order, then sync.
  */
 export async function GET(request: Request) {
   const ip = clientIp(request);
@@ -86,7 +86,7 @@ export async function GET(request: Request) {
       releaseDbClient(client);
     }
 
-    const synced = await syncOrderByAwb(docket, { sendWhatsApp: true });
+    const synced = await syncOrderByAwb(docket);
     if (!synced.verified) {
       return NextResponse.json(
         {
@@ -117,11 +117,10 @@ export async function GET(request: Request) {
     });
   }
 
-  // Public / customer: verify + quiet sync (no WhatsApp spam)
+  // Public / customer: verify + sync status if docket is on an order
   const live = await fetchStCourierTrack(docket);
   if (!live.ok) {
-    // Still try quiet sync if docket already on an order
-    const synced = await syncOrderByAwb(docket, { sendWhatsApp: false });
+    const synced = await syncOrderByAwb(docket);
     if (synced.verified) {
       return NextResponse.json({
         success: true,
@@ -148,7 +147,7 @@ export async function GET(request: Request) {
     );
   }
 
-  const synced = await syncOrderByAwb(docket, { sendWhatsApp: false });
+  const synced = await syncOrderByAwb(docket);
   return NextResponse.json({
     success: true,
     isValid: true,

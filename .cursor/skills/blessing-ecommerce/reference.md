@@ -5,13 +5,13 @@
 | Concern | Files |
 |---------|--------|
 | Place order | `src/app/api/orders/route.ts` |
-| Cancel | `src/app/api/orders/cancel/route.ts` |
+| Cancel | `src/app/api/orders/cancel/route.ts`, `src/lib/orderCancel.ts` |
 | Timeline / status | `src/app/api/orders/timeline/route.ts` |
 | Live admin stream | `src/app/api/orders/stream/route.ts` |
 | Analytics | `src/app/api/admin/analytics/route.ts` |
 | Track public | `src/app/api/track/route.ts`, `src/app/track/page.tsx` |
 | ST Courier | `src/lib/stCourier.ts`, `src/app/api/courier/*` |
-| WhatsApp (disabled) | `src/lib/notify/send.ts` (no-op), `api/whatsapp/*` → 410 |
+| Shop WhatsApp chat (wa.me only) | `src/lib/shopContact.ts`, `FloatingActions` |
 | Status helpers | `src/lib/orderStatus.ts` |
 | Invoice | `src/lib/invoiceGenerator.ts` |
 | Admin UI | `src/app/admin/page.tsx` |
@@ -31,7 +31,7 @@
 - Claiming Flipkart-level automation the site does not have
 - Soft-cancel via PATCH or timeline instead of `/api/orders/cancel`
 - One-off status string checks that diverge (`Cancelled` vs `cancel` vs `CANCELLED`) — use `isOrderCancelled`
-- Re-enabling WhatsApp/Baileys without an explicit product decision
+- Re-adding Baileys / transactional WhatsApp without an explicit product decision
 - Opening Razorpay without an on-page Confirm order step
 
 ## Cancel rules

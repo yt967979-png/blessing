@@ -3,15 +3,15 @@ import { queryDb } from '@/lib/db';
 import { applyRateLimit, verifyAdminRequest } from '@/lib/serverSecurity';
 
 // Stage metadata - mirrors ST Courier's real logistics stages
-const STAGE_META: Record<string, { emoji: string; label: string; whatsappTitle: string; whatsappDesc: string }> = {
-  ORDER_PLACED:         { emoji: '📋', label: 'Order Confirmed',      whatsappTitle: '🎉 ORDER CONFIRMED',        whatsappDesc: 'Thank you! Your order has been received and is being processed.' },
-  PACKED:               { emoji: '📦', label: 'Packed & Sealed',      whatsappTitle: '📦 ORDER PACKED & SEALED',  whatsappDesc: 'Your books have been quality-checked, packed, and sealed for shipment.' },
-  HANDED_TO_ST_COURIER: { emoji: '🚚', label: 'Handed to ST Courier', whatsappTitle: '🚚 HANDED TO ST COURIER',   whatsappDesc: 'Your order has been handed to ST Courier Express for fast delivery.' },
-  IN_TRANSIT:           { emoji: '⚡', label: 'In Transit',           whatsappTitle: '⚡ PARCEL IN TRANSIT',       whatsappDesc: 'Your parcel is moving between ST Courier hubs towards your city.' },
-  OUT_FOR_DELIVERY:     { emoji: '🛵', label: 'Out for Delivery',     whatsappTitle: '🛵 OUT FOR DELIVERY TODAY', whatsappDesc: 'The ST Courier delivery agent is on the way. Please be available at your address.' },
-  DELIVERED:            { emoji: '✅', label: 'Delivered',            whatsappTitle: '✅ ORDER DELIVERED!',        whatsappDesc: 'Your order was delivered successfully. Thank you for choosing Blessing Power Guide!' },
-  FAILED_DELIVERY:      { emoji: '❌', label: 'Delivery Attempted',   whatsappTitle: '❌ DELIVERY ATTEMPTED',      whatsappDesc: 'Delivery was attempted but incomplete. Please contact ST Courier or reply here.' },
-  CANCELLED:            { emoji: '🚫', label: 'Cancelled',            whatsappTitle: '❌ ORDER CANCELLED',         whatsappDesc: 'Your order was cancelled by the shop. If you paid online, any refund returns via Razorpay to your original payment method.' },
+const STAGE_META: Record<string, { emoji: string; label: string; desc: string }> = {
+  ORDER_PLACED:         { emoji: '📋', label: 'Order Confirmed',      desc: 'Thank you! Your order has been received and is being processed.' },
+  PACKED:               { emoji: '📦', label: 'Packed & Sealed',      desc: 'Your books have been quality-checked, packed, and sealed for shipment.' },
+  HANDED_TO_ST_COURIER: { emoji: '🚚', label: 'Handed to ST Courier', desc: 'Your order has been handed to ST Courier Express for fast delivery.' },
+  IN_TRANSIT:           { emoji: '⚡', label: 'In Transit',           desc: 'Your parcel is moving between ST Courier hubs towards your city.' },
+  OUT_FOR_DELIVERY:     { emoji: '🛵', label: 'Out for Delivery',     desc: 'The ST Courier delivery agent is on the way. Please be available at your address.' },
+  DELIVERED:            { emoji: '✅', label: 'Delivered',            desc: 'Your order was delivered successfully. Thank you for choosing Blessing Power Guide!' },
+  FAILED_DELIVERY:      { emoji: '❌', label: 'Delivery Attempted',   desc: 'Delivery was attempted but incomplete. Please contact ST Courier or the shop.' },
+  CANCELLED:            { emoji: '🚫', label: 'Cancelled',            desc: 'Your order was cancelled by the shop. If you paid online, any refund returns via Razorpay to your original payment method.' },
 };
 
 // POST /api/orders/timeline — Add a new tracking event
@@ -75,7 +75,7 @@ export async function POST(request: Request) {
     await queryDb(
       `INSERT INTO order_timeline (id, order_id, status, remarks, hub_city, awb_number, created_at)
        VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
-      [eventId, order.id, statusLabel, remarks || meta.whatsappDesc || null, hubCity || null, awb || null]
+      [eventId, order.id, statusLabel, remarks || meta.desc || null, hubCity || null, awb || null]
     );
 
     // Update main orders table
@@ -90,33 +90,6 @@ export async function POST(request: Request) {
         `UPDATE orders SET order_status = $1, updated_at = NOW() WHERE id = $2`,
         [statusLabel, order.id]
       );
-    }
-
-    // Auto-fire WhatsApp if customer has phone
-    let phone = '';
-    let name = 'Customer';
-    try {
-      const rawAddr = order.shipping_address;
-      const addrObj = typeof rawAddr === 'object' ? rawAddr : JSON.parse(rawAddr || '{}');
-      phone = addrObj.phone || addrObj.alternatePhone || '';
-      name = addrObj.name || 'Customer';
-    } catch (_) {}
-
-    if (phone) {
-      const { notify, statusToNotifyEvent } = await import('@/lib/notify/send');
-      const mapped = statusToNotifyEvent(status) || statusToNotifyEvent(statusLabel);
-      if (mapped) {
-        try {
-          await notify(mapped, {
-            customerPhone: phone,
-            customerName: name,
-            orderId: order.order_number || order.id,
-            awbNumber: awb,
-          });
-        } catch (err: any) {
-          console.error('Error firing WhatsApp in timeline route:', err.message);
-        }
-      }
     }
 
     return NextResponse.json({ success: true, eventId, status, statusLabel });

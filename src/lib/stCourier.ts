@@ -273,12 +273,8 @@ async function persistCourierEvents(
 
 /**
  * Pull live ST Courier status for one AWB and auto-update order if status advanced.
- * Sends WhatsApp when Out for Delivery / Delivered / In Transit advances.
  */
-export async function syncOrderByAwb(
-  docketInput: string,
-  opts: { sendWhatsApp?: boolean } = {}
-): Promise<{
+export async function syncOrderByAwb(docketInput: string): Promise<{
   verified: boolean;
   updated: boolean;
   status?: string;
@@ -346,7 +342,7 @@ export async function syncOrderByAwb(
         orderId: order.order_number || order.id,
         trackingUrl: tracked.trackingUrl,
         events: tracked.events,
-        error: 'Awaiting customer YES — status not updated.',
+        error: 'Order not confirmed yet — status not updated.',
       };
     }
 
@@ -392,37 +388,6 @@ export async function syncOrderByAwb(
         broadcastOrderChange(event);
         await notifyOrderChanged(event);
       } catch (_) {}
-
-      if (opts.sendWhatsApp !== false) {
-        if (
-          nextStatus === 'Out for Delivery' ||
-          nextStatus === 'Delivered' ||
-          nextStatus === 'In Transit'
-        ) {
-          try {
-            let addr: any = {};
-            try {
-              addr =
-                typeof order.shipping_address === 'string'
-                  ? JSON.parse(order.shipping_address)
-                  : order.shipping_address || {};
-            } catch (_) {}
-            const phone = addr.phone || '';
-            if (phone) {
-              const { notify, statusToNotifyEvent } = await import('@/lib/notify/send');
-              const mapped = statusToNotifyEvent(nextStatus);
-              if (mapped) {
-                await notify(mapped, {
-                  customerPhone: phone,
-                  customerName: addr.name || 'Customer',
-                  orderId: order.order_number,
-                  awbNumber: tracked.docket,
-                });
-              }
-            }
-          } catch (_) {}
-        }
-      }
     }
 
     return {
@@ -465,7 +430,7 @@ export async function syncAllActiveAwbOrders(): Promise<{ checked: number; updat
 
   let updated = 0;
   for (const row of rows) {
-    const result = await syncOrderByAwb(row.awb_number, { sendWhatsApp: true });
+    const result = await syncOrderByAwb(row.awb_number);
     if (result.updated) updated += 1;
     // small delay to avoid hammering ERP
     await new Promise((r) => setTimeout(r, 300));

@@ -5,28 +5,13 @@
 import { queryDb } from '@/lib/db';
 import { paymentStatusAfterCancel, isOrderCancelled } from '@/lib/orderStatus';
 import { broadcastOrderChange, notifyOrderChanged } from '@/app/api/orders/stream/route';
-import { notify } from '@/lib/notify/send';
-import { getAdminAlertPhones } from '@/lib/orderConfirm';
 import { needsRazorpayRefund, refundRazorpayPayment } from '@/lib/razorpayRefund';
 
-export type CancelActor = 'customer' | 'admin' | 'system' | 'whatsapp_no';
+export type CancelActor = 'customer' | 'admin' | 'system';
 
 export type CancelResult =
   | { ok: true; orderNumber: string; duplicate?: boolean; refunded?: boolean; refundId?: string }
   | { ok: false; error: string; status?: number };
-
-function parseAddr(raw: unknown): { phone: string; name: string; city?: string } {
-  try {
-    const addr = typeof raw === 'string' ? JSON.parse(raw) : raw;
-    return {
-      phone: String((addr as any)?.phone || ''),
-      name: String((addr as any)?.name || 'Student'),
-      city: String((addr as any)?.city || (addr as any)?.district || ''),
-    };
-  } catch {
-    return { phone: '', name: 'Student' };
-  }
-}
 
 export async function executeOrderCancel(opts: {
   orderId: string;
@@ -34,14 +19,13 @@ export async function executeOrderCancel(opts: {
   actor: CancelActor;
   /** Legacy — customer cancel is always rejected regardless of ownership. */
   userId?: string | null;
-  skipCustomerWhatsApp?: boolean;
 }): Promise<CancelResult> {
   const orderId = String(opts.orderId || '').trim();
   const reason = String(opts.reason || 'Cancelled').slice(0, 200);
   if (!orderId) return { ok: false, error: 'orderId required', status: 400 };
 
-  // Policy: customers cannot cancel (UI + WhatsApp NO + API).
-  if (opts.actor === 'customer' || opts.actor === 'whatsapp_no') {
+  // Policy: customers cannot cancel.
+  if (opts.actor === 'customer') {
     return {
       ok: false,
       error:
@@ -161,37 +145,6 @@ export async function executeOrderCancel(opts: {
       }
     }
 
-    const { phone, name } = parseAddr(row.shipping_address);
-    if (phone && !opts.skipCustomerWhatsApp) {
-      const cancelReason =
-        opts.actor === 'system'
-          ? reason
-          : opts.actor === 'admin'
-            ? `admin: ${reason}`
-            : reason;
-      await notify('order.cancelled', {
-        customerPhone: phone,
-        customerName: name,
-        orderId: row.order_number,
-        cancelReason,
-        refunded,
-        totalAmount: row.total_amount,
-      });
-    }
-
-    try {
-      const admins = await getAdminAlertPhones();
-      if (admins.length > 0) {
-        await notify('admin.low_stock', {
-          adminPhones: admins,
-          title: `❌ ORDER CANCELLED: #${row.order_number}`,
-          stockLeft: refunded
-            ? `Reason: ${reason} | Razorpay refund issued (${refundId || 'ok'}) — Customer: ${name}`
-            : `Reason: ${reason} (Customer: ${name})`,
-        });
-      }
-    } catch (_) {}
-
     const event = {
       type: 'ORDER_UPDATED',
       orderId: row.order_number,
@@ -209,4 +162,30 @@ export async function executeOrderCancel(opts: {
   } catch (err: any) {
     return { ok: false, error: err?.message || 'Cancel failed', status: 500 };
   }
+}
+
+/** Heal: auto-cancel legacy "Awaiting Confirmation" rows older than maxAgeHours. */
+export async function expireAwaitingConfirmations(maxAgeHours = 24) {
+  let cancelled = 0;
+  try {
+    const res = await queryDb(
+      `SELECT order_number FROM orders
+       WHERE order_status ILIKE '%Awaiting Confirmation%'
+       AND COALESCE(ordered_at, updated_at, NOW()) < NOW() - ($1::int * INTERVAL '1 hour')
+       ORDER BY COALESCE(ordered_at, updated_at) ASC
+       LIMIT 20`,
+      [maxAgeHours]
+    );
+    for (const row of res.rows) {
+      const r = await executeOrderCancel({
+        orderId: row.order_number,
+        reason: `Auto-cancelled after ${maxAgeHours}h without confirmation`,
+        actor: 'system',
+      });
+      if (r.ok && !r.duplicate) cancelled++;
+    }
+  } catch {
+    /* ignore */
+  }
+  return cancelled;
 }

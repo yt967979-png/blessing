@@ -11,8 +11,6 @@ import {
 } from '@/lib/serverSecurity';
 import { verifyRazorpayPayment } from '@/lib/orderPricing';
 import { priceCheckoutOrder } from '@/lib/checkoutPricing';
-import { notify, statusToNotifyEvent, getEnvAdminNotifyPhones } from '@/lib/notify/send';
-
 function mapOrderRow(o: any) {
   let addrObj: any = {};
   if (o.shipping_address) {
@@ -301,20 +299,6 @@ export async function POST(request: Request) {
           { status: 409 }
         );
       }
-      const left = Number(stockRes.rows[0]?.stock ?? 0);
-      if (left <= 5) {
-        try {
-          void notify('admin.low_stock', {
-            title: stockRes.rows[0].title,
-            stockLeft: left,
-            bookId: String(item.id),
-            orderId: orderNumber,
-            adminPhones: getEnvAdminNotifyPhones(),
-          }).catch(() => {});
-        } catch {
-          /* ignore */
-        }
-      }
     }
 
     if (razorpayPaymentId) {
@@ -342,33 +326,6 @@ export async function POST(request: Request) {
       }
     } catch {
       /* table may not exist yet */
-    }
-
-    const itemsSummary = verifiedItems.map((i) => `${i.title}×${i.qty}`).join(', ');
-    const phoneDigits = String(customerPhone || '').replace(/\D/g, '').slice(-10);
-
-    try {
-      if (phoneDigits.length === 10) {
-        void notify('payment.confirmed', {
-          customerPhone: phoneDigits,
-          customerName: customerName || 'Student',
-          orderId: orderNumber,
-          totalAmount,
-          itemsSummary,
-        }).catch(() => {});
-      }
-      void notify('admin.new_order', {
-        orderId: orderNumber,
-        customerName: customerName || 'Customer',
-        customerPhone: phoneDigits || undefined,
-        totalAmount,
-        city: city || 'Chennai',
-        paymentMethod: paymentMethod || 'Razorpay UPI',
-        itemsSummary,
-        adminPhones: getEnvAdminNotifyPhones(),
-      }).catch(() => {});
-    } catch {
-      /* WhatsApp optional — order already committed */
     }
 
     const event = {
@@ -411,7 +368,7 @@ export async function PATCH(request: NextRequest) {
 
   let client: any = null;
   try {
-    const { orderId, status, awbNumber, skipWhatsApp } = await request.json();
+    const { orderId, status, awbNumber } = await request.json();
     if (!orderId) {
       return NextResponse.json({ error: 'orderId is required' }, { status: 400 });
     }
@@ -475,46 +432,6 @@ export async function PATCH(request: NextRequest) {
         ]
       );
     } catch (_) {}
-
-    if (!skipWhatsApp) {
-      try {
-        const orderRes = await client.query(
-          `SELECT order_number, user_id, shipping_address, awb_number, tracking_url FROM orders WHERE order_number = $1 OR id::text = $1 LIMIT 1`,
-          [orderId]
-        );
-        if (orderRes.rows.length > 0) {
-          const orderRow = orderRes.rows[0];
-          let phone = '';
-          let customerName = 'Customer';
-          try {
-            const addr =
-              typeof orderRow.shipping_address === 'string'
-                ? JSON.parse(orderRow.shipping_address)
-                : orderRow.shipping_address;
-            phone = addr?.phone || '';
-            customerName = addr?.name || 'Customer';
-          } catch (_) {}
-
-          if (phone) {
-            try {
-              const mapped = statusToNotifyEvent(newStatus);
-              if (mapped) {
-                await notify(mapped, {
-                  customerPhone: phone,
-                  customerName,
-                  orderId: orderRow.order_number || orderId,
-                  awbNumber: awbNumber || orderRow.awb_number || undefined,
-                });
-              }
-            } catch (waErr: any) {
-              console.error('In-process WhatsApp dispatch error in PATCH /api/orders:', waErr.message);
-            }
-          }
-        }
-      } catch (waErr) {
-        console.error('Auto WhatsApp dispatch error:', waErr);
-      }
-    }
 
     const event = { type: 'ORDER_UPDATED', orderId, status: newStatus, awbNumber, timestamp: Date.now() };
     try {

@@ -1,6 +1,6 @@
 # Deploy on Amazon Lightsail (from Railway)
 
-**Preferred path when you have AWS credits but no Render payment card.** Neon Postgres stays the same (Singapore). The app runs on an **always-on** Lightsail VM so Baileys WhatsApp stays in-process (do **not** use Amplify, Lambda, or App Runner — they are not a fit).
+**Preferred path when you have AWS credits but no Render payment card.** Neon Postgres stays the same (Singapore). The app runs on an **always-on** Lightsail VM (do **not** use Amplify, Lambda, or App Runner for this shop).
 
 **Repo:** `yt967979-png/blessing` · **branch:** `main` · **region:** `ap-southeast-1` (Singapore, matches Neon)
 
@@ -14,9 +14,9 @@ Render remains an optional alternative — see [`RENDER.md`](RENDER.md).
 
 | Option | Why not for this shop |
 |--------|------------------------|
-| Amplify / Lambda | No long-lived Node process → Baileys QR/session dies |
+| Amplify / Lambda | Cold starts / no always-on Node process for SSE + cron |
 | App Runner | Scales to zero / short-lived containers → same problem |
-| **Lightsail / EC2** | Always-on VM; `npm start` + Baileys in one Node process |
+| **Lightsail / EC2** | Always-on VM; simple `npm start` + systemd |
 
 ---
 
@@ -150,12 +150,11 @@ sudo systemctl restart blessing
 | `SESSION_SECRET` | Same as Railway (≥32 chars) |
 | `ADMIN_EMAIL` | Your Google admin email |
 | `ADMIN_PASSWORD` | Same as Railway (password login is off; still set) |
-| `ADMIN_PHONE` | WhatsApp admin alerts |
+| `ADMIN_PHONE` | Shop phone for customer `wa.me` chat icon |
 | `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | Same Google OAuth client ID |
 | `NEXT_PUBLIC_SITE_URL` | `https://<your-domain>` or temporary `https://<STATIC_IP>` if using IP+HTTPS carefully — prefer a domain |
 | `PUBLIC_BASE_URL` | Same as `NEXT_PUBLIC_SITE_URL` (keep-alive / host detection) |
 | `HOSTING` | `aws` |
-| `WHATSAPP_SESSION_DIR` | `/var/lib/blessing/whatsapp_session` (outside the app tree so `next build` / Turbopack does not scan Baileys session files) |
 
 ### Recommended tuning (Lightsail 1–2 GB)
 
@@ -393,8 +392,6 @@ sudo bash deploy/aws/redeploy.sh "$PWD"
 ```
 
 `redeploy.sh` aborts if `.next/server/middleware-manifest.json` is missing (never starts a broken build), removes nested `/opt/blessing/blessing` junk, and exits non-zero if localhost `/api/health` or `/api/ready` fail.
-
-WhatsApp auth state lives in `WHATSAPP_SESSION_DIR` (default `/var/lib/blessing/whatsapp_session` on AWS). Prefer not wiping that directory without backing up session data. `setup-lightsail.sh` creates and chowns it for the app user.
 
 ### Connection refused on `:3000` while `blessing` is “active”
 

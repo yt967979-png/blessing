@@ -19,12 +19,12 @@ surface map over a single-file patch.
 - Brand: **Blessing Power Guide** — 6th–12th Tamil Nadu guide books
 - Auth: **Password + Google** (name/email/phone/password register & login; Google sign-in). No guest checkout; **no OTP**. Long-lived session until logout
 - Payment: **Razorpay only** (UPI / cards / netbanking). **COD disabled** in API and all checkout UIs — do not re-offer Cash on Delivery
-- Checkout confirm: **Before Razorpay**, checkout must ask **Confirm order** or **No**. **No** → return to cart/previous (do not open payment). **Confirm** → create Razorpay order + checkout. No WhatsApp YES/NO gate
+- Checkout confirm: **Before Razorpay**, checkout must ask **Confirm order** or **No**. **No** → return to cart/previous (do not open payment). **Confirm** → create Razorpay order + checkout
 - Post-payment: Order is **Confirmed** immediately after successful Razorpay place. Show Flipkart-style confirmation **on the success screen** (order #, amount paid, items, next steps)
 - Coupons: **Disabled** product-wide (APIs return 410; no customer/admin apply UI). Historical `coupon_*` DB columns/tables may remain; cancel rollback must stay a safe no-op
 - Courier: **ST Courier Express** — admin pastes real AWB; site verifies + syncs
-- Comms: **No WhatsApp** for order alerts, pairing, Baileys, YES/NO inbound, or transactional `notify`. `DISABLE_WHATSAPP` defaults on; `/api/whatsapp/*` returns 410. Track status on-site / My Orders
-- Admin: New paid orders appear in Admin → Orders; play a short notification sound when a new order arrives while the admin tab is open (SSE). No Admin WhatsApp tab
+- Comms: **No Baileys / no bot / no transactional WhatsApp**. Only a UI message icon that opens `wa.me/<shop phone>` (`ADMIN_PHONE` / `NEXT_PUBLIC_ADMIN_PHONE`, see `src/lib/shopContact.ts`). Track status on-site / My Orders
+- Admin: New paid orders appear in Admin → Orders; play a short notification sound when a new order arrives while the admin tab is open (SSE). No Admin WhatsApp pairing tab
 - Policy: **no returns / no customer cancel / final sale** on guide books — say so in shipping/footer copy. Customers cannot cancel. **Admin cancel** of a paid Razorpay order **must refund via Razorpay** (refund-first; abort cancel if refund fails); stock restore + revenue exclude still apply
 - Hosting: AWS Lightsail (and/or Railway); do not claim Flipkart-scale inventory/traffic
 
@@ -57,7 +57,7 @@ Search for the status/field name and close every hit.
 5. Store `razorpay_refund_id` when present; timeline remarks include refund id
 6. Restore book stock
 7. Coupon rollback if historical `coupon_id` exists (safe no-op when tables empty)
-8. Timeline event (no WhatsApp cancel message)
+8. Timeline event (no WhatsApp message)
 9. Exclude from revenue/analytics
 10. Lock AWB / dispatch / status advances
 11. Red Cancelled UI on admin + customer + track (not green “live”)
@@ -113,7 +113,7 @@ Search for the status/field name and close every hit.
 - [ ] All surfaces in the map updated
 - [ ] Cancelled never counts as revenue or looks “live shipping”
 - [ ] Illegal AWB/status paths return 4xx
-- [ ] No WhatsApp order messaging / pairing UI live
+- [ ] No Baileys / notify WhatsApp runtime paths
 - [ ] Checkout confirm step runs before Razorpay
 - [ ] Mobile + desktop of touched pages still usable
 - [ ] User told if Lightsail/Railway deploy is still required

@@ -80,7 +80,7 @@ export async function register() {
     // Admin order stream works on any replica (load balancer safe).
     await startSharedBackgroundServices();
 
-    // Courier cron (+ optional WhatsApp if DISABLE_WHATSAPP=false): one replica, auto-elected.
+    // Courier cron: exactly one replica, auto-elected; failover ~30s.
     startAutomaticLeaderElection(
       () => startLeaderBackgroundServices(),
       () => stopLeaderBackgroundServices()

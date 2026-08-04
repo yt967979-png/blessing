@@ -644,7 +644,6 @@ export default function AdminPage() {
           orderId: o.orderId,
           status: orderStatus,
           awbNumber: o.trackingNumber && !o.trackingNumber.startsWith('SHP-') ? o.trackingNumber : undefined,
-          skipWhatsApp: true,
         }),
       });
       showToast(`✅ Status updated to ${orderStatus}`);
