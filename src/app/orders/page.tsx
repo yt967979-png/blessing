@@ -145,8 +145,8 @@ function OrdersContent() {
 
     fetchOrders();
 
-    // Poll for updates (SSE is admin-only — do not open global order stream as a customer)
-    const interval = setInterval(fetchOrders, 45000);
+    // Live 5-second polling for order updates across all customer orders
+    const interval = setInterval(fetchOrders, 5000);
 
     return () => {
       clearInterval(interval);
