@@ -51,24 +51,6 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <head>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.getRegistrations().then(function(regs) {
-                  for (var r of regs) { r.unregister(); }
-                }).catch(function() {});
-              }
-              if ('caches' in window) {
-                caches.keys().then(function(keys) {
-                  keys.forEach(function(k) { caches.delete(k); });
-                }).catch(function() {});
-              }
-            `,
-          }}
-        />
-      </head>
       <body className="antialiased">
         <StoreProvider>
           <ClientChrome>{children}</ClientChrome>
@@ -86,6 +68,19 @@ export default function RootLayout({
           }}
         />
         <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
+        <Script
+          id="register-sw"
+          strategy="afterInteractive"
+          dangerouslySetInnerHTML={{
+            __html: `
+              if ('serviceWorker' in navigator) {
+                window.addEventListener('load', function() {
+                  navigator.serviceWorker.register('/sw.js').catch(function() {});
+                });
+              }
+            `,
+          }}
+        />
       </body>
     </html>
   );
