@@ -46,7 +46,6 @@ function OrdersContent() {
   const [rating, setRating] = useState(5);
   const [reviewComment, setReviewComment] = useState('');
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
-  const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
   const [orderTab, setOrderTab] = useState<'all' | 'active' | 'delivered' | 'cancelled'>('all');
 
   const isCancelledStatus = (status: string) => (status || '').toLowerCase().includes('cancel');
@@ -73,46 +72,6 @@ function OrdersContent() {
     { key: 'Out for Delivery', label: 'Out for Delivery', desc: 'Courier executive out for delivery' },
     { key: 'Delivered', label: 'Delivered', desc: 'Successfully delivered' },
   ];
-
-  const canCustomerCancel = (status: string) => {
-    const s = (status || '').toLowerCase();
-    if (!s || s.includes('cancel') || s.includes('delivered')) return false;
-    if (s.includes('packed') || s.includes('handed') || s.includes('transit') || s.includes('out for delivery')) {
-      return false;
-    }
-    return true;
-  };
-
-  const handleCancelOrder = async (orderId: string) => {
-    if (!user || !orderId) return;
-    if (!confirm(`Cancel order ${orderId}? This cannot be undone.`)) return;
-    setCancellingOrderId(orderId);
-    try {
-      const res = await fetch('/api/orders/cancel', {
-        method: 'POST',
-        headers: authHeaders(user),
-        body: JSON.stringify({ orderId, reason: 'Cancelled by customer' }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        showToast(`❌ ${data.error || 'Could not cancel'}`);
-        return;
-      }
-      showToast('✅ Order cancelled');
-      setSearchedOrderData((prev: any) =>
-        prev && prev.orderId === orderId ? { ...prev, courierStatus: 'Cancelled', status: 'Cancelled' } : prev
-      );
-      setUserOrders((prev) =>
-        prev.map((o) =>
-          o.orderId === orderId ? { ...o, courierStatus: 'Cancelled', status: 'Cancelled' } : o
-        )
-      );
-    } catch {
-      showToast('❌ Cancel failed');
-    } finally {
-      setCancellingOrderId(null);
-    }
-  };
 
   const handleReorder = (ord: any) => {
     const items = Array.isArray(ord.items) ? ord.items : [];
@@ -404,17 +363,6 @@ function OrdersContent() {
                 <Download className="w-4 h-4 text-amber-400" />
                 <span>TAX INVOICE PDF</span>
               </button>
-              {user && canCustomerCancel(searchedOrderData.courierStatus || searchedOrderData.status) && (
-                <button
-                  type="button"
-                  disabled={cancellingOrderId === searchedOrderData.orderId}
-                  onClick={() => void handleCancelOrder(searchedOrderData.orderId)}
-                  className="bg-white border border-red-200 text-red-700 hover:bg-red-50 font-extrabold text-xs px-4 py-2.5 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
-                >
-                  <X className="w-4 h-4" />
-                  <span>{cancellingOrderId === searchedOrderData.orderId ? 'CANCELLING…' : 'CANCEL ORDER'}</span>
-                </button>
-              )}
             </div>
 
             {/* Amazon / Flipkart Horizontal Connected Stepper Line */}
@@ -425,7 +373,7 @@ function OrdersContent() {
                 </div>
                 <h3 className="font-heading font-black text-lg text-red-800">Order Cancelled</h3>
                 <p className="text-xs text-red-700/80 max-w-md mx-auto">
-                  This order is cancelled. Stock is restored — you can place a new order anytime from the shop.
+                  This order was cancelled by the shop. If you paid online, any refund returns to your original Razorpay payment method (usually 5–7 working days). You can place a new order anytime.
                 </p>
               </div>
             ) : (

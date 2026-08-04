@@ -31,11 +31,12 @@
 - Soft-cancel via PATCH or timeline instead of `/api/orders/cancel`
 - One-off status string checks that diverge (`Cancelled` vs `cancel` vs `CANCELLED`) — use `isOrderCancelled`
 
-## Customer cancel rules
+## Cancel rules
 
-- Customer: only before packed / handed to courier
-- Admin: until delivered
+- Customer: **cannot cancel** (API 403, no UI, WhatsApp NO is no-op)
+- Admin: until delivered; paid Razorpay → refund first then cancel
 - Delivered: never cancel via app
+- Refund helper: `src/lib/razorpayRefund.ts`
 
 ## Deploy reminder
 

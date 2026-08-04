@@ -629,7 +629,11 @@ export default function AdminPage() {
       return;
     }
     if (statusKey === 'CANCELLED') {
-      if (!confirm(`Cancel order ${o.orderId}? Stock will be restored.`)) return;
+      const paidHint =
+        String(o.paymentMethod || '').toLowerCase().includes('cod')
+          ? 'Stock will be restored.'
+          : 'If this order was paid via Razorpay, a full refund will be issued to the customer’s original payment method before cancel completes. If refund fails, cancel is aborted — retry after fixing Razorpay.';
+      if (!confirm(`Cancel order ${o.orderId}?\n\n${paidHint}`)) return;
       setUpdatingStatusId(`${o.orderId}-${statusKey}`);
       try {
         const r = await fetch('/api/orders/cancel', {
@@ -642,7 +646,11 @@ export default function AdminPage() {
           showToast(`❌ ${d.error || 'Cancel failed'}`);
           return;
         }
-        showToast(`✅ Order ${o.orderId} cancelled`);
+        showToast(
+          d.refunded
+            ? `✅ Order ${o.orderId} cancelled + Razorpay refund issued`
+            : `✅ Order ${o.orderId} cancelled`
+        );
         loadLiveOrders();
         void loadAnalytics();
       } catch {
@@ -1238,7 +1246,12 @@ export default function AdminPage() {
                             <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${isCancelled ? 'bg-red-100 text-red-700' : isAwaiting ? 'bg-amber-100 text-amber-800' : isDelivered ? 'bg-green-50 text-green-700' : stepIdx >= 4 ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700'}`}>{isCancelled ? 'Cancelled' : (o.courierStatus || 'Order Placed')}</span>
                           </div>
                           {isCancelled ? (
-                            <p className="text-[11px] text-red-700 font-medium">Cancelled — AWB / dispatch locked. Revenue not counted.</p>
+                            <p className="text-[11px] text-red-700 font-medium">
+                              Cancelled — AWB / dispatch locked. Revenue not counted.
+                              {String(o.paymentStatus || '').toLowerCase().includes('refund')
+                                ? ' Razorpay refunded to customer.'
+                                : ''}
+                            </p>
                           ) : isAwaiting ? (
                             <p className="text-[11px] text-amber-800 font-medium">Legacy pending status — refresh page (paid Razorpay orders auto-confirm). Pack / AWB locked until Confirmed.</p>
                           ) : (

@@ -236,9 +236,12 @@ export async function handleAdminAwbReply(fromPhone: string, text: string) {
       skipCustomerWhatsApp: false,
     });
     if (res.ok) {
+      const refundNote = res.refunded
+        ? ` Razorpay refund issued (${res.refundId || 'ok'}) — money returns to customer’s payment method.`
+        : '';
       return {
         handled: true as const,
-        message: `❌ Order #${res.orderNumber} has been cancelled by Admin. Stock restored and customer notified on WhatsApp!`,
+        message: `❌ Order #${res.orderNumber} cancelled by Admin. Stock restored.${refundNote} Customer notified on WhatsApp.`,
       };
     }
     return { handled: true as const, message: `Failed to cancel order: ${res.error}` };
@@ -334,19 +337,13 @@ export async function handleInboundYesNo(fromPhone: string, text: string) {
     return { handled: true as const, answer, result: { message: confirmMsg } };
   }
 
-  // Handle NO reply -> Cancel order
-  const r = await executeOrderCancel({
-    orderId: pending.order_number,
-    reason: 'Customer replied NO on WhatsApp',
-    actor: 'whatsapp_no',
-    skipCustomerWhatsApp: true,
-  });
+  // Customers cannot cancel — WhatsApp NO is a no-op for cancel (prepaid / final-sale policy).
+  const noCancelMsg =
+    `ℹ️ Customers cannot cancel orders from WhatsApp.\n\n` +
+    `Order #${pending.order_number} stays active. For help, WhatsApp the shop — an admin may cancel and refund a paid Razorpay order if needed.\n\n` +
+    `Track: ${siteUrl}/track?orderId=${pending.order_number}`;
 
-  const cancelMsg = (r as any).duplicate
-    ? `❌ Order #${pending.order_number} was ALREADY CANCELLED.\n\nYou can place a new order anytime at ${siteUrl}`
-    : `❌ Order #${pending.order_number} HAS BEEN CANCELLED as requested.\n\nIf this was a mistake, you can place a new order anytime at ${siteUrl}`;
-
-  return { handled: true as const, answer, result: { message: cancelMsg } };
+  return { handled: true as const, answer, result: { message: noCancelMsg } };
 }
 
 /** Auto-cancel awaiting orders older than 24h. */

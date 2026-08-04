@@ -83,6 +83,8 @@ function buildMessage(event: NotifyEvent, payload: NotifyPayload): string | null
         customerName: name,
         orderId,
         cancelReason: payload.cancelReason,
+        refunded: !!payload.refunded,
+        totalAmount: payload.totalAmount,
       });
     case 'admin.new_order':
       if (!orderId) return null;

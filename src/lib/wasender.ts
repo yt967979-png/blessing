@@ -58,7 +58,7 @@ export async function sendViaWasender(to: string, message: string): Promise<{ ok
             type: 'reply',
             reply: {
               id: 'no',
-              title: '❌ CANCEL ORDER',
+              title: '❓ NEED HELP',
             },
           },
         ],
@@ -68,7 +68,7 @@ export async function sendViaWasender(to: string, message: string): Promise<{ ok
     // Backup button payload arrays for WasenderAPI gateway formats
     bodyData.buttons = [
       { id: 'yes', text: '✅ YES - CONFIRM', title: '✅ YES - CONFIRM' },
-      { id: 'no', text: '❌ CANCEL ORDER', title: '❌ CANCEL ORDER' },
+      { id: 'no', text: '❓ NEED HELP', title: '❓ NEED HELP' },
     ];
   }
 

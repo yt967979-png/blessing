@@ -1027,6 +1027,7 @@ async function runSchemaInit(client: any) {
           razorpay_order_id VARCHAR(255),
           razorpay_payment_id VARCHAR(255),
           razorpay_signature VARCHAR(255),
+          razorpay_refund_id VARCHAR(255),
           shipment_id VARCHAR(255),
           awb_number VARCHAR(255),
           courier_name VARCHAR(255) DEFAULT 'ST Courier Express',
@@ -1247,6 +1248,7 @@ async function runSchemaInit(client: any) {
         ALTER TABLE order_timeline ADD COLUMN IF NOT EXISTS hub_city VARCHAR(255);
         ALTER TABLE order_timeline ADD COLUMN IF NOT EXISTS awb_number VARCHAR(255);
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS idempotency_key VARCHAR(80);
+        ALTER TABLE orders ADD COLUMN IF NOT EXISTS razorpay_refund_id VARCHAR(255);
 
         -- courier_tracking: old summary schema → event-row columns used by track/ST sync
         ALTER TABLE courier_tracking ADD COLUMN IF NOT EXISTS awb_number VARCHAR(255);
@@ -1308,10 +1310,14 @@ async function runSchemaInit(client: any) {
     }
 
     // Heal: cancelled orders must not look like collectible COD / paid sales
+    // Do not overwrite Refunded (admin cancel + Razorpay refund).
     try {
       await client.query(`
         UPDATE orders
         SET payment_status = CASE
+              WHEN COALESCE(razorpay_refund_id, '') <> ''
+                OR COALESCE(payment_status, '') ILIKE '%refund%'
+                THEN 'Refunded'
               WHEN COALESCE(payment_method, '') ILIKE '%cod%'
                 THEN 'Cancelled — COD not collectible'
               ELSE 'Cancelled'
@@ -1319,6 +1325,7 @@ async function runSchemaInit(client: any) {
             updated_at = NOW()
         WHERE COALESCE(order_status, '') ILIKE '%cancel%'
           AND COALESCE(payment_status, '') NOT ILIKE '%cancel%'
+          AND COALESCE(payment_status, '') NOT ILIKE '%refund%'
       `);
     } catch (_) {
       /* ignore */

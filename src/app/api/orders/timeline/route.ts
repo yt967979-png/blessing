@@ -11,7 +11,7 @@ const STAGE_META: Record<string, { emoji: string; label: string; whatsappTitle: 
   OUT_FOR_DELIVERY:     { emoji: '🛵', label: 'Out for Delivery',     whatsappTitle: '🛵 OUT FOR DELIVERY TODAY', whatsappDesc: 'The ST Courier delivery agent is on the way. Please be available at your address.' },
   DELIVERED:            { emoji: '✅', label: 'Delivered',            whatsappTitle: '✅ ORDER DELIVERED!',        whatsappDesc: 'Your order was delivered successfully. Thank you for choosing Blessing Power Guide!' },
   FAILED_DELIVERY:      { emoji: '❌', label: 'Delivery Attempted',   whatsappTitle: '❌ DELIVERY ATTEMPTED',      whatsappDesc: 'Delivery was attempted but incomplete. Please contact ST Courier or reply here.' },
-  CANCELLED:            { emoji: '🚫', label: 'Cancelled',            whatsappTitle: '❌ ORDER CANCELLED',         whatsappDesc: 'Your order has been cancelled. Stock is restored — you can order again anytime.' },
+  CANCELLED:            { emoji: '🚫', label: 'Cancelled',            whatsappTitle: '❌ ORDER CANCELLED',         whatsappDesc: 'Your order was cancelled by the shop. If you paid online, any refund returns via Razorpay to your original payment method.' },
 };
 
 // POST /api/orders/timeline — Add a new tracking event
@@ -43,7 +43,7 @@ export async function POST(request: Request) {
 
     if (status === 'CANCELLED') {
       return NextResponse.json(
-        { error: 'Use POST /api/orders/cancel to cancel orders (restores stock).' },
+        { error: 'Use POST /api/orders/cancel (admin only; Razorpay refund for paid orders).' },
         { status: 400 }
       );
     }

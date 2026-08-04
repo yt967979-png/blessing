@@ -437,7 +437,7 @@ export async function PATCH(request: NextRequest) {
     const newStatus = status || 'Handed to ST Courier';
     if (String(newStatus).toLowerCase().includes('cancel')) {
       return NextResponse.json(
-        { error: 'Use POST /api/orders/cancel to cancel (restores stock + coupon).' },
+        { error: 'Use POST /api/orders/cancel (admin only; Razorpay refund for paid orders).' },
         { status: 400 }
       );
     }

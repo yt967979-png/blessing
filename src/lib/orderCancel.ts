@@ -1,19 +1,19 @@
 /**
- * Shared cancel execution — used by API, WhatsApp NO, Admin CANCEL command, and 24h timeout.
+ * Shared cancel execution — admin (and legacy system expire) only.
+ * Customers cannot cancel. Paid Razorpay: refund first, then cancel.
  */
 import { queryDb } from '@/lib/db';
 import { paymentStatusAfterCancel, isOrderCancelled } from '@/lib/orderStatus';
 import { broadcastOrderChange, notifyOrderChanged } from '@/app/api/orders/stream/route';
 import { notify } from '@/lib/notify/send';
 import { getAdminAlertPhones } from '@/lib/orderConfirm';
+import { needsRazorpayRefund, refundRazorpayPayment } from '@/lib/razorpayRefund';
 
 export type CancelActor = 'customer' | 'admin' | 'system' | 'whatsapp_no';
 
 export type CancelResult =
-  | { ok: true; orderNumber: string; duplicate?: boolean }
+  | { ok: true; orderNumber: string; duplicate?: boolean; refunded?: boolean; refundId?: string }
   | { ok: false; error: string; status?: number };
-
-const BLOCKED_AFTER = ['handed to st courier', 'in transit', 'out for delivery', 'delivered', 'cancelled'];
 
 function parseAddr(raw: unknown): { phone: string; name: string; city?: string } {
   try {
@@ -32,7 +32,7 @@ export async function executeOrderCancel(opts: {
   orderId: string;
   reason: string;
   actor: CancelActor;
-  /** When set, enforce ownership (customer / whatsapp). */
+  /** Legacy — customer cancel is always rejected regardless of ownership. */
   userId?: string | null;
   skipCustomerWhatsApp?: boolean;
 }): Promise<CancelResult> {
@@ -40,10 +40,21 @@ export async function executeOrderCancel(opts: {
   const reason = String(opts.reason || 'Cancelled').slice(0, 200);
   if (!orderId) return { ok: false, error: 'orderId required', status: 400 };
 
+  // Policy: customers cannot cancel (UI + WhatsApp NO + API).
+  if (opts.actor === 'customer' || opts.actor === 'whatsapp_no') {
+    return {
+      ok: false,
+      error:
+        'Customers cannot cancel orders. Contact the shop on WhatsApp if you need help — admin may cancel and refund paid orders.',
+      status: 403,
+    };
+  }
+
   try {
     const ord = await queryDb(
       `SELECT id, order_number, user_id, order_status, payment_method, payment_status,
-              shipping_address, coupon_id
+              shipping_address, coupon_id, razorpay_payment_id, total_amount,
+              razorpay_refund_id
        FROM orders WHERE order_number = $1 OR id = $1 LIMIT 1`,
       [orderId]
     );
@@ -52,25 +63,52 @@ export async function executeOrderCancel(opts: {
     }
 
     const row = ord.rows[0];
-    if (opts.userId && opts.actor === 'customer' && row.user_id !== opts.userId) {
-      return { ok: false, error: 'You can only cancel your own orders.', status: 403 };
-    }
-
     const status = String(row.order_status || '').toLowerCase();
     if (isOrderCancelled(status)) {
-      return { ok: true, orderNumber: row.order_number, duplicate: true };
+      const alreadyRefunded = String(row.payment_status || '').toLowerCase().includes('refund');
+      return {
+        ok: true,
+        orderNumber: row.order_number,
+        duplicate: true,
+        refunded: alreadyRefunded,
+        refundId: row.razorpay_refund_id || undefined,
+      };
     }
 
-    if (opts.actor === 'customer') {
-      if (BLOCKED_AFTER.some((s) => status.includes(s)) || status.includes('packed')) {
-        return {
-          ok: false,
-          error: 'Order already packed or shipped. Contact support on WhatsApp to cancel.',
-          status: 409,
-        };
-      }
-    } else if (opts.actor === 'admin' && status.includes('delivered')) {
+    if (opts.actor === 'admin' && status.includes('delivered')) {
       return { ok: false, error: 'Delivered orders cannot be cancelled.', status: 409 };
+    }
+
+    // Paid Razorpay: refund FIRST — abort cancel if refund fails (admin can retry).
+    let refunded = false;
+    let refundId: string | undefined;
+    if (needsRazorpayRefund(row)) {
+      const refund = await refundRazorpayPayment({
+        paymentId: String(row.razorpay_payment_id || '').trim(),
+        orderNumber: row.order_number,
+        existingRefundId: row.razorpay_refund_id,
+      });
+      if (!refund.ok) {
+        return { ok: false, error: refund.error, status: 502 };
+      }
+      refunded = true;
+      refundId = refund.refundId;
+      try {
+        await queryDb(
+          `UPDATE orders SET razorpay_refund_id = $2, updated_at = NOW() WHERE id = $1`,
+          [row.id, refund.refundId]
+        );
+      } catch (e: any) {
+        console.warn('[cancel] could not store razorpay_refund_id:', e?.message);
+      }
+      try {
+        await queryDb(
+          `UPDATE payments SET status = 'REFUNDED' WHERE order_id = $1 OR payment_id = $2`,
+          [row.id, String(row.razorpay_payment_id || '').trim()]
+        );
+      } catch (e: any) {
+        console.warn('[cancel] payments refund status skipped:', e?.message);
+      }
     }
 
     const items = await queryDb(`SELECT book_id, quantity FROM order_items WHERE order_id = $1`, [
@@ -87,7 +125,7 @@ export async function executeOrderCancel(opts: {
       );
     }
 
-    const payStatus = paymentStatusAfterCancel(row.payment_method);
+    const payStatus = paymentStatusAfterCancel(row.payment_method, { refunded });
     await queryDb(
       `UPDATE orders
        SET order_status = 'Cancelled',
@@ -96,10 +134,14 @@ export async function executeOrderCancel(opts: {
        WHERE id = $1`,
       [row.id, payStatus]
     );
+
+    const timelineRemarks = refunded
+      ? `${reason} | Razorpay refund ${refundId || 'issued'} — amount returns to original payment method`
+      : reason;
     await queryDb(
       `INSERT INTO order_timeline (id, order_id, status, remarks)
        VALUES ($1, $2, 'Cancelled', $3)`,
-      [`tl-cancel-${Date.now()}`, row.id, reason]
+      [`tl-cancel-${Date.now()}`, row.id, timelineRemarks.slice(0, 500)]
     );
 
     if (row.coupon_id) {
@@ -124,27 +166,28 @@ export async function executeOrderCancel(opts: {
       const cancelReason =
         opts.actor === 'system'
           ? reason
-          : opts.actor === 'whatsapp_no' || opts.actor === 'customer'
-            ? 'requested'
-            : opts.actor === 'admin'
-              ? `admin: ${reason}`
-              : reason;
+          : opts.actor === 'admin'
+            ? `admin: ${reason}`
+            : reason;
       await notify('order.cancelled', {
         customerPhone: phone,
         customerName: name,
         orderId: row.order_number,
         cancelReason,
+        refunded,
+        totalAmount: row.total_amount,
       });
     }
 
-    // Always notify Admin alert phones when an order is cancelled!
     try {
       const admins = await getAdminAlertPhones();
       if (admins.length > 0) {
         await notify('admin.low_stock', {
           adminPhones: admins,
           title: `❌ ORDER CANCELLED: #${row.order_number}`,
-          stockLeft: `Reason: ${reason} (Customer: ${name})`,
+          stockLeft: refunded
+            ? `Reason: ${reason} | Razorpay refund issued (${refundId || 'ok'}) — Customer: ${name}`
+            : `Reason: ${reason} (Customer: ${name})`,
         });
       }
     } catch (_) {}
@@ -162,7 +205,7 @@ export async function executeOrderCancel(opts: {
       /* ignore */
     }
 
-    return { ok: true, orderNumber: row.order_number };
+    return { ok: true, orderNumber: row.order_number, refunded, refundId };
   } catch (err: any) {
     return { ok: false, error: err?.message || 'Cancel failed', status: 500 };
   }

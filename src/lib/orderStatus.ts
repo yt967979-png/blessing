@@ -18,10 +18,23 @@ export function blocksShippingActions(status: string | null | undefined): boolea
   return isOrderCancelled(status) || isAwaitingConfirmation(status);
 }
 
-export function paymentStatusAfterCancel(paymentMethod: string | null | undefined): string {
+/**
+ * payment_status after cancel.
+ * Paid Razorpay admin-cancel → Refunded (money returned via Razorpay).
+ * Legacy COD → not collectible. Unpaid / no payment id → Cancelled.
+ */
+export function paymentStatusAfterCancel(
+  paymentMethod: string | null | undefined,
+  opts?: { refunded?: boolean }
+): string {
+  if (opts?.refunded) return 'Refunded';
   const m = String(paymentMethod || '').toLowerCase();
   if (m.includes('cod')) return 'Cancelled — COD not collectible';
   return 'Cancelled';
+}
+
+export function isPaymentRefunded(paymentStatus: string | null | undefined): boolean {
+  return String(paymentStatus || '').toLowerCase().includes('refund');
 }
 
 /** Normalize inbound WhatsApp reply to yes / no / null. */

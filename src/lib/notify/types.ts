@@ -23,8 +23,10 @@ export type NotifyPayload = {
   awbNumber?: string;
   trackingUrl?: string;
   city?: string;
-  /** cancel reason / actor nuance: requested | expired | admin | system */
+  /** cancel reason / actor nuance: expired | admin | system */
   cancelReason?: string;
+  /** true when Razorpay refund was issued on admin cancel */
+  refunded?: boolean;
   /** low stock */
   title?: string;
   stockLeft?: number | string;

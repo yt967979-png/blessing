@@ -24,7 +24,7 @@ surface map over a single-file patch.
 - Courier: **ST Courier Express** — admin pastes real AWB; site verifies + syncs
 - Comms: **WhatsApp** (Baileys in-process) for order updates (paid/confirmed language — not “reply YES”)
 - Admin: New paid orders appear in Admin → Orders; play a short notification sound when a new order arrives while the admin tab is open
-- Policy: **no returns / no refunds / no money-back flow** on guide books (final sale) — say so in shipping/footer copy; cancel restores stock but does not refund Razorpay
+- Policy: **no returns / no customer cancel / final sale** on guide books — say so in shipping/footer copy. Customers cannot cancel. **Admin cancel** of a paid Razorpay order **must refund via Razorpay** (refund-first; abort cancel if refund fails); stock restore + revenue exclude still apply
 - Hosting: AWS Lightsail (and/or Railway); do not claim Flipkart-scale inventory/traffic
 
 ## Non‑negotiable: cross-cutting changes
@@ -50,14 +50,17 @@ Search for the status/field name and close every hit.
 
 ### Cancel contract (must all happen)
 
-1. `order_status = Cancelled`
-2. `payment_status` via `paymentStatusAfterCancel` (legacy COD = not collectible)
-3. Restore book stock
-4. Coupon rollback if historical `coupon_id` exists (safe no-op when tables empty)
-5. Timeline event + WhatsApp cancel message
-6. Exclude from revenue/analytics
-7. Lock AWB / dispatch / status advances
-8. Red Cancelled UI on admin + customer + track (not green “live”)
+1. **Admin only** — customer API/UI/WhatsApp NO must not cancel
+2. Paid Razorpay + `razorpay_payment_id`: **refund first** via Razorpay Refunds API; on failure **abort** cancel
+3. `order_status = Cancelled`
+4. `payment_status` via `paymentStatusAfterCancel` (`Refunded` when refunded; legacy COD = not collectible)
+5. Store `razorpay_refund_id` when present; timeline remarks include refund id
+6. Restore book stock
+7. Coupon rollback if historical `coupon_id` exists (safe no-op when tables empty)
+8. Timeline event + WhatsApp cancel message (refund copy when applicable; never “you cancelled”)
+9. Exclude from revenue/analytics
+10. Lock AWB / dispatch / status advances
+11. Red Cancelled UI on admin + customer + track (not green “live”)
 
 ## Build workflow (every feature)
 

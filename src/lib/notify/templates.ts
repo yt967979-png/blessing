@@ -46,11 +46,12 @@ export function confirmNoReplyMessage(opts: {
   orderId: string;
 }) {
   const name = opts.customerName || 'Student';
+  // Legacy helper — customers can no longer cancel via WhatsApp NO.
   return (
-    `*BLESSING POWER GUIDE*\n*❌ ORDER CANCELLED*\n\n` +
+    `*BLESSING POWER GUIDE*\n\n` +
     `Dear *${name}*,\n` +
-    `Your order *${opts.orderId}* was cancelled as requested. Stock is restored.\n\n` +
-    `Order again anytime:\n${siteBase()}`
+    `Customers cannot cancel orders from WhatsApp. Order *${opts.orderId}* stays active unless the shop cancels it.\n\n` +
+    `Track / help:\n${siteBase()}`
   );
 }
 
@@ -58,23 +59,32 @@ export function orderCancelledMessage(opts: {
   customerName?: string;
   orderId: string;
   cancelReason?: string;
+  refunded?: boolean;
+  totalAmount?: number | string;
 }) {
   const name = opts.customerName || 'Student';
   const reason = String(opts.cancelReason || '').toLowerCase();
   let body =
-    `Your order *${opts.orderId}* has been cancelled. Stock is restored — you can order again anytime.`;
+    `Your order *${opts.orderId}* has been cancelled by the shop. Stock is restored — you can order again anytime.`;
   if (reason.includes('24h') || reason.includes('expired') || reason.includes('timeout')) {
     body =
       `Your order *${opts.orderId}* was cancelled automatically after no confirmation within 24 hours. Stock is restored.`;
-  } else if (reason.includes('no') || reason.includes('requested') || reason.includes('customer')) {
-    body = `Your order *${opts.orderId}* was cancelled as requested. Stock is restored.`;
   } else if (reason.includes('admin')) {
     body = `Your order *${opts.orderId}* was cancelled by the shop. Stock is restored.`;
   }
+  // Never claim the customer cancelled — customers cannot cancel prepaid orders.
+  const amount =
+    opts.totalAmount != null && opts.totalAmount !== ''
+      ? `₹${opts.totalAmount}`
+      : 'your payment';
+  const refundLine = opts.refunded
+    ? `\n\n💰 *Refund:* ${amount} will return to your original payment method (Razorpay UPI / card / netbanking). Banks usually take 5–7 working days.`
+    : '';
   return (
     `*BLESSING POWER GUIDE*\n*❌ ORDER CANCELLED*\n\n` +
     `Dear *${name}*,\n` +
-    `${body}\n\n` +
+    `${body}` +
+    `${refundLine}\n\n` +
     `Order again:\n${siteBase()}`
   );
 }

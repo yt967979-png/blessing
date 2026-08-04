@@ -47,11 +47,14 @@ export default function ShippingPolicyPage() {
             </h2>
             <p>
               Blessing Power Guide sells <strong>educational guide books</strong>. All sales are <strong>final</strong>.
-              We do <strong>not</strong> offer returns, exchanges, or refunds once an order is placed.
+              Customers cannot cancel orders from the website. We do <strong>not</strong> offer returns, exchanges, or
+              a general money-back flow once an order is placed and paid.
             </p>
             <p>
-              If your parcel arrives damaged in transit or you received a clearly wrong title, WhatsApp us at{' '}
-              <strong>+91 9840418228</strong> with your Order ID and photos — we will help case by case.
+              In rare cases the shop may cancel an order before dispatch; if you paid online via Razorpay, that
+              payment is refunded to your original payment method. If your parcel arrives damaged in transit or you
+              received a clearly wrong title, WhatsApp us at <strong>+91 9840418228</strong> with your Order ID and
+              photos — we will help case by case.
             </p>
           </section>
 

@@ -10,12 +10,13 @@ import {
 import { executeOrderCancel } from '@/lib/orderCancel';
 
 /**
- * Cancel order — admin anytime (before delivered), customer only before packed/shipped.
- * Restores stock, rolls back coupon usage, updates payment_status, notifies via WhatsApp.
+ * Cancel order — admin only.
+ * Paid Razorpay orders: Razorpay refund is attempted first; cancel aborts if refund fails.
+ * Customers cannot cancel (403).
  */
 export async function POST(request: NextRequest) {
   const session = await getAuthenticatedUser(request);
-  if (!session) return unauthorizedResponse('Sign in to cancel an order.');
+  if (!session) return unauthorizedResponse('Sign in required.');
 
   const rl = await applyRateLimitAsync(`cancel:${session.userId}:${clientIp(request)}`, 10, 60000);
   if (!rl.allowed) {
@@ -23,12 +24,16 @@ export async function POST(request: NextRequest) {
   }
 
   const admin = await verifyAdminRequest(request);
-  const isAdmin = admin.isAdmin;
+  if (!admin.isAdmin) {
+    return forbiddenResponse(
+      'Customers cannot cancel orders. Contact the shop on WhatsApp — admin may cancel and issue a Razorpay refund for paid orders.'
+    );
+  }
 
   try {
     const body = await request.json();
     const orderId = String(body.orderId || '').trim();
-    const reason = String(body.reason || 'Cancelled by request').slice(0, 200);
+    const reason = String(body.reason || 'Cancelled by admin').slice(0, 200);
     if (!orderId) {
       return NextResponse.json({ error: 'orderId required' }, { status: 400 });
     }
@@ -36,8 +41,7 @@ export async function POST(request: NextRequest) {
     const result = await executeOrderCancel({
       orderId,
       reason,
-      actor: isAdmin ? 'admin' : 'customer',
-      userId: isAdmin ? null : session.userId,
+      actor: 'admin',
     });
 
     if (!result.ok) {
@@ -48,8 +52,14 @@ export async function POST(request: NextRequest) {
       success: true,
       orderId: result.orderNumber,
       status: 'Cancelled',
+      refunded: result.refunded || false,
+      refundId: result.refundId || null,
       duplicate: result.duplicate || false,
-      message: result.duplicate ? 'Order already cancelled.' : undefined,
+      message: result.duplicate
+        ? 'Order already cancelled.'
+        : result.refunded
+          ? 'Order cancelled. Razorpay refund issued — amount returns to the customer’s original payment method.'
+          : 'Order cancelled.',
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message || 'Cancel failed' }, { status: 500 });

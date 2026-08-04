@@ -677,7 +677,7 @@ async function sendWhatsAppDirect(to: string, message: string) {
         footer: 'Blessing Power Guide • Quick Reply',
         templateButtons: [
           { index: 1, quickReplyButton: { displayText: '✅ YES - CONFIRM ORDER', id: 'yes' } },
-          { index: 2, quickReplyButton: { displayText: '❌ NO - CANCEL ORDER', id: 'no' } },
+          { index: 2, quickReplyButton: { displayText: '❓ NEED HELP', id: 'no' } },
         ],
       } as any);
       console.log(`✅ [IN-PROCESS BAILEYS TEMPLATE BUTTONS SENT] Sent to +${phoneWithCountry}`);
@@ -690,7 +690,7 @@ async function sendWhatsAppDirect(to: string, message: string) {
           footer: 'Blessing Power Guide • Quick Reply',
           buttons: [
             { buttonId: 'yes', buttonText: { displayText: '✅ YES - CONFIRM ORDER' }, type: 1 },
-            { buttonId: 'no', buttonText: { displayText: '❌ NO - CANCEL ORDER' }, type: 1 },
+            { buttonId: 'no', buttonText: { displayText: '❓ NEED HELP' }, type: 1 },
           ],
           headerType: 1,
         } as any);
