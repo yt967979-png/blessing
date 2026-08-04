@@ -94,7 +94,9 @@ export async function GET(request: Request) {
           COUNT(*) FILTER (WHERE ${ACTIVE} AND (payment_status ILIKE '%confirm%' OR payment_status ILIKE '%paid%'))::int AS paid_orders,
           COUNT(*) FILTER (WHERE ${ACTIVE} AND payment_method ILIKE '%cod%')::int   AS cod_orders,
           COUNT(*) FILTER (WHERE ${ACTIVE} AND (ordered_at AT TIME ZONE 'Asia/Kolkata')::date = (NOW() AT TIME ZONE 'Asia/Kolkata')::date)::int AS today_orders,
-          COALESCE(SUM(total_amount) FILTER (WHERE ${ACTIVE} AND (ordered_at AT TIME ZONE 'Asia/Kolkata')::date = (NOW() AT TIME ZONE 'Asia/Kolkata')::date), 0)::numeric AS today_revenue
+          COALESCE(SUM(total_amount) FILTER (WHERE ${ACTIVE} AND (ordered_at AT TIME ZONE 'Asia/Kolkata')::date = (NOW() AT TIME ZONE 'Asia/Kolkata')::date), 0)::numeric AS today_revenue,
+          COUNT(*) FILTER (WHERE ${ACTIVE} AND DATE_TRUNC('month', ordered_at AT TIME ZONE 'Asia/Kolkata') = DATE_TRUNC('month', NOW() AT TIME ZONE 'Asia/Kolkata'))::int AS month_orders,
+          COALESCE(SUM(total_amount) FILTER (WHERE ${ACTIVE} AND DATE_TRUNC('month', ordered_at AT TIME ZONE 'Asia/Kolkata') = DATE_TRUNC('month', NOW() AT TIME ZONE 'Asia/Kolkata')), 0)::numeric AS month_revenue
         FROM orders
       `);
 
@@ -195,6 +197,8 @@ export async function GET(request: Request) {
             codOrders: Number(summary.cod_orders || 0),
             todayOrders: Number(summary.today_orders || 0),
             todayRevenue: Number(summary.today_revenue || 0),
+            monthOrders: Number(summary.month_orders || 0),
+            monthRevenue: Number(summary.month_revenue || 0),
           },
           daily: dailyRes.rows.map((r: any) => ({
             day: r.day,

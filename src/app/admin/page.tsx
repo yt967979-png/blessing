@@ -33,6 +33,7 @@ interface Order {
 interface AnalyticsSummary {
   totalOrders: number; totalRevenue: number; avgOrderValue: number;
   paidOrders: number; codOrders: number; todayOrders: number; todayRevenue: number;
+  monthOrders?: number; monthRevenue?: number;
 }
 interface DailyPoint { day: string; orders: number; revenue: number; onlineRevenue: number; codRevenue: number; }
 interface MethodBreakdown { method: string; count: number; revenue: number; }
@@ -52,6 +53,7 @@ function emptyAnalytics(days: number): Analytics {
     summary: {
       totalOrders: 0, totalRevenue: 0, avgOrderValue: 0,
       paidOrders: 0, codOrders: 0, todayOrders: 0, todayRevenue: 0,
+      monthOrders: 0, monthRevenue: 0,
     },
     daily: [], paymentMethods: [], orderStatuses: [], paymentStatuses: [],
     topProducts: [], monthlyTrend: [], range: days,
@@ -1002,12 +1004,13 @@ export default function AdminPage() {
               </div>
             ) : analytics ? (
               <>
-                {/* Today spotlight */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {/* Today & Month spotlight */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {[
                     { label: "Today's Revenue", value: fmt(analytics.summary.todayRevenue), icon: IndianRupee, color: 'text-green-600', bg: 'bg-green-50' },
                     { label: "Today's Orders", value: analytics.summary.todayOrders, icon: ShoppingCart, color: 'text-blue-600', bg: 'bg-blue-50' },
-                    { label: 'Online Payments (Razorpay)', value: analytics.summary.paidOrders, icon: CreditCard, color: 'text-violet-600', bg: 'bg-violet-50' },
+                    { label: "This Month's Orders", value: analytics.summary.monthOrders || 0, icon: Package, color: 'text-amber-600', bg: 'bg-amber-50' },
+                    { label: 'Online Payments', value: analytics.summary.paidOrders, icon: CreditCard, color: 'text-violet-600', bg: 'bg-violet-50' },
                   ].map((s) => (
                     <div key={s.label} className="bg-white rounded-xl border border-gray-200 p-3.5">
                       <div className={`w-8 h-8 ${s.bg} rounded-lg flex items-center justify-center ${s.color} mb-2`}><s.icon className="w-4 h-4" /></div>
