@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { queryDb } from '@/lib/db';
 import { applyRateLimitAsync } from '@/lib/serverSecurity';
-import { createSessionToken, verifyPassword } from '@/lib/auth';
+import { createSessionToken, verifyPassword, SESSION_COOKIE_MAX_AGE_SEC } from '@/lib/auth';
 
 export async function POST(request: Request) {
   try {
@@ -61,7 +61,7 @@ export async function POST(request: Request) {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 30 * 24 * 60 * 60, // 30 days
+      maxAge: SESSION_COOKIE_MAX_AGE_SEC, // 10 years (stay signed in)
       path: '/',
     });
 
