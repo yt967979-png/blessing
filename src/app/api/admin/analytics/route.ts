@@ -39,7 +39,7 @@ const ANALYTICS_STATEMENT_MS = Number(
 
 /** Flipkart-Grade RAM Cache: Store analytics in server memory for 60s to guarantee 0ms instant loads and 0 DB timeouts */
 let analyticsRamCache: { timestamp: number; range: number; payload: any } | null = null;
-const RAM_CACHE_TTL_MS = 60_000; // 60 seconds
+const RAM_CACHE_TTL_MS = 10_000; // 10 seconds
 
 export async function GET(request: Request) {
   // JWT only here — DB role check runs on the same ephemeral Client as analytics
@@ -93,8 +93,8 @@ export async function GET(request: Request) {
           COALESCE(AVG(total_amount) FILTER (WHERE ${ACTIVE}), 0)::numeric              AS avg_order_value,
           COUNT(*) FILTER (WHERE ${ACTIVE} AND (payment_status ILIKE '%confirm%' OR payment_status ILIKE '%paid%'))::int AS paid_orders,
           COUNT(*) FILTER (WHERE ${ACTIVE} AND payment_method ILIKE '%cod%')::int   AS cod_orders,
-          COUNT(*) FILTER (WHERE ${ACTIVE} AND ordered_at >= NOW() - INTERVAL '1 day')::int   AS today_orders,
-          COALESCE(SUM(total_amount) FILTER (WHERE ${ACTIVE} AND ordered_at >= NOW() - INTERVAL '1 day'), 0)::numeric AS today_revenue
+          COUNT(*) FILTER (WHERE ${ACTIVE} AND (ordered_at AT TIME ZONE 'Asia/Kolkata')::date = (NOW() AT TIME ZONE 'Asia/Kolkata')::date)::int AS today_orders,
+          COALESCE(SUM(total_amount) FILTER (WHERE ${ACTIVE} AND (ordered_at AT TIME ZONE 'Asia/Kolkata')::date = (NOW() AT TIME ZONE 'Asia/Kolkata')::date), 0)::numeric AS today_revenue
         FROM orders
       `);
 
