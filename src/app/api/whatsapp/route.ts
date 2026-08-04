@@ -67,10 +67,16 @@ export async function POST(request: Request) {
       statusClean.includes('AWAITING_CONFIRMATION') ||
       statusClean.includes('AWAITING CONFIRMATION')
     ) {
-      event = 'order.confirm_request';
+      // Prepaid flow: no YES gate — send paid/confirmed copy
+      event = 'payment.confirmed';
     } else if (statusClean.includes('PAYMENT') || statusClean.includes('PAID')) {
       event = 'payment.confirmed';
-    } else if (statusClean.includes('ORDER_PLACED') || statusClean === 'ORDER PLACED') {
+    } else if (
+      statusClean.includes('ORDER_PLACED') ||
+      statusClean === 'ORDER PLACED' ||
+      statusClean === 'CONFIRMED' ||
+      statusClean.includes('CONFIRMED')
+    ) {
       event = 'order.confirmed';
     }
 

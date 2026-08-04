@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import {
@@ -104,6 +104,34 @@ function SimpleBarChart({ data, height = 120 }: { data: DailyPoint[]; height?: n
   );
 }
 
+/** Short two-tone beep for new paid orders (no external CDN / audio file). */
+function playAdminNewOrderBeep() {
+  try {
+    const AC = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AC) return;
+    const ctx = new AC();
+    void ctx.resume();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    const t0 = ctx.currentTime;
+    osc.frequency.setValueAtTime(880, t0);
+    osc.frequency.setValueAtTime(1175, t0 + 0.12);
+    gain.gain.setValueAtTime(0.0001, t0);
+    gain.gain.exponentialRampToValueAtTime(0.18, t0 + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.38);
+    osc.start(t0);
+    osc.stop(t0 + 0.4);
+    osc.onended = () => {
+      void ctx.close().catch(() => {});
+    };
+  } catch {
+    /* autoplay / AudioContext blocked */
+  }
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function AdminPage() {
   const router = useRouter();
@@ -119,6 +147,9 @@ export default function AdminPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [ordersError, setOrdersError] = useState<string | null>(null);
+  const knownOrderIdsRef = useRef<Set<string> | null>(null);
+  const soundUnlockedRef = useRef(false);
+  const [soundHintVisible, setSoundHintVisible] = useState(false);
   const [shiprocketAwbInput, setShiprocketAwbInput] = useState<Record<string, string>>({});
   const [dispatchingOrderIds, setDispatchingOrderIds] = useState<Record<string, boolean>>({});
   const [dbStats, setDbStats] = useState({ users: 0, books: 0 });
@@ -177,7 +208,7 @@ export default function AdminPage() {
   // ── Data loaders
   // Do NOT call these inside startTransition: setOrdersLoading(true) would be deferred
   // while finally(false) is urgent — a fast empty DB response can leave loading stuck true.
-  const loadLiveOrders = useCallback(async () => {
+  const loadLiveOrders = useCallback(async (opts?: { fromStream?: boolean }) => {
     if (!user?.id) return;
     setOrdersLoading(true);
     setOrdersError(null);
@@ -189,7 +220,25 @@ export default function AdminPage() {
       });
       if (res.ok) {
         const data = await res.json();
-        setOrders(Array.isArray(data) ? data : []);
+        const list: Order[] = Array.isArray(data) ? data : [];
+        setOrders(list);
+
+        const nextIds = new Set(list.map((o) => String(o.orderId || o.id || '')).filter(Boolean));
+        if (knownOrderIdsRef.current === null) {
+          // Baseline — never beep on first admin load
+          knownOrderIdsRef.current = nextIds;
+        } else {
+          const newcomers: string[] = [];
+          for (const id of nextIds) {
+            if (!knownOrderIdsRef.current.has(id)) newcomers.push(id);
+          }
+          if (newcomers.length > 0) {
+            if (soundUnlockedRef.current) playAdminNewOrderBeep();
+            showToast(`🔔 New order ${newcomers[0]}${newcomers.length > 1 ? ` (+${newcomers.length - 1})` : ''}`);
+            if (opts?.fromStream) setActiveTab('orders');
+          }
+          knownOrderIdsRef.current = nextIds;
+        }
       } else {
         const errData = await res.json().catch(() => ({}));
         setOrdersError(errData.error || errData.message || `Could not load orders (${res.status})`);
@@ -206,7 +255,7 @@ export default function AdminPage() {
     } finally {
       setOrdersLoading(false);
     }
-  }, [user]);
+  }, [user, showToast]);
 
   const loadLowStock = useCallback(async () => {
     if (!user?.id) return;
@@ -283,6 +332,27 @@ export default function AdminPage() {
     }
   }, [user, analyticsRange]);
 
+  // Unlock notification sound after first admin gesture (browser autoplay policy)
+  useEffect(() => {
+    if (!user?.id || user.role !== 'admin') return;
+    if (soundUnlockedRef.current) return;
+    setSoundHintVisible(true);
+    const unlock = () => {
+      soundUnlockedRef.current = true;
+      setSoundHintVisible(false);
+      try {
+        const AC = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        if (AC) {
+          const ctx = new AC();
+          void ctx.resume().then(() => ctx.close()).catch(() => {});
+        }
+      } catch { /* ignore */ }
+      window.removeEventListener('pointerdown', unlock);
+    };
+    window.addEventListener('pointerdown', unlock, { once: true });
+    return () => window.removeEventListener('pointerdown', unlock);
+  }, [user?.id, user?.role]);
+
   // ── Initial load + SSE stream
   useEffect(() => {
     if (!user?.id || user.role !== 'admin') return;
@@ -295,9 +365,9 @@ export default function AdminPage() {
       es = new EventSource('/api/orders/stream');
       es.onmessage = (e) => {
         try {
-          const p = JSON.parse(e.data) as { type: string };
-          if (p.type === 'ORDER_UPDATED') {
-            void loadLiveOrders();
+          const p = JSON.parse(e.data) as { type: string; orderId?: string };
+          if (p.type === 'ORDER_CREATED' || p.type === 'ORDER_UPDATED') {
+            void loadLiveOrders({ fromStream: p.type === 'ORDER_CREATED' });
             void loadAnalytics();
           }
         } catch { /* ignore parse errors */ }
@@ -454,7 +524,7 @@ export default function AdminPage() {
       return;
     }
     if (st.includes('awaiting confirmation')) {
-      showToast('❌ Wait for customer WhatsApp YES before adding AWB');
+      showToast('❌ Order still pending confirmation — pack after it shows Confirmed');
       return;
     }
     const awb = (shiprocketAwbInput[orderId] ?? '').trim();
@@ -509,15 +579,15 @@ export default function AdminPage() {
     const st = (o.courierStatus || '').toLowerCase();
     if (st.includes('cancel')) {
       showToast('📲 Sending cancel confirmation…');
-    } else if (st.includes('awaiting confirmation')) {
-      showToast('📲 Re-sending YES/NO confirm request…');
+    } else if (st.includes('awaiting') || st.includes('confirm') || st.includes('order placed') || st.includes('payment')) {
+      showToast('📲 Sending payment / order confirmed WhatsApp…');
     } else {
       showToast('📲 Sending WhatsApp from linked admin number...');
     }
     try {
       const step = st.includes('awaiting confirmation')
-        ? 'CONFIRM_REQUEST'
-        : (o.courierStatus || 'ORDER_PLACED').toUpperCase().replace(/\s+/g, '_');
+        ? 'PAYMENT_CONFIRMED'
+        : (o.courierStatus || 'CONFIRMED').toUpperCase().replace(/\s+/g, '_');
       const r = await fetch('/api/whatsapp', {
         method: 'POST',
         headers: authHeaders(user),
@@ -555,7 +625,7 @@ export default function AdminPage() {
   const handleUpdateOrderStatus = async (o: Order, statusKey: string, orderStatus: string) => {
     const awaiting = (o.courierStatus || '').toLowerCase().includes('awaiting confirmation');
     if (awaiting && statusKey !== 'CANCELLED') {
-      showToast('❌ Wait for customer WhatsApp YES before packing / shipping');
+      showToast('❌ Order still pending confirmation — refresh; paid orders auto-confirm');
       return;
     }
     if (statusKey === 'CANCELLED') {
@@ -749,6 +819,25 @@ export default function AdminPage() {
             </div>
           ))}
         </div>
+
+        {soundHintVisible && (
+          <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-2.5 flex items-center gap-2 text-blue-800">
+            <span className="text-[11px] font-semibold">
+              Click anywhere once to enable new-order sound alerts
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                soundUnlockedRef.current = true;
+                setSoundHintVisible(false);
+                playAdminNewOrderBeep();
+              }}
+              className="ml-auto text-[11px] font-bold text-white bg-[#2874f0] hover:bg-[#1a5dc8] px-2.5 py-1 rounded-lg cursor-pointer"
+            >
+              Sound on
+            </button>
+          </div>
+        )}
 
         {lowStockAlerts.length > 0 && (
           <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-2">
@@ -1011,7 +1100,7 @@ export default function AdminPage() {
                   <p className="text-xs text-gray-400 mt-0.5">{filteredOrders.length} of {orders.length} orders shown</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button onClick={loadLiveOrders} className="p-1.5 text-gray-400 hover:text-[#2874f0] hover:bg-blue-50 rounded-lg transition-colors cursor-pointer" title="Refresh"><RefreshCw className={`w-4 h-4 ${ordersLoading ? 'animate-spin' : ''}`} /></button>
+                  <button onClick={() => void loadLiveOrders()} className="p-1.5 text-gray-400 hover:text-[#2874f0] hover:bg-blue-50 rounded-lg transition-colors cursor-pointer" title="Refresh"><RefreshCw className={`w-4 h-4 ${ordersLoading ? 'animate-spin' : ''}`} /></button>
                   <button onClick={handleExportCsv} className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-white bg-[#2874f0] hover:bg-[#1a5dc8] rounded-lg transition-colors cursor-pointer"><Download className="w-3.5 h-3.5" /><span className="hidden sm:inline">Export CSV</span></button>
                 </div>
               </div>
@@ -1085,12 +1174,19 @@ export default function AdminPage() {
             ) : (
               <div className="space-y-3">
                 {filteredOrders.map((o) => {
-                  const allSteps = ['Order Placed', 'Payment Confirmed', 'Preparing Order', 'Packed', 'Handed to ST Courier', 'In Transit', 'Out for Delivery', 'Delivered'];
+                  const allSteps = ['Confirmed', 'Packed', 'Handed to ST Courier', 'In Transit', 'Out for Delivery', 'Delivered'];
                   const isCancelled = (o.courierStatus || '').toLowerCase().includes('cancel');
                   const isAwaiting = (o.courierStatus || '').toLowerCase().includes('awaiting confirmation');
-                  const stepIdx = isCancelled || isAwaiting ? -1 : Math.max(0, allSteps.findIndex((s) => s.toLowerCase() === (o.courierStatus || '').toLowerCase()));
+                  const stNorm = (o.courierStatus || '').toLowerCase();
+                  const statusForStep =
+                    stNorm.includes('awaiting') ? '' :
+                    stNorm.includes('confirm') || stNorm.includes('order placed') || stNorm.includes('preparing') || stNorm.includes('payment')
+                      ? 'Confirmed'
+                      : (o.courierStatus || 'Confirmed');
+                  const foundIdx = allSteps.findIndex((s) => s.toLowerCase() === statusForStep.toLowerCase());
+                  const stepIdx = isCancelled || isAwaiting ? -1 : Math.max(0, foundIdx);
                   const isCod = (o.paymentMethod || '').toLowerCase().includes('cod');
-                  const isDelivered = !isCancelled && !isAwaiting && stepIdx >= 7;
+                  const isDelivered = !isCancelled && !isAwaiting && stepIdx >= 5;
                   return (
                     <div key={o.orderId} className={`bg-white rounded-xl border overflow-hidden hover:shadow-sm transition-shadow ${isCancelled ? 'border-red-200' : isAwaiting ? 'border-amber-300' : 'border-gray-200'}`}>
                       {/* Order header */}
@@ -1101,7 +1197,7 @@ export default function AdminPage() {
                             {isCod ? 'COD' : 'PAID'} • {fmt(o.totalAmount)}
                           </span>
                           {isCancelled && <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-red-50 text-red-700 border border-red-200">CANCELLED</span>}
-                          {isAwaiting && <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200">AWAITING YES</span>}
+                          {isAwaiting && <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200">PENDING CONFIRM</span>}
                           {!isCancelled && !isAwaiting && o.isOfficialAwb && <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-50 text-blue-600 border border-blue-200">AUTO-TRACKED</span>}
                           {isDelivered && <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-green-50 text-green-700 border border-green-200 flex items-center gap-1"><CheckCircle2 className="w-2.5 h-2.5" />DELIVERED</span>}
                         </div>
@@ -1144,7 +1240,7 @@ export default function AdminPage() {
                           {isCancelled ? (
                             <p className="text-[11px] text-red-700 font-medium">Cancelled — AWB / dispatch locked. Revenue not counted.</p>
                           ) : isAwaiting ? (
-                            <p className="text-[11px] text-amber-800 font-medium">Waiting for customer WhatsApp YES. Pack / AWB locked until confirmed (or Cancel).</p>
+                            <p className="text-[11px] text-amber-800 font-medium">Legacy pending status — refresh page (paid Razorpay orders auto-confirm). Pack / AWB locked until Confirmed.</p>
                           ) : (
                             <>
                               <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
@@ -1202,7 +1298,7 @@ export default function AdminPage() {
                         ) : (o.courierStatus || '').toLowerCase().includes('awaiting confirmation') ? (
                           <div className="flex items-center gap-2 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2.5 text-xs text-amber-800">
                             <Truck className="w-4 h-4 shrink-0 opacity-60" />
-                            <span className="font-medium">AWB locked — waiting for customer WhatsApp YES</span>
+                            <span className="font-medium">AWB locked — refresh to heal paid orders to Confirmed</span>
                           </div>
                         ) : (
                           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-[#f8f9fa] rounded-lg p-3">

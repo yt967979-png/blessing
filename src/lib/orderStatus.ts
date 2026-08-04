@@ -13,7 +13,7 @@ export function isAwaitingConfirmation(status: string | null | undefined): boole
   return s.includes('awaiting confirmation') || s.includes('awaiting_confirmation') || s.includes('awaiting');
 }
 
-/** Pack / AWB / courier advances blocked until customer YES. */
+/** Pack / AWB / courier advances blocked for cancelled or legacy awaiting rows. */
 export function blocksShippingActions(status: string | null | undefined): boolean {
   return isOrderCancelled(status) || isAwaitingConfirmation(status);
 }

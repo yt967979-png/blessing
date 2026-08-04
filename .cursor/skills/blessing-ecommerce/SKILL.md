@@ -17,12 +17,14 @@ surface map over a single-file patch.
 ## Product facts (do not invent)
 
 - Brand: **Blessing Power Guide** — 6th–12th Tamil Nadu guide books
-- Auth: **Password + Google** (name/email/phone/password register & login; Google sign-in). No guest checkout; no WhatsApp OTP login. Long-lived session until logout
-- Payment: **Razorpay primary** (UPI / cards / netbanking). **COD disabled** in API and all checkout UIs — do not re-offer Cash on Delivery
+- Auth: **Password + Google** (name/email/phone/password register & login; Google sign-in). No guest checkout; **no OTP** (no WhatsApp OTP login). Long-lived session until logout
+- Payment: **Razorpay only** (UPI / cards / netbanking). **COD disabled** in API and all checkout UIs — do not re-offer Cash on Delivery
+- Post-payment: Order is **Confirmed** immediately after successful Razorpay place. Show Flipkart-style confirmation **on the success screen** (order #, amount paid, items, next steps). **No WhatsApp YES/NO gate**
 - Coupons: **Disabled** product-wide (APIs return 410; no customer/admin apply UI). Historical `coupon_*` DB columns/tables may remain; cancel rollback must stay a safe no-op
 - Courier: **ST Courier Express** — admin pastes real AWB; site verifies + syncs
-- Comms: **WhatsApp** (Baileys in-process) for order updates
-- Policy: **no returns** on guide books (final sale) — say so in shipping/footer copy
+- Comms: **WhatsApp** (Baileys in-process) for order updates (paid/confirmed language — not “reply YES”)
+- Admin: New paid orders appear in Admin → Orders; play a short notification sound when a new order arrives while the admin tab is open
+- Policy: **no returns / no refunds / no money-back flow** on guide books (final sale) — say so in shipping/footer copy; cancel restores stock but does not refund Razorpay
 - Hosting: AWS Lightsail (and/or Railway); do not claim Flipkart-scale inventory/traffic
 
 ## Non‑negotiable: cross-cutting changes

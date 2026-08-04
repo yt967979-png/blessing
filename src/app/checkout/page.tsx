@@ -213,16 +213,22 @@ export default function CheckoutPage() {
         idempotencyKeyRef.current = null;
         setOrderSuccessData({
           orderId: serverOrderId,
-          totalAmount: finalAmount,
+          totalAmount: Number(orderData.totalAmount ?? finalAmount),
           customerName: selectedAddress.name || user.name || 'Customer',
           address: selectedAddress.address,
           city: selectedAddress.city || 'Chennai',
           phone: selectedAddress.phone || user.phone || '',
           paymentMethod: 'Razorpay UPI / Online',
-          paymentStatus: 'Payment Confirmed',
+          paymentStatus: orderData.paymentStatus || 'Payment Confirmed',
+          status: orderData.status || 'Confirmed',
+          items: cart.map((i) => ({
+            title: i.title,
+            qty: i.qty,
+            price: i.price,
+          })),
         });
-        if (!orderData.duplicate) showToast(`🎉 Order #${serverOrderId} placed successfully!`);
-        router.push('/orders');
+        if (!orderData.duplicate) showToast(`🎉 Order #${serverOrderId} confirmed!`);
+        router.push(`/orders?orderId=${encodeURIComponent(serverOrderId)}`);
         return true;
       };
 

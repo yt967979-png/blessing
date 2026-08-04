@@ -344,13 +344,43 @@ export async function POST(request: Request) {
       /* table may not exist yet */
     }
 
-    const event = { type: 'ORDER_UPDATED', orderId: orderNumber, status: initialStatus, timestamp: Date.now() };
+    const itemsSummary = verifiedItems.map((i) => `${i.title}×${i.qty}`).join(', ');
+    const phoneDigits = String(customerPhone || '').replace(/\D/g, '').slice(-10);
+
+    try {
+      if (phoneDigits.length === 10) {
+        void notify('payment.confirmed', {
+          customerPhone: phoneDigits,
+          customerName: customerName || 'Student',
+          orderId: orderNumber,
+          totalAmount,
+          itemsSummary,
+        }).catch(() => {});
+      }
+      void notify('admin.new_order', {
+        orderId: orderNumber,
+        customerName: customerName || 'Customer',
+        customerPhone: phoneDigits || undefined,
+        totalAmount,
+        city: city || 'Chennai',
+        paymentMethod: paymentMethod || 'Razorpay UPI',
+        itemsSummary,
+        adminPhones: getEnvAdminNotifyPhones(),
+      }).catch(() => {});
+    } catch {
+      /* WhatsApp optional — order already committed */
+    }
+
+    const event = {
+      type: 'ORDER_CREATED',
+      orderId: orderNumber,
+      status: initialStatus,
+      timestamp: Date.now(),
+    };
     try {
       broadcastOrderChange(event);
       await notifyOrderChanged(event);
     } catch (_) {}
-
-
 
     return NextResponse.json(
       {

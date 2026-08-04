@@ -5,8 +5,7 @@ import { isOfficialAwb, syncOrderByAwb } from '@/lib/stCourier';
 import { isOrderCancelled, isAwaitingConfirmation } from '@/lib/orderStatus';
 
 const CUSTOMER_STEPS = [
-  { key: 'Awaiting Confirmation', label: 'Confirm on WhatsApp', short: 'Confirm' },
-  { key: 'Order Placed', label: 'Confirmed', short: 'Confirmed' },
+  { key: 'Confirmed', label: 'Confirmed', short: 'Confirmed' },
   { key: 'Packed', label: 'Packed', short: 'Packed' },
   { key: 'Handed to ST Courier', label: 'Shipped', short: 'Shipped' },
   { key: 'In Transit', label: 'In Transit', short: 'Transit' },
@@ -30,13 +29,13 @@ function phonesMatch(input: string, stored: string): boolean {
 function stepIndex(status: string): number {
   const s = (status || '').toLowerCase();
   if (isOrderCancelled(s)) return -1;
-  if (s.includes('delivered')) return 6;
-  if (s.includes('out for delivery')) return 5;
-  if (s.includes('in transit') || s.includes('shipped')) return 4;
-  if (s.includes('handed to st courier')) return 3;
-  if (s.includes('packed')) return 2;
-  if (isAwaitingConfirmation(s)) return 0;
-  return 1;
+  if (s.includes('delivered')) return 5;
+  if (s.includes('out for delivery')) return 4;
+  if (s.includes('in transit') || s.includes('shipped')) return 3;
+  if (s.includes('handed to st courier')) return 2;
+  if (s.includes('packed')) return 1;
+  // Confirmed / Order Placed / Payment Confirmed / legacy awaiting → confirmed step
+  return 0;
 }
 
 function maskPhone(phone: string): string {
@@ -192,7 +191,9 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string, request?: Reque
       } catch (_) {}
     }
 
-    const status = o.order_status || 'Order Placed';
+    const rawStatus = o.order_status || 'Confirmed';
+    // Prepaid flow: legacy awaiting YES is treated as Confirmed for customer display
+    const status = !cancelled && awaiting ? 'Confirmed' : rawStatus;
     const currentStep = stepIndex(status);
     const awb = isOfficialAwb(o.awb_number) ? o.awb_number : null;
     const trackingUrl =
@@ -205,16 +206,16 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string, request?: Reque
         orderId: o.order_number || o.id,
         status,
         cancelled,
-        awaitingConfirmation: awaiting,
+        awaitingConfirmation: false,
         currentStep,
         steps: CUSTOMER_STEPS.map((s, i) => ({
           ...s,
           done: cancelled ? false : i <= currentStep,
           active: cancelled ? false : i === currentStep,
         })),
-        awb: cancelled || awaiting ? null : awb,
+        awb: cancelled ? null : awb,
         courierName: o.courier_name || 'ST Courier Express',
-        trackingUrl: cancelled || awaiting ? null : trackingUrl,
+        trackingUrl: cancelled ? null : trackingUrl,
         paymentStatus: o.payment_status,
         placedAt: o.ordered_at,
         customer: {

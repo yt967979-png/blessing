@@ -1324,6 +1324,24 @@ async function runSchemaInit(client: any) {
       /* ignore */
     }
 
+    // Heal: prepaid Razorpay orders stuck on legacy WhatsApp YES gate → Confirmed
+    try {
+      await client.query(`
+        UPDATE orders
+        SET order_status = 'Confirmed',
+            updated_at = NOW()
+        WHERE COALESCE(order_status, '') ILIKE '%awaiting%'
+          AND COALESCE(payment_method, '') NOT ILIKE '%cod%'
+          AND (
+            COALESCE(payment_status, '') ILIKE '%confirm%'
+            OR COALESCE(payment_status, '') ILIKE '%paid%'
+            OR razorpay_payment_id IS NOT NULL
+          )
+      `);
+    } catch (_) {
+      /* ignore */
+    }
+
     // Heal: FAQ that still claims COD is available
     try {
       await client.query(

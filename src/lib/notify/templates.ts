@@ -13,17 +13,17 @@ export function confirmRequestMessage(opts: {
   totalAmount: number | string;
   bookTitle?: string;
 }) {
+  // Legacy event name — prepaid Razorpay flow confirms on payment; no YES/NO gate.
   const name = opts.customerName || 'Student';
   const book = opts.bookTitle || 'Blessing Power Guide';
   return (
-    `*BLESSING POWER GUIDE*\n*📋 CONFIRM YOUR ORDER*\n\n` +
+    `*BLESSING POWER GUIDE*\n*✅ ORDER CONFIRMED*\n\n` +
     `Dear *${name}*,\n` +
-    `We received your order. Please confirm to proceed.\n\n` +
+    `Your order is confirmed and paid online.\n\n` +
     `📦 *Order ID:* ${opts.orderId}\n` +
     `📖 *Books:* ${book}\n` +
     `💰 *Total:* ₹${opts.totalAmount}\n\n` +
-    `Reply *YES* to confirm\n` +
-    `Reply *NO* to cancel\n\n` +
+    `We will pack and ship via ST Courier soon.\n` +
     `👉 Track: ${trackUrl(opts.orderId)}`
   );
 }
@@ -65,7 +65,7 @@ export function orderCancelledMessage(opts: {
     `Your order *${opts.orderId}* has been cancelled. Stock is restored — you can order again anytime.`;
   if (reason.includes('24h') || reason.includes('expired') || reason.includes('timeout')) {
     body =
-      `Your order *${opts.orderId}* was cancelled because we did not receive a YES reply within 24 hours. Stock is restored.`;
+      `Your order *${opts.orderId}* was cancelled automatically after no confirmation within 24 hours. Stock is restored.`;
   } else if (reason.includes('no') || reason.includes('requested') || reason.includes('customer')) {
     body = `Your order *${opts.orderId}* was cancelled as requested. Stock is restored.`;
   } else if (reason.includes('admin')) {
@@ -86,10 +86,10 @@ export function paymentConfirmedMessage(opts: {
 }) {
   const name = opts.customerName || 'Student';
   return (
-    `*BLESSING POWER GUIDE*\n*💳 PAYMENT CONFIRMED*\n\n` +
+    `*BLESSING POWER GUIDE*\n*✅ ORDER CONFIRMED — PAID ONLINE*\n\n` +
     `Dear *${name}*,\n` +
     `Payment of *₹${opts.totalAmount}* for order *${opts.orderId}* is verified.\n` +
-    `Please still reply *YES* on WhatsApp to confirm shipping.\n\n` +
+    `Your order is confirmed. We will pack and ship via ST Courier soon.\n\n` +
     `👉 Track: ${trackUrl(opts.orderId)}`
   );
 }

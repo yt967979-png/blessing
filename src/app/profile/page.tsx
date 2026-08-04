@@ -484,12 +484,13 @@ export default function ProfilePage() {
                 ) : (
                   <div className="space-y-5">
                     {liveOrders.map((o) => {
-                      const currentStatus = o.courierStatus || o.status || 'Order Placed';
-                      const cancelled = String(currentStatus).toLowerCase().includes('cancel');
-                      const awaiting = String(currentStatus).toLowerCase().includes('awaiting confirmation');
+                      const rawStatus = o.courierStatus || o.status || 'Confirmed';
+                      const cancelled = String(rawStatus).toLowerCase().includes('cancel');
+                      const currentStatus = String(rawStatus).toLowerCase().includes('awaiting')
+                        ? 'Confirmed'
+                        : rawStatus;
                       const allSteps = [
-                        'Awaiting Confirmation',
-                        'Order Placed',
+                        'Confirmed',
                         'Preparing Order',
                         'Packed',
                         'Handed to ST Courier',
@@ -498,13 +499,20 @@ export default function ProfilePage() {
                         'Delivered',
                       ];
                       const activeIdx = allSteps.findIndex((s) => s.toLowerCase() === currentStatus.toLowerCase());
-                      const stepIdx = cancelled ? -1 : activeIdx >= 0 ? activeIdx : awaiting ? 0 : 1;
+                      const stepIdx = cancelled
+                        ? -1
+                        : activeIdx >= 0
+                          ? activeIdx
+                          : String(currentStatus).toLowerCase().includes('order placed') ||
+                              String(currentStatus).toLowerCase().includes('payment')
+                            ? 0
+                            : 0;
 
                       return (
                         <div
                           key={o.orderId}
                           className={`border rounded-2xl p-5 bg-white shadow-xs space-y-4 transition-all ${
-                            cancelled ? 'border-red-200' : awaiting ? 'border-amber-300' : 'border-slate-200 hover:border-blue-300'
+                            cancelled ? 'border-red-200' : 'border-slate-200 hover:border-blue-300'
                           }`}
                         >
                           <div className="flex flex-wrap justify-between items-center gap-2 pb-3 border-b border-slate-100">
@@ -522,14 +530,10 @@ export default function ProfilePage() {
                                 <X className="w-4 h-4" />
                                 <span>Cancelled</span>
                               </div>
-                            ) : awaiting ? (
-                              <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-900 font-extrabold text-xs px-3 py-1 rounded-full">
-                                <span>Confirm on WhatsApp</span>
-                              </div>
                             ) : (
                               <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-700 font-extrabold text-xs px-3 py-1 rounded-full">
                                 <Truck className="w-4 h-4 text-emerald-600 animate-pulse" />
-                                <span>{o.courierStatus || 'Order Placed'}</span>
+                                <span>{currentStatus}</span>
                               </div>
                             )}
                           </div>
@@ -538,17 +542,13 @@ export default function ProfilePage() {
                             <div className="bg-red-50 border border-red-100 rounded-xl px-3 py-3 text-xs text-red-700 font-semibold">
                               This order is cancelled — no shipment will be sent.
                             </div>
-                          ) : awaiting ? (
-                            <div className="bg-amber-50 border border-amber-100 rounded-xl px-3 py-3 text-xs text-amber-900 font-semibold">
-                              Reply YES on WhatsApp to confirm, or NO to cancel. We pack only after YES.
-                            </div>
                           ) : (
                           <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 space-y-1.5">
                             <div className="flex justify-between items-center text-[10px] font-extrabold uppercase text-slate-500">
-                              <span>Shipment Progress (Stage {stepIdx + 1} of 8):</span>
+                              <span>Shipment Progress (Stage {stepIdx + 1} of {allSteps.length}):</span>
                               <span className="text-emerald-700 font-black">{currentStatus}</span>
                             </div>
-                            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-1.5 text-[9px] text-center">
+                            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-1.5 text-[9px] text-center">
                               {allSteps.map((s, idx) => {
                                 const isDone = idx <= stepIdx;
                                 const isCur = idx === stepIdx;

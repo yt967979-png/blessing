@@ -50,25 +50,22 @@ function OrdersContent() {
   const [orderTab, setOrderTab] = useState<'all' | 'active' | 'delivered' | 'cancelled'>('all');
 
   const isCancelledStatus = (status: string) => (status || '').toLowerCase().includes('cancel');
-  const isAwaitingStatus = (status: string) => (status || '').toLowerCase().includes('awaiting confirmation');
 
   const getCurrentStepIndex = (status: string) => {
     const s = (status || '').toLowerCase();
     if (s.includes('cancel')) return -1;
-    if (s.includes('awaiting confirmation')) return 0;
-    if (s.includes('delivered')) return 7;
-    if (s.includes('out for delivery')) return 6;
-    if (s.includes('in transit') || s.includes('shipped')) return 5;
-    if (s.includes('handed to st courier')) return 4;
-    if (s.includes('packed')) return 3;
-    if (s.includes('preparing')) return 2;
-    if (s.includes('payment confirmed') || s.includes('paid')) return 1;
-    return 1; // confirmed / Order Placed
+    if (s.includes('delivered')) return 6;
+    if (s.includes('out for delivery')) return 5;
+    if (s.includes('in transit') || s.includes('shipped')) return 4;
+    if (s.includes('handed to st courier')) return 3;
+    if (s.includes('packed')) return 2;
+    if (s.includes('preparing')) return 1;
+    // Confirmed / Payment Confirmed / Order Placed / legacy awaiting → active confirmed
+    return 0;
   };
 
   const ALL_STATUS_STEPS = [
-    { key: 'Awaiting Confirmation', label: 'Confirm on WhatsApp', desc: 'Reply YES on WhatsApp to confirm' },
-    { key: 'Order Placed', label: 'Confirmed', desc: 'Order confirmed — we will pack soon' },
+    { key: 'Confirmed', label: 'Confirmed', desc: 'Paid online — order confirmed' },
     { key: 'Preparing Order', label: 'Preparing', desc: 'Retrieving books from inventory' },
     { key: 'Packed', label: 'Packed', desc: 'Parcel packaged & sealed' },
     { key: 'Handed to ST Courier', label: 'Shipped', desc: 'Dispatched to ST Courier Hub' },
@@ -265,13 +262,10 @@ function OrdersContent() {
   const orderIsCancelled = searchedOrderData
     ? isCancelledStatus(searchedOrderData.courierStatus || searchedOrderData.status || '')
     : false;
-  const orderIsAwaiting = searchedOrderData
-    ? isAwaitingStatus(searchedOrderData.courierStatus || searchedOrderData.status || '')
-    : false;
   const isOfficialAwb = searchedOrderData?.trackingNumber && (searchedOrderData.trackingNumber.startsWith('STC') || !searchedOrderData.trackingNumber.startsWith('SHP-'));
   const progressPercent = orderIsCancelled
     ? 0
-    : Math.min(100, Math.max(12, ((currentStepIdx + 1) / 8) * 100));
+    : Math.min(100, Math.max(12, ((currentStepIdx + 1) / ALL_STATUS_STEPS.length) * 100));
 
   if (!user) {
     return (
@@ -434,16 +428,6 @@ function OrdersContent() {
                   This order is cancelled. Stock is restored — you can place a new order anytime from the shop.
                 </p>
               </div>
-            ) : orderIsAwaiting ? (
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-6 text-center space-y-2">
-                <div className="w-12 h-12 rounded-full bg-amber-100 border border-amber-200 text-amber-800 flex items-center justify-center mx-auto">
-                  <AlertCircle className="w-6 h-6" />
-                </div>
-                <h3 className="font-heading font-black text-lg text-amber-900">Confirm on WhatsApp</h3>
-                <p className="text-xs text-amber-800/90 max-w-md mx-auto">
-                  Reply <strong>YES</strong> to confirm or <strong>NO</strong> to cancel on the WhatsApp we sent. We pack only after YES.
-                </p>
-              </div>
             ) : (
             <div className="pt-2 pb-4">
               <div className="relative">
@@ -456,38 +440,34 @@ function OrdersContent() {
                   style={{ width: `${progressPercent}%` }}
                 />
 
-                {/* 4 Major E-Commerce Milestones */}
+                {/* 4 Major E-Commerce Milestones — indices match ALL_STATUS_STEPS */}
                 <div className="relative z-10 flex justify-between items-start text-center">
-                  {/* Milestone 1: Order Placed */}
                   <div className="flex flex-col items-center">
                     <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shadow-md ring-4 ring-white ${currentStepIdx >= 0 ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-400'}`}>
                       <Check className="w-5 h-5" />
                     </div>
-                    <span className="font-heading font-black text-xs text-slate-900 mt-3">Order Placed</span>
+                    <span className="font-heading font-black text-xs text-slate-900 mt-3">Confirmed</span>
                     <span className="text-[10px] font-semibold text-slate-500 mt-0.5">{searchedOrderData.createdAt}</span>
                   </div>
 
-                  {/* Milestone 2: Packed */}
                   <div className="flex flex-col items-center">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shadow-md ring-4 ring-white ${currentStepIdx >= 3 ? 'bg-emerald-600 text-white' : currentStepIdx >= 1 ? 'bg-amber-400 text-[#001B3A] animate-pulse' : 'bg-slate-200 text-slate-400'}`}>
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shadow-md ring-4 ring-white ${currentStepIdx >= 2 ? 'bg-emerald-600 text-white' : currentStepIdx >= 1 ? 'bg-amber-400 text-[#001B3A] animate-pulse' : 'bg-slate-200 text-slate-400'}`}>
                       <PackageCheck className="w-5 h-5" />
                     </div>
                     <span className="font-heading font-black text-xs text-slate-900 mt-3">Packed &amp; Sealed</span>
                     <span className="text-[10px] font-semibold text-slate-500 mt-0.5">{searchedOrderData.packedAt || 'Fulfillment Center'}</span>
                   </div>
 
-                  {/* Milestone 3: Handed to Courier / In Transit */}
                   <div className="flex flex-col items-center">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shadow-md ring-4 ring-white ${currentStepIdx >= 5 ? 'bg-emerald-600 text-white' : currentStepIdx >= 4 ? 'bg-blue-600 text-white animate-bounce' : 'bg-slate-200 text-slate-400'}`}>
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shadow-md ring-4 ring-white ${currentStepIdx >= 4 ? 'bg-emerald-600 text-white' : currentStepIdx >= 3 ? 'bg-blue-600 text-white animate-bounce' : 'bg-slate-200 text-slate-400'}`}>
                       <Truck className="w-5 h-5" />
                     </div>
                     <span className="font-heading font-black text-xs text-slate-900 mt-3">ST Courier Transit</span>
                     <span className="text-[10px] font-semibold text-slate-500 mt-0.5">{searchedOrderData.shippedAt || 'Express Route'}</span>
                   </div>
 
-                  {/* Milestone 4: Delivered */}
                   <div className="flex flex-col items-center">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shadow-md ring-4 ring-white ${currentStepIdx >= 7 ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-400'}`}>
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shadow-md ring-4 ring-white ${currentStepIdx >= 6 ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-400'}`}>
                       <CheckCircle2 className="w-5 h-5" />
                     </div>
                     <span className="font-heading font-black text-xs text-slate-900 mt-3">Delivered</span>
@@ -616,13 +596,13 @@ function OrdersContent() {
               </div>
             </div>
 
-            {/* 3. Detailed 8-Stage Progress Checklist */}
+            {/* Detailed progress checklist */}
             {!orderIsCancelled && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="font-heading font-black text-sm text-[#001B3A] flex items-center gap-2">
                   <ShieldCheck className="w-4 h-4 text-blue-600" />
-                  <span>Detailed E-Commerce Milestone Audit</span>
+                  <span>Order milestone progress</span>
                 </h3>
               </div>
 
@@ -1017,9 +997,9 @@ function OrdersContent() {
                 </div>
               </div>
 
-              {/* 8-Stage Checklist */}
+              {/* Status checklist */}
               <div className="space-y-2.5 pt-1">
-                <span className="font-black text-slate-800 text-[11px] uppercase tracking-wider block">8-Stage Order Status:</span>
+                <span className="font-black text-slate-800 text-[11px] uppercase tracking-wider block">Order status:</span>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {ALL_STATUS_STEPS.map((step, idx) => {
                     const isDone = idx <= currentStepIdx;

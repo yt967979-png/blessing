@@ -339,74 +339,86 @@ export const ModalsBundle = () => {
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.85, opacity: 0, y: 30 }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              className="bg-white rounded-[2.5rem] max-w-lg w-full p-6 sm:p-9 text-center space-y-6 shadow-[0_25px_60px_-15px_rgba(0,27,58,0.5)] relative border border-slate-200/80 overflow-hidden"
+              className="bg-white rounded-[2.5rem] max-w-lg w-full p-6 sm:p-9 text-center space-y-5 shadow-[0_25px_60px_-15px_rgba(0,27,58,0.5)] relative border border-slate-200/80 overflow-hidden"
             >
               <div className="absolute -top-32 left-1/2 -translate-x-1/2 w-80 h-80 bg-gradient-to-tr from-amber-400/40 via-blue-600/30 to-emerald-400/40 rounded-full blur-3xl opacity-60 pointer-events-none animate-pulse" />
-              <div className="absolute top-0 right-0 w-32 h-32 bg-amber-300/20 rounded-full blur-2xl pointer-events-none" />
 
               <div className="relative inline-block mt-2">
-                <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-[#001B3A] via-[#002B5B] to-[#0044AA] text-white flex items-center justify-center mx-auto shadow-2xl ring-8 ring-amber-400/30 transform -rotate-3 hover:rotate-0 transition-transform duration-300">
-                  <PackageCheck className="w-12 h-12 text-amber-400 stroke-[2.2]" />
-                </div>
-                <div className="absolute -bottom-2 right-0 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white font-black text-[10px] px-3 py-1 rounded-full shadow-lg border border-white flex items-center gap-1">
-                  <CheckCircle2 className="w-3 h-3 text-white" />
-                  <span>BPG VERIFIED</span>
+                <div className="w-20 h-20 rounded-full bg-emerald-500 text-white flex items-center justify-center mx-auto shadow-xl ring-8 ring-emerald-100">
+                  <CheckCircle2 className="w-11 h-11 stroke-[2.2]" />
                 </div>
               </div>
 
               <div className="space-y-2">
-                <div className="inline-flex items-center gap-1.5 bg-amber-500/10 text-amber-700 text-[11px] font-black uppercase tracking-widest px-4 py-1.5 rounded-full border border-amber-400/30">
-                  <Sparkles className="w-3.5 h-3.5 text-amber-500 fill-amber-400" />
-                  <span>ORDER CONFIRMED &amp; DISPATCH READY</span>
+                <div className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-800 text-[11px] font-black uppercase tracking-widest px-4 py-1.5 rounded-full border border-emerald-200">
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Order confirmed</span>
                 </div>
-
                 <h2 className="font-heading font-black text-2xl sm:text-3xl text-[#001B3A] tracking-tight">
-                  Congratulations on Your Guide Book Order!
+                  Thank you! Your payment is complete
                 </h2>
-
-                <p className="text-xs text-slate-500 max-w-xs mx-auto">
-                  Your order is confirmed and saved. ST Courier fulfillment is now underway!
+                <p className="text-xs text-slate-500 max-w-sm mx-auto leading-relaxed">
+                  Order is confirmed and active. Next we pack your guides, then ship via ST Courier Express.
                 </p>
               </div>
 
               <div className="bg-gradient-to-br from-slate-50 to-blue-50/40 border border-slate-200/90 rounded-3xl p-5 text-left space-y-3 shadow-inner">
                 <div className="flex justify-between items-center pb-3 border-b border-slate-200/70">
                   <div>
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">OFFICIAL ORDER NUMBER</span>
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Order number</span>
                     <span className="font-mono font-black text-[#001B3A] text-base">#{orderSuccessData.orderId}</span>
                   </div>
                   <button
+                    type="button"
                     onClick={() => {
                       navigator.clipboard.writeText(orderSuccessData.orderId);
-                      showToast('📋 Order ID copied to clipboard!');
+                      showToast('Order ID copied');
                     }}
                     className="text-[10px] font-bold text-blue-600 bg-blue-100/80 hover:bg-blue-200/80 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
                   >
-                    COPY ID
+                    COPY
                   </button>
                 </div>
 
                 <div className="flex justify-between items-center pb-3 border-b border-slate-200/70">
                   <div>
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">TOTAL PAYMENT</span>
-                    <span className="font-black text-emerald-600 text-sm">₹{orderSuccessData.totalAmount}</span>
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Amount paid</span>
+                    <span className="font-black text-emerald-600 text-lg">₹{orderSuccessData.totalAmount}</span>
                   </div>
                   <span className="text-[11px] font-extrabold bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full border border-emerald-200">
-                    {orderSuccessData.paymentMethod || 'Razorpay Online'}
+                    {orderSuccessData.paymentStatus || 'Payment Confirmed'}
                   </span>
                 </div>
 
-                <div className="flex items-center justify-between pt-1">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center shrink-0 border border-amber-400/30">
-                      <Truck className="w-5 h-5 text-amber-500" />
-                    </div>
-                    <div>
-                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">GUARANTEED ST COURIER DELIVERY</span>
-                      <span className="font-black text-[#001B3A] text-xs sm:text-sm">
-                        Arriving by {getSTCourierDeliveryEstimate(orderSuccessData.city).formattedDate} before 11 PM
-                      </span>
-                    </div>
+                {Array.isArray(orderSuccessData.items) && orderSuccessData.items.length > 0 && (
+                  <div className="pb-3 border-b border-slate-200/70 space-y-1.5">
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Items</span>
+                    {orderSuccessData.items.slice(0, 6).map((item: { title?: string; qty?: number; price?: number }, idx: number) => (
+                      <div key={idx} className="flex justify-between gap-2 text-xs">
+                        <span className="font-semibold text-slate-800 truncate">
+                          {item.title || 'Guide'} × {item.qty || 1}
+                        </span>
+                        {item.price != null && (
+                          <span className="font-bold text-slate-600 shrink-0">₹{Number(item.price) * Number(item.qty || 1)}</span>
+                        )}
+                      </div>
+                    ))}
+                    {orderSuccessData.items.length > 6 && (
+                      <p className="text-[10px] text-slate-400 font-semibold">+{orderSuccessData.items.length - 6} more</p>
+                    )}
+                  </div>
+                )}
+
+                <div className="flex items-start gap-2.5 pt-1">
+                  <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center shrink-0 border border-amber-400/30">
+                    <Truck className="w-5 h-5 text-amber-500" />
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">What happens next</span>
+                    <p className="font-semibold text-[#001B3A] text-xs leading-relaxed">
+                      1) Packing → 2) ST Courier dispatch → 3) Delivery by{' '}
+                      {getSTCourierDeliveryEstimate(orderSuccessData.city).formattedDate} (before 11 PM)
+                    </p>
                   </div>
                 </div>
               </div>
@@ -414,39 +426,43 @@ export const ModalsBundle = () => {
               <div className="bg-[#001B3A] text-white rounded-2xl p-4 flex items-center justify-between text-xs shadow-lg">
                 <div className="flex items-center gap-3 text-left">
                   <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/40">
-                    <Send className="w-4.5 h-4.5 animate-pulse" />
+                    <Send className="w-4 h-4" />
                   </div>
                   <div>
-                    <span className="font-bold text-slate-200 block">WhatsApp Notification Sent</span>
+                    <span className="font-bold text-slate-200 block">Updates on WhatsApp</span>
                     <span className="text-[11px] text-emerald-400 font-mono">+91 {orderSuccessData.phone}</span>
                   </div>
                 </div>
                 <span className="text-[10px] font-extrabold bg-emerald-500 text-slate-950 px-2.5 py-1 rounded-lg">
-                  LIVE
+                  {orderSuccessData.status || 'Confirmed'}
                 </span>
               </div>
 
               <div className="space-y-3 pt-1">
                 <button
+                  type="button"
+                  onClick={() => {
+                    const oid = orderSuccessData.orderId;
+                    setOrderSuccessData(null);
+                    router.push(`/orders?orderId=${encodeURIComponent(oid)}`);
+                  }}
+                  className="w-full bg-gradient-to-r from-[#001B3A] via-[#002B5B] to-[#0044AA] hover:from-blue-700 hover:to-blue-600 text-white font-black text-xs py-4 rounded-2xl shadow-xl uppercase tracking-wider flex items-center justify-center gap-2.5 transition-all transform hover:-translate-y-0.5 cursor-pointer"
+                >
+                  <PackageCheck className="w-4 h-4 text-amber-400" />
+                  <span>View my order</span>
+                </button>
+
+                <button
+                  type="button"
                   onClick={() => {
                     const oid = orderSuccessData.orderId;
                     setOrderSuccessData(null);
                     router.push(`/track?orderId=${encodeURIComponent(oid)}`);
                   }}
-                  className="w-full bg-gradient-to-r from-[#001B3A] via-[#002B5B] to-[#0044AA] hover:from-blue-700 hover:to-blue-600 text-white font-black text-xs py-4 rounded-2xl shadow-xl uppercase tracking-wider flex items-center justify-center gap-2.5 transition-all transform hover:-translate-y-0.5 cursor-pointer"
+                  className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs py-3.5 rounded-2xl transition-colors cursor-pointer flex items-center justify-center gap-2"
                 >
-                  <Truck className="w-4 h-4 text-amber-400" />
-                  <span>TRACK ST COURIER SHIPMENT LIVE</span>
-                </button>
-
-                <button
-                  onClick={() => {
-                    setOrderSuccessData(null);
-                    router.push('/');
-                  }}
-                  className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs py-3.5 rounded-2xl transition-colors cursor-pointer"
-                >
-                  CONTINUE SHOPPING
+                  <Truck className="w-4 h-4" />
+                  Track shipment
                 </button>
               </div>
             </motion.div>
