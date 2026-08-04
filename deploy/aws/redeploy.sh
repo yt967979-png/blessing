@@ -85,8 +85,30 @@ chown -R "$APP_USER:$APP_USER" "$APP_DIR"
 echo "==> npm ci --include=dev (clean env — do NOT source $ENV_FILE)"
 sudo -u "$APP_USER" bash -lc "cd '$APP_DIR' && npm ci --include=dev"
 
+# `next build` runs with cleanDistDir (default true), which deletes the whole .next
+# dir — including .next/static/chunks/* from the PREVIOUS build — before writing the
+# new, re-hashed output. Any browser tab still holding the old HTML (open before this
+# redeploy) will then request old chunk filenames that no longer exist, and Next
+# deliberately answers with a plain-text 404 for missing /_next/static/* files —
+# this is the "Refused to apply style... MIME type text/plain" / chunk 404 bug.
+# Back up the previous build's static assets so we can merge them back in below.
+STATIC_BACKUP="/tmp/blessing-next-static-prev"
+rm -rf "$STATIC_BACKUP"
+if [[ -d "$APP_DIR/.next/static" ]]; then
+  cp -a "$APP_DIR/.next/static" "$STATIC_BACKUP"
+fi
+
 echo "==> npm run build (with $ENV_FILE for NEXT_PUBLIC_* / DATABASE_URL)"
 sudo -u "$APP_USER" bash -lc "set -a; source '$ENV_FILE'; set +a; cd '$APP_DIR' && npm run build"
+
+if [[ -d "$STATIC_BACKUP" ]]; then
+  echo "==> Merging previous build's static chunks back in (avoid stale-tab 404s)"
+  # Content-hashed filenames never collide across builds, so -n (no-clobber) only
+  # ever adds back files the new build doesn't have — it never masks fresh output.
+  cp -an "$STATIC_BACKUP"/. "$APP_DIR/.next/static"/ 2>/dev/null || true
+  chown -R "$APP_USER:$APP_USER" "$APP_DIR/.next/static"
+  rm -rf "$STATIC_BACKUP"
+fi
 
 MANIFEST_OK=0
 if [[ -f "$APP_DIR/.next/server/middleware-manifest.json" ]] \

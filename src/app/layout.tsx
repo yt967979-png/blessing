@@ -62,6 +62,17 @@ export default function RootLayout({
                 if (e && e.message && (e.message.indexOf('Loading chunk') !== -1 || e.message.indexOf('ChunkLoadError') !== -1 || e.message.indexOf('Refused to execute script') !== -1)) {
                   console.warn('New deployment detected — refreshing page for latest bundle...');
                   window.location.reload();
+                  return;
+                }
+                // Failed <script>/<link> loads (e.g. stale /_next/static/* chunk from
+                // a build that has since been redeployed) fire a resource error with
+                // no useful message — detect via the target element instead.
+                var target = e && e.target;
+                var src = target && (target.src || target.href);
+                if (target && src && typeof src === 'string' && src.indexOf('/_next/static/') !== -1
+                    && (target.tagName === 'SCRIPT' || target.tagName === 'LINK')) {
+                  console.warn('Stale build asset detected — refreshing page for latest bundle...');
+                  window.location.reload();
                 }
               }, true);
             `,
