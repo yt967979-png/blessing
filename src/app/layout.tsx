@@ -80,13 +80,15 @@ export default function RootLayout({
         />
         <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
         <Script
-          id="register-sw"
-          strategy="afterInteractive"
+          id="unregister-sw"
+          strategy="beforeInteractive"
           dangerouslySetInnerHTML={{
             __html: `
               if ('serviceWorker' in navigator) {
-                window.addEventListener('load', function() {
-                  navigator.serviceWorker.register('/sw.js').catch(function() {});
+                navigator.serviceWorker.getRegistrations().then(function(registrations) {
+                  for (var registration of registrations) {
+                    registration.unregister();
+                  }
                 });
               }
             `,
