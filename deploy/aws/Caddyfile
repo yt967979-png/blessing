@@ -1,38 +1,19 @@
-# Reverse proxy for Blessing Power Guide on Lightsail/EC2.
-# Install: copy to /etc/caddy/Caddyfile then: sudo systemctl reload caddy
-#
-# --- Active: temporary smoke test (HTTP only, no domain yet) ---
-# Hit http://<STATIC_IP>/api/health - Google Sign-In needs HTTPS + domain.
-# Example static IP: 18.139.220.64
+# Reverse proxy for Blessing Power Guide on Lightsail.
+# Active: DuckDNS + automatic HTTPS (Let's Encrypt).
+# Install: sudo cp deploy/aws/Caddyfile /etc/caddy/Caddyfile && sudo systemctl reload caddy
 
-:80 {
+blessingpowerguide.duckdns.org {
 	encode gzip
 	reverse_proxy 127.0.0.1:3000
 }
 
-# --- Free hostname (DuckDNS) + Let's Encrypt ---
-# Recommended: blessingpowerguide.duckdns.org -> A/IP 18.139.220.64
-# (update DuckDNS if you recreate the Lightsail static IP)
-# 1. Create subdomain at https://www.duckdns.org/ and set the IP.
-# 2. Comment out the :80 block above.
-# 3. Uncomment the block below (or tee a single-host Caddyfile on the VM).
-# 4. sudo systemctl reload caddy
-# 5. Set PUBLIC_BASE_URL / NEXT_PUBLIC_SITE_URL to https://blessingpowerguide.duckdns.org and rebuild.
-# 6. Add that URL to Google OAuth Authorized JavaScript origins.
-# Optional quick HTTPS (no account): https://18-139-220-64.sslip.io
-#
-# blessingpowerguide.duckdns.org {
+# Temporary HTTP by IP only (no HTTPS) — uncomment and comment DuckDNS block if needed:
+# :80 {
 # 	encode gzip
 # 	reverse_proxy 127.0.0.1:3000
 # }
 
-# --- Paid/custom domain (.in) + Let's Encrypt ---
-# 1. Point A records for blessingpowerguide.in + www at the Lightsail static IP.
-# 2. Comment out the :80 block (and any DuckDNS block) above.
-# 3. Uncomment the block below.
-# 4. sudo systemctl reload caddy
-# 5. Set PUBLIC_BASE_URL / NEXT_PUBLIC_SITE_URL to https://blessingpowerguide.in and rebuild.
-#
+# Custom domain later:
 # blessingpowerguide.in, www.blessingpowerguide.in {
 # 	encode gzip
 # 	reverse_proxy 127.0.0.1:3000
