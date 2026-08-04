@@ -580,15 +580,88 @@ export default function AdminPage() {
     }
   };
 
-  // ── Export CSV
+  // ── Export Comprehensive Excel / CSV Report (Date Filtered + Full Product Breakdown)
   const handleExportCsv = () => {
-    if (!filteredOrders.length) { showToast('⚠️ No orders to export'); return; }
-    const rows = [
-      ['Order ID', 'Date', 'Customer', 'Phone', 'City', 'Amount', 'Payment', 'Status', 'AWB'].join(','),
-      ...filteredOrders.map((o) => [`"${o.orderId}"`, `"${o.createdAt}"`, `"${(o.customerName || '').replace(/"/g, '""')}"`, `"${o.customerPhone}"`, `"${o.city}"`, o.totalAmount, `"${o.paymentMethod}"`, `"${o.courierStatus}"`, `"${o.trackingNumber || ''}"`].join(',')),
-    ].join('\n');
-    const a = document.createElement('a'); a.href = 'data:text/csv;charset=utf-8,' + encodeURI(rows); a.download = `orders_${Date.now()}.csv`; a.click();
-    showToast('📥 CSV exported');
+    if (!filteredOrders.length) {
+      showToast('⚠️ No orders match the selected date / filter criteria');
+      return;
+    }
+
+    const headers = [
+      'Order ID',
+      'Date & Time',
+      'Customer Name',
+      'Phone Number',
+      'Alt Phone',
+      'Full Shipping Address',
+      'City',
+      'Pincode',
+      'State',
+      'Total Amount (INR)',
+      'Payment Status',
+      'Courier Status',
+      'ST Courier AWB Docket',
+      'Total Books Qty',
+      'Book Titles Sold',
+      'Itemized Product Breakdown',
+      'ST Courier Tracking Link',
+    ];
+
+    const formatCell = (val: any) => {
+      const str = String(val ?? '').replace(/"/g, '""');
+      return `"${str}"`;
+    };
+
+    const csvRows = filteredOrders.map((o) => {
+      const items = Array.isArray(o.items) ? o.items : [];
+      const totalQty = items.reduce((sum: number, it: any) => sum + (Number(it.qty) || 1), 0);
+      const bookTitles = items.map((it: any) => it.title || 'Guide Book').join(' | ');
+      const itemizedBreakdown = items
+        .map((it: any) => `${it.title || 'Guide Book'} (Qty: ${it.qty || 1}${it.price ? `, ₹${it.price}` : ''})`)
+        .join('; ');
+
+      const trackingUrl = o.trackingNumber && !o.trackingNumber.startsWith('SHP-')
+        ? `https://stcourier.com/track/shipment?docket=${o.trackingNumber}`
+        : '';
+
+      return [
+        formatCell(o.orderId),
+        formatCell(o.createdAt),
+        formatCell(o.customerName),
+        formatCell(o.customerPhone),
+        formatCell(o.customerAltPhone || ''),
+        formatCell(o.address),
+        formatCell(o.city),
+        formatCell(o.pincode),
+        formatCell(o.state || 'Tamil Nadu'),
+        o.totalAmount,
+        formatCell('PAID ONLINE'),
+        formatCell(o.courierStatus),
+        formatCell(o.trackingNumber || ''),
+        totalQty,
+        formatCell(bookTitles),
+        formatCell(itemizedBreakdown),
+        formatCell(trackingUrl),
+      ].join(',');
+    });
+
+    const csvContent = '\uFEFF' + [headers.join(','), ...csvRows].join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+
+    const fromStr = filterDateFrom ? filterDateFrom : 'All';
+    const toStr = filterDateTo ? filterDateTo : 'All';
+    const filename = `Blessing_Power_Guide_Orders_${fromStr}_to_${toStr}_${Date.now()}.csv`;
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    showToast(`📥 Excel report downloaded: ${filename}`);
   };
 
   const ORDER_STATUS_ACTIONS: { label: string; statusKey: string; orderStatus: string }[] = [
