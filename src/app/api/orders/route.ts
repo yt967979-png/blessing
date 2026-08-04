@@ -12,6 +12,60 @@ import {
 import { verifyRazorpayPayment } from '@/lib/orderPricing';
 import { priceCheckoutOrder } from '@/lib/checkoutPricing';
 import { blocksShippingActions, isOrderCancelled } from '@/lib/orderStatus';
+import { refundRazorpayPayment } from '@/lib/razorpayRefund';
+
+/**
+ * Money-safety net: payment is captured by Razorpay client-side BEFORE this
+ * route runs. If we've verified that capture but then can't complete the
+ * order (stock lost the race, DB error, etc.), the money must not sit
+ * captured with nothing to show for it — refund immediately and tell the
+ * customer plainly. Idempotent: refundRazorpayPayment no-ops if Razorpay
+ * already shows the payment refunded (e.g. a retry, or webhook got there first).
+ */
+async function refundOrphanedCapture(
+  client: any,
+  opts: { paymentId: string; orderNumberAttempt?: string; amountRupees: number; reason: string }
+): Promise<{ refunded: boolean; refundId?: string; error?: string }> {
+  const refund = await refundRazorpayPayment({
+    paymentId: opts.paymentId,
+    orderNumber: opts.orderNumberAttempt,
+  });
+
+  // Audit trail so admin can reconcile — mirrors the webhook's ORPHAN_CAPTURED
+  // bookkeeping, but resolved immediately here since we already know the outcome.
+  try {
+    const existing = await client.query(`SELECT id FROM payments WHERE payment_id = $1 LIMIT 1`, [
+      opts.paymentId,
+    ]);
+    const status = refund.ok ? 'REFUNDED' : 'ORPHAN_CAPTURED';
+    if (existing.rows.length) {
+      await client.query(`UPDATE payments SET status = $2 WHERE payment_id = $1`, [
+        opts.paymentId,
+        status,
+      ]);
+    } else {
+      await client.query(
+        `INSERT INTO payments (id, order_id, payment_id, transaction_id, amount, status)
+         VALUES ($1, NULL, $2, $2, $3, $4)`,
+        [`pay-orphan-${Date.now()}`, opts.paymentId, opts.amountRupees, status]
+      );
+    }
+  } catch (e: any) {
+    console.error('[orders] could not record orphan payment audit row:', e?.message || e);
+  }
+
+  if (refund.ok) {
+    console.warn(
+      `[orders] Auto-refunded captured payment ${opts.paymentId} after checkout failure (${opts.reason}). refundId=${refund.refundId}`
+    );
+    return { refunded: true, refundId: refund.refundId };
+  }
+
+  console.error(
+    `[orders] CRITICAL: could not auto-refund captured payment ${opts.paymentId} after checkout failure (${opts.reason}): ${refund.error}`
+  );
+  return { refunded: false, error: refund.error };
+}
 function mapOrderRow(o: any) {
   let addrObj: any = {};
   if (o.shipping_address) {
@@ -140,6 +194,12 @@ export async function POST(request: Request) {
   }
 
   const client = await getDbClient();
+  // Hoisted out of the try block so the catch handler can still see them —
+  // needed to know whether a captured payment must be refunded on failure.
+  let paymentAlreadyVerified = false;
+  let capturedPaymentId: string | null = null;
+  let capturedAmountForRefund = 0;
+  let capturedOrderNumber = '';
   try {
     const body = await request.json();
     const {
@@ -156,6 +216,7 @@ export async function POST(request: Request) {
       razorpaySignature,
       idempotencyKey,
     } = body;
+    capturedPaymentId = razorpayPaymentId || null;
 
     const userId = session.userId;
     const isRazorpay = String(paymentMethod || '').toLowerCase().includes('razorpay');
@@ -178,6 +239,7 @@ export async function POST(request: Request) {
       totalAmount,
       verifiedItems,
     } = checkout;
+    capturedAmountForRefund = totalAmount;
 
     const idemKey = String(idempotencyKey || '').trim().slice(0, 80) || null;
 
@@ -236,10 +298,14 @@ export async function POST(request: Request) {
       await client.query('ROLLBACK');
       return NextResponse.json({ error: verified.error }, { status: 400 });
     }
+    // From here on, Razorpay has confirmed the money is captured. Any failure
+    // past this point MUST refund — never let a confirmed capture sit orphaned.
+    paymentAlreadyVerified = true;
 
     const payStat = 'Payment Confirmed';
     const id = `ord-${Date.now()}`;
     const orderNumber = 'BPG-' + Math.floor(1000 + Math.random() * 9000);
+    capturedOrderNumber = orderNumber;
     const ymd = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     const internalShipmentId = `SHP-${ymd}-${Math.floor(100000 + Math.random() * 900000)}`;
     const initialStatus = 'Confirmed';
@@ -295,8 +361,19 @@ export async function POST(request: Request) {
       );
       if (stockRes.rowCount === 0) {
         await client.query('ROLLBACK');
+        // Someone else's order won this stock race after our payment was
+        // already captured — refund immediately, don't let money sit taken.
+        const refund = await refundOrphanedCapture(client, {
+          paymentId: razorpayPaymentId,
+          orderNumberAttempt: orderNumber,
+          amountRupees: totalAmount,
+          reason: `stock conflict on "${item.title}"`,
+        });
+        const message = refund.refunded
+          ? `"${item.title}" went out of stock while your payment was processing. Your payment of ₹${totalAmount} has been refunded automatically — it will reflect in your original payment method within 5-7 business days.`
+          : `"${item.title}" went out of stock while your payment was processing. We could not auto-refund immediately — our team has been notified and will refund your payment of ₹${totalAmount} within 24 hours. Please contact us with payment ID ${razorpayPaymentId} if you don't see it.`;
         return NextResponse.json(
-          { error: `"${item.title}" went out of stock. Please refresh your cart.` },
+          { error: message, refunded: refund.refunded, refundId: refund.refundId },
           { status: 409 }
         );
       }
@@ -357,6 +434,25 @@ export async function POST(request: Request) {
     try {
       await client.query('ROLLBACK');
     } catch (_) {}
+
+    // Payment was verified as captured before this exception hit — refund
+    // rather than leaving the customer paid with no order.
+    if (paymentAlreadyVerified && capturedPaymentId) {
+      const refund = await refundOrphanedCapture(client, {
+        paymentId: capturedPaymentId,
+        orderNumberAttempt: capturedOrderNumber,
+        amountRupees: capturedAmountForRefund,
+        reason: `order creation error: ${err?.message || 'unknown'}`,
+      });
+      const message = refund.refunded
+        ? 'We could not complete your order due to a system error, but your payment has been refunded automatically — it will reflect in your original payment method within 5-7 business days.'
+        : `We could not complete your order due to a system error. We could not auto-refund immediately — our team has been notified and will refund you within 24 hours. Please contact us with payment ID ${capturedPaymentId} if needed.`;
+      return NextResponse.json(
+        { error: message, refunded: refund.refunded, refundId: refund.refundId },
+        { status: 500 }
+      );
+    }
+
     return NextResponse.json({ error: err.message || 'Order failed' }, { status: 500 });
   } finally {
     if (client) await client.end();

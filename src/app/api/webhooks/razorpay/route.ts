@@ -2,6 +2,17 @@ import { NextResponse } from 'next/server';
 import { createHmac, timingSafeEqual } from 'crypto';
 import { getDbClient } from '@/lib/db';
 import { isOrderCancelled } from '@/lib/orderStatus';
+import { refundRazorpayPayment } from '@/lib/razorpayRefund';
+
+/**
+ * Grace window before an orphan capture (payment succeeded, no matching order
+ * found yet) is treated as safe to auto-refund. Place-order runs synchronously
+ * right after the client's Razorpay success callback, so a genuine in-flight
+ * order normally lands within seconds — refunding instantly here would risk
+ * cancelling money for an order that's about to be created. Only payments
+ * that are still orphaned once they're older than this are refunded.
+ */
+const ORPHAN_REFUND_GRACE_MS = 5 * 60 * 1000;
 
 /**
  * Razorpay webhooks — confirms capture / heals payment_status.
@@ -206,11 +217,13 @@ export async function POST(request: Request) {
 
     if (effectivePaymentId) {
       const existingPay = await client.query(
-        `SELECT id FROM payments WHERE payment_id = $1 LIMIT 1`,
+        `SELECT id, status, paid_at FROM payments WHERE payment_id = $1 LIMIT 1`,
         [effectivePaymentId]
       );
+
       if (!existingPay.rows.length) {
-        // order_id NULL — admin can reconcile; place-order idempotency still keys on payment_id
+        // First sighting — too fresh to refund. Place-order is usually seconds
+        // away from committing; give it the full grace window before healing.
         await client.query(
           `INSERT INTO payments (id, order_id, payment_id, transaction_id, amount, status)
            VALUES ($1, NULL, $2, $3, $4, 'ORPHAN_CAPTURED')`,
@@ -223,6 +236,51 @@ export async function POST(request: Request) {
         ).catch((err: any) => {
           console.warn('[razorpay-webhook] Could not persist orphan payment row:', err?.message || err);
         });
+        return NextResponse.json({
+          ok: true,
+          action: 'orphan_logged',
+          paymentId: effectivePaymentId,
+          note: 'No matching order yet — will auto-refund if still orphaned past the grace window (background sweep also covers this).',
+        });
+      }
+
+      const existingStatus = String(existingPay.rows[0]?.status || '').toUpperCase();
+      if (existingStatus.includes('REFUND')) {
+        return NextResponse.json({ ok: true, action: 'noop_already_refunded', paymentId: effectivePaymentId });
+      }
+
+      const ageMs = Date.now() - new Date(existingPay.rows[0]?.paid_at || Date.now()).getTime();
+      if (existingStatus === 'ORPHAN_CAPTURED' && ageMs >= ORPHAN_REFUND_GRACE_MS) {
+        // Re-delivered/duplicate event landed after the grace window and it's
+        // still unmatched — safe to refund now (idempotent via Razorpay's own
+        // refunded-payment check inside refundRazorpayPayment).
+        const refund = await refundRazorpayPayment({
+          paymentId: effectivePaymentId,
+          orderNumber: effectiveOrderId || undefined,
+        });
+        if (refund.ok) {
+          await client.query(`UPDATE payments SET status = 'REFUNDED' WHERE payment_id = $1`, [
+            effectivePaymentId,
+          ]);
+          console.warn(
+            `[razorpay-webhook] Auto-refunded orphan capture ${effectivePaymentId}. refundId=${refund.refundId}`
+          );
+          return NextResponse.json({
+            ok: true,
+            action: 'orphan_refunded',
+            paymentId: effectivePaymentId,
+            refundId: refund.refundId,
+          });
+        }
+        console.error(
+          `[razorpay-webhook] CRITICAL: could not auto-refund orphan capture ${effectivePaymentId}: ${refund.error}`
+        );
+        return NextResponse.json({
+          ok: true,
+          action: 'orphan_refund_failed',
+          paymentId: effectivePaymentId,
+          error: refund.error,
+        });
       }
     }
 
@@ -231,7 +289,7 @@ export async function POST(request: Request) {
       action: 'orphan_logged',
       paymentId: effectivePaymentId || null,
       razorpayOrderId: effectiveOrderId || null,
-      note: 'No matching order — admin should reconcile. Customer place-order remains idempotent by payment_id.',
+      note: 'No matching order — admin should reconcile. Customer place-order remains idempotent by payment_id. Background sweep auto-refunds once stale.',
     });
   } catch (err: any) {
     console.error('[razorpay-webhook]', err?.message || err);
