@@ -1,13 +1,4 @@
 import { queryDb } from '@/lib/db';
-import {
-  checkCouponCartRestrictions,
-  checkCouponEligibility,
-  checkUserCouponLimit,
-  computeDiscountAmount,
-  fetchCouponByCode,
-  normalizeCouponCode,
-  type CouponRow,
-} from '@/lib/coupons';
 import { priceCartItems } from '@/lib/orderPricing';
 
 export type CheckoutPricingResult =
@@ -20,7 +11,7 @@ export type CheckoutPricingResult =
       verifiedItems: any[];
       appliedCouponId: string | null;
       appliedCouponCode: string | null;
-      coupon: CouponRow | null;
+      coupon: null;
     }
   | { ok: false; error: string; status: number };
 
@@ -34,7 +25,7 @@ async function execQuery(client: any, sql: string, params?: any[]): Promise<any>
   return queryDb(sql, params);
 }
 
-/** Server-side cart + minimum quantity check + shipping fee + optional coupon total. */
+/** Server-side cart + minimum quantity check + shipping fee. Coupons disabled. */
 export async function priceCheckoutOrder(
   client: any,
   opts: {
@@ -45,13 +36,17 @@ export async function priceCheckoutOrder(
     lockCoupon?: boolean;
   }
 ): Promise<CheckoutPricingResult> {
+  void opts.userId;
+  void opts.couponCode;
+  void opts.freeBookId;
+  void opts.lockCoupon;
+  void execQuery;
+
   const priced = await priceCartItems(client, opts.items);
   if (!priced.ok) return priced;
 
-  let { total: subtotalAmount, verifiedItems } = priced;
-  const calculatedSubtotal = subtotalAmount;
+  const { total: calculatedSubtotal, verifiedItems } = priced;
 
-  // Enforce Minimum Order Quantity of 4 books
   const cartQty = verifiedItems.reduce((s, i) => s + Number(i.qty || 0), 0);
   if (cartQty < 4) {
     return {
@@ -61,119 +56,18 @@ export async function priceCheckoutOrder(
     };
   }
 
-  // Shipping Fee Calculation: Free delivery for 5+ books, ₹150 for 4 books
   const shippingFee = cartQty >= 5 ? 0 : 150;
-
-  let discountAmount = 0;
-  let appliedCouponId: string | null = null;
-  let appliedCouponCode: string | null = null;
-  let coupon: CouponRow | null = null;
-
-  const normalizedCoupon = opts.couponCode ? normalizeCouponCode(String(opts.couponCode)) : '';
-  if (!normalizedCoupon) {
-    const finalTotal = Math.max(0, calculatedSubtotal + shippingFee);
-    return {
-      ok: true,
-      subtotal: calculatedSubtotal,
-      discountAmount: 0,
-      shippingFee,
-      totalAmount: finalTotal,
-      verifiedItems,
-      appliedCouponId: null,
-      appliedCouponCode: null,
-      coupon: null,
-    };
-  }
-
-  coupon = await fetchCouponByCode(client, normalizedCoupon);
-  if (!coupon) {
-    return { ok: false, error: 'Invalid coupon code.', status: 400 };
-  }
-
-  const cartBookIds = verifiedItems.map((i) => String(i.id));
-
-  const eligible = checkCouponEligibility(coupon, calculatedSubtotal, cartQty);
-  if (!eligible.ok) return { ok: false, error: eligible.message, status: 400 };
-
-  const cartRules = await checkCouponCartRestrictions(client, coupon, cartBookIds);
-  if (!cartRules.ok) return { ok: false, error: cartRules.message, status: 400 };
-
-  const userLimit = await checkUserCouponLimit(client, coupon, opts.userId);
-  if (!userLimit.ok) return { ok: false, error: userLimit.message, status: 400 };
-
-  if (opts.lockCoupon) {
-    const lockedCoupon = await execQuery(
-      client,
-      `SELECT used_count, usage_limit FROM coupons WHERE id = $1`,
-      [coupon.id]
-    );
-    if (
-      Number(lockedCoupon.rows[0]?.used_count || 0) >=
-      Number(lockedCoupon.rows[0]?.usage_limit || 100)
-    ) {
-      return { ok: false, error: 'This coupon has reached its usage limit.', status: 400 };
-    }
-  }
-
-  if (coupon.offer_type === 'free_book') {
-    const pickId = opts.freeBookId ? String(opts.freeBookId) : '';
-    if (!pickId) {
-      return { ok: false, error: 'Please select your free book for this coupon.', status: 400 };
-    }
-
-    const bookRes = await execQuery(
-      client,
-      `SELECT id, title, price, discount_price, stock, status FROM books WHERE id = $1 LIMIT 1`,
-      [pickId]
-    );
-    if (!bookRes.rows.length) {
-      return { ok: false, error: 'Free book not found.', status: 400 };
-    }
-    const book = bookRes.rows[0];
-    const stock = Number(book.stock ?? 0);
-    if (book.status === 'out_of_stock' || stock <= 0) {
-      return { ok: false, error: `"${book.title}" is out of stock.`, status: 409 };
-    }
-
-    const mrp = Number(book.price) || 0;
-    const rawSale =
-      book.discount_price == null || book.discount_price === '' ? NaN : Number(book.discount_price);
-    const unitPrice =
-      Number.isFinite(rawSale) && rawSale > 0 && rawSale < mrp ? rawSale : mrp;
-    const cap = Number(coupon.discount_value) || 0;
-    if (cap > 0 && unitPrice > cap) {
-      return { ok: false, error: `Free book must be ₹${cap} or less.`, status: 400 };
-    }
-
-    discountAmount = unitPrice;
-    verifiedItems = [
-      ...verifiedItems,
-      {
-        id: book.id,
-        title: `${book.title} (FREE Offer)`,
-        price: 0,
-        qty: 1,
-        subtotal: 0,
-        isFreeBonus: true,
-      },
-    ];
-  } else {
-    discountAmount = computeDiscountAmount(coupon, calculatedSubtotal);
-  }
-
-  const finalTotal = Math.max(0, calculatedSubtotal - (coupon.offer_type === 'free_book' ? 0 : discountAmount)) + shippingFee;
-  appliedCouponId = coupon.id;
-  appliedCouponCode = coupon.code;
+  const finalTotal = Math.max(0, calculatedSubtotal + shippingFee);
 
   return {
     ok: true,
     subtotal: calculatedSubtotal,
-    discountAmount,
+    discountAmount: 0,
     shippingFee,
     totalAmount: finalTotal,
     verifiedItems,
-    appliedCouponId,
-    appliedCouponCode,
-    coupon,
+    appliedCouponId: null,
+    appliedCouponCode: null,
+    coupon: null,
   };
 }

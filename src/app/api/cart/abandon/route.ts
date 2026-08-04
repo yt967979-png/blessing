@@ -49,7 +49,7 @@ export async function drainAbandonedCarts(): Promise<{ sent: number }> {
         .slice(0, 3)
         .map((i: any) => i.title || 'Guide')
         .join(', ');
-      const msg = `*BLESSING POWER GUIDE*\n*🛒 Cart waiting for you*\n\nDear *${row.name || 'Student'}*,\nYou left items in your cart:\n${titles || 'Study guides'}\n\nComplete your order (COD available):\n${siteUrl}/cart\n\nReply STOP to opt out.`;
+      const msg = `*BLESSING POWER GUIDE*\n*🛒 Cart waiting for you*\n\nDear *${row.name || 'Student'}*,\nYou left items in your cart:\n${titles || 'Study guides'}\n\nComplete your order with secure Razorpay checkout:\n${siteUrl}/cart\n\nReply STOP to opt out.`;
       try {
         await sendWhatsAppMessageInProcess(row.phone, msg);
         await client.query(`UPDATE abandoned_carts SET reminded = TRUE WHERE id = $1`, [row.id]);

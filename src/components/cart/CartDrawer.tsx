@@ -4,7 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ShoppingBag, X, Truck, Plus, Minus, ArrowRight, Tag } from 'lucide-react';
+import { ShoppingBag, X, Truck, Plus, Minus, ArrowRight } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { getSTCourierDeliveryEstimate } from '@/lib/deliveryEstimator';
 
@@ -16,24 +16,11 @@ export const CartDrawer = () => {
     updateQty,
     cartTotal,
     cartGrandTotal,
-    couponDiscount,
-    appliedCoupon,
-    applyCouponCode,
-    clearAppliedCoupon,
-    pendingCouponCode,
-    setPendingCouponCode,
     setIsCheckoutOpen,
     user,
     setIsAuthOpen,
     showToast,
   } = useStore();
-
-  const [couponInput, setCouponInput] = React.useState('');
-  const [couponBusy, setCouponBusy] = React.useState(false);
-
-  React.useEffect(() => {
-    if (pendingCouponCode) setCouponInput(pendingCouponCode);
-  }, [pendingCouponCode]);
 
   const freeDeliveryThreshold = 499;
   const amountForFreeDelivery = Math.max(0, freeDeliveryThreshold - cartTotal);

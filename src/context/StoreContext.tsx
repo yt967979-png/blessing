@@ -44,6 +44,7 @@ export interface UserData {
   isGuest?: boolean;
 }
 
+/** Coupons are product-disabled; types kept so stale imports compile cleanly. */
 export interface PublicCoupon {
   id: string;
   code: string;
@@ -705,107 +706,24 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // Free shipping for 5+ books, ₹150 for <5 books
   const shippingFee = cartCount >= 5 ? 0 : (cartCount > 0 ? 150 : 0);
   const [checkoutTotal, setCheckoutTotal] = useState(0);
-  const [publicCoupons, setPublicCoupons] = useState<PublicCoupon[]>([]);
-  const [appliedCoupon, setAppliedCoupon] = useState<AppliedCoupon | null>(null);
-  const [pendingCouponCode, setPendingCouponCode] = useState('');
+  /** Coupons disabled — always empty / zero; no customer apply path. */
+  const publicCoupons: PublicCoupon[] = [];
+  const appliedCoupon: AppliedCoupon | null = null;
+  const pendingCouponCode = '';
+  const couponDiscount = 0;
+  const cartGrandTotal = cartCount > 0 ? cartTotal + shippingFee : 0;
 
-  const couponDiscount = appliedCoupon?.discountAmount ?? 0;
-  const baseDiscounted = Math.max(0, cartTotal - couponDiscount);
-  const cartGrandTotal = cartCount > 0 ? baseDiscounted + shippingFee : 0;
-
-  const refreshPublicCoupons = () => {
-    fetch('/api/coupons')
-      .then((r) => r.json())
-      .then((data) => {
-        if (Array.isArray(data)) setPublicCoupons(data);
-      })
-      .catch(() => setPublicCoupons([]));
+  const applyCouponCode = async (_code: string, _freeBookId?: string): Promise<boolean> => {
+    showToast('Coupons are no longer available');
+    return false;
   };
 
-  useEffect(() => {
-    refreshPublicCoupons();
-  }, []);
-
-  const applyCouponCode = async (code: string, freeBookId?: string): Promise<boolean> => {
-    const trimmed = String(code || '').trim();
-    if (!trimmed) {
-      showToast('Enter a coupon code');
-      return false;
-    }
-    if (cart.length === 0) {
-      showToast('Add books to cart before applying a coupon');
-      return false;
-    }
-    if (!user?.token) {
-      showToast('Please login to apply a coupon');
-      setIsAuthOpen(true);
-      return false;
-    }
-    try {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (user?.token) headers.Authorization = `Bearer ${user.token}`;
-
-      const res = await fetch('/api/coupons/validate', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          code: trimmed,
-          items: cart.map((i) => ({ id: i.id, qty: i.qty })),
-          freeBookId: freeBookId || undefined,
-        }),
-      });
-      const data = await res.json();
-      if (!data.valid) {
-        showToast(`❌ ${data.error || 'Invalid coupon'}`);
-        setAppliedCoupon(null);
-        return false;
-      }
-      if (data.needsFreeBook) {
-        showToast('Select your free book below');
-        setPendingCouponCode(trimmed);
-        setAppliedCoupon({
-          code: data.coupon.code,
-          label: data.coupon.label,
-          offerType: 'free_book',
-          discountAmount: 0,
-          total: data.total ?? cartTotal,
-          allowedClasses: data.coupon.allowedClasses || [],
-          allowedCategories: data.coupon.allowedCategories || [],
-        });
-        return false;
-      }
-      setAppliedCoupon({
-        code: data.coupon.code,
-        label: data.coupon.label,
-        offerType: data.coupon.offerType,
-        discountAmount: data.discountAmount || 0,
-        total: data.total ?? cartTotal,
-        freeBookId: data.freeBook?.id,
-        freeBookTitle: data.freeBook?.title,
-        allowedClasses: data.coupon.allowedClasses || [],
-        allowedCategories: data.coupon.allowedCategories || [],
-      });
-      setPendingCouponCode('');
-      showToast(`✅ Coupon ${data.coupon.code} applied`);
-      return true;
-    } catch {
-      showToast('❌ Could not validate coupon');
-      return false;
-    }
-  };
-
-  const clearAppliedCoupon = () => {
-    setAppliedCoupon(null);
-    setPendingCouponCode('');
-  };
+  const clearAppliedCoupon = () => {};
+  const setPendingCouponCode = (_code: string) => {};
 
   useEffect(() => {
     setCheckoutTotal(cartGrandTotal);
   }, [cartGrandTotal]);
-
-  useEffect(() => {
-    if (cart.length === 0) clearAppliedCoupon();
-  }, [cart.length]);
 
   /** Debounced abandoned-cart ping for WhatsApp reminder (no SMS). */
   useEffect(() => {

@@ -1,11 +1,10 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   X,
-  Lock,
   ShoppingBag,
   Truck,
   User,
@@ -14,16 +13,11 @@ import {
   PackageCheck,
   Send,
   MapPin,
-  Plus,
-  ShieldCheck,
   Tag,
-  Phone,
   Sparkles,
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { getSTCourierDeliveryEstimate } from '@/lib/deliveryEstimator';
-import { pincodeDeliveryMessage } from '@/lib/pincode';
-import { createUserAddress, migrateLocalAddressesToDb } from '@/lib/addresses';
 import { GoogleAuthModal } from '@/components/auth/GoogleAuthModal';
 
 export const ModalsBundle = () => {
@@ -39,25 +33,15 @@ export const ModalsBundle = () => {
     setIsAuthOpen,
     isProfileOpen,
     setIsProfileOpen,
-    cart,
-    cartTotal,
-    cartGrandTotal,
-    checkoutTotal,
-    appliedCoupon,
-    applyCouponCode,
-    clearAppliedCoupon,
-    pendingCouponCode,
-    products,
-    publicCoupons,
-    clearCartAfterOrder,
     addToCart,
     user,
-    loginUser,
     logoutUser,
     orderSuccessData,
     setOrderSuccessData,
     showToast,
   } = useStore();
+
+  const [trackId, setTrackId] = React.useState('');
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -83,340 +67,15 @@ export const ModalsBundle = () => {
     setOrderSuccessData,
   ]);
 
-  /** Flipkart-style: checkout is a full page, not a modal */
+  /** Flipkart-style: checkout is a full page (Razorpay-only), not a modal */
   useEffect(() => {
     if (!isCheckoutOpen) return;
     setIsCheckoutOpen(false);
     router.push('/checkout');
   }, [isCheckoutOpen, router, setIsCheckoutOpen]);
 
-  // Saved Addresses (from DB — login required for checkout)
-  const [savedAddresses, setSavedAddresses] = useState<any[]>([]);
-  const [selectedAddrId, setSelectedAddrId] = useState<string | number | 'new'>('new');
-  const [savingAddress, setSavingAddress] = useState(false);
-  const [newAddr, setNewAddr] = useState({
-    type: 'HOME',
-    name: '',
-    phone: '',
-    address: '',
-    city: '',
-    pincode: '',
-  });
-
-  useEffect(() => {
-    if (!isCheckoutOpen) return;
-    if (!user?.id) {
-      setIsCheckoutOpen(false);
-      setIsAuthOpen(true);
-      showToast('Please sign in with Google to place an order');
-      return;
-    }
-    let cancelled = false;
-    (async () => {
-      const list = await migrateLocalAddressesToDb(user);
-      if (cancelled) return;
-      setSavedAddresses(list);
-      if (list.length > 0) setSelectedAddrId(list[0].id);
-      else setSelectedAddrId('new');
-      setNewAddr((prev) => ({
-        ...prev,
-        name: prev.name || user.name || '',
-        phone: prev.phone || user.phone || '',
-      }));
-    })();
-    return () => { cancelled = true; };
-  }, [isCheckoutOpen, user]);
-
-  const [paymentMethod, setPaymentMethod] = useState<'razorpay' | 'cod'>('cod');
-  const [couponInput, setCouponInput] = useState('');
-  const [couponBusy, setCouponBusy] = useState(false);
-  const [freeBookPickId, setFreeBookPickId] = useState('');
-  const [isPlacingOrder, setIsPlacingOrder] = useState(false);
-  const orderSubmitLock = useRef(false);
-  const idempotencyKeyRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (!isCheckoutOpen) {
-      idempotencyKeyRef.current = null;
-      orderSubmitLock.current = false;
-      setIsPlacingOrder(false);
-    }
-  }, [isCheckoutOpen]);
-
-  useEffect(() => {
-    if (pendingCouponCode) setCouponInput(pendingCouponCode);
-  }, [pendingCouponCode]);
-
-  // Track state
-  const [trackId, setTrackId] = useState('');
-  const [trackResult, setTrackResult] = useState<any>(null);
-
-  const selectedAddress =
-    selectedAddrId === 'new'
-      ? newAddr
-      : savedAddresses.find((a) => a.id === selectedAddrId) || savedAddresses[0];
-
-  const couponMeta =
-    appliedCoupon ||
-    publicCoupons.find((c) => c.code === pendingCouponCode || c.code === couponInput.toUpperCase());
-
-  const freeBookOptions = products.filter((p) => {
-    if (!p.inStock) return false;
-    const classes = couponMeta?.allowedClasses || [];
-    const categories = couponMeta?.allowedCategories || [];
-    if (classes.length && !classes.includes(String(p.cls).toLowerCase())) return false;
-    if (categories.length && !categories.includes(p.category)) return false;
-    return true;
-  });
-
-  const handleSaveInlineAddress = async (e?: React.MouseEvent) => {
-    if (e) e.preventDefault();
-    if (!user?.id) {
-      setIsAuthOpen(true);
-      showToast('Please sign in with Google to save address & order');
-      return false;
-    }
-    if (!newAddr.name || !newAddr.address || !newAddr.pincode) {
-      alert('Please fill out Receiver Name, Address, and Pincode.');
-      return false;
-    }
-    const pinCheck = pincodeDeliveryMessage(String(newAddr.pincode));
-    if (!pinCheck.ok) {
-      alert(pinCheck.message);
-      return false;
-    }
-
-    setSavingAddress(true);
-    try {
-      const created = await createUserAddress(user, {
-        type: newAddr.type || 'HOME',
-        name: newAddr.name,
-        phone: newAddr.phone || user.phone || '',
-        address: newAddr.address,
-        city: newAddr.city || 'Chennai',
-        pincode: newAddr.pincode,
-        isDefault: savedAddresses.length === 0,
-      });
-      if (!created) {
-        showToast('❌ Failed to save address. Please try again.');
-        return false;
-      }
-      const next = [created, ...savedAddresses];
-      setSavedAddresses(next);
-      setSelectedAddrId(created.id);
-      setNewAddr({ type: 'HOME', name: user.name || '', phone: user.phone || '', address: '', city: '', pincode: '' });
-      showToast('✓ Address saved to your account');
-      return true;
-    } finally {
-      setSavingAddress(false);
-    }
-  };
-
-  const handlePlaceOrder = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (orderSubmitLock.current || isPlacingOrder) return;
-
-    orderSubmitLock.current = true;
-    setIsPlacingOrder(true);
-
-    const releaseOrderLock = () => {
-      orderSubmitLock.current = false;
-      setIsPlacingOrder(false);
-    };
-
-    try {
-      if (selectedAddrId === 'new') {
-        const saved = await handleSaveInlineAddress();
-        if (!saved) {
-          releaseOrderLock();
-          return;
-        }
-      }
-
-      if (!idempotencyKeyRef.current) {
-        idempotencyKeyRef.current = `bpg-${user?.id || 'guest'}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-      }
-
-      const finalAmount = checkoutTotal > 0 ? checkoutTotal : cartGrandTotal > 0 ? cartGrandTotal : cartTotal;
-
-      const processOrderCompletion = async (payId?: string, rzpOrderId?: string, rzpSignature?: string) => {
-        let serverOrderId = '';
-        let wasDuplicate = false;
-        try {
-          const orderRes = await fetch('/api/orders', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(user?.token ? { Authorization: `Bearer ${user.token}` } : {}),
-            },
-            body: JSON.stringify({
-              userId: user?.id,
-              customerName: selectedAddress.name || user?.name || 'Customer',
-              customerPhone: selectedAddress.phone || user?.phone || '',
-              address: selectedAddress.address,
-              city: selectedAddress.city || 'Chennai',
-              pincode: selectedAddress.pincode || '600012',
-              items: cart.map((i) => ({ id: i.id, qty: i.qty, price: i.price })),
-              paymentMethod: 'Razorpay UPI / Online',
-              razorpayPaymentId: payId || null,
-              razorpayOrderId: rzpOrderId || null,
-              razorpaySignature: rzpSignature || null,
-              couponCode: appliedCoupon?.code || null,
-              freeBookId: appliedCoupon?.freeBookId || null,
-              idempotencyKey: idempotencyKeyRef.current,
-            }),
-          });
-          const orderData = await orderRes.json();
-          if (!orderRes.ok) {
-            showToast(`❌ ${orderData.error || 'Order failed'}`);
-            return false;
-          }
-          if (orderData.orderId) {
-            serverOrderId = orderData.orderId;
-          }
-          wasDuplicate = Boolean(orderData.duplicate);
-          if (wasDuplicate) {
-            showToast(`ℹ️ Order #${serverOrderId} was already placed — cart cleared.`);
-          }
-        } catch (_) {
-          showToast('❌ Could not place order. Try again.');
-          return false;
-        }
-
-        if (!serverOrderId) {
-          showToast('❌ Order was not saved. Please try again.');
-          return false;
-        }
-
-        setIsCheckoutOpen(false);
-        clearCartAfterOrder();
-        clearAppliedCoupon();
-        idempotencyKeyRef.current = null;
-        setOrderSuccessData({
-          orderId: serverOrderId,
-          totalAmount: finalAmount,
-          customerName: selectedAddress.name || user?.name || 'Customer',
-          address: selectedAddress.address,
-          city: selectedAddress.city || 'Chennai',
-          phone: selectedAddress.phone || user?.phone || '',
-          paymentMethod: 'Razorpay UPI / Online',
-          paymentStatus: 'Payment Confirmed',
-        });
-        if (!wasDuplicate) {
-          showToast(`🎉 Order #${serverOrderId} placed successfully!`);
-        }
-        return true;
-      };
-
-      if (paymentMethod === 'razorpay') {
-        const receiptId = `rcpt-${Date.now()}`;
-        try {
-          const cartPayload = cart.map((i) => ({ id: i.id, qty: i.qty }));
-          const res = await fetch('/api/razorpay', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(user?.token ? { Authorization: `Bearer ${user.token}` } : {}),
-            },
-            body: JSON.stringify({
-              items: cartPayload,
-              receipt: receiptId,
-              couponCode: appliedCoupon?.code || null,
-              freeBookId: appliedCoupon?.freeBookId || null,
-            }),
-          });
-          const rzpData = await res.json();
-
-          if (!res.ok || !rzpData.id) {
-            if (rzpData.needsConfig) {
-              showToast('⚠️ Razorpay online payment configuration is missing.');
-              window.location.href = '/payment/failed?reason=no_config';
-              return;
-            }
-            showToast(`❌ ${rzpData.error || 'Could not create payment order.'}`);
-            window.location.href = '/payment/failed?reason=create_failed';
-            return;
-          }
-
-          if (typeof window !== 'undefined' && (window as any).Razorpay) {
-            const options = {
-              key: rzpData.key,
-              amount: rzpData.amount,
-              currency: 'INR',
-              name: 'BLESSING POWER GUIDE',
-              description: 'Educational Guide Books Order',
-              order_id: rzpData.id,
-              prefill: {
-                name: selectedAddress.name || user?.name || '',
-                email: user?.email || '',
-                contact: selectedAddress.phone || user?.phone || '',
-              },
-              theme: { color: '#001B3A' },
-              handler: async function (response: any) {
-                const verifyRes = await fetch('/api/razorpay', {
-                  method: 'PUT',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    ...(user?.token ? { Authorization: `Bearer ${user.token}` } : {}),
-                  },
-                  body: JSON.stringify({
-                    razorpay_order_id: response.razorpay_order_id,
-                    razorpay_payment_id: response.razorpay_payment_id,
-                    razorpay_signature: response.razorpay_signature,
-                    items: cartPayload,
-                    expectedRupees: rzpData.expectedRupees,
-                  }),
-                });
-                const verifyData = await verifyRes.json();
-
-                if (!verifyData.verified) {
-                  showToast(`❌ ${verifyData.error || 'Payment verification failed.'}`);
-                  window.location.href = '/payment/failed?reason=verify_failed';
-                  releaseOrderLock();
-                  return;
-                }
-
-                showToast('💳 Payment verified!');
-                await processOrderCompletion(
-                  response.razorpay_payment_id,
-                  response.razorpay_order_id,
-                  response.razorpay_signature
-                );
-                releaseOrderLock();
-              },
-              modal: {
-                ondismiss: function () {
-                  releaseOrderLock();
-                  window.location.href = '/payment/failed?reason=dismissed';
-                },
-              },
-            };
-
-            const rzp = new (window as any).Razorpay(options);
-            rzp.on('payment.failed', function () {
-              releaseOrderLock();
-              window.location.href = '/payment/failed?reason=failed';
-            });
-            rzp.open();
-            return;
-          }
-        } catch {
-          showToast('❌ Payment service error. Please try again.');
-          return;
-        }
-      } else {
-        await processOrderCompletion();
-      }
-    } finally {
-      if (paymentMethod === 'cod') {
-        releaseOrderLock();
-      }
-    }
-  };
-
   return (
     <>
-      {/* Quick View Modal */}
       <AnimatePresence>
         {quickViewProduct && (
           <div
@@ -451,35 +110,35 @@ export const ModalsBundle = () => {
                 </div>
                 <div>
                   {quickViewProduct.badge ? (
-                      <span
-                        className={`text-[10px] font-extrabold text-white px-2 py-0.5 rounded ${quickViewProduct.badgeColor || 'bg-blue-600'} inline-block mb-2`}
-                      >
-                        {quickViewProduct.badge}
-                      </span>
-                    ) : null}
+                    <span
+                      className={`text-[10px] font-extrabold text-white px-2 py-0.5 rounded ${quickViewProduct.badgeColor || 'bg-blue-600'} inline-block mb-2`}
+                    >
+                      {quickViewProduct.badge}
+                    </span>
+                  ) : null}
                   <h3 className="font-heading font-extrabold text-base text-[#001B3A] mb-1">
                     {quickViewProduct.title}
                   </h3>
                   <p className="text-xs text-slate-500 mb-3 leading-relaxed">
                     {quickViewProduct.description}
                   </p>
-                    <div className="flex items-baseline gap-2 mb-4">
-                      <span className="text-xl font-black text-[#001B3A]">
-                        ₹{quickViewProduct.price}
-                      </span>
-                      {quickViewProduct.mrp > quickViewProduct.price && (
-                        <>
-                          <span className="text-xs text-slate-400 line-through">
-                            ₹{quickViewProduct.mrp}
+                  <div className="flex items-baseline gap-2 mb-4">
+                    <span className="text-xl font-black text-[#001B3A]">
+                      ₹{quickViewProduct.price}
+                    </span>
+                    {quickViewProduct.mrp > quickViewProduct.price && (
+                      <>
+                        <span className="text-xs text-slate-400 line-through">
+                          ₹{quickViewProduct.mrp}
+                        </span>
+                        {quickViewProduct.discount > 0 && (
+                          <span className="text-xs font-bold text-emerald-600">
+                            {quickViewProduct.discount}% OFF
                           </span>
-                          {quickViewProduct.discount > 0 && (
-                            <span className="text-xs font-bold text-emerald-600">
-                              {quickViewProduct.discount}% OFF
-                            </span>
-                          )}
-                        </>
-                      )}
-                    </div>
+                        )}
+                      </>
+                    )}
+                  </div>
                   <button
                     onClick={() => {
                       addToCart(quickViewProduct);
@@ -497,7 +156,6 @@ export const ModalsBundle = () => {
         )}
       </AnimatePresence>
 
-      {/* Track Order Modal */}
       <AnimatePresence>
         {isTrackOpen && (
           <div
@@ -564,7 +222,6 @@ export const ModalsBundle = () => {
         )}
       </AnimatePresence>
 
-      {/* Authentication Modal */}
       <AnimatePresence>
         {isAuthOpen && (
           <GoogleAuthModal
@@ -574,7 +231,6 @@ export const ModalsBundle = () => {
         )}
       </AnimatePresence>
 
-      {/* User Profile Quick Menu Modal */}
       <AnimatePresence>
         {isProfileOpen && user && (
           <div
@@ -675,7 +331,7 @@ export const ModalsBundle = () => {
             </motion.div>
           </div>
         )}
-        {/* Custom Brand-Exclusive Blessing Power Guide Order Victory Splash Modal */}
+
         {orderSuccessData && (
           <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl z-50 flex items-center justify-center p-4 overflow-y-auto">
             <motion.div
@@ -685,11 +341,9 @@ export const ModalsBundle = () => {
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
               className="bg-white rounded-[2.5rem] max-w-lg w-full p-6 sm:p-9 text-center space-y-6 shadow-[0_25px_60px_-15px_rgba(0,27,58,0.5)] relative border border-slate-200/80 overflow-hidden"
             >
-              {/* Background Ambient Radial Aura */}
               <div className="absolute -top-32 left-1/2 -translate-x-1/2 w-80 h-80 bg-gradient-to-tr from-amber-400/40 via-blue-600/30 to-emerald-400/40 rounded-full blur-3xl opacity-60 pointer-events-none animate-pulse" />
               <div className="absolute top-0 right-0 w-32 h-32 bg-amber-300/20 rounded-full blur-2xl pointer-events-none" />
 
-              {/* Unique BPG Crest Icon with Glowing Pulse Ring */}
               <div className="relative inline-block mt-2">
                 <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-[#001B3A] via-[#002B5B] to-[#0044AA] text-white flex items-center justify-center mx-auto shadow-2xl ring-8 ring-amber-400/30 transform -rotate-3 hover:rotate-0 transition-transform duration-300">
                   <PackageCheck className="w-12 h-12 text-amber-400 stroke-[2.2]" />
@@ -700,7 +354,6 @@ export const ModalsBundle = () => {
                 </div>
               </div>
 
-              {/* Title & Subtitle */}
               <div className="space-y-2">
                 <div className="inline-flex items-center gap-1.5 bg-amber-500/10 text-amber-700 text-[11px] font-black uppercase tracking-widest px-4 py-1.5 rounded-full border border-amber-400/30">
                   <Sparkles className="w-3.5 h-3.5 text-amber-500 fill-amber-400" />
@@ -716,7 +369,6 @@ export const ModalsBundle = () => {
                 </p>
               </div>
 
-              {/* Interactive Order Details Summary Box */}
               <div className="bg-gradient-to-br from-slate-50 to-blue-50/40 border border-slate-200/90 rounded-3xl p-5 text-left space-y-3 shadow-inner">
                 <div className="flex justify-between items-center pb-3 border-b border-slate-200/70">
                   <div>
@@ -740,7 +392,7 @@ export const ModalsBundle = () => {
                     <span className="font-black text-emerald-600 text-sm">₹{orderSuccessData.totalAmount}</span>
                   </div>
                   <span className="text-[11px] font-extrabold bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full border border-emerald-200">
-                    {orderSuccessData.paymentMethod}
+                    {orderSuccessData.paymentMethod || 'Razorpay Online'}
                   </span>
                 </div>
 
@@ -759,7 +411,6 @@ export const ModalsBundle = () => {
                 </div>
               </div>
 
-              {/* WhatsApp Automated Dispatch Status Card */}
               <div className="bg-[#001B3A] text-white rounded-2xl p-4 flex items-center justify-between text-xs shadow-lg">
                 <div className="flex items-center gap-3 text-left">
                   <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/40">
@@ -775,7 +426,6 @@ export const ModalsBundle = () => {
                 </span>
               </div>
 
-              {/* High-Impact Action Buttons */}
               <div className="space-y-3 pt-1">
                 <button
                   onClick={() => {

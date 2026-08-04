@@ -41,7 +41,7 @@ export default function TermsOfServicePage() {
               <Shield className="w-4 h-4 text-[#2874f0]" /> 2. Pricing & Orders
             </h2>
             <p>
-              Prices listed are in Indian Rupees (INR) inclusive of applicable taxes. We reserve the right to revise prices or cancel orders in case of typographical pricing errors. Order confirmation receipts are generated automatically upon successful payment or COD placement.
+              Prices listed are in Indian Rupees (INR) inclusive of applicable taxes. We reserve the right to revise prices or cancel orders in case of typographical pricing errors. Orders are paid online via Razorpay; Cash on Delivery is not available. Order confirmation receipts are generated automatically upon successful payment.
             </p>
           </section>
 

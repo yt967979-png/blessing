@@ -9,9 +9,8 @@ import {
   applyRateLimitAsync,
   clientIp,
 } from '@/lib/serverSecurity';
-import { priceCartItems, verifyRazorpayPayment } from '@/lib/orderPricing';
+import { verifyRazorpayPayment } from '@/lib/orderPricing';
 import { priceCheckoutOrder } from '@/lib/checkoutPricing';
-import { ensureCouponSchema } from '@/lib/coupons';
 import { notify, statusToNotifyEvent, getEnvAdminNotifyPhones } from '@/lib/notify/send';
 
 function mapOrderRow(o: any) {
@@ -156,8 +155,6 @@ export async function POST(request: Request) {
       razorpayPaymentId,
       razorpayOrderId,
       razorpaySignature,
-      couponCode,
-      freeBookId,
       idempotencyKey,
     } = body;
 
@@ -165,14 +162,10 @@ export async function POST(request: Request) {
     const isRazorpay = String(paymentMethod || '').toLowerCase().includes('razorpay');
 
     await client.query('BEGIN');
-    await ensureCouponSchema(client);
 
     const checkout = await priceCheckoutOrder(client, {
       items,
       userId,
-      couponCode: couponCode || null,
-      freeBookId: freeBookId || null,
-      lockCoupon: true,
     });
 
     if (!checkout.ok) {
@@ -185,9 +178,6 @@ export async function POST(request: Request) {
       discountAmount,
       totalAmount,
       verifiedItems,
-      appliedCouponId,
-      appliedCouponCode,
-      coupon,
     } = checkout;
 
     const idemKey = String(idempotencyKey || '').trim().slice(0, 80) || null;
@@ -217,51 +207,42 @@ export async function POST(request: Request) {
       );
     }
 
-    if (appliedCouponId && coupon) {
-      await client.query(`UPDATE coupons SET used_count = COALESCE(used_count, 0) + 1 WHERE id = $1`, [
-        appliedCouponId,
-      ]);
+    if (!razorpayPaymentId || !razorpayOrderId || !razorpaySignature) {
+      await client.query('ROLLBACK');
+      return NextResponse.json({ error: 'Payment details required for online checkout.' }, { status: 400 });
     }
 
-    if (isRazorpay) {
-      if (!razorpayPaymentId || !razorpayOrderId || !razorpaySignature) {
-        await client.query('ROLLBACK');
-        return NextResponse.json({ error: 'Payment details required for online checkout.' }, { status: 400 });
-      }
-
-      const dupPay = await client.query(
-        `SELECT order_number, id, total_amount FROM orders WHERE razorpay_payment_id = $1 LIMIT 1`,
-        [razorpayPaymentId]
-      );
-      if (dupPay.rows.length) {
-        await client.query('ROLLBACK');
-        const existing = dupPay.rows[0];
-        return NextResponse.json({
-          orderId: existing.order_number,
-          duplicate: true,
-          totalAmount: Number(existing.total_amount || totalAmount),
-          message: 'Payment already processed — returning your existing order.',
-        });
-      }
-
-      const verified = await verifyRazorpayPayment({
-        razorpayOrderId,
-        razorpayPaymentId,
-        razorpaySignature,
-        expectedRupees: totalAmount,
+    const dupPay = await client.query(
+      `SELECT order_number, id, total_amount FROM orders WHERE razorpay_payment_id = $1 LIMIT 1`,
+      [razorpayPaymentId]
+    );
+    if (dupPay.rows.length) {
+      await client.query('ROLLBACK');
+      const existing = dupPay.rows[0];
+      return NextResponse.json({
+        orderId: existing.order_number,
+        duplicate: true,
+        totalAmount: Number(existing.total_amount || totalAmount),
+        message: 'Payment already processed — returning your existing order.',
       });
-      if (!verified.ok) {
-        await client.query('ROLLBACK');
-        return NextResponse.json({ error: verified.error }, { status: 400 });
-      }
     }
 
-    const payStat = isRazorpay ? 'Payment Confirmed' : 'Pending COD';
+    const verified = await verifyRazorpayPayment({
+      razorpayOrderId,
+      razorpayPaymentId,
+      razorpaySignature,
+      expectedRupees: totalAmount,
+    });
+    if (!verified.ok) {
+      await client.query('ROLLBACK');
+      return NextResponse.json({ error: verified.error }, { status: 400 });
+    }
+
+    const payStat = 'Payment Confirmed';
     const id = `ord-${Date.now()}`;
     const orderNumber = 'BPG-' + Math.floor(1000 + Math.random() * 9000);
     const ymd = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     const internalShipmentId = `SHP-${ymd}-${Math.floor(100000 + Math.random() * 900000)}`;
-    // Direct order placement (Confirmed upon checkout)
     const initialStatus = 'Confirmed';
 
     const shippingAddressObj = JSON.stringify({
@@ -276,7 +257,7 @@ export async function POST(request: Request) {
     await client.query(
       `INSERT INTO orders (id, order_number, user_id, subtotal, discount, total_amount, payment_method, payment_status, order_status,
         courier_name, shipment_id, awb_number, shipping_address, razorpay_order_id, razorpay_payment_id, razorpay_signature, coupon_code, coupon_id, idempotency_key)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'ST Courier Express', $10, NULL, $11, $12, $13, $14, $15, $16, $17)`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'ST Courier Express', $10, NULL, $11, $12, $13, $14, NULL, NULL, $15)`,
       [
         id,
         orderNumber,
@@ -284,7 +265,7 @@ export async function POST(request: Request) {
         calculatedSubtotal,
         discountAmount,
         totalAmount,
-        paymentMethod || (isRazorpay ? 'Razorpay UPI' : 'Cash on Delivery (COD)'),
+        paymentMethod || 'Razorpay UPI',
         payStat,
         initialStatus,
         internalShipmentId,
@@ -292,18 +273,9 @@ export async function POST(request: Request) {
         razorpayOrderId || null,
         razorpayPaymentId || null,
         razorpaySignature || null,
-        appliedCouponCode,
-        appliedCouponId,
         idemKey,
       ]
     );
-
-    if (appliedCouponId) {
-      await client.query(
-        `INSERT INTO coupon_redemptions (id, coupon_id, user_id, order_id) VALUES ($1, $2, $3, $4)`,
-        [`red-${Date.now()}`, appliedCouponId, userId, id]
-      );
-    }
 
     for (const item of verifiedItems) {
       const itemId = `item-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;

@@ -39,4 +39,4 @@
 
 ## Deploy reminder
 
-Local edits are not production until git push + Railway redeploy. Always say so when verifying live `blessing-production.up.railway.app`.
+Local edits are not production until git push + Lightsail redeploy (`sudo bash deploy/aws/redeploy.sh ~/blessing-src` after `git pull`).

@@ -1324,7 +1324,148 @@ async function runSchemaInit(client: any) {
       /* ignore */
     }
 
+    // Heal: FAQ that still claims COD is available
+    try {
+      await client.query(
+        `UPDATE faqs
+         SET answer = $1
+         WHERE id = 'faq-3'
+            OR question ILIKE '%cash on delivery%'
+            OR (question ILIKE '%COD%' AND question ILIKE '%deliver%')`,
+        [
+          'We accept secure online payments via Razorpay (UPI, Google Pay, PhonePe, Cards, Net Banking). Cash on Delivery is not available.',
+        ]
+      );
+    } catch (_) {
+      /* ignore */
+    }
 
+    await ensureDefaultCategories(client);
+    await ensureAdminUser(client);
+}
+
+function isProductionDeployRuntime(): boolean {
+  if (process.env.NODE_ENV !== 'production') return false;
+  if (process.env.NEXT_PHASE === 'phase-production-build') return false;
+  return Boolean(
+    process.env.RAILWAY_ENVIRONMENT ||
+      process.env.RAILWAY_SERVICE_ID ||
+      process.env.LIGHTSAIL ||
+      process.env.AWS_EXECUTION_ENV ||
+      process.env.PUBLIC_BASE_URL ||
+      process.env.DATABASE_URL
+  );
+}
+
+const WEAK_ADMIN_PASSWORDS = new Set([
+  '123456',
+  'password',
+  'admin',
+  'changeme',
+  'changeme@bpg2026',
+  'yogesh234456',
+  'blessing',
+  'admin123',
+  'password123',
+]);
+
+function isStrongAdminPassword(password: string): boolean {
+  const pw = String(password || '');
+  if (pw.length < 12) return false;
+  if (WEAK_ADMIN_PASSWORDS.has(pw.toLowerCase())) return false;
+  // Require mix of letter + digit (or symbol) so Lightsail never boots with "123456789012"
+  const hasLetter = /[A-Za-z]/.test(pw);
+  const hasDigitOrSymbol = /[0-9]|[^A-Za-z0-9]/.test(pw);
+  return hasLetter && hasDigitOrSymbol;
+}
+
+/**
+ * Ensure a default admin exists. Production never hardcodes weak credentials and
+ * never resets an existing admin password unless ADMIN_FORCE_PASSWORD_RESET=true.
+ */
+export async function ensureAdminUser(client: any) {
+  try {
+    const email = String(process.env.ADMIN_EMAIL || '')
+      .toLowerCase()
+      .trim();
+    const password = String(process.env.ADMIN_PASSWORD || '');
+    const name = String(process.env.ADMIN_NAME || 'Admin').trim() || 'Admin';
+    const phone = String(process.env.ADMIN_PHONE || '')
+      .replace(/\D/g, '')
+      .slice(-10);
+    const forceReset = String(process.env.ADMIN_FORCE_PASSWORD_RESET || '').toLowerCase() === 'true';
+    const production = isProductionDeployRuntime();
+
+    if (!email || !password) {
+      if (production) {
+        console.warn(
+          '[db] ensureAdminUser skipped: set ADMIN_EMAIL and ADMIN_PASSWORD in production (no hardcoded defaults).'
+        );
+      }
+      return;
+    }
+
+    if (production && !isStrongAdminPassword(password)) {
+      console.error(
+        '[db] ensureAdminUser refused weak ADMIN_PASSWORD in production (min 12 chars, not a common default).'
+      );
+      return;
+    }
+
+    const passwordHash = hashPassword(password);
+    const adminId = 'admin-bpg-001';
+
+    const byEmail = await client.query(`SELECT id, email, role FROM users WHERE LOWER(email) = $1 LIMIT 1`, [
+      email,
+    ]);
+    const byId = await client.query(`SELECT id, email, role FROM users WHERE id = $1 LIMIT 1`, [adminId]);
+    const target = byEmail.rows[0] || byId.rows[0] || null;
+
+    if (!target) {
+      await client.query(
+        `INSERT INTO users (id, name, email, phone, password_hash, role, status)
+         VALUES ($1, $2, $3, $4, $5, 'admin', 'active')`,
+        [adminId, name, email, phone || null, passwordHash]
+      );
+      await client.query(
+        `INSERT INTO cart (id, user_id) VALUES ($1, $2) ON CONFLICT (user_id) DO NOTHING`,
+        [`cart-${adminId}`, adminId]
+      );
+      console.log(`[db] admin created for ${email}`);
+      return;
+    }
+
+    // Existing admin: promote role / refresh profile, but do not silently reset password.
+    if (forceReset) {
+      if (production && !isStrongAdminPassword(password)) {
+        console.error('[db] ADMIN_FORCE_PASSWORD_RESET ignored — password too weak for production.');
+        return;
+      }
+      await client.query(
+        `UPDATE users
+         SET name = $1, email = $2, phone = COALESCE(NULLIF($3, ''), phone),
+             password_hash = $4, role = 'admin', status = 'active', updated_at = NOW()
+         WHERE id = $5`,
+        [name, email, phone, passwordHash, target.id]
+      );
+      console.log(`[db] admin password force-reset for id=${target.id}`);
+      return;
+    }
+
+    await client.query(
+      `UPDATE users
+       SET name = $1,
+           email = $2,
+           phone = COALESCE(NULLIF($3, ''), phone),
+           role = 'admin',
+           status = 'active',
+           updated_at = NOW()
+       WHERE id = $4`,
+      [name, email, phone, target.id]
+    );
+  } catch (err: any) {
+    console.warn('[db] ensureAdminUser skipped:', err?.message || err);
+  }
 }
 
 /** Idempotent seed for 6th–12th + combo categories — safe to call before any book insert. */

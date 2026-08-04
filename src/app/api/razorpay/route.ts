@@ -7,7 +7,6 @@ import {
   clientIp,
 } from '@/lib/serverSecurity';
 import { priceCheckoutOrder } from '@/lib/checkoutPricing';
-import { ensureCouponSchema } from '@/lib/coupons';
 import { verifyRazorpayPayment } from '@/lib/orderPricing';
 
 export async function POST(request: Request) {
@@ -25,8 +24,6 @@ export async function POST(request: Request) {
       items,
       currency = 'INR',
       receipt,
-      couponCode,
-      freeBookId,
     } = body;
 
     const keyId = process.env.RAZORPAY_KEY_ID;
@@ -35,21 +32,16 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           error:
-            'Razorpay is not configured yet. Add RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in Railway after your domain is approved.',
+            'Razorpay is not configured yet. Add RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in the server env.',
           needsConfig: true,
         },
         { status: 503 }
       );
     }
 
-    await ensureCouponSchema(queryDb as any);
-
     const checkout = await priceCheckoutOrder(queryDb, {
       items,
       userId: session.userId,
-      couponCode: couponCode || null,
-      freeBookId: freeBookId || null,
-      lockCoupon: false,
     });
 
     if (!checkout.ok) {
@@ -74,7 +66,6 @@ export async function POST(request: Request) {
         receipt: receipt || `rcpt_${Date.now()}`,
         notes: {
           userId: session.userId,
-          couponCode: checkout.appliedCouponCode || '',
         },
       }),
     });
@@ -90,13 +81,15 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       orderId: rzpData.id,
+      id: rzpData.id,
       amount: rzpData.amount,
       currency: rzpData.currency,
+      key: keyId,
       keyId,
+      expectedRupees: checkout.totalAmount,
       subtotal: checkout.subtotal,
       discountAmount: checkout.discountAmount,
       totalAmount: checkout.totalAmount,
-      appliedCouponCode: checkout.appliedCouponCode,
     });
   } catch (err: any) {
     console.error('[Razorpay Route Error]', err);
@@ -115,8 +108,6 @@ export async function PUT(request: Request) {
       razorpay_signature,
       expectedRupees,
       items,
-      couponCode,
-      freeBookId,
     } = await request.json();
 
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
@@ -125,13 +116,9 @@ export async function PUT(request: Request) {
 
     let amount = Number(expectedRupees || 0);
     if ((!amount || amount <= 0) && Array.isArray(items)) {
-      await ensureCouponSchema(queryDb as any);
       const checkout = await priceCheckoutOrder(queryDb, {
         items,
         userId: session.userId,
-        couponCode: couponCode || null,
-        freeBookId: freeBookId || null,
-        lockCoupon: false,
       });
       if (checkout.ok) amount = checkout.totalAmount;
     }

@@ -1,9 +1,19 @@
 import { NextResponse } from 'next/server';
 
+const GONE = { error: 'Coupons system is disabled.' };
+
 export async function GET() {
-  return NextResponse.json([]);
+  return NextResponse.json(GONE, { status: 410 });
 }
 
 export async function POST() {
-  return NextResponse.json({ error: 'Coupons system is disabled.' }, { status: 410 });
+  return NextResponse.json(GONE, { status: 410 });
+}
+
+export async function PUT() {
+  return NextResponse.json(GONE, { status: 410 });
+}
+
+export async function DELETE() {
+  return NextResponse.json(GONE, { status: 410 });
 }

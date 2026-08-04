@@ -422,23 +422,36 @@ function hashPassword(password) {
   return `${salt}:${hash}`;
 }
 
-const ADMIN_USERS = [
-  {
-    id: 'admin-bpg-001',
-    name: process.env.ADMIN_NAME || 'Yogesh Admin',
-    email: process.env.ADMIN_EMAIL || 'yogesh234456@gmail.com',
-    phone: process.env.ADMIN_PHONE || '9840418228',
-    password: process.env.ADMIN_PASSWORD || '123456',
-    role: 'admin',
-  },
-];
+const WEAK_ADMIN_PASSWORDS = new Set([
+  '123456',
+  'password',
+  'admin',
+  'changeme',
+  'changeme@bpg2026',
+  'yogesh234456',
+  'blessing',
+  'admin123',
+  'password123',
+]);
 
-const DEFAULT_COUPONS = [
-  { id: 'cpn-first10', code: 'FIRST10', discount_type: 'percentage', discount_value: 10, minimum_amount: 0 },
-  { id: 'cpn-blessing10', code: 'BLESSING10', discount_type: 'percentage', discount_value: 10, minimum_amount: 0 },
-  { id: 'cpn-power20', code: 'POWER20', discount_type: 'percentage', discount_value: 20, minimum_amount: 500 },
-  { id: 'cpn-student20', code: 'STUDENT20', discount_type: 'percentage', discount_value: 20, minimum_amount: 0 },
-];
+function isStrongAdminPassword(password) {
+  const pw = String(password || '');
+  if (pw.length < 12) return false;
+  if (WEAK_ADMIN_PASSWORDS.has(pw.toLowerCase())) return false;
+  return /[A-Za-z]/.test(pw) && (/[0-9]/.test(pw) || /[^A-Za-z0-9]/.test(pw));
+}
+
+function isProductionSeedRuntime() {
+  if (process.env.NODE_ENV !== 'production') return false;
+  return Boolean(
+    process.env.RAILWAY_ENVIRONMENT ||
+      process.env.RAILWAY_SERVICE_ID ||
+      process.env.LIGHTSAIL ||
+      process.env.AWS_EXECUTION_ENV ||
+      process.env.PUBLIC_BASE_URL ||
+      process.env.DATABASE_URL
+  );
+}
 
 const DEFAULT_FAQS = [
   {
@@ -456,7 +469,7 @@ const DEFAULT_FAQS = [
   {
     id: 'faq-3',
     question: 'Do you offer Cash on Delivery (COD)?',
-    answer: 'Yes! We support Cash on Delivery (COD) as well as secure online payments via Razorpay (UPI, Google Pay, PhonePe, Cards, Net Banking).',
+    answer: 'We accept secure online payments via Razorpay (UPI, Google Pay, PhonePe, Cards, Net Banking). Cash on Delivery is not available.',
     display_order: 3,
   },
   {
@@ -486,72 +499,67 @@ async function seedAdmin(connStr, dbName) {
       await client.query(`ALTER TABLE users DROP COLUMN IF EXISTS email_verified`);
     } catch (_) { }
 
-    for (const admin of ADMIN_USERS) {
-      const phone = String(admin.phone).replace(/\D/g, '').slice(-10);
-      const email = String(admin.email).toLowerCase().trim();
-      const passwordHash = hashPassword(admin.password);
+    const email = String(process.env.ADMIN_EMAIL || '').toLowerCase().trim();
+    const password = String(process.env.ADMIN_PASSWORD || '');
+    const name = String(process.env.ADMIN_NAME || 'Admin').trim() || 'Admin';
+    const phone = String(process.env.ADMIN_PHONE || '').replace(/\D/g, '').slice(-10);
+    const forceReset = String(process.env.ADMIN_FORCE_PASSWORD_RESET || '').toLowerCase() === 'true';
+    const production = isProductionSeedRuntime();
 
-      // Priority: match by email → fixed admin id → phone (never overwrite email if taken)
-      const byEmail = await client.query(
-        `SELECT id, email FROM users WHERE LOWER(email) = $1 LIMIT 1`,
-        [email]
-      );
-      const byId = await client.query(
-        `SELECT id, email FROM users WHERE id = $1 LIMIT 1`,
-        [admin.id]
-      );
-      const byPhone = await client.query(
-        `SELECT id, email FROM users
-         WHERE RIGHT(REGEXP_REPLACE(COALESCE(phone, ''), '\\D', '', 'g'), 10) = $1
-         LIMIT 1`,
-        [phone]
-      );
-
-      let userId = admin.id;
-      let targetRow = byEmail.rows[0] || byId.rows[0] || byPhone.rows[0] || null;
-
-      if (!targetRow) {
-        await client.query(
-          `INSERT INTO users (id, name, email, phone, password_hash, role, status)
-           VALUES ($1, $2, $3, $4, $5, 'admin', 'active')`,
-          [userId, admin.name, email, phone, passwordHash]
-        );
-        console.log(`✅ [ADMIN CREATED] ${email} / phone ${phone}`);
-      } else {
-        userId = targetRow.id;
-        const canSetEmail = !targetRow.email || String(targetRow.email).toLowerCase() === email;
-
-        if (canSetEmail) {
-          await client.query(
-            `UPDATE users
-             SET name = $1, email = $2, phone = $3, password_hash = $4,
-                 role = 'admin', status = 'active', updated_at = NOW()
-             WHERE id = $5`,
-            [admin.name, email, phone, passwordHash, userId]
-          );
-        } else {
-          // Email belongs to another account — only promote role + password, keep existing email
-          await client.query(
-            `UPDATE users
-             SET name = $1, phone = $2, password_hash = $3,
-                 role = 'admin', status = 'active', updated_at = NOW()
-             WHERE id = $4`,
-            [admin.name, phone, passwordHash, userId]
-          );
-          console.log(`⚠️  [ADMIN] Kept existing email "${targetRow.email}" (admin@ email already taken elsewhere)`);
-        }
-        console.log(`✅ [ADMIN UPDATED] id=${userId} → role: admin`);
-      }
-
-      await client.query(
-        `INSERT INTO cart (id, user_id) VALUES ($1, $2) ON CONFLICT (user_id) DO NOTHING`,
-        [`cart-${userId}`, userId]
-      );
-
-      console.log(`   Login phone: ${phone}`);
-      console.log(`   Login email: ${email}`);
-      console.log(`   Password: ${admin.password}`);
+    if (!email || !password) {
+      console.warn(`⚠️  [${dbName}] Admin seed skipped — set ADMIN_EMAIL and ADMIN_PASSWORD (no hardcoded defaults).`);
+      await client.end();
+      return;
     }
+
+    if (production && !isStrongAdminPassword(password)) {
+      console.error(`❌ [${dbName}] ADMIN_PASSWORD too weak for production (min 12 chars, not a common default).`);
+      await client.end();
+      return;
+    }
+
+    const adminId = 'admin-bpg-001';
+    const passwordHash = hashPassword(password);
+
+    const byEmail = await client.query(`SELECT id, email FROM users WHERE LOWER(email) = $1 LIMIT 1`, [email]);
+    const byId = await client.query(`SELECT id, email FROM users WHERE id = $1 LIMIT 1`, [adminId]);
+    const targetRow = byEmail.rows[0] || byId.rows[0] || null;
+
+    if (!targetRow) {
+      await client.query(
+        `INSERT INTO users (id, name, email, phone, password_hash, role, status)
+         VALUES ($1, $2, $3, $4, $5, 'admin', 'active')`,
+        [adminId, name, email, phone || null, passwordHash]
+      );
+      console.log(`✅ [ADMIN CREATED] ${email}`);
+    } else if (forceReset) {
+      await client.query(
+        `UPDATE users
+         SET name = $1, email = $2, phone = COALESCE(NULLIF($3, ''), phone),
+             password_hash = $4, role = 'admin', status = 'active', updated_at = NOW()
+         WHERE id = $5`,
+        [name, email, phone, passwordHash, targetRow.id]
+      );
+      console.log(`✅ [ADMIN FORCE RESET] id=${targetRow.id}`);
+    } else {
+      await client.query(
+        `UPDATE users
+         SET name = $1, email = $2, phone = COALESCE(NULLIF($3, ''), phone),
+             role = 'admin', status = 'active', updated_at = NOW()
+         WHERE id = $4`,
+        [name, email, phone, targetRow.id]
+      );
+      console.log(`✅ [ADMIN UPDATED] id=${targetRow.id} (password unchanged; set ADMIN_FORCE_PASSWORD_RESET=true to reset)`);
+    }
+
+    const userId = targetRow?.id || adminId;
+    await client.query(
+      `INSERT INTO cart (id, user_id) VALUES ($1, $2) ON CONFLICT (user_id) DO NOTHING`,
+      [`cart-${userId}`, userId]
+    );
+
+    console.log(`   Login email: ${email}`);
+    if (!production) console.log(`   Password: (from ADMIN_PASSWORD env)`);
 
     await client.end();
   } catch (err) {
@@ -569,21 +577,14 @@ async function seedCouponsAndFaqs(connStr, dbName) {
   try {
     await client.connect();
 
-    for (const coupon of DEFAULT_COUPONS) {
-      await client.query(
-        `INSERT INTO coupons (id, code, discount_type, discount_value, minimum_amount, status)
-         VALUES ($1, $2, $3, $4, $5, 'active')
-         ON CONFLICT (code) DO NOTHING`,
-        [coupon.id, coupon.code, coupon.discount_type, coupon.discount_value, coupon.minimum_amount]
-      );
-    }
-    console.log(`✅ [${dbName}] Coupons seeded`);
+    // Coupons are product-disabled — do not seed offer codes.
+    console.log(`ℹ️  [${dbName}] Coupon seed skipped (system disabled)`);
 
     for (const faq of DEFAULT_FAQS) {
       await client.query(
         `INSERT INTO faqs (id, question, answer, display_order, status)
          VALUES ($1, $2, $3, $4, 'active')
-         ON CONFLICT (id) DO NOTHING`,
+         ON CONFLICT (id) DO UPDATE SET answer = EXCLUDED.answer, question = EXCLUDED.question`,
         [faq.id, faq.question, faq.answer, faq.display_order]
       );
     }

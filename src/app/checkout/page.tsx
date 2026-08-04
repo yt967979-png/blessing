@@ -5,11 +5,9 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import {
-  Lock,
   MapPin,
   Plus,
   ShieldCheck,
-  Tag,
   Truck,
   ChevronRight,
   Check,
@@ -36,15 +34,8 @@ export default function CheckoutPage() {
     cartCount,
     cartTotal,
     shippingFee,
-    couponDiscount,
     cartGrandTotal,
     checkoutTotal,
-    appliedCoupon,
-    publicCoupons,
-    pendingCouponCode,
-    products,
-    applyCouponCode,
-    clearAppliedCoupon,
     clearCartAfterOrder,
     setOrderSuccessData,
     showToast,
@@ -56,10 +47,6 @@ export default function CheckoutPage() {
   const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
   const [selectedAddrId, setSelectedAddrId] = useState('new');
   const [savingAddress, setSavingAddress] = useState(false);
-  const [paymentMethod] = useState<'razorpay'>('razorpay');
-  const [couponInput, setCouponInput] = useState('');
-  const [couponBusy, setCouponBusy] = useState(false);
-  const [freeBookPickId, setFreeBookPickId] = useState('');
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const orderSubmitLock = useRef(false);
   const idempotencyKeyRef = useRef<string | null>(null);
@@ -110,27 +97,10 @@ export default function CheckoutPage() {
     };
   }, [user, cart.length, router, setIsAuthOpen, showToast]);
 
-  useEffect(() => {
-    if (pendingCouponCode) setCouponInput(pendingCouponCode);
-  }, [pendingCouponCode]);
-
   const selectedAddress =
     selectedAddrId === 'new'
       ? newAddr
       : savedAddresses.find((a) => a.id === selectedAddrId) || savedAddresses[0];
-
-  const couponMeta =
-    appliedCoupon ||
-    publicCoupons.find((c) => c.code === pendingCouponCode || c.code === couponInput.toUpperCase());
-
-  const freeBookOptions = products.filter((p) => {
-    if (!p.inStock) return false;
-    const classes = couponMeta?.allowedClasses || [];
-    const categories = couponMeta?.allowedCategories || [];
-    if (classes.length && !classes.includes(String(p.cls).toLowerCase())) return false;
-    if (categories.length && !categories.includes(p.category)) return false;
-    return true;
-  });
 
   const handleSaveInlineAddress = async () => {
     if (!user?.id) return false;
@@ -226,8 +196,6 @@ export default function CheckoutPage() {
             razorpayPaymentId: payId || null,
             razorpayOrderId: rzpOrderId || null,
             razorpaySignature: rzpSignature || null,
-            couponCode: appliedCoupon?.code || null,
-            freeBookId: appliedCoupon?.freeBookId || null,
             idempotencyKey: idempotencyKeyRef.current,
           }),
         });
@@ -242,7 +210,6 @@ export default function CheckoutPage() {
           return false;
         }
         clearCartAfterOrder();
-        clearAppliedCoupon();
         idempotencyKeyRef.current = null;
         setOrderSuccessData({
           orderId: serverOrderId,
@@ -270,8 +237,6 @@ export default function CheckoutPage() {
         body: JSON.stringify({
           items: cartPayload,
           receipt: `rcpt-${Date.now()}`,
-          couponCode: appliedCoupon?.code || null,
-          freeBookId: appliedCoupon?.freeBookId || null,
         }),
       });
 
@@ -567,12 +532,6 @@ export default function CheckoutPage() {
                   <span>Books Subtotal ({cartCount} qty)</span>
                   <span>₹{cartTotal}</span>
                 </div>
-                {couponDiscount > 0 && (
-                  <div className="flex justify-between text-emerald-600 font-semibold">
-                    <span>Coupon Discount</span>
-                    <span>-₹{couponDiscount}</span>
-                  </div>
-                )}
                 <div className="flex justify-between">
                   <span>Delivery Charge</span>
                   <span className={shippingFee === 0 ? 'text-emerald-600 font-bold' : ''}>
@@ -631,12 +590,6 @@ export default function CheckoutPage() {
                   <span>Subtotal ({cartCount} guides)</span>
                   <span>₹{cartTotal}</span>
                 </div>
-                {couponDiscount > 0 && (
-                  <div className="flex justify-between text-emerald-600 font-semibold">
-                    <span>Coupon Savings</span>
-                    <span>-₹{couponDiscount}</span>
-                  </div>
-                )}
                 <div className="flex justify-between text-slate-600">
                   <span>Delivery Charge</span>
                   <span className={shippingFee === 0 ? 'text-emerald-600 font-bold' : ''}>
