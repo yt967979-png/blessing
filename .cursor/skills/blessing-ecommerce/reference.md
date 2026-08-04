@@ -18,7 +18,7 @@
 | Checkout | `src/app/checkout/page.tsx` (confirm before Razorpay) |
 | My Orders | `src/app/orders/page.tsx` |
 | Profile orders | `src/app/profile/page.tsx` |
-| Auth | `src/lib/auth.ts`, `src/lib/serverSecurity.ts` |
+| Auth | `GoogleAuthModal`, `api/auth/google`, `api/auth/complete-profile`, `lib/auth.ts`, `lib/userProfile.ts` |
 | Schema / heal | `src/lib/db.ts` |
 
 ## Anti-patterns

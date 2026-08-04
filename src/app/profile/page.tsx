@@ -116,11 +116,16 @@ export default function ProfilePage() {
         showToast('⚠️ ' + data.error);
         return;
       }
-      loginUser({ ...user, name: data.name || name, phone: data.phone || phone }, cart, wishlist, addresses);
+      loginUser(
+        { ...user, name: data.name || name, phone: data.phone || phone, needsProfile: false },
+        cart,
+        wishlist,
+        addresses
+      );
       setIsEditing(false);
       showToast('✓ Profile saved successfully!');
     } catch {
-      loginUser({ ...user, name, phone }, cart, wishlist, addresses);
+      loginUser({ ...user, name, phone, needsProfile: false }, cart, wishlist, addresses);
       setIsEditing(false);
       showToast('✓ Profile updated (offline).');
     }

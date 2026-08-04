@@ -303,10 +303,16 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 const nextUser = {
                   ...dbUser.user,
                   token: u.token,
-                  needsProfile: false,
+                  needsProfile:
+                    dbUser.user.needsProfile ??
+                    (userNeedsProfile(dbUser.user.phone) ||
+                      String(dbUser.user.name || '').trim().length < 2),
                 };
                 setUser(nextUser);
                 localStorage.setItem('bpg_user_next', JSON.stringify(nextUser));
+                if (nextUser.needsProfile) {
+                  setIsAuthOpen(true);
+                }
                 // Prefer local cart; if empty, restore from DB (fixes refresh wipe)
                 if (!localCart.length && Array.isArray(dbUser.cart) && dbUser.cart.length > 0) {
                   setCart(dbUser.cart);
@@ -406,6 +412,16 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const requestCheckout = (open: boolean) => {
+    if (open && !user) {
+      setIsAuthOpen(true);
+      showToast('Please continue with Google to place an order');
+      return;
+    }
+    if (open && user && (user.needsProfile || userNeedsProfile(user.phone))) {
+      setIsAuthOpen(true);
+      showToast('Please add your mobile number before checkout');
+      return;
+    }
     setIsCheckoutOpen(open);
   };
 
@@ -513,8 +529,17 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     restoredWishlist?: (string | number)[],
     restoredAddresses?: any[]
   ) => {
-    setUser(userData);
-    localStorage.setItem('bpg_user_next', JSON.stringify(userData));
+    const nextUser: UserData = {
+      ...userData,
+      needsProfile:
+        userData.needsProfile ??
+        (userNeedsProfile(userData.phone) || String(userData.name || '').trim().length < 2),
+    };
+    setUser(nextUser);
+    localStorage.setItem('bpg_user_next', JSON.stringify(nextUser));
+    if (nextUser.needsProfile) {
+      setIsAuthOpen(true);
+    }
 
     if (Array.isArray(restoredCart) && restoredCart.length > 0) {
       setCart(restoredCart);
@@ -536,7 +561,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       localStorage.removeItem('bpg_user_addresses');
     }
 
-    showToast(`✓ Account Synced! Welcome back, ${userData.name}!`);
+    showToast(`✓ Account Synced! Welcome back, ${nextUser.name}!`);
   };
 
   const logoutUser = () => {

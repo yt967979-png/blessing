@@ -17,7 +17,7 @@ surface map over a single-file patch.
 ## Product facts (do not invent)
 
 - Brand: **Blessing Power Guide** — 6th–12th Tamil Nadu guide books
-- Auth: **Password + Google** (name/email/phone/password register & login; Google sign-in). No guest checkout; **no OTP**. Long-lived session until logout
+- Auth: **Google primary** (Continue with Google → collect name + phone if incomplete / new user). Password register/login stays as secondary “or use email”. No guest checkout; **no OTP** / no Baileys. Long-lived session until logout
 - Payment: **Razorpay only** (UPI / cards / netbanking). **COD disabled** in API and all checkout UIs — do not re-offer Cash on Delivery
 - Checkout confirm: **Before Razorpay**, checkout must ask **Confirm order** or **No**. **No** → return to cart/previous (do not open payment). **Confirm** → create Razorpay order + checkout
 - Post-payment: Order is **Confirmed** immediately after successful Razorpay place. Show Flipkart-style confirmation **on the success screen** (order #, amount paid, items, next steps)

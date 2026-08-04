@@ -18,6 +18,7 @@ import { useStore } from '@/context/StoreContext';
 import { createUserAddress, migrateLocalAddressesToDb, type SavedAddress } from '@/lib/addresses';
 import { pincodeDeliveryMessage } from '@/lib/pincode';
 import { isValidMobileNumber } from '@/lib/authValidation';
+import { userNeedsProfile } from '@/lib/userProfile';
 import { imageNeedsUnoptimized } from '@/lib/productImage';
 import { Header } from '@/components/layout/Header';
 import { NavBar } from '@/components/layout/NavBar';
@@ -67,7 +68,13 @@ export default function CheckoutPage() {
   useEffect(() => {
     if (!user?.id) {
       setIsAuthOpen(true);
-      showToast('Please sign in to proceed to checkout');
+      showToast('Please continue with Google to proceed to checkout');
+      router.replace('/cart');
+      return;
+    }
+    if (user.needsProfile || userNeedsProfile(user.phone)) {
+      setIsAuthOpen(true);
+      showToast('Please add your mobile number before checkout');
       router.replace('/cart');
       return;
     }

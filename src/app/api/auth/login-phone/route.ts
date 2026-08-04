@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { queryDb } from '@/lib/db';
 import { applyRateLimitAsync } from '@/lib/serverSecurity';
 import { createSessionToken, verifyPassword, SESSION_COOKIE_MAX_AGE_SEC } from '@/lib/auth';
+import { userNeedsProfile } from '@/lib/userProfile';
 
 export async function POST(request: Request) {
   try {
@@ -21,7 +22,7 @@ export async function POST(request: Request) {
     const emailInput = rawInput.toLowerCase();
 
     const res = await queryDb(
-      `SELECT id, name, email, phone, role, status, password_hash 
+      `SELECT id, name, email, phone, role, status, password_hash, profile_completed
        FROM users 
        WHERE (phone = $1 OR phone = $2 OR (email = $3 AND email != '')) LIMIT 1`,
       [phoneWithCc, cleanPhone, emailInput]
@@ -44,6 +45,9 @@ export async function POST(request: Request) {
 
     const userRole = user.role || 'customer';
     const token = createSessionToken(user.id, userRole);
+    // Password accounts already collected phone at register; only flag incomplete profiles.
+    const needsProfile =
+      userNeedsProfile(user.phone) || String(user.name || '').trim().length < 2;
     const response = NextResponse.json({
       success: true,
       user: {
@@ -52,7 +56,7 @@ export async function POST(request: Request) {
         email: user.email,
         phone: user.phone,
         role: userRole,
-        needsProfile: false,
+        needsProfile,
         token,
       },
     });

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { queryDb } from '@/lib/db';
 import { applyRateLimitAsync } from '@/lib/serverSecurity';
 import { createSessionToken, hashPassword, SESSION_COOKIE_MAX_AGE_SEC } from '@/lib/auth';
+import { isValidMobileNumber, normalizeMobileDigits } from '@/lib/authValidation';
 
 export async function POST(request: Request) {
   try {
@@ -19,11 +20,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Please enter your full name.' }, { status: 400 });
     }
 
-    const cleanPhone = rawPhone.replace(/\D/g, '');
-    if (cleanPhone.length < 10) {
+    const cleanPhone = normalizeMobileDigits(rawPhone);
+    if (!isValidMobileNumber(cleanPhone)) {
       return NextResponse.json({ error: 'Please enter a valid 10-digit mobile number.' }, { status: 400 });
     }
-    const phoneWithCc = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+    const phoneWithCc = `91${cleanPhone}`;
 
     if (!password || password.length < 4) {
       return NextResponse.json({ error: 'Password must be at least 4 characters long.' }, { status: 400 });
@@ -33,10 +34,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Passwords do not match. Please verify your entry.' }, { status: 400 });
     }
 
-    // Check if phone or email already registered
+    // Check if phone or email already registered (10-digit or legacy 91… form)
     const existing = await queryDb(
       `SELECT id FROM users WHERE phone = $1 OR phone = $2 OR (email = $3 AND email != '') LIMIT 1`,
-      [phoneWithCc, cleanPhone, email]
+      [cleanPhone, phoneWithCc, email]
     );
 
     if (existing.rows.length > 0) {
@@ -52,7 +53,7 @@ export async function POST(request: Request) {
     await queryDb(
       `INSERT INTO users (id, name, email, phone, role, password_hash, profile_completed, created_at)
        VALUES ($1, $2, $3, $4, 'customer', $5, true, NOW())`,
-      [userId, name, email, phoneWithCc, passwordHash]
+      [userId, name, email, cleanPhone, passwordHash]
     );
 
     const token = createSessionToken(userId, 'customer');
@@ -60,7 +61,7 @@ export async function POST(request: Request) {
       id: userId,
       name,
       email,
-      phone: phoneWithCc,
+      phone: cleanPhone,
       role: 'customer',
       needsProfile: false,
       token,
