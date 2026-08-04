@@ -396,14 +396,11 @@ async function migrateDatabase(connStr, dbName) {
       CREATE INDEX IF NOT EXISTS idx_coupon_redemptions_coupon_user
         ON coupon_redemptions (coupon_id, user_id);
 
-      CREATE TABLE IF NOT EXISTS faqs (
-        id VARCHAR(255) PRIMARY KEY,
-        question TEXT NOT NULL,
-        answer TEXT NOT NULL,
-        display_order INT DEFAULT 0,
-        status VARCHAR(50) DEFAULT 'active',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
+      CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders (user_id);
+      CREATE INDEX IF NOT EXISTS idx_orders_status ON orders (order_status);
+      CREATE INDEX IF NOT EXISTS idx_orders_created ON orders (ordered_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_orders_awb ON orders (awb_number);
+      CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items (order_id);
     `);
 
     console.log(`✅ [${dbName}] Schema migration complete!`);
