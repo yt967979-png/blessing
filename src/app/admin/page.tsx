@@ -900,27 +900,16 @@ export default function AdminPage() {
             ) : analytics ? (
               <>
                 {/* Today spotlight */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   {[
                     { label: "Today's Revenue", value: fmt(analytics.summary.todayRevenue), icon: IndianRupee, color: 'text-green-600', bg: 'bg-green-50' },
                     { label: "Today's Orders", value: analytics.summary.todayOrders, icon: ShoppingCart, color: 'text-blue-600', bg: 'bg-blue-50' },
-                    { label: 'Online Payments', value: analytics.summary.paidOrders, icon: CreditCard, color: 'text-violet-600', bg: 'bg-violet-50' },
-                    {
-                      label: 'COD (historical)',
-                      value: analytics.summary.codOrders,
-                      icon: Banknote,
-                      color: 'text-amber-600',
-                      bg: 'bg-amber-50',
-                      hint: 'Legacy only — COD is disabled; live checkout is Razorpay',
-                    },
+                    { label: 'Online Payments (Razorpay)', value: analytics.summary.paidOrders, icon: CreditCard, color: 'text-violet-600', bg: 'bg-violet-50' },
                   ].map((s) => (
                     <div key={s.label} className="bg-white rounded-xl border border-gray-200 p-3.5">
                       <div className={`w-8 h-8 ${s.bg} rounded-lg flex items-center justify-center ${s.color} mb-2`}><s.icon className="w-4 h-4" /></div>
                       <p className="text-[11px] text-gray-400">{s.label}</p>
                       <p className="text-xl font-black text-gray-900">{s.value}</p>
-                      {'hint' in s && s.hint ? (
-                        <p className="text-[10px] text-gray-400 mt-1 leading-snug">{s.hint}</p>
-                      ) : null}
                     </div>
                   ))}
                 </div>
@@ -1125,7 +1114,6 @@ export default function AdminPage() {
                   className="px-3 py-2 text-xs border border-gray-200 rounded-lg outline-none focus:border-[#2874f0] bg-white cursor-pointer">
                   <option value="all">All Payments</option>
                   <option value="online">Online (Paid)</option>
-                  <option value="cod">COD (historical)</option>
                 </select>
                 <div className="flex gap-1.5 col-span-2 sm:col-span-1">
                   <input type="date" value={filterDateFrom} onChange={(e) => setFilterDateFrom(e.target.value)}
@@ -1198,8 +1186,8 @@ export default function AdminPage() {
                       <div className="px-4 py-3 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                         <div className="flex items-center gap-2.5 flex-wrap">
                           <span className="text-sm font-black text-gray-900">#{o.orderId}</span>
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase ${isCod ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-green-50 text-green-700 border border-green-200'}`}>
-                            {isCod ? 'COD (legacy)' : 'PAID'} • {fmt(o.totalAmount)}
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-md uppercase bg-green-50 text-green-700 border border-green-200">
+                            PAID ONLINE • {fmt(o.totalAmount)}
                           </span>
                           {isCancelled && <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-red-50 text-red-700 border border-red-200">CANCELLED</span>}
                           {isAwaiting && <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200">PENDING CONFIRM</span>}
