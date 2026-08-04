@@ -104,17 +104,22 @@ function OrdersContent() {
   });
 
   useEffect(() => {
+    let isMounted = true;
+    let isInitial = true;
+
     const fetchOrders = async () => {
-      setIsLoading(true);
+      if (isInitial) {
+        setIsLoading(true);
+      }
       try {
         if (queryOrderId && user) {
           const res = await fetch(`/api/orders?orderId=${encodeURIComponent(queryOrderId)}`, {
             headers: authHeaders(user),
           });
-          if (res.ok) {
+          if (res.ok && isMounted) {
             const data = await res.json();
             if (data.length > 0) {
-              setSearchedOrderData(data[0]);
+              setSearchedOrderData((prev: any) => (JSON.stringify(prev) === JSON.stringify(data[0]) ? prev : data[0]));
               setOrderSearchInput(queryOrderId);
               if (data[0].trackingNumber && (data[0].trackingNumber.startsWith('STC') || !data[0].trackingNumber.startsWith('SHP-'))) {
                 fetch(`/api/courier/track?docket=${encodeURIComponent(data[0].trackingNumber)}`).catch(() => {});
@@ -125,11 +130,11 @@ function OrdersContent() {
 
         if (user) {
           const res = await fetch(`/api/orders`, { headers: authHeaders(user) });
-          if (res.ok) {
+          if (res.ok && isMounted) {
             const data = await res.json();
-            setUserOrders(data);
+            setUserOrders((prev) => (JSON.stringify(prev) === JSON.stringify(data) ? prev : data));
             if (!queryOrderId && data.length > 0) {
-              setSearchedOrderData(data[0]);
+              setSearchedOrderData((prev: any) => (prev?.orderId === data[0].orderId && prev?.courierStatus === data[0].courierStatus ? prev : data[0]));
               if (data[0].trackingNumber && (data[0].trackingNumber.startsWith('STC') || !data[0].trackingNumber.startsWith('SHP-'))) {
                 fetch(`/api/courier/track?docket=${encodeURIComponent(data[0].trackingNumber)}`).catch(() => {});
               }
@@ -139,16 +144,22 @@ function OrdersContent() {
       } catch (err) {
         console.error('Error loading orders:', err);
       } finally {
-        setIsLoading(false);
+        if (isMounted && isInitial) {
+          setIsLoading(false);
+          isInitial = false;
+        }
       }
     };
 
     fetchOrders();
 
-    // Live 5-second polling for order updates across all customer orders
-    const interval = setInterval(fetchOrders, 5000);
+    // Silent 5-second polling for background updates without UI flickering
+    const interval = setInterval(() => {
+      fetchOrders();
+    }, 5000);
 
     return () => {
+      isMounted = false;
       clearInterval(interval);
     };
   }, [user, queryOrderId]);
