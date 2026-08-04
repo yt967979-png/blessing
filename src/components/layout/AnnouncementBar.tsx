@@ -4,6 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import { HelpCircle, MapPin, User, UserCheck } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
+import { shopWhatsAppChatUrl } from '@/lib/shopContact';
 
 export const AnnouncementBar = () => {
   const { user, setIsAuthOpen } = useStore();
@@ -16,7 +17,7 @@ export const AnnouncementBar = () => {
         </span>
         <div className="flex items-center gap-2.5 sm:gap-4 font-medium flex-shrink-0">
           <a
-            href="https://wa.me/919840418228?text=Hello%20Blessing%20Power%20Guide%20Support"
+            href={shopWhatsAppChatUrl('Hello Blessing Power Guide Support')}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-1 hover:text-amber-400 transition-colors cursor-pointer"

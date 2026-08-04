@@ -11,6 +11,7 @@ import {
 } from '@/lib/serverSecurity';
 import { verifyRazorpayPayment } from '@/lib/orderPricing';
 import { priceCheckoutOrder } from '@/lib/checkoutPricing';
+import { blocksShippingActions, isOrderCancelled } from '@/lib/orderStatus';
 function mapOrderRow(o: any) {
   let addrObj: any = {};
   if (o.shipping_address) {
@@ -45,7 +46,7 @@ function mapOrderRow(o: any) {
     paymentStatus: o.payment_status || 'Pending',
     courierStatus: o.order_status || 'Order Placed',
     orderStatus: o.order_status || 'Order Placed',
-    isCancelled: String(o.order_status || '').toLowerCase().includes('cancel'),
+    isCancelled: isOrderCancelled(o.order_status),
     shipmentId: o.shipment_id || `SHP-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-000101`,
     trackingNumber: awb,
     isOfficialAwb,
@@ -382,17 +383,20 @@ export async function PATCH(request: NextRequest) {
     if (!existing.rows.length) {
       return NextResponse.json({ error: 'Order not found' }, { status: 404 });
     }
-    const currentStatus = String(existing.rows[0].order_status || '').toLowerCase();
-    if (currentStatus.includes('cancel')) {
+    const currentStatus = existing.rows[0].order_status;
+    if (blocksShippingActions(currentStatus)) {
       return NextResponse.json(
-        { error: 'Cannot update status or AWB on a cancelled order.' },
+        {
+          error: isOrderCancelled(currentStatus)
+            ? 'Cannot update status or AWB on a cancelled order.'
+            : 'Cannot update status or AWB — order is not confirmed yet.',
+        },
         { status: 409 }
       );
     }
 
-
     const newStatus = status || 'Handed to ST Courier';
-    if (String(newStatus).toLowerCase().includes('cancel')) {
+    if (isOrderCancelled(newStatus)) {
       return NextResponse.json(
         { error: 'Use POST /api/orders/cancel (admin only; Razorpay refund for paid orders).' },
         { status: 400 }

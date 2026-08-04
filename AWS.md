@@ -30,7 +30,9 @@ Render remains an optional alternative — see [`RENDER.md`](RENDER.md).
 | Neon | Unchanged (existing plan) |
 | **~$200 AWS free credits** | Roughly **20–40 months** at $5–$10/mo if only this VM burns credits |
 
-Prefer **$10 / 2 GB** if WhatsApp + Next feel tight on 1 GB. EC2 **t3.small** (~$15–18/mo on-demand in Singapore) works the same way if you already prefer EC2 — steps below are Lightsail-first; EC2 is the same Node + systemd + Caddy pattern.
+Prefer **$10 / 2 GB** if Next + Neon feel tight on 1 GB. EC2 **t3.small** (~$15–18/mo on-demand in Singapore) works the same way if you already prefer EC2 — steps below are Lightsail-first; EC2 is the same Node + systemd + Caddy pattern.
+
+**WhatsApp = wa.me icon only** (customer opens chat to `ADMIN_PHONE`). No Baileys, no QR pairing, no transactional WhatsApp bot on this host.
 
 ---
 
@@ -172,7 +174,17 @@ KEEP_ALIVE_MS=240000
 
 ### Optional (copy from Railway only if set)
 
-`CLOUDINARY_*`, `RAZORPAY_*`, `RESEND_API_KEY`, `GMAIL_*`, `CRON_SECRET`.
+`CLOUDINARY_*`, `RESEND_API_KEY`, `GMAIL_*`, `CRON_SECRET`.
+
+**Razorpay** (live checkout): set empty placeholders in [`deploy/aws/env.example`](deploy/aws/env.example), then paste real values only into `/etc/blessing.env`:
+
+| Key | Notes |
+|-----|--------|
+| `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` | From Razorpay Dashboard → API Keys |
+| `RAZORPAY_WEBHOOK_SECRET` | Dashboard → Settings → Webhooks → signing secret (required for `POST /api/webhooks/razorpay`) |
+| `NEXT_PUBLIC_RAZORPAY_KEY_ID` | Optional; checkout normally receives the key from `/api/razorpay` |
+
+Webhook URL to configure in Razorpay: `https://<your-domain>/api/webhooks/razorpay` (events: `payment.captured`, optionally `order.paid`).
 
 Do **not** copy `RAILWAY_*` or `RENDER_*` variables.
 
@@ -343,15 +355,15 @@ curl -sS http://127.0.0.1:3000/api/health
 | Home page | Loads on the Lightsail HTTPS URL |
 | Google Sign-In | GIS button works; session cookie set |
 | Admin | `/admin` Analytics loads for `ADMIN_EMAIL` |
-| WhatsApp | Admin WhatsApp shows **Linked**; stay idle **20+ min** → still Linked |
-| Orders | Place a test COD order (or open existing) on the AWS URL |
+| Message icon | Floating / Help opens `wa.me` to shop phone (`ADMIN_PHONE`) — no Admin WhatsApp pairing |
+| Orders | Place a test **Razorpay** order (test keys) on the AWS URL |
 
 ### C. Do **not** pause Railway until
 
 - [ ] `/api/health` and `/api/ready` OK on AWS  
 - [ ] Google Sign-In works on the AWS URL  
 - [ ] Admin Analytics loads  
-- [ ] WhatsApp still **Linked** after 20+ minutes idle  
+- [ ] Razorpay test checkout + order appears in Admin  
 
 Until then, Railway remains the live shop.
 
@@ -459,7 +471,7 @@ curl -sS https://blessingpowerguide.duckdns.org/api/health
 
 ## 10. Cloudflare Free in front of Lightsail (optional, recommended)
 
-App already emits `s-maxage` / `stale-while-revalidate` for `/`, `/api/products`, and `/_next/image`. Cloudflare Free absorbs repeat catalog/static hits so the VM stays free for checkout + WhatsApp.
+App already emits `s-maxage` / `stale-while-revalidate` for `/`, `/api/products`, and `/_next/image`. Cloudflare Free absorbs repeat catalog/static hits so the VM stays free for checkout + admin.
 
 1. Cloudflare → **Add site** → Free plan → add `blessingpowerguide.duckdns.org` **or** your future `.in` domain.
 2. DNS: orange-cloud **proxied** record to Lightsail static IP (`18.139.220.64` today). For DuckDNS you may need a Cloudflare CNAME/A as Cloudflare documents for third-party DNS, or move the zone to Cloudflare nameservers when you own `.in`.
@@ -468,7 +480,7 @@ App already emits `s-maxage` / `stale-while-revalidate` for `/`, `/api/products`
    - Cache everything under `/_next/static/*` (long TTL)
    - Short Edge TTL (60–120s) for `/` and anonymous catalog HTML
    - **Bypass cache** for `/api/*` when `Cookie` or `Authorization` is present (auth, orders, admin, checkout)
-5. Do **not** cache WhatsApp/admin streams. Keep Railway running until §6 passes on the Cloudflare hostname too.
+5. Do **not** cache admin SSE/streams (`/api/orders/stream`). Keep Railway running until §6 passes on the Cloudflare hostname too.
 
 More Free-tier notes: [`docs/FREE-SCALE.md`](docs/FREE-SCALE.md). Skip catalog virtualization — the guide catalog is small.
 
@@ -490,7 +502,7 @@ You cannot literally zero all loading — Flipkart itself shows **skeletons**. G
 2. **Cloudflare Free** in front of Lightsail (§10) — cache `/_next/static/*` and short-TTL anonymous catalog; bypass cookie’d `/api/*`.
 3. **Neon** — keep the **pooler** URL (`*-pooler.*.neon.tech`). If your Neon plan allows, **disable scale-to-zero** so the first catalog hit after idle is not a cold start.
 4. **Railway** — keep running until DuckDNS (or `.in`) §6 checklist passes; then pause Railway only. Keep Neon.
-5. **Keepalive** — already in-app (`KEEP_ALIVE_MS`, default ~4 min): DB ping + HTTP self-hit to `/api/health` via `PUBLIC_BASE_URL` / `NEXT_PUBLIC_SITE_URL`. No extra cron required on Lightsail (always-on VM). Optional external uptime (UptimeRobot) is fine but not required for WhatsApp.
+5. **Keepalive** — already in-app (`KEEP_ALIVE_MS`, default ~4 min): DB ping + HTTP self-hit to `/api/health` via `PUBLIC_BASE_URL` / `NEXT_PUBLIC_SITE_URL`. No extra cron required on Lightsail (always-on VM). Optional external uptime (UptimeRobot) is fine. (WhatsApp = wa.me icon only — no Baileys keepalive.)
 
 **One-liner (Lightsail, after `git pull` in the clone):**
 

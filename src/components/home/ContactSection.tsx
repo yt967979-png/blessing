@@ -8,6 +8,7 @@ import {
   OFFICE_MAPS_EMBED_URL,
   OFFICE_MAPS_SEARCH_URL,
 } from '@/lib/officeLocation';
+import { shopWhatsAppChatUrl } from '@/lib/shopContact';
 
 export const ContactSection = () => {
   const { showToast, user } = useStore();
@@ -37,11 +38,10 @@ export const ContactSection = () => {
         body: JSON.stringify({ name, email, phone, subject, message }),
       }).catch(() => {});
 
-      // Build pre-filled WhatsApp message
+      // Build pre-filled WhatsApp message (shop phone from ADMIN_PHONE / shopContact)
       const formattedMessage = `Hello Blessing Power Guide Helpdesk,\n\n*Name:* ${name}\n*Phone:* ${phone}\n*Email:* ${email || 'N/A'}\n*Subject:* ${subject}\n\n*Message:* ${message}`;
-      const encodedMsg = encodeURIComponent(formattedMessage);
-      const waUrl = `https://wa.me/918148814326?text=${encodedMsg}`;
-      
+      const waUrl = shopWhatsAppChatUrl(formattedMessage);
+
       setLastWaUrl(waUrl);
       setSubmitted(true);
       showToast('✅ Message pre-filled! Opening WhatsApp...');

@@ -24,14 +24,6 @@ const STAGE_RANK: Record<string, number> = {
   'Delivery Attempted': 4,
 };
 
-const STAGE_TO_WHATSAPP_KEY: Record<string, string> = {
-  'Handed to ST Courier': 'HANDED_TO_ST_COURIER',
-  'In Transit': 'IN_TRANSIT',
-  'Out for Delivery': 'OUT_FOR_DELIVERY',
-  Delivered: 'DELIVERED',
-  'Delivery Attempted': 'FAILED_DELIVERY',
-};
-
 export function cleanDocket(docket: string): string {
   return (docket || '').trim().toUpperCase().replace(/\s+/g, '');
 }

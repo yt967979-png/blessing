@@ -30,6 +30,7 @@ import {
 import { downloadTaxInvoice } from '@/lib/invoiceGenerator';
 import { getSTCourierDeliveryEstimate } from '@/lib/deliveryEstimator';
 import { imageNeedsUnoptimized } from '@/lib/productImage';
+import { shopWhatsAppChatUrl } from '@/lib/shopContact';
 
 function OrdersContent() {
   const { user, showToast, setIsAuthOpen, addToCart, setIsCheckoutOpen, products } = useStore();
@@ -532,7 +533,9 @@ function OrdersContent() {
                   ))}
 
                   <a
-                    href={`https://wa.me/919840418228?text=${encodeURIComponent(`Hi Blessing Power Guide! I need help with my order #${searchedOrderData.orderId || ''}.`)}`}
+                    href={shopWhatsAppChatUrl(
+                      `Hi Blessing Power Guide! I need help with my order #${searchedOrderData.orderId || ''}.`
+                    )}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex-1 sm:flex-initial bg-[#25D366] hover:bg-[#1fb855] text-white font-extrabold text-xs px-5 py-3 rounded-xl transition-all shadow-md flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer"

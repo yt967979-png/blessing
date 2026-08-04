@@ -1,6 +1,12 @@
 import { NextResponse } from 'next/server';
 import { queryDb } from '@/lib/db';
-import { applyRateLimit, verifyAdminRequest } from '@/lib/serverSecurity';
+import {
+  applyRateLimit,
+  verifyAdminRequest,
+  getAuthenticatedUser,
+  unauthorizedResponse,
+} from '@/lib/serverSecurity';
+import { blocksShippingActions, isOrderCancelled } from '@/lib/orderStatus';
 
 // Stage metadata - mirrors ST Courier's real logistics stages
 const STAGE_META: Record<string, { emoji: string; label: string; desc: string }> = {
@@ -41,7 +47,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: `Unknown status key "${status}". Valid: ${Object.keys(STAGE_META).join(', ')}` }, { status: 400 });
     }
 
-    if (status === 'CANCELLED') {
+    if (status === 'CANCELLED' || isOrderCancelled(STAGE_META[status]?.label)) {
       return NextResponse.json(
         { error: 'Use POST /api/orders/cancel (admin only; Razorpay refund for paid orders).' },
         { status: 400 }
@@ -49,7 +55,7 @@ export async function POST(request: Request) {
     }
 
     const existing = await queryDb(
-      `SELECT id, order_status, awb_number, shipping_address, order_number FROM orders WHERE id = $1 OR order_number = $1 LIMIT 1`,
+      `SELECT id, order_status, awb_number, shipping_address, order_number, user_id FROM orders WHERE id = $1 OR order_number = $1 LIMIT 1`,
       [orderId]
     );
 
@@ -58,10 +64,13 @@ export async function POST(request: Request) {
     }
 
     const order = existing.rows[0];
-    const currentStatus = String(order.order_status || '').toLowerCase();
-    if (currentStatus.includes('cancel')) {
+    if (blocksShippingActions(order.order_status)) {
       return NextResponse.json(
-        { error: 'Cannot update status or AWB on a cancelled order.' },
+        {
+          error: isOrderCancelled(order.order_status)
+            ? 'Cannot update status or AWB on a cancelled order.'
+            : 'Cannot update status or AWB — order is not confirmed yet.',
+        },
         { status: 409 }
       );
     }
@@ -99,6 +108,7 @@ export async function POST(request: Request) {
 }
 
 // GET /api/orders/timeline?orderId=xxx — Fetch all events for an order
+// Requires: session owner of the order OR admin (same ownership pattern as track).
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -108,13 +118,30 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'orderId is required' }, { status: 400 });
     }
 
+    const session = await getAuthenticatedUser(request);
+    const adminCheck = await verifyAdminRequest(request);
+    if (!session && !adminCheck.isAdmin) {
+      return unauthorizedResponse('Please login to view order timeline.');
+    }
+
+    const orderRes = await queryDb(
+      `SELECT id, user_id, order_number FROM orders WHERE id = $1 OR order_number = $1 LIMIT 1`,
+      [orderId]
+    );
+    if (!orderRes.rows.length) {
+      return NextResponse.json({ error: 'Order not found' }, { status: 404 });
+    }
+    const order = orderRes.rows[0];
+    if (!adminCheck.isAdmin && String(session?.userId) !== String(order.user_id)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const res = await queryDb(
       `SELECT tl.id, tl.status, tl.remarks, tl.hub_city, tl.awb_number, tl.created_at
        FROM order_timeline tl
-       JOIN orders o ON tl.order_id = o.id
-       WHERE o.id = $1 OR o.order_number = $1
+       WHERE tl.order_id = $1
        ORDER BY tl.created_at ASC`,
-      [orderId]
+      [order.id]
     );
 
     const statusLabelToKey = Object.fromEntries(
@@ -136,7 +163,12 @@ export async function GET(request: Request) {
       };
     });
 
-    return NextResponse.json({ success: true, orderId, events, stageMeta: STAGE_META });
+    return NextResponse.json({
+      success: true,
+      orderId: order.order_number || orderId,
+      events,
+      stageMeta: STAGE_META,
+    });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }

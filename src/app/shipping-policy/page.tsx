@@ -4,6 +4,7 @@ import { NavBar } from '@/components/layout/NavBar';
 import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
 import { Footer } from '@/components/layout/Footer';
 import { Truck, CheckCircle, Clock } from 'lucide-react';
+import { getShopPhoneDisplay } from '@/lib/shopContact';
 
 export const metadata = {
   title: 'Shipping Policy | Blessing Power Guide',
@@ -11,6 +12,8 @@ export const metadata = {
 };
 
 export default function ShippingPolicyPage() {
+  const shopPhone = getShopPhoneDisplay();
+
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-800">
       <AnnouncementBar />
@@ -43,18 +46,21 @@ export default function ShippingPolicyPage() {
 
           <section className="space-y-3 text-xs sm:text-sm leading-relaxed text-slate-600">
             <h2 className="font-bold text-base text-slate-900 flex items-center gap-2">
-              <CheckCircle className="w-4 h-4 text-[#2874f0]" /> No returns / no refunds
+              <CheckCircle className="w-4 h-4 text-[#2874f0]" /> No customer returns / refunds
             </h2>
             <p>
               Blessing Power Guide sells <strong>educational guide books</strong>. All sales are <strong>final</strong>.
-              Customers cannot cancel orders from the website. We do <strong>not</strong> offer returns, exchanges, or
-              a general money-back flow once an order is placed and paid.
+              Customers <strong>cannot cancel</strong> orders from the website. We do <strong>not</strong> offer
+              customer-initiated returns, exchanges, or refunds once an order is placed and paid.
             </p>
             <p>
-              In rare cases the shop may cancel an order before dispatch; if you paid online via Razorpay, that
-              payment is refunded to your original payment method. If your parcel arrives damaged in transit or you
-              received a clearly wrong title, call or message <strong>+91 9840418228</strong> with your Order ID and
-              photos — we will help case by case.
+              If the <strong>shop admin cancels</strong> an order (for example before dispatch), and you paid online
+              via Razorpay, a <strong>Razorpay refund is issued</strong> to your original payment method. That is the
+              only refund path — there is no general money-back or return-to-warehouse flow for customers.
+            </p>
+            <p>
+              If your parcel arrives damaged in transit or you received a clearly wrong title, call or message{' '}
+              <strong>{shopPhone}</strong> with your Order ID and photos — we will help case by case.
             </p>
           </section>
 
@@ -64,7 +70,7 @@ export default function ShippingPolicyPage() {
             </h2>
             <p>
               Track your order anytime on My Orders or the Track page. For delivery questions, contact{' '}
-              <strong>+91 9840418228</strong> or <strong>blessingpowerguide@gmail.com</strong>.
+              <strong>{shopPhone}</strong> or <strong>blessingpowerguide@gmail.com</strong>.
             </p>
           </section>
         </div>

@@ -20,6 +20,14 @@ export function getShopWhatsAppDigits(): string {
   return '919840418228';
 }
 
+/** Display form e.g. +91 9840418228 */
+export function getShopPhoneDisplay(): string {
+  const d = getShopWhatsAppDigits();
+  if (d.length === 12 && d.startsWith('91')) return `+91 ${d.slice(2)}`;
+  if (d.length === 10) return `+91 ${d}`;
+  return `+${d}`;
+}
+
 export function shopWhatsAppChatUrl(prefill?: string): string {
   const phone = getShopWhatsAppDigits();
   if (!prefill) return `https://wa.me/${phone}`;
