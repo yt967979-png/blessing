@@ -429,7 +429,7 @@ export const ModalsBundle = () => {
                     <Send className="w-4 h-4" />
                   </div>
                   <div>
-                    <span className="font-bold text-slate-200 block">Updates on WhatsApp</span>
+                    <span className="font-bold text-slate-200 block">Track in My Orders</span>
                     <span className="text-[11px] text-emerald-400 font-mono">+91 {orderSuccessData.phone}</span>
                   </div>
                 </div>

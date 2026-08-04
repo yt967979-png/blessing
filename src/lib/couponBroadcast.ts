@@ -123,6 +123,7 @@ export async function broadcastCouponToAllUsers(coupon: CouponRow): Promise<{
 
 /** Fire-and-forget wrapper — does not block admin API response. */
 export function scheduleCouponWhatsAppBroadcast(coupon: CouponRow) {
+  if (process.env.DISABLE_WHATSAPP !== 'false') return;
   if (String(coupon.status || '').toLowerCase() !== 'active') return;
   setTimeout(() => {
     void broadcastCouponToAllUsers(coupon).catch((err) => {

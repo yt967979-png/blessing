@@ -45,7 +45,7 @@ export async function executeOrderCancel(opts: {
     return {
       ok: false,
       error:
-        'Customers cannot cancel orders. Contact the shop on WhatsApp if you need help — admin may cancel and refund paid orders.',
+        'Customers cannot cancel orders. Contact the shop if you need help — admin may cancel and refund paid orders.',
       status: 403,
     };
   }

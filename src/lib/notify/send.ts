@@ -14,6 +14,11 @@ import {
   paymentConfirmedMessage,
 } from '@/lib/notify/templates';
 
+/** Product default: WhatsApp disabled. Set DISABLE_WHATSAPP=false only to re-enable. */
+export function isWhatsAppDisabled() {
+  return process.env.DISABLE_WHATSAPP !== 'false';
+}
+
 function last10(phone: string) {
   return String(phone || '').replace(/\D/g, '').slice(-10);
 }
@@ -146,8 +151,7 @@ async function sendToAdmins(phones: string[], message: string) {
 }
 
 /**
- * Single entry for transactional WhatsApp.
- * Templates are text (Baileys); later Meta can map the same events.
+ * Transactional notify entry. WhatsApp is product-disabled (no-op by default).
  */
 export async function notify(
   event: NotifyEvent | 'order.in_transit',
@@ -155,6 +159,10 @@ export async function notify(
 ): Promise<NotifyResult> {
   const resolvedEvent: NotifyEvent =
     event === 'order.in_transit' ? 'order.shipped' : event;
+
+  if (isWhatsAppDisabled()) {
+    return { ok: false, error: 'WhatsApp disabled', event: resolvedEvent };
+  }
 
   let message: string | null = null;
   if (event === 'order.in_transit' && payload.orderId) {
@@ -191,9 +199,13 @@ export async function notify(
 
 /** @deprecated Prefer notify(event, payload) — kept for gradual migration */
 export async function notifyWhatsApp(to: string, message: string) {
+  if (isWhatsAppDisabled()) {
+    return { ok: false as const, queued: false, error: 'WhatsApp disabled' };
+  }
   return sendViaBaileys(to, message);
 }
 
 export async function notifyWhatsAppMany(phones: string[], message: string) {
+  if (isWhatsAppDisabled()) return;
   await sendToAdmins(phones, message);
 }

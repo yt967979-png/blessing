@@ -62,7 +62,7 @@ export async function GET(request: Request) {
                 isValid: false,
                 verified: false,
                 error: awaiting
-                  ? 'Cannot assign AWB — wait for customer WhatsApp YES first.'
+                  ? 'Cannot assign AWB — order is not confirmed yet.'
                   : 'Cannot assign AWB — order is cancelled.',
                 docket,
               },

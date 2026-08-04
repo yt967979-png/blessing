@@ -4,7 +4,7 @@ let leaderServicesRunning = false;
 let abandonCartTimer: ReturnType<typeof setInterval> | null = null;
 let confirmExpireTimer: ReturnType<typeof setInterval> | null = null;
 
-/** WhatsApp, courier cron, outbox — leader replica only. */
+/** Courier cron (+ legacy heal timers). WhatsApp workers are product-disabled. */
 export async function startLeaderBackgroundServices() {
   if (!isBackgroundLeader() || leaderServicesRunning) return;
   leaderServicesRunning = true;
@@ -12,24 +12,26 @@ export async function startLeaderBackgroundServices() {
   const { startCourierSyncCron } = await import('@/lib/courierCron');
   startCourierSyncCron();
 
-  // Stay single-service on Free: outbox only — Baileys connects lazily on QR/send
-  const { startWhatsAppOutboxWorker } = await import('@/lib/whatsapp');
-  startWhatsAppOutboxWorker();
+  const waEnabled = process.env.DISABLE_WHATSAPP === 'false';
+  if (waEnabled) {
+    const { startWhatsAppOutboxWorker } = await import('@/lib/whatsapp');
+    startWhatsAppOutboxWorker();
 
-  if (!abandonCartTimer) {
-    const drain = async () => {
-      try {
-        const { drainAbandonedCarts } = await import('@/app/api/cart/abandon/route');
-        const result = await drainAbandonedCarts();
-        if (result.sent > 0) {
-          console.log(`[abandon-cart] reminded ${result.sent} cart(s)`);
+    if (!abandonCartTimer) {
+      const drain = async () => {
+        try {
+          const { drainAbandonedCarts } = await import('@/app/api/cart/abandon/route');
+          const result = await drainAbandonedCarts();
+          if (result.sent > 0) {
+            console.log(`[abandon-cart] reminded ${result.sent} cart(s)`);
+          }
+        } catch (e: any) {
+          console.warn('[abandon-cart]', e?.message || e);
         }
-      } catch (e: any) {
-        console.warn('[abandon-cart]', e?.message || e);
-      }
-    };
-    setTimeout(() => void drain(), 5 * 60 * 1000);
-    abandonCartTimer = setInterval(() => void drain(), 30 * 60 * 1000);
+      };
+      setTimeout(() => void drain(), 5 * 60 * 1000);
+      abandonCartTimer = setInterval(() => void drain(), 30 * 60 * 1000);
+    }
   }
 
   if (!confirmExpireTimer) {
@@ -47,7 +49,7 @@ export async function startLeaderBackgroundServices() {
   }
 
   console.log(
-    '[background] leader services started (WhatsApp, courier cron, outbox, abandon-cart, confirm-timeout)'
+    `[background] leader services started (courier cron${waEnabled ? ', WhatsApp' : ', WhatsApp off'}, confirm-timeout)`
   );
 }
 

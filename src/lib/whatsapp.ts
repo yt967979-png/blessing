@@ -279,7 +279,8 @@ async function restoreSessionFromDb() {
 }
 
 export async function initWhatsAppInProcess(opts?: { requireLeader?: boolean }) {
-  if (process.env.DISABLE_LOCAL_BAILEYS !== 'false') {
+  // Product default: no WhatsApp / Baileys. Set DISABLE_WHATSAPP=false AND DISABLE_LOCAL_BAILEYS=false to enable.
+  if (process.env.DISABLE_WHATSAPP !== 'false' || process.env.DISABLE_LOCAL_BAILEYS !== 'false') {
     return null;
   }
   const requireLeader = opts?.requireLeader !== false;
@@ -760,6 +761,10 @@ async function drainWhatsAppOutboxOnce() {
 
 /** Leader replica only — drains cross-replica WhatsApp queue. */
 export function startWhatsAppOutboxWorker() {
+  if (process.env.DISABLE_WHATSAPP !== 'false') {
+    console.log('[whatsapp] outbox worker skipped — DISABLE_WHATSAPP (default)');
+    return;
+  }
   if (outboxWorkerStarted || !isBackgroundLeader()) return;
   outboxWorkerStarted = true;
   const intervalMs = resolveTunedNumber('WHATSAPP_OUTBOX_INTERVAL_MS', 'whatsappOutboxIntervalMs');
@@ -791,12 +796,15 @@ export async function shutdownWhatsAppInProcess() {
 }
 
 export async function sendWhatsAppMessageInProcess(to: string, message: string) {
+  if (process.env.DISABLE_WHATSAPP !== 'false') {
+    return { success: false as const, recipient: to, error: 'WhatsApp disabled' };
+  }
   const { sendViaWasender } = await import('@/lib/wasender');
   const res = await sendViaWasender(to, message);
   if (!res.ok) {
     throw new Error(res.error || 'WasenderAPI send failed');
   }
-  return { success: true, recipient: to };
+  return { success: true as const, recipient: to };
 }
 
 export function getWhatsAppConnectionState() {

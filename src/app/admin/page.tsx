@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import {
   Package, ShoppingCart, Users, ArrowLeft, Edit2, Check,
-  Plus, Trash2, MessageSquare, Truck, Send, ShieldCheck,
+  Plus, Trash2, Truck, Send, ShieldCheck,
   Download, X, Search, RefreshCw, TrendingUp, IndianRupee,
   Box, Clock, CheckCircle2, LogOut, BarChart2,
   CreditCard, Banknote, Smartphone, Star, AlertCircle, Tag, Gift, Upload,
@@ -573,46 +573,6 @@ export default function AdminPage() {
     showToast('📥 CSV exported');
   };
 
-  // ── WhatsApp
-  const handleResendWhatsApp = async (o: Order) => {
-    if (!o.customerPhone) { showToast('❌ No customer phone on this order'); return; }
-    const st = (o.courierStatus || '').toLowerCase();
-    if (st.includes('cancel')) {
-      showToast('📲 Sending cancel confirmation…');
-    } else if (st.includes('awaiting') || st.includes('confirm') || st.includes('order placed') || st.includes('payment')) {
-      showToast('📲 Sending payment / order confirmed WhatsApp…');
-    } else {
-      showToast('📲 Sending WhatsApp from linked admin number...');
-    }
-    try {
-      const step = st.includes('awaiting confirmation')
-        ? 'PAYMENT_CONFIRMED'
-        : (o.courierStatus || 'CONFIRMED').toUpperCase().replace(/\s+/g, '_');
-      const r = await fetch('/api/whatsapp', {
-        method: 'POST',
-        headers: authHeaders(user),
-        body: JSON.stringify({
-          step,
-          orderId: o.orderId,
-          customerName: o.customerName,
-          customerPhone: o.customerPhone,
-          totalAmount: o.totalAmount,
-          trackingNumber: o.trackingNumber,
-          items: o.items,
-        }),
-      });
-      const d = await r.json();
-      if (r.ok && d.success) {
-        showToast(d.whatsappLink ? '⚠️ Open wa.me link (Baileys not linked)' : '✅ WhatsApp sent');
-        if (d.whatsappLink) window.open(d.whatsappLink, '_blank');
-      } else {
-        showToast(`❌ ${d.error || 'WhatsApp failed'}`);
-      }
-    } catch {
-      showToast('❌ WhatsApp failed');
-    }
-  };
-
   const ORDER_STATUS_ACTIONS: { label: string; statusKey: string; orderStatus: string }[] = [
     { label: 'Packed', statusKey: 'PACKED', orderStatus: 'Packed' },
     { label: 'Hand to Courier', statusKey: 'HANDED_TO_ST_COURIER', orderStatus: 'Handed to ST Courier' },
@@ -661,7 +621,7 @@ export default function AdminPage() {
       return;
     }
     setUpdatingStatusId(`${o.orderId}-${statusKey}`);
-    showToast(`Updating → ${orderStatus} & notifying customer...`);
+    showToast(`Updating → ${orderStatus}…`);
     try {
       const r = await fetch('/api/orders/timeline', {
         method: 'POST',
@@ -687,7 +647,7 @@ export default function AdminPage() {
           skipWhatsApp: true,
         }),
       });
-      showToast(`✅ ${orderStatus} — WhatsApp sent to customer`);
+      showToast(`✅ Status updated to ${orderStatus}`);
       loadLiveOrders();
     } catch {
       showToast('❌ Failed to update status');
@@ -1235,7 +1195,6 @@ export default function AdminPage() {
                           </div>
                           <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
                             <button onClick={() => handlePrintLabel(o)} className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold text-gray-600 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg transition-colors cursor-pointer" title="Print shipping sticker for packet"><Download className="w-3 h-3" />Label</button>
-                            <button onClick={() => handleResendWhatsApp(o)} className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold text-white bg-[#25d366] hover:bg-[#1fb855] rounded-lg transition-colors cursor-pointer"><MessageSquare className="w-3 h-3" />WhatsApp</button>
                           </div>
                         </div>
 
@@ -1271,9 +1230,8 @@ export default function AdminPage() {
                           )}
                         </div>
 
-                        {/* Status steps — each sends WhatsApp from linked admin number */}
                         <div className="bg-[#f8f9fa] rounded-lg p-3 space-y-2">
-                          <p className="text-[11px] font-semibold text-gray-500">Update status (auto WhatsApp to customer)</p>
+                          <p className="text-[11px] font-semibold text-gray-500">Update status</p>
                           <div className="flex flex-wrap gap-1.5">
                             {ORDER_STATUS_ACTIONS.map((a) => {
                               const busy = updatingStatusId === `${o.orderId}-${a.statusKey}`;
@@ -1302,7 +1260,7 @@ export default function AdminPage() {
                           </div>
                         </div>
 
-                        {/* Dispatch — disabled after cancel / before YES */}
+                        {/* Dispatch — disabled after cancel / before confirmed */}
                         {(o.courierStatus || '').toLowerCase().includes('cancel') ? (
                           <div className="flex items-center gap-2 bg-red-50 border border-red-100 rounded-lg px-3 py-2.5 text-xs text-red-700">
                             <Truck className="w-4 h-4 shrink-0 opacity-60" />

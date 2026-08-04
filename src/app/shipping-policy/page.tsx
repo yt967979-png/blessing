@@ -53,7 +53,7 @@ export default function ShippingPolicyPage() {
             <p>
               In rare cases the shop may cancel an order before dispatch; if you paid online via Razorpay, that
               payment is refunded to your original payment method. If your parcel arrives damaged in transit or you
-              received a clearly wrong title, WhatsApp us at <strong>+91 9840418228</strong> with your Order ID and
+              received a clearly wrong title, call or message <strong>+91 9840418228</strong> with your Order ID and
               photos — we will help case by case.
             </p>
           </section>
@@ -63,7 +63,7 @@ export default function ShippingPolicyPage() {
               <Clock className="w-4 h-4 text-[#2874f0]" /> Support
             </h2>
             <p>
-              Order updates are sent on WhatsApp. For delivery questions, contact{' '}
+              Track your order anytime on My Orders or the Track page. For delivery questions, contact{' '}
               <strong>+91 9840418228</strong> or <strong>blessingpowerguide@gmail.com</strong>.
             </p>
           </section>

@@ -4,8 +4,8 @@ description: >-
   Build and evolve Blessing Power Guide (and similar India courier
   e-commerce) the right way: cross-cutting order/cancel/AWB/revenue changes,
   Flipkart-style shop UX, password + Google auth, Razorpay, ST Courier,
-  WhatsApp, admin ops. Use when working on this shop, checkout, orders, admin,
-  tracking, cancel, products, WhatsApp, invoices, or when the user asks to
+  admin ops. Use when working on this shop, checkout, orders, admin,
+  tracking, cancel, products, invoices, or when the user asks to
   improve the e-commerce website / store / shop.
 ---
 
@@ -17,20 +17,21 @@ surface map over a single-file patch.
 ## Product facts (do not invent)
 
 - Brand: **Blessing Power Guide** — 6th–12th Tamil Nadu guide books
-- Auth: **Password + Google** (name/email/phone/password register & login; Google sign-in). No guest checkout; **no OTP** (no WhatsApp OTP login). Long-lived session until logout
+- Auth: **Password + Google** (name/email/phone/password register & login; Google sign-in). No guest checkout; **no OTP**. Long-lived session until logout
 - Payment: **Razorpay only** (UPI / cards / netbanking). **COD disabled** in API and all checkout UIs — do not re-offer Cash on Delivery
-- Post-payment: Order is **Confirmed** immediately after successful Razorpay place. Show Flipkart-style confirmation **on the success screen** (order #, amount paid, items, next steps). **No WhatsApp YES/NO gate**
+- Checkout confirm: **Before Razorpay**, checkout must ask **Confirm order** or **No**. **No** → return to cart/previous (do not open payment). **Confirm** → create Razorpay order + checkout. No WhatsApp YES/NO gate
+- Post-payment: Order is **Confirmed** immediately after successful Razorpay place. Show Flipkart-style confirmation **on the success screen** (order #, amount paid, items, next steps)
 - Coupons: **Disabled** product-wide (APIs return 410; no customer/admin apply UI). Historical `coupon_*` DB columns/tables may remain; cancel rollback must stay a safe no-op
 - Courier: **ST Courier Express** — admin pastes real AWB; site verifies + syncs
-- Comms: **WhatsApp** (Baileys in-process) for order updates (paid/confirmed language — not “reply YES”)
-- Admin: New paid orders appear in Admin → Orders; play a short notification sound when a new order arrives while the admin tab is open
+- Comms: **No WhatsApp** for order alerts, pairing, Baileys, YES/NO inbound, or transactional `notify`. `DISABLE_WHATSAPP` defaults on; `/api/whatsapp/*` returns 410. Track status on-site / My Orders
+- Admin: New paid orders appear in Admin → Orders; play a short notification sound when a new order arrives while the admin tab is open (SSE). No Admin WhatsApp tab
 - Policy: **no returns / no customer cancel / final sale** on guide books — say so in shipping/footer copy. Customers cannot cancel. **Admin cancel** of a paid Razorpay order **must refund via Razorpay** (refund-first; abort cancel if refund fails); stock restore + revenue exclude still apply
 - Hosting: AWS Lightsail (and/or Railway); do not claim Flipkart-scale inventory/traffic
 
 ## Non‑negotiable: cross-cutting changes
 
 When changing **orders / status / cancel / AWB / payment / revenue /
-stock / WhatsApp**, update **every** related layer in the same pass:
+stock**, update **every** related layer in the same pass:
 
 | Layer | Typical paths |
 |-------|----------------|
@@ -40,7 +41,6 @@ stock / WhatsApp**, update **every** related layer in the same pass:
 | Admin UI | `src/app/admin/page.tsx` — badges, progress, AWB lock, labels |
 | Customer UI | `orders`, `profile`, `track` pages |
 | Public track API | `api/track` — skip courier sync when cancelled |
-| WhatsApp | `api/whatsapp` templates must match status (esp. CANCEL) |
 | Invoice / label | `lib/invoiceGenerator`, admin print label, `api/orders/[id]/invoice` |
 | DB heal | `lib/db` startup if old rows need payment_status / schema |
 | Shared helper | `lib/orderStatus.ts` (`isOrderCancelled`, `paymentStatusAfterCancel`) |
@@ -50,14 +50,14 @@ Search for the status/field name and close every hit.
 
 ### Cancel contract (must all happen)
 
-1. **Admin only** — customer API/UI/WhatsApp NO must not cancel
+1. **Admin only** — customer API/UI must not cancel
 2. Paid Razorpay + `razorpay_payment_id`: **refund first** via Razorpay Refunds API; on failure **abort** cancel
 3. `order_status = Cancelled`
 4. `payment_status` via `paymentStatusAfterCancel` (`Refunded` when refunded; legacy COD = not collectible)
 5. Store `razorpay_refund_id` when present; timeline remarks include refund id
 6. Restore book stock
 7. Coupon rollback if historical `coupon_id` exists (safe no-op when tables empty)
-8. Timeline event + WhatsApp cancel message (refund copy when applicable; never “you cancelled”)
+8. Timeline event (no WhatsApp cancel message)
 9. Exclude from revenue/analytics
 10. Lock AWB / dispatch / status advances
 11. Red Cancelled UI on admin + customer + track (not green “live”)
@@ -65,7 +65,7 @@ Search for the status/field name and close every hit.
 ## Build workflow (every feature)
 
 1. **Read** Next docs under `node_modules/next/dist/docs/` before new Next APIs
-2. **Map surfaces** — list admin / customer / API / WhatsApp / DB touches first
+2. **Map surfaces** — list admin / customer / API / DB touches first
 3. **Implement write path** with correct side effects
 4. **Mirror UI** admin + customer + track in the same change
 5. **Guard** illegal transitions (cancelled, delivered, packed rules)
@@ -91,7 +91,7 @@ Search for the status/field name and close every hit.
 ## Feature playbooks
 
 ### New order status
-- Add to admin action list + customer step maps + WhatsApp branch + timeline STAGE_META
+- Add to admin action list + customer step maps + timeline STAGE_META
 - Sync mapping in `lib/stCourier` if courier-driven
 - Never leave one UI showing a different label for the same DB value
 
@@ -113,7 +113,8 @@ Search for the status/field name and close every hit.
 - [ ] All surfaces in the map updated
 - [ ] Cancelled never counts as revenue or looks “live shipping”
 - [ ] Illegal AWB/status paths return 4xx
-- [ ] WhatsApp copy matches status
+- [ ] No WhatsApp order messaging / pairing UI live
+- [ ] Checkout confirm step runs before Razorpay
 - [ ] Mobile + desktop of touched pages still usable
 - [ ] User told if Lightsail/Railway deploy is still required
 

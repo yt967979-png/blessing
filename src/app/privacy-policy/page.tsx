@@ -48,7 +48,7 @@ export default function PrivacyPolicyPage() {
               <FileText className="w-4 h-4 text-[#2874f0]" /> 2. How We Use Your Data
             </h2>
             <p>
-              Your personal information is strictly used for order fulfillment, dispatching parcels via our official courier partner (ST Courier Express), providing real-time tracking updates over automated WhatsApp messages, and assisting customer support inquiries.
+              Your personal information is strictly used for order fulfillment, dispatching parcels via our official courier partner (ST Courier Express), on-site order tracking, and assisting customer support inquiries.
             </p>
           </section>
 
@@ -66,7 +66,7 @@ export default function PrivacyPolicyPage() {
             <p>If you have any questions regarding your account data or request data deletion, contact us at:</p>
             <div className="bg-slate-50 p-4 rounded-xl space-y-2 text-xs font-medium text-slate-700">
               <div className="flex items-center gap-2"><Mail className="w-4 h-4 text-[#2874f0]" /> Email: support@blessingpowerguide.in</div>
-              <div className="flex items-center gap-2"><Phone className="w-4 h-4 text-[#2874f0]" /> WhatsApp Support: +91 9840418228</div>
+              <div className="flex items-center gap-2"><Phone className="w-4 h-4 text-[#2874f0]" /> Phone Support: +91 9840418228</div>
               <div className="flex items-center gap-2"><MapPin className="w-4 h-4 text-[#2874f0]" /> Address: Main Express Logistics Hub, Tamil Nadu, India</div>
             </div>
           </section>

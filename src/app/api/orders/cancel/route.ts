@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
   const admin = await verifyAdminRequest(request);
   if (!admin.isAdmin) {
     return forbiddenResponse(
-      'Customers cannot cancel orders. Contact the shop on WhatsApp — admin may cancel and issue a Razorpay refund for paid orders.'
+      'Customers cannot cancel orders. Contact the shop — admin may cancel and issue a Razorpay refund for paid orders.'
     );
   }
 

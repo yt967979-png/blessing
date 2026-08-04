@@ -42,7 +42,7 @@ export function pincodeDeliveryMessage(raw: string): {
   }
   return {
     ok: false,
-    message: 'This pincode may not be serviceable yet. WhatsApp us to confirm.',
+    message: 'This pincode may not be serviceable yet. Call +91 9840418228 to confirm.',
     region: 'invalid',
   };
 }

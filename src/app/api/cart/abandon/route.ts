@@ -20,6 +20,9 @@ async function ensureAbandonTable(client: any) {
 
 /** Internal drain used by background worker (no HTTP auth). */
 export async function drainAbandonedCarts(): Promise<{ sent: number }> {
+  if (process.env.DISABLE_WHATSAPP !== 'false') {
+    return { sent: 0 };
+  }
   let client: any = null;
   let sent = 0;
   try {

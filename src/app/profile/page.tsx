@@ -399,7 +399,7 @@ export default function ProfilePage() {
                     </div>
                     <div>
                       <label className="block font-bold text-slate-700 mb-1">
-                        Mobile Number (WhatsApp)
+                        Mobile Number
                       </label>
                       <input
                         type="tel"

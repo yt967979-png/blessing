@@ -336,7 +336,7 @@ export default function CheckoutPage() {
             <span className="w-6 h-6 rounded-full bg-current text-white flex items-center justify-center text-[10px]">
               3
             </span>
-            <span>Payment</span>
+            <span>Confirm</span>
           </div>
         </div>
 
@@ -556,7 +556,7 @@ export default function CheckoutPage() {
                 onClick={() => setStep(3)}
                 className="w-full bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-[#001B3A] font-extrabold text-sm py-3.5 rounded-xl uppercase tracking-wider disabled:opacity-50 transition-all"
               >
-                Continue to Payment →
+                Review & Confirm →
               </button>
             </div>
           )}
@@ -566,16 +566,47 @@ export default function CheckoutPage() {
               <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-center justify-between">
                 <div className="flex items-center gap-2 text-emerald-800 font-bold">
                   <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                  100% Secure Official Order
+                  Confirm your order before payment
                 </div>
                 <span className="text-[10px] bg-emerald-600 text-white font-extrabold px-2 py-0.5 rounded flex items-center gap-1">
                   <Truck className="w-3 h-3" /> {shippingFee === 0 ? 'FREE Delivery' : 'Fast ST Courier'}
                 </span>
               </div>
 
-              {/* Payment Method Selector (Razorpay Only) */}
+              <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                <p className="font-bold text-slate-800 flex items-center gap-1">
+                  <MapPin className="w-3.5 h-3.5 text-blue-600" /> Deliver to
+                </p>
+                <p className="text-slate-600 mt-0.5">
+                  {selectedAddress?.name} · {selectedAddress?.phone}
+                  <br />
+                  {selectedAddress?.address}, {selectedAddress?.city} — {selectedAddress?.pincode}
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                {cart.map((item) => (
+                  <div key={item.id} className="flex gap-3 items-center border border-slate-100 rounded-xl p-3">
+                    <Image
+                      src={item.image || '/logo.png'}
+                      alt=""
+                      width={48}
+                      height={48}
+                      className="w-12 h-12 object-contain bg-slate-50 rounded-lg"
+                      unoptimized={imageNeedsUnoptimized(item.image || '')}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold text-slate-900 truncate">{item.title}</p>
+                      <p className="text-slate-500">
+                        Qty {item.qty} · ₹{item.price * item.qty}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
               <div>
-                <label className="block font-extrabold text-slate-800 mb-2">Select Payment Method</label>
+                <label className="block font-extrabold text-slate-800 mb-2">Payment method</label>
                 <div className="p-4 border-2 border-[#0044AA] bg-blue-50/50 rounded-2xl flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-[#0044AA] text-white rounded-xl flex items-center justify-center">
@@ -590,7 +621,6 @@ export default function CheckoutPage() {
                 </div>
               </div>
 
-              {/* Price Breakdown */}
               <div className="space-y-1.5 p-4 bg-slate-50 rounded-2xl border border-slate-200">
                 <div className="flex justify-between text-slate-600">
                   <span>Subtotal ({cartCount} guides)</span>
@@ -608,16 +638,33 @@ export default function CheckoutPage() {
                 </div>
               </div>
 
+              <p className="text-[11px] text-slate-500 text-center leading-relaxed">
+                All sales are final. After you confirm, Razorpay opens to complete payment. You cannot cancel online after paying.
+              </p>
+
               <button
                 type="button"
                 disabled={isPlacingOrder || cart.length === 0 || cartCount < 4}
                 onClick={() => void handlePlaceOrder()}
                 className="w-full bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 hover:from-amber-500 hover:to-amber-700 text-[#001B3A] font-black text-sm py-4 rounded-xl uppercase tracking-wider shadow-lg shadow-amber-500/20 disabled:opacity-60 transition-all hover:scale-[1.01]"
               >
-                {isPlacingOrder ? 'Processing Payment…' : `Pay ₹${cartGrandTotal} via Razorpay →`}
+                {isPlacingOrder ? 'Opening Razorpay…' : `Confirm order · Pay ₹${cartGrandTotal}`}
               </button>
-              <button type="button" onClick={() => setStep(2)} className="w-full text-slate-500 font-semibold text-center pt-1">
-                ← Back to Order Summary
+              <button
+                type="button"
+                disabled={isPlacingOrder}
+                onClick={() => router.push('/cart')}
+                className="w-full border border-slate-200 text-slate-700 font-bold py-3 rounded-xl hover:bg-slate-50 disabled:opacity-60 transition-all"
+              >
+                No, go back
+              </button>
+              <button
+                type="button"
+                disabled={isPlacingOrder}
+                onClick={() => setStep(2)}
+                className="w-full text-slate-500 font-semibold text-center pt-1"
+              >
+                ← Edit order summary
               </button>
             </div>
           )}

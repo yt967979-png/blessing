@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { tryGetDbClient, releaseDbClient } from '@/lib/db';
 import { applyRateLimit } from '@/lib/serverSecurity';
-import { sendWhatsAppMessageInProcess } from '@/lib/whatsapp';
 
 export async function POST(request: Request) {
   const ip = request.headers.get('x-forwarded-for') || 'anonymous';
@@ -42,11 +41,6 @@ export async function POST(request: Request) {
         [contactId, name, email || '', phone, subject || 'General Inquiry', message]
       );
     }
-
-    try {
-      const whatsappMsg = `📩 *NEW WEBSITE CONTACT FORM INQUIRY*\n\n👤 *Name:* ${name}\n📞 *Phone:* ${phone}\n✉️ *Email:* ${email || 'N/A'}\n📌 *Subject:* ${subject || 'General Inquiry'}\n\n💬 *Message:* ${message}`;
-      await sendWhatsAppMessageInProcess('919840418228', whatsappMsg);
-    } catch (_) {}
 
     return NextResponse.json({
       success: true,

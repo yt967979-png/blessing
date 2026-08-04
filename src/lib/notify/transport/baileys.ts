@@ -1,18 +1,18 @@
-import { sendViaWasender } from '@/lib/wasender';
-import { sendViaMetaCloud } from '@/lib/metaCloud';
-
 /**
- * Universal WhatsApp Transport Engine:
- * Primary: WasenderAPI Cloud Gateway (No Meta Business Verification Required)
- * Fallback: Meta Official Cloud API
+ * WhatsApp transport — product-disabled by default (DISABLE_WHATSAPP !== 'false').
+ * Wasender / Meta / Baileys paths kept for optional re-enable only.
  */
 export async function sendViaBaileys(to: string, message: string) {
+  if (process.env.DISABLE_WHATSAPP !== 'false') {
+    return { ok: false as const, queued: false, error: 'WhatsApp disabled' };
+  }
+
   const digits = String(to || '').replace(/\D/g, '');
   if (digits.length < 10) {
     return { ok: false as const, queued: false, error: 'invalid phone' };
   }
 
-  // Priority 1: WasenderAPI Gateway (100% Instant Delivery without Meta Verification)
+  const { sendViaWasender } = await import('@/lib/wasender');
   const wasenderResult = await sendViaWasender(digits, message);
   if (wasenderResult.ok) {
     return {
@@ -21,11 +21,9 @@ export async function sendViaBaileys(to: string, message: string) {
       provider: 'wasenderapi',
       recipient: digits.length === 10 ? `91${digits}` : digits,
     };
-  } else {
-    console.warn('[transport] WasenderAPI dispatch warning, trying Meta Cloud API fallback:', wasenderResult.error);
   }
 
-  // Priority 2: Meta Official Cloud API Fallback
+  const { sendViaMetaCloud } = await import('@/lib/metaCloud');
   const metaResult = await sendViaMetaCloud(digits, message);
   if (metaResult.ok) {
     return {
@@ -36,5 +34,9 @@ export async function sendViaBaileys(to: string, message: string) {
     };
   }
 
-  return { ok: false as const, queued: false, error: wasenderResult.error || metaResult.error || 'WhatsApp send failed' };
+  return {
+    ok: false as const,
+    queued: false,
+    error: wasenderResult.error || metaResult.error || 'WhatsApp send failed',
+  };
 }
