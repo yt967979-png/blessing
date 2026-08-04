@@ -1349,49 +1349,4 @@ export async function ensureDefaultCategories(client: any) {
   }
 }
 
-async function ensureAdminUser(client: any) {
-  try {
-    const phone = String(process.env.ADMIN_PHONE || '9840418228').replace(/\D/g, '').slice(-10);
-    const email = String(process.env.ADMIN_EMAIL || 'yogesh234456@gmail.com').toLowerCase().trim();
-    const name = process.env.ADMIN_NAME || 'Yogesh Admin';
-    const password = process.env.ADMIN_PASSWORD || '123456';
-    const passwordHash = hashPassword(password);
-    const userId = 'admin-bpg-001';
 
-    const byEmail = await client.query(`SELECT id, email FROM users WHERE LOWER(email) = $1 LIMIT 1`, [email]);
-    const byId = await client.query(`SELECT id, email FROM users WHERE id = $1 LIMIT 1`, [userId]);
-    const byPhone = await client.query(
-      `SELECT id, email FROM users
-       WHERE RIGHT(REGEXP_REPLACE(COALESCE(phone, ''), '\\D', '', 'g'), 10) = $1 LIMIT 1`,
-      [phone]
-    );
-
-    const targetRow = byEmail.rows[0] || byId.rows[0] || byPhone.rows[0] || null;
-
-    if (!targetRow) {
-      await client.query(
-        `INSERT INTO users (id, name, email, phone, password_hash, role, status)
-         VALUES ($1, $2, $3, $4, $5, 'admin', 'active')
-         ON CONFLICT (email) DO UPDATE
-         SET role = 'admin', status = 'active', password_hash = EXCLUDED.password_hash`,
-        [userId, name, email, phone, passwordHash]
-      );
-      await client.query(
-        `INSERT INTO cart (id, user_id) VALUES ($1, $2) ON CONFLICT (user_id) DO NOTHING`,
-        [`cart-${userId}`, userId]
-      );
-      console.log(`[db] admin created: phone ${phone}`);
-      return;
-    }
-
-    const id = targetRow.id;
-    await client.query(
-      `UPDATE users SET name = $1, email = $2, phone = $3, password_hash = $4,
-       role = 'admin', status = 'active', updated_at = NOW() WHERE id = $5`,
-      [name, email, phone, passwordHash, id]
-    );
-    console.log(`[db] admin account updated: ${email} -> role: admin`);
-  } catch (e: any) {
-    console.warn('[db] ensureAdminUser skipped:', e?.message || e);
-  }
-}
