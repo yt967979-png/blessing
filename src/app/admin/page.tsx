@@ -373,7 +373,7 @@ export default function AdminPage() {
         } catch { /* ignore parse errors */ }
       };
     } catch { /* SSE not supported */ }
-    const interval = setInterval(() => { void loadLiveOrders(); }, 45000);
+    const interval = setInterval(() => { void loadLiveOrders(); }, 5000);
     // Auto-pull ST Courier live status for all open AWB orders (Out for Delivery → auto update)
     const runCourierSync = () => {
       if (!user?.token) return;
@@ -393,7 +393,7 @@ export default function AdminPage() {
         .catch(() => { });
     };
     runCourierSync();
-    const courierSync = setInterval(runCourierSync, 45000);
+    const courierSync = setInterval(runCourierSync, 10000);
     fetch('/api/db-status', { headers: authHeaders(user), credentials: 'include' }).then((r) => r.json()).then((d: { tableRowCounts?: { users?: number; books?: number } }) => {
       if (d.tableRowCounts) {
         const u = d.tableRowCounts.users || 0;
