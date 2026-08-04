@@ -17,7 +17,7 @@ export const TrustBar = () => {
           </div>
           <div>
             <h4 className="font-heading font-black text-xs text-white uppercase tracking-wider">100% SECURE PAYMENT</h4>
-            <p className="text-[10px] text-slate-300 font-medium">Razorpay, UPI & Cash on Delivery</p>
+            <p className="text-[10px] text-slate-300 font-medium">Razorpay UPI, Cards & NetBanking</p>
           </div>
         </div>
 

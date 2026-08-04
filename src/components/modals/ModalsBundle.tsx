@@ -257,7 +257,7 @@ export const ModalsBundle = () => {
               city: selectedAddress.city || 'Chennai',
               pincode: selectedAddress.pincode || '600012',
               items: cart.map((i) => ({ id: i.id, qty: i.qty, price: i.price })),
-              paymentMethod: paymentMethod === 'razorpay' ? 'Razorpay UPI / Cards' : 'Cash on Delivery (COD)',
+              paymentMethod: 'Razorpay UPI / Online',
               razorpayPaymentId: payId || null,
               razorpayOrderId: rzpOrderId || null,
               razorpaySignature: rzpSignature || null,
@@ -299,8 +299,8 @@ export const ModalsBundle = () => {
           address: selectedAddress.address,
           city: selectedAddress.city || 'Chennai',
           phone: selectedAddress.phone || user?.phone || '',
-          paymentMethod: paymentMethod === 'razorpay' ? 'Razorpay UPI' : 'Cash on Delivery (COD)',
-          paymentStatus: paymentMethod === 'razorpay' ? 'Payment Confirmed' : 'Pending COD',
+          paymentMethod: 'Razorpay UPI / Online',
+          paymentStatus: 'Payment Confirmed',
         });
         if (!wasDuplicate) {
           showToast(`🎉 Order #${serverOrderId} placed successfully!`);
@@ -329,7 +329,7 @@ export const ModalsBundle = () => {
 
           if (!res.ok || !rzpData.id) {
             if (rzpData.needsConfig) {
-              showToast('⚠️ Online payment is not available yet — please use Cash on Delivery.');
+              showToast('⚠️ Razorpay online payment configuration is missing.');
               window.location.href = '/payment/failed?reason=no_config';
               return;
             }

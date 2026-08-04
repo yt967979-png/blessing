@@ -540,7 +540,7 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
                       <span className="text-slate-500 font-semibold">•</span>
                       <span className="text-blue-700 font-bold">₹0 Shipping Charges</span>
                       <span className="text-slate-500 font-semibold">•</span>
-                      <span className="text-amber-700 font-bold">Cash on Delivery Available</span>
+                      <span className="text-amber-700 font-bold">100% Secure Razorpay Online Payment</span>
                     </div>
                   )}
                 </div>

@@ -77,7 +77,8 @@ export async function GET(request: Request) {
             status: 403,
           });
         }
-        if (String(row.role || '').toLowerCase() !== 'admin') {
+        const userRole = String(row.role || '').toLowerCase();
+        if (userRole !== 'admin' && userRole !== 'super_admin') {
           throw Object.assign(new Error('Forbidden: Admin privilege required'), {
             code: 'AUTH',
             status: 403,
