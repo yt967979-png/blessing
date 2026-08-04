@@ -43,6 +43,7 @@ function OrdersContent() {
   const [userOrders, setUserOrders] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showTrackingModal, setShowTrackingModal] = useState(false);
+  const [liveTrackingScans, setLiveTrackingScans] = useState<any[]>([]);
   const [reviewModalItem, setReviewModalItem] = useState<any>(null);
   const [rating, setRating] = useState(5);
   const [reviewComment, setReviewComment] = useState('');
@@ -151,6 +152,37 @@ function OrdersContent() {
       clearInterval(interval);
     };
   }, [user, queryOrderId]);
+
+  // Auto-poll live ST Courier tracking feed every 5 seconds when modal is open
+  useEffect(() => {
+    if (!showTrackingModal || !searchedOrderData || !user) return;
+
+    const targetDocket = searchedOrderData.trackingNumber || searchedOrderData.orderId || searchedOrderData.id;
+    if (!targetDocket) return;
+
+    const fetchScans = async () => {
+      try {
+        const res = await fetch(`/api/track?orderId=${encodeURIComponent(targetDocket)}`, {
+          headers: authHeaders(user),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data?.scans)) {
+            setLiveTrackingScans(data.scans);
+          } else if (Array.isArray(data?.order?.scans)) {
+            setLiveTrackingScans(data.order.scans);
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+    };
+
+    fetchScans();
+
+    const interval = setInterval(fetchScans, 5000);
+    return () => clearInterval(interval);
+  }, [showTrackingModal, searchedOrderData, user]);
 
   const handleSearchOrder = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -906,46 +938,50 @@ function OrdersContent() {
 
             <div className="p-6 space-y-5 text-xs max-h-[70vh] overflow-y-auto custom-scrollbar">
               {/* ST Courier Hub Location Feed */}
-              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
-                <div className="flex justify-between items-center pb-2 border-b border-slate-200">
-                  <span className="font-heading font-black text-xs text-[#001B3A] uppercase tracking-wider flex items-center gap-1.5">
-                    <MapPin className="w-3.5 h-3.5 text-blue-600" />
-                    <span>ST Courier Live Hub Movement Log</span>
-                  </span>
-                  <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded uppercase">
-                    LIVE FEED
-                  </span>
+              {isOfficialAwb ? (
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+                  <div className="flex justify-between items-center pb-2 border-b border-slate-200">
+                    <span className="font-heading font-black text-xs text-[#001B3A] uppercase tracking-wider flex items-center gap-1.5">
+                      <MapPin className="w-3.5 h-3.5 text-blue-600" />
+                      <span>ST Courier Live Hub Movement Log</span>
+                    </span>
+                    <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded uppercase flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
+                      LIVE 5s FEED
+                    </span>
+                  </div>
+
+                  {liveTrackingScans.length > 0 ? (
+                    <div className="space-y-3 pt-1">
+                      {liveTrackingScans.map((scan: any, idx: number) => (
+                        <div key={idx} className="flex items-start gap-3 relative">
+                          <div className={`w-2.5 h-2.5 rounded-full mt-1 flex-shrink-0 ${idx === 0 ? 'bg-emerald-500 ring-4 ring-emerald-100' : 'bg-blue-500'}`} />
+                          <div>
+                            <span className="font-extrabold text-slate-900 block">{scan.location || scan.activity || 'ST Courier Hub'}</span>
+                            <span className="text-[11px] text-slate-500">{scan.activity || scan.status || scan.remarks || 'In Transit'}</span>
+                            {scan.at && <span className="text-[10px] font-mono text-slate-400 block mt-0.5">{new Date(scan.at).toLocaleString()}</span>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="py-3 text-center space-y-1">
+                      <p className="font-extrabold text-slate-800 text-xs">AWB Assigned: {searchedOrderData.trackingNumber}</p>
+                      <p className="text-[11px] text-slate-500">Waiting for initial scan update from ST Courier hub. Auto-refreshing live every 5 seconds...</p>
+                    </div>
+                  )}
                 </div>
-
-                <div className="space-y-3 pt-1">
-                  <div className="flex items-start gap-3 relative">
-                    <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-100 mt-1 flex-shrink-0" />
-                    <div>
-                      <span className="font-extrabold text-slate-900 block">Coimbatore Regional Sorting Hub</span>
-                      <span className="text-[11px] text-slate-500">Dispatched &amp; In Transit to Local Delivery Branch</span>
-                      <span className="text-[10px] font-mono text-slate-400 block mt-0.5">Today, 08:30 AM • ST Courier Express Route</span>
-                    </div>
+              ) : (
+                <div className="bg-[#0044AA]/5 border border-[#0044AA]/20 rounded-2xl p-4 space-y-2">
+                  <div className="flex items-center gap-2 text-[#0044AA] font-bold text-xs">
+                    <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>Order Confirmed & Payment Received</span>
                   </div>
-
-                  <div className="flex items-start gap-3 relative">
-                    <div className="w-2.5 h-2.5 rounded-full bg-blue-500 mt-1 flex-shrink-0" />
-                    <div>
-                      <span className="font-extrabold text-slate-900 block">Chennai Central Distribution Hub</span>
-                      <span className="text-[11px] text-slate-500">Sorted &amp; Manifest Prepared for Transit</span>
-                      <span className="text-[10px] font-mono text-slate-400 block mt-0.5">Yesterday, 07:15 PM • ST Courier Hub #402</span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start gap-3 relative">
-                    <div className="w-2.5 h-2.5 rounded-full bg-slate-300 mt-1 flex-shrink-0" />
-                    <div>
-                      <span className="font-extrabold text-slate-900 block">Blessing Fulfillment Warehouse</span>
-                      <span className="text-[11px] text-slate-500">Parcel Packaged, Sealed &amp; Handed to Courier</span>
-                      <span className="text-[10px] font-mono text-slate-400 block mt-0.5">Yesterday, 04:00 PM • Dispatch Bay #1</span>
-                    </div>
-                  </div>
+                  <p className="text-slate-600 text-xs leading-relaxed">
+                    Your order is confirmed and being prepared. As soon as ST Courier assigns your AWB tracking docket number, real-time live hub movement scans will appear here automatically.
+                  </p>
                 </div>
-              </div>
+              )}
 
               {/* Status checklist */}
               <div className="space-y-2.5 pt-1">
