@@ -103,6 +103,9 @@ interface StoreContextType {
   removeFromCart: (id: string | number) => void;
   clearCart: () => void;
   clearCartAfterOrder: () => void;
+  /** Live server stock check for everything in the cart — clamps qty, drops OOS items, toasts changes. Returns false if anything is still blocking after the check. */
+  validateCartStock: () => Promise<boolean>;
+  isValidatingCartStock: boolean;
   saveForLater: (id: string | number) => void;
   moveToCartFromSaved: (id: string | number) => void;
   savedForLater: CartItem[];
@@ -193,6 +196,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const productsRef = useRef<Product[]>([]);
   productsRef.current = products;
+
+  const cartRef = useRef<CartItem[]>([]);
+  cartRef.current = cart;
+
+  const [isValidatingCartStock, setIsValidatingCartStock] = useState(false);
 
   const CATALOG_CACHE_KEY = 'bpg_catalog_cache_v1';
   const CATALOG_TTL_MS = 5 * 60 * 1000;
@@ -341,6 +349,20 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setHydrated(true);
   }, []);
 
+  // Live stock feel: re-poll the catalog every 15s so an admin marking a book
+  // out-of-stock (or changing qty) is reflected on product cards/pages without
+  // a manual refresh. Server memory cache is already invalidated on admin
+  // write, so this always resolves to a fresh DB read.
+  useEffect(() => {
+    const POLL_MS = 15_000;
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      refreshProducts();
+    }, POLL_MS);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Debounced cart/wishlist sync — only after hydrate
   useEffect(() => {
     if (!hydrated || !user?.id) return;
@@ -391,24 +413,43 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const addToCart = (product: Product, qty: number = 1) => {
-    if (product.inStock === false) {
-      showToast('❌ This book is out of stock');
+    // Prefer the freshest catalog snapshot (kept live by the 15s poll) over
+    // whatever stale product object the caller passed in.
+    const live = productsRef.current.find((p) => p.id === product.id) || product;
+    if (live.inStock === false) {
+      showToast(`❌ "${live.title}" is out of stock`);
       return;
     }
+    const stockLimit = typeof live.stock === 'number' ? Math.max(0, live.stock) : Infinity;
+
+    let toastMsg = '';
     setCart((prev) => {
       const existing = prev.find((item) => item.id === product.id);
-      let updated: CartItem[];
-      if (existing) {
-        updated = prev.map((item) =>
-          item.id === product.id ? { ...item, qty: item.qty + qty } : item
-        );
-      } else {
-        updated = [...prev, { ...product, qty }];
+      const currentQty = existing ? existing.qty : 0;
+      const desiredQty = currentQty + qty;
+      const finalQty = Math.min(desiredQty, stockLimit);
+
+      if (finalQty <= currentQty) {
+        toastMsg = `⚠️ Only ${stockLimit} of "${live.title}" available — already at max in your cart`;
+        return prev;
       }
+
+      toastMsg =
+        finalQty < desiredQty
+          ? `⚠️ Only ${stockLimit} of "${live.title}" left — added up to the limit`
+          : `✓ Added "${live.title}" to cart!`;
+
+      const updated: CartItem[] = existing
+        ? prev.map((item) =>
+            item.id === product.id
+              ? { ...item, qty: finalQty, stock: live.stock, inStock: live.inStock }
+              : item
+          )
+        : [...prev, { ...live, qty: finalQty }];
       localStorage.setItem('bpg_cart_next', JSON.stringify(updated));
       return updated;
     });
-    showToast(`✓ Added "${product.title}" to cart!`);
+    showToast(toastMsg);
   };
 
   const requestCheckout = (open: boolean) => {
@@ -426,17 +467,32 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const updateQty = (id: string | number, delta: number) => {
-    setCart((prev) =>
-      prev
+    let toastMsg = '';
+    setCart((prev) => {
+      const next = prev
         .map((item) => {
-          if (item.id === id) {
-            const newQty = item.qty + delta;
-            return newQty > 0 ? { ...item, qty: newQty } : null;
+          if (item.id !== id) return item;
+          const live = productsRef.current.find((p) => p.id === id);
+          const stockSource = typeof live?.stock === 'number' ? live.stock : item.stock;
+          const stockLimit = typeof stockSource === 'number' ? Math.max(0, stockSource) : Infinity;
+          const isOos = live ? live.inStock === false : item.inStock === false;
+          const newQty = item.qty + delta;
+
+          if (delta > 0 && isOos) {
+            toastMsg = `⚠️ "${item.title}" is out of stock — cannot add more`;
+            return item;
           }
-          return item;
+          if (delta > 0 && newQty > stockLimit) {
+            toastMsg = `⚠️ Only ${stockLimit} of "${item.title}" available`;
+            return stockLimit > item.qty ? { ...item, qty: stockLimit } : item;
+          }
+          return newQty > 0 ? { ...item, qty: newQty } : null;
         })
-        .filter(Boolean) as CartItem[]
-    );
+        .filter(Boolean) as CartItem[];
+      localStorage.setItem('bpg_cart_next', JSON.stringify(next));
+      return next;
+    });
+    if (toastMsg) showToast(toastMsg);
   };
 
   const removeFromCart = (id: string | number) => {
@@ -506,6 +562,89 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }).catch(() => {});
     }
   }, [user?.id, user?.token, wishlist]);
+
+  /**
+   * Authoritative live stock check against the DB (not just the polled catalog
+   * snapshot). Clamps quantities, drops out-of-stock items, and toasts what
+   * changed. Called periodically while the cart has items, and synchronously
+   * before checkout / opening Razorpay. Returns true when the cart is clean.
+   */
+  const validateCartStock = useCallback(async (): Promise<boolean> => {
+    const current = cartRef.current;
+    if (current.length === 0) return true;
+
+    setIsValidatingCartStock(true);
+    try {
+      const res = await fetch('/api/cart/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: current.map((c) => ({ id: c.id, qty: c.qty, title: c.title })),
+        }),
+        signal: AbortSignal.timeout(8_000),
+      });
+      if (!res.ok) return true; // soft-fail — don't block the shop on a network hiccup
+      const data = await res.json();
+      const results: any[] = Array.isArray(data.items) ? data.items : [];
+      if (results.length === 0) return true;
+
+      let clean = true;
+      const messages: string[] = [];
+
+      setCart((prev) => {
+        const next: CartItem[] = [];
+        for (const item of prev) {
+          const r = results.find((x) => String(x.id) === String(item.id));
+          if (!r) {
+            next.push(item);
+            continue;
+          }
+          if (r.removed || !r.inStock || r.allowedQty <= 0) {
+            clean = false;
+            messages.push(r.message || `"${item.title}" is out of stock — removed from cart`);
+            continue;
+          }
+          if (r.allowedQty < item.qty) {
+            clean = false;
+            messages.push(r.message || `Only ${r.allowedQty} of "${item.title}" available — quantity updated`);
+            next.push({ ...item, qty: r.allowedQty, stock: r.availableStock, inStock: true });
+          } else if (item.stock !== r.availableStock || item.inStock !== r.inStock) {
+            next.push({ ...item, stock: r.availableStock, inStock: r.inStock });
+          } else {
+            next.push(item);
+          }
+        }
+        try {
+          localStorage.setItem('bpg_cart_next', JSON.stringify(next));
+        } catch {
+          /* ignore quota */
+        }
+        return next;
+      });
+
+      if (messages.length > 0) {
+        showToast(`⚠️ ${messages[0]}${messages.length > 1 ? ` (+${messages.length - 1} more)` : ''}`);
+      }
+      return clean;
+    } catch {
+      return true; // network error — don't block, the final server-side order check still protects us
+    } finally {
+      setIsValidatingCartStock(false);
+    }
+  }, [showToast]);
+
+  // Keep the cart honest every few seconds while it has items — catches an
+  // admin marking something out of stock (or dropping qty) while the
+  // customer is browsing the cart/checkout in another tab.
+  useEffect(() => {
+    if (!hydrated || cart.length === 0) return;
+    const POLL_MS = 8_000;
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      void validateCartStock();
+    }, POLL_MS);
+    return () => clearInterval(interval);
+  }, [hydrated, cart.length, validateCartStock]);
 
   const toggleWishlist = (id: string | number) => {
     if (!user) {
@@ -802,6 +941,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         removeFromCart,
         clearCart,
         clearCartAfterOrder,
+        validateCartStock,
+        isValidatingCartStock,
         saveForLater,
         moveToCartFromSaved,
         savedForLater,

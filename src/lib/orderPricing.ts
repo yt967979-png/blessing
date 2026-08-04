@@ -1,4 +1,5 @@
 import { queryDb } from '@/lib/db';
+import { isBookInStock, availableStock } from '@/lib/stock';
 
 async function execQuery(client: any, sql: string, params?: any[]): Promise<any> {
   if (typeof client === 'function') {
@@ -37,10 +38,10 @@ export async function priceCartItems(
       return { ok: false, error: 'Book not found in catalog.', status: 400 };
     }
     const book = dbBook.rows[0];
-    const stock = Number(book.stock ?? 0);
-    if (book.status === 'out_of_stock' || stock <= 0) {
+    if (!isBookInStock(book)) {
       return { ok: false, error: `"${book.title}" is out of stock.`, status: 400 };
     }
+    const stock = availableStock(book);
     if (itemQty > stock) {
       return { ok: false, error: `"${book.title}" — only ${stock} left in stock.`, status: 400 };
     }

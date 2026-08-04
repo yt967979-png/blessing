@@ -20,6 +20,7 @@ import { pincodeDeliveryMessage } from '@/lib/pincode';
 import { isValidMobileNumber } from '@/lib/authValidation';
 import { userNeedsProfile } from '@/lib/userProfile';
 import { imageNeedsUnoptimized } from '@/lib/productImage';
+import { getCartItemStockState, anyCartItemBlocking } from '@/lib/cartStock';
 import { Header } from '@/components/layout/Header';
 import { NavBar } from '@/components/layout/NavBar';
 import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
@@ -32,6 +33,7 @@ export default function CheckoutPage() {
   const {
     user,
     cart,
+    products,
     cartCount,
     cartTotal,
     shippingFee,
@@ -42,7 +44,9 @@ export default function CheckoutPage() {
     showToast,
     setIsAuthOpen,
     setIsCheckoutOpen,
+    validateCartStock,
   } = useStore();
+  const hasBlockingItem = anyCartItemBlocking(cart, products);
 
   const [step, setStep] = useState<Step>(1);
   const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
@@ -64,6 +68,13 @@ export default function CheckoutPage() {
   useEffect(() => {
     setIsCheckoutOpen(false);
   }, [setIsCheckoutOpen]);
+
+  // Re-check stock the moment checkout opens — catches an admin change that
+  // happened between adding to cart and reaching checkout.
+  useEffect(() => {
+    void validateCartStock();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!user?.id) {
@@ -176,6 +187,16 @@ export default function CheckoutPage() {
       orderSubmitLock.current = false;
       setIsPlacingOrder(false);
     };
+
+    // Final live stock gate before opening Razorpay — never trust the qty the
+    // customer had when they started checkout.
+    const clean = await validateCartStock();
+    if (!clean) {
+      showToast('⚠️ Some items changed — please review your cart before paying.');
+      release();
+      setStep(2);
+      return;
+    }
 
     try {
       if (!idempotencyKeyRef.current) {
@@ -503,24 +524,41 @@ export default function CheckoutPage() {
               </div>
 
               <div className="space-y-2">
-                {cart.map((item) => (
-                  <div key={item.id} className="flex gap-3 items-center border border-slate-100 rounded-xl p-3">
-                    <Image
-                      src={item.image || '/logo.png'}
-                      alt=""
-                      width={48}
-                      height={48}
-                      className="w-12 h-12 object-contain bg-slate-50 rounded-lg"
-                      unoptimized={imageNeedsUnoptimized(item.image || '')}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <p className="font-bold text-slate-900 truncate">{item.title}</p>
-                      <p className="text-slate-500">
-                        Qty {item.qty} · ₹{item.price * item.qty}
-                      </p>
+                {cart.map((item) => {
+                  const stockState = getCartItemStockState(item, products);
+                  return (
+                    <div
+                      key={item.id}
+                      className={`flex gap-3 items-center border rounded-xl p-3 ${
+                        stockState.blocking ? 'border-red-300 bg-red-50/40' : 'border-slate-100'
+                      }`}
+                    >
+                      <Image
+                        src={item.image || '/logo.png'}
+                        alt=""
+                        width={48}
+                        height={48}
+                        className="w-12 h-12 object-contain bg-slate-50 rounded-lg"
+                        unoptimized={imageNeedsUnoptimized(item.image || '')}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold text-slate-900 truncate">{item.title}</p>
+                        <p className="text-slate-500">
+                          Qty {item.qty} · ₹{item.price * item.qty}
+                        </p>
+                        {!stockState.inStock ? (
+                          <p className="text-[10px] font-bold text-red-600 mt-0.5 flex items-center gap-1">
+                            <AlertTriangle className="w-3 h-3" /> Out of stock — go back to cart to remove
+                          </p>
+                        ) : stockState.overLimit ? (
+                          <p className="text-[10px] font-bold text-amber-600 mt-0.5 flex items-center gap-1">
+                            <AlertTriangle className="w-3 h-3" /> Only {stockState.stock} available
+                          </p>
+                        ) : null}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               {/* Delivery Fee Notice */}
@@ -557,10 +595,19 @@ export default function CheckoutPage() {
                 </div>
               </div>
 
+              {hasBlockingItem && (
+                <p className="text-xs font-bold text-red-600 text-center flex items-center justify-center gap-1.5">
+                  <AlertTriangle className="w-4 h-4" /> Fix out-of-stock items before continuing
+                </p>
+              )}
               <button
                 type="button"
-                disabled={cartCount < 4}
-                onClick={() => setStep(3)}
+                disabled={cartCount < 4 || hasBlockingItem}
+                onClick={async () => {
+                  const clean = await validateCartStock();
+                  if (!clean) return;
+                  setStep(3);
+                }}
                 className="w-full bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-[#001B3A] font-extrabold text-sm py-3.5 rounded-xl uppercase tracking-wider disabled:opacity-50 transition-all"
               >
                 Review & Confirm →
@@ -592,24 +639,41 @@ export default function CheckoutPage() {
               </div>
 
               <div className="space-y-2">
-                {cart.map((item) => (
-                  <div key={item.id} className="flex gap-3 items-center border border-slate-100 rounded-xl p-3">
-                    <Image
-                      src={item.image || '/logo.png'}
-                      alt=""
-                      width={48}
-                      height={48}
-                      className="w-12 h-12 object-contain bg-slate-50 rounded-lg"
-                      unoptimized={imageNeedsUnoptimized(item.image || '')}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <p className="font-bold text-slate-900 truncate">{item.title}</p>
-                      <p className="text-slate-500">
-                        Qty {item.qty} · ₹{item.price * item.qty}
-                      </p>
+                {cart.map((item) => {
+                  const stockState = getCartItemStockState(item, products);
+                  return (
+                    <div
+                      key={item.id}
+                      className={`flex gap-3 items-center border rounded-xl p-3 ${
+                        stockState.blocking ? 'border-red-300 bg-red-50/40' : 'border-slate-100'
+                      }`}
+                    >
+                      <Image
+                        src={item.image || '/logo.png'}
+                        alt=""
+                        width={48}
+                        height={48}
+                        className="w-12 h-12 object-contain bg-slate-50 rounded-lg"
+                        unoptimized={imageNeedsUnoptimized(item.image || '')}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold text-slate-900 truncate">{item.title}</p>
+                        <p className="text-slate-500">
+                          Qty {item.qty} · ₹{item.price * item.qty}
+                        </p>
+                        {!stockState.inStock ? (
+                          <p className="text-[10px] font-bold text-red-600 mt-0.5 flex items-center gap-1">
+                            <AlertTriangle className="w-3 h-3" /> Out of stock
+                          </p>
+                        ) : stockState.overLimit ? (
+                          <p className="text-[10px] font-bold text-amber-600 mt-0.5 flex items-center gap-1">
+                            <AlertTriangle className="w-3 h-3" /> Only {stockState.stock} available
+                          </p>
+                        ) : null}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               <div>
@@ -649,9 +713,15 @@ export default function CheckoutPage() {
                 All sales are final. After you confirm, Razorpay opens to complete payment. You cannot cancel online after paying.
               </p>
 
+              {hasBlockingItem && (
+                <p className="text-xs font-bold text-red-600 text-center flex items-center justify-center gap-1.5">
+                  <AlertTriangle className="w-4 h-4" /> Some items are out of stock — go back and fix your cart
+                </p>
+              )}
+
               <button
                 type="button"
-                disabled={isPlacingOrder || cart.length === 0 || cartCount < 4}
+                disabled={isPlacingOrder || cart.length === 0 || cartCount < 4 || hasBlockingItem}
                 onClick={() => void handlePlaceOrder()}
                 className="w-full bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 hover:from-amber-500 hover:to-amber-700 text-[#001B3A] font-black text-sm py-4 rounded-xl uppercase tracking-wider shadow-lg shadow-amber-500/20 disabled:opacity-60 transition-all hover:scale-[1.01]"
               >

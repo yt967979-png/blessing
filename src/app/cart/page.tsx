@@ -1,14 +1,28 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { ShoppingBag, ArrowLeft, Trash2, Plus, Minus, ShieldCheck, Truck, MapPin, Tag, Check, Bookmark } from 'lucide-react';
+import {
+  ShoppingBag,
+  ArrowLeft,
+  Trash2,
+  Plus,
+  Minus,
+  ShieldCheck,
+  Truck,
+  MapPin,
+  Tag,
+  Check,
+  Bookmark,
+  AlertTriangle,
+} from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { pincodeDeliveryMessage } from '@/lib/pincode';
 import { getSTCourierDeliveryEstimate } from '@/lib/deliveryEstimator';
 import { imageNeedsUnoptimized } from '@/lib/productImage';
+import { getCartItemStockState, anyCartItemBlocking } from '@/lib/cartStock';
 import { Header } from '@/components/layout/Header';
 import { NavBar } from '@/components/layout/NavBar';
 import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
@@ -18,6 +32,7 @@ export default function CartPage() {
   const router = useRouter();
   const {
     cart,
+    products,
     updateQty,
     removeFromCart,
     cartTotal,
@@ -31,10 +46,18 @@ export default function CartPage() {
     cartCount,
     shippingFee,
     cartGrandTotal,
+    validateCartStock,
   } = useStore();
   const [pincode, setPincode] = useState('600012');
   const [pincodeMsg, setPincodeMsg] = useState('✓ Deliverable via ST Courier — usually 2–3 days in Tamil Nadu.');
   const [pincodeOk, setPincodeOk] = useState(true);
+  const hasBlockingItem = anyCartItemBlocking(cart, products);
+
+  // Instant stock re-check the moment a customer opens the cart page.
+  useEffect(() => {
+    void validateCartStock();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const totalMrp = cart.reduce((sum, item) => sum + (item.mrp || item.price + 40) * item.qty, 0);
   const totalDiscount = totalMrp - cartTotal;
@@ -134,67 +157,83 @@ export default function CartPage() {
                 </form>
               </div>
 
-              {cart.map((item) => (
-                <div
-                  key={item.id}
-                  className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 flex gap-4 sm:gap-6 items-center shadow-xs"
-                >
-                  <Image
-                    src={item.image || '/logo.png'}
-                    alt={item.title}
-                    width={80}
-                    height={80}
-                    className="w-20 h-20 object-contain bg-slate-50 border border-slate-200 rounded-xl p-2 flex-shrink-0"
-                    unoptimized={imageNeedsUnoptimized(item.image || '')}
-                  />
-                  <div className="flex-1 min-w-0">
-                    <span className="text-[10px] font-bold text-blue-600 uppercase">{item.cls} Standard</span>
-                    <h3 className="font-heading font-bold text-sm text-[#001B3A] truncate">{item.title}</h3>
+              {cart.map((item) => {
+                const stockState = getCartItemStockState(item, products);
+                return (
+                  <div
+                    key={item.id}
+                    className={`bg-white border rounded-2xl p-4 sm:p-6 flex gap-4 sm:gap-6 items-center shadow-xs ${
+                      stockState.blocking ? 'border-red-300' : 'border-slate-200'
+                    }`}
+                  >
+                    <Image
+                      src={item.image || '/logo.png'}
+                      alt={item.title}
+                      width={80}
+                      height={80}
+                      className="w-20 h-20 object-contain bg-slate-50 border border-slate-200 rounded-xl p-2 flex-shrink-0"
+                      unoptimized={imageNeedsUnoptimized(item.image || '')}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <span className="text-[10px] font-bold text-blue-600 uppercase">{item.cls} Standard</span>
+                      <h3 className="font-heading font-bold text-sm text-[#001B3A] truncate">{item.title}</h3>
 
-                    <div className="flex items-baseline gap-2 mt-1">
-                      <span className="font-black text-base text-slate-900">₹{item.price}</span>
-                      {item.mrp && item.mrp > item.price && (
-                        <span className="text-xs text-slate-400 line-through">₹{item.mrp}</span>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-3 mt-3 flex-wrap">
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => updateQty(item.id, -1)}
-                          className="w-11 h-11 rounded-lg bg-slate-100 border border-slate-200 font-bold flex items-center justify-center hover:bg-slate-200"
-                          aria-label="Decrease quantity"
-                        >
-                          <Minus className="w-4 h-4" />
-                        </button>
-                        <span className="text-xs font-bold w-6 text-center">{item.qty}</span>
-                        <button
-                          onClick={() => updateQty(item.id, 1)}
-                          className="w-11 h-11 rounded-lg bg-slate-100 border border-slate-200 font-bold flex items-center justify-center hover:bg-slate-200"
-                          aria-label="Increase quantity"
-                        >
-                          <Plus className="w-4 h-4" />
-                        </button>
+                      <div className="flex items-baseline gap-2 mt-1">
+                        <span className="font-black text-base text-slate-900">₹{item.price}</span>
+                        {item.mrp && item.mrp > item.price && (
+                          <span className="text-xs text-slate-400 line-through">₹{item.mrp}</span>
+                        )}
                       </div>
 
-                      <button
-                        onClick={() => saveForLater(item.id)}
-                        className="text-blue-600 hover:text-blue-800 text-xs font-semibold flex items-center gap-1 min-h-11 px-2"
-                      >
-                        <Bookmark className="w-4 h-4" />
-                        Save for later
-                      </button>
-                      <button
-                        onClick={() => removeFromCart(item.id)}
-                        className="text-red-500 hover:text-red-700 text-xs font-semibold flex items-center gap-1 ml-auto min-h-11 px-2"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                        Remove
-                      </button>
+                      {!stockState.inStock ? (
+                        <p className="text-[11px] font-bold text-red-600 mt-1.5 flex items-center gap-1">
+                          <AlertTriangle className="w-3.5 h-3.5" /> Out of stock — remove this item to continue
+                        </p>
+                      ) : stockState.overLimit ? (
+                        <p className="text-[11px] font-bold text-amber-600 mt-1.5 flex items-center gap-1">
+                          <AlertTriangle className="w-3.5 h-3.5" /> Only {stockState.stock} available — reduce quantity to {stockState.stock}
+                        </p>
+                      ) : null}
+
+                      <div className="flex items-center gap-3 mt-3 flex-wrap">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => updateQty(item.id, -1)}
+                            className="w-11 h-11 rounded-lg bg-slate-100 border border-slate-200 font-bold flex items-center justify-center hover:bg-slate-200"
+                            aria-label="Decrease quantity"
+                          >
+                            <Minus className="w-4 h-4" />
+                          </button>
+                          <span className="text-xs font-bold w-6 text-center">{item.qty}</span>
+                          <button
+                            onClick={() => updateQty(item.id, 1)}
+                            disabled={!stockState.inStock || stockState.atLimit}
+                            className="w-11 h-11 rounded-lg bg-slate-100 border border-slate-200 font-bold flex items-center justify-center hover:bg-slate-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                            aria-label="Increase quantity"
+                          >
+                            <Plus className="w-4 h-4" />
+                          </button>
+                        </div>
+
+                        <button
+                          onClick={() => saveForLater(item.id)}
+                          className="text-blue-600 hover:text-blue-800 text-xs font-semibold flex items-center gap-1 min-h-11 px-2"
+                        >
+                          <Bookmark className="w-4 h-4" />
+                          Save for later
+                        </button>
+                        <button
+                          onClick={() => removeFromCart(item.id)}
+                          className="text-red-500 hover:text-red-700 text-xs font-semibold flex items-center gap-1 ml-auto min-h-11 px-2"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                          Remove
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
 
               {savedForLater.length > 0 && (
                 <div className="pt-4 space-y-3">
@@ -268,19 +307,21 @@ export default function CartPage() {
                   )}
 
                   <button
-                    onClick={() => {
+                    onClick={async () => {
                       if (!user) {
                         setIsAuthOpen(true);
                         return;
                       }
-                      if (!pincodeOk) {
+                      if (!pincodeOk || hasBlockingItem) {
                         return;
                       }
+                      const clean = await validateCartStock();
+                      if (!clean) return;
                       setCheckoutTotal(cartGrandTotal);
                       setIsCheckoutOpen(true);
                       router.push('/checkout');
                     }}
-                    disabled={!pincodeOk}
+                    disabled={!pincodeOk || hasBlockingItem}
                     className="w-full bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 disabled:opacity-50 text-[#001B3A] font-extrabold text-xs py-3.5 rounded-xl shadow-md uppercase tracking-wider transition-colors min-h-12"
                   >
                     PLACE ORDER
@@ -290,6 +331,11 @@ export default function CartPage() {
                   )}
                   {!pincodeOk && (
                     <p className="text-[10px] text-center text-red-600 font-medium">Check a serviceable pincode first</p>
+                  )}
+                  {hasBlockingItem && (
+                    <p className="text-[10px] text-center text-red-600 font-bold flex items-center justify-center gap-1">
+                      <AlertTriangle className="w-3.5 h-3.5" /> Remove or fix out-of-stock items above
+                    </p>
                   )}
 
                   <div className="pt-2 text-[11px] text-slate-500 space-y-2 border-t border-slate-100">

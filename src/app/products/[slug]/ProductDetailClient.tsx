@@ -72,7 +72,16 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
 
   const storeProduct = products.find((p: any) => p.slug === slug || p.id === slug) || null;
-  const product = dbProduct || storeProduct;
+  // dbProduct is fetched once; storeProduct is kept live by the catalog poll in
+  // StoreContext — always prefer its stock/inStock so this page reflects an
+  // admin stock change without a manual refresh.
+  const product = dbProduct
+    ? {
+        ...dbProduct,
+        inStock: storeProduct ? storeProduct.inStock : dbProduct.inStock,
+        stock: storeProduct ? storeProduct.stock : dbProduct.stock,
+      }
+    : storeProduct;
   const [activeImg, setActiveImg] = useState('');
 
   useEffect(() => {

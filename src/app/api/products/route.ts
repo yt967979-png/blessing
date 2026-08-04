@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getDbClient, releaseDbClient, ensureDefaultCategories, queryDb } from '@/lib/db';
 import { verifyAdminRequest, forbiddenResponse } from '@/lib/serverSecurity';
 import { getCatalogCacheTtlMs, getCatalogCdnHeaders } from '@/lib/launchScale';
+import { isBookInStock } from '@/lib/stock';
 
 // Shared catalog cache: same search/class/slug reused without hitting DB again
 const queryCache = new Map<string, { data: any[]; timestamp: number }>();
@@ -51,14 +52,7 @@ function mapBookPrices(d: { price?: unknown; discount_price?: unknown }) {
 }
 
 function mapBookInStock(d: { status?: unknown; stock?: unknown }) {
-  const status = String(d.status || '').toLowerCase().trim();
-  if (status === 'out_of_stock' || status === 'draft' || status === 'archived' || status === 'inactive') {
-    return false;
-  }
-  if (d.stock !== undefined && d.stock !== null && d.stock !== '') {
-    return Number(d.stock) > 0;
-  }
-  return status === 'published' || status === 'active' || status === '';
+  return isBookInStock(d);
 }
 
 async function ensureCategory(client: any, categoryId: string, cls: string, category: string) {
