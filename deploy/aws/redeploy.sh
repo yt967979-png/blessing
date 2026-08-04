@@ -55,14 +55,6 @@ fi
 # systemd EnvironmentFile breaks on Windows CRLF
 sed -i 's/\r$//' "$ENV_FILE"
 
-echo "==> Stop blessing (avoid serving incomplete .next)"
-systemctl stop blessing || true
-if [[ -f "$CLONE_PATH/deploy/aws/optimize-postgres.sh" ]]; then
-  echo "==> Enforce 300 PG max_connections & idle timeouts"
-  bash "$CLONE_PATH/deploy/aws/optimize-postgres.sh" || true
-fi
-sudo -u postgres psql -d blessing -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='blessing' AND pid != pg_backend_pid();" >/dev/null 2>&1 || true
-
 echo "==> Rsync $CLONE_PATH → $APP_DIR"
 mkdir -p "$APP_DIR"
 rsync -a --delete \
@@ -122,7 +114,11 @@ if [[ "$MANIFEST_OK" -ne 1 ]]; then
 fi
 test -d "$APP_DIR/.next" || { echo "ERROR: .next missing"; exit 1; }
 
-echo "==> Install systemd unit + start"
+echo "==> Instant 0.3s Atomic Swap & Systemd Restart"
+if [[ -f "$CLONE_PATH/deploy/aws/optimize-postgres.sh" ]]; then
+  bash "$CLONE_PATH/deploy/aws/optimize-postgres.sh" || true
+fi
+systemctl restart blessing || systemctl start blessing
 cp "$APP_DIR/deploy/aws/blessing.service" /etc/systemd/system/blessing.service
 sed -i "s/^User=.*/User=$APP_USER/" /etc/systemd/system/blessing.service
 sed -i "s/^Group=.*/Group=$APP_USER/" /etc/systemd/system/blessing.service
