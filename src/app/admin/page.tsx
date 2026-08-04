@@ -696,6 +696,36 @@ export default function AdminPage() {
     }, 'a4');
   };
 
+  const handleBatchPrintLabels = () => {
+    const activeOrders = filteredOrders.filter((o) => !(o.courierStatus || '').toLowerCase().includes('cancel'));
+    if (activeOrders.length === 0) {
+      showToast('No active orders to print');
+      return;
+    }
+    showToast(`🖨️ Opening ${activeOrders.length} shipping labels…`);
+    activeOrders.forEach((o, idx) => {
+      setTimeout(() => {
+        openShippingLabelPrint({
+          orderId: o.orderId,
+          customerName: o.customerName,
+          customerPhone: o.customerPhone,
+          customerAltPhone: o.customerAltPhone,
+          address: o.address,
+          city: o.city,
+          pincode: o.pincode,
+          state: o.state,
+          totalAmount: o.totalAmount,
+          paymentMethod: o.paymentMethod,
+          courierStatus: o.courierStatus,
+          trackingNumber: o.trackingNumber,
+          courierName: o.courierName,
+          createdAt: o.createdAt,
+          items: o.items,
+        }, 'a4');
+      }, idx * 400);
+    });
+  };
+
   // ── Access gate
   if (!isAdmin) {
     return (
@@ -1095,6 +1125,7 @@ export default function AdminPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <button onClick={() => void loadLiveOrders()} className="p-1.5 text-gray-400 hover:text-[#2874f0] hover:bg-blue-50 rounded-lg transition-colors cursor-pointer" title="Refresh"><RefreshCw className={`w-4 h-4 ${ordersLoading ? 'animate-spin' : ''}`} /></button>
+                  <button onClick={handleBatchPrintLabels} className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors cursor-pointer" title="Print Shipping Labels"><Tag className="w-3.5 h-3.5" /><span className="hidden sm:inline">Print Batch Labels</span></button>
                   <button onClick={handleExportCsv} className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-white bg-[#2874f0] hover:bg-[#1a5dc8] rounded-lg transition-colors cursor-pointer"><Download className="w-3.5 h-3.5" /><span className="hidden sm:inline">Export CSV</span></button>
                 </div>
               </div>
