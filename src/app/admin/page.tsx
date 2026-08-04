@@ -1255,58 +1255,63 @@ export default function AdminPage() {
                           )}
                         </div>
 
-                        <div className="bg-[#f8f9fa] rounded-lg p-3 space-y-2">
-                          <p className="text-[11px] font-semibold text-gray-500">Update status</p>
-                          <div className="flex flex-wrap gap-1.5">
-                            {ORDER_STATUS_ACTIONS.map((a) => {
-                              const busy = updatingStatusId === `${o.orderId}-${a.statusKey}`;
-                              const isCurrent = (o.courierStatus || '').toLowerCase() === a.orderStatus.toLowerCase();
-                              const isCancelledBtn = (o.courierStatus || '').toLowerCase().includes('cancel');
-                              const isAwaitingBtn = (o.courierStatus || '').toLowerCase().includes('awaiting confirmation');
-                              const isCancelBtn = a.statusKey === 'CANCELLED';
-                              return (
-                                <button
-                                  key={a.statusKey}
-                                  disabled={busy || isCurrent || (isCancelBtn && isCancelledBtn) || (!isCancelBtn && (isCancelledBtn || isAwaitingBtn))}
-                                  onClick={() => handleUpdateOrderStatus(o, a.statusKey, a.orderStatus)}
-                                  className={`px-2.5 py-1.5 text-[11px] font-semibold rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${isCancelBtn
-                                      ? isCurrent || isCancelledBtn
-                                        ? 'bg-red-100 text-red-700 border border-red-200'
-                                        : 'bg-white text-red-700 border border-red-200 hover:bg-red-50'
-                                      : isCurrent
-                                        ? 'bg-green-100 text-green-700 border border-green-200'
-                                        : 'bg-white text-gray-700 border border-gray-200 hover:border-[#2874f0] hover:text-[#2874f0]'
-                                    }`}
-                                >
-                                  {busy ? '...' : a.label}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-
-                        {/* Dispatch — disabled after cancel / before confirmed */}
-                        {(o.courierStatus || '').toLowerCase().includes('cancel') ? (
+                        {/* Dispatch & Live ST Courier Auto-Tracking (Admin types AWB; status advances automatically via ST Courier live feed) */}
+                        {isCancelled ? (
                           <div className="flex items-center gap-2 bg-red-50 border border-red-100 rounded-lg px-3 py-2.5 text-xs text-red-700">
                             <Truck className="w-4 h-4 shrink-0 opacity-60" />
                             <span className="font-medium">AWB / Dispatch locked — order cancelled</span>
                           </div>
-                        ) : (o.courierStatus || '').toLowerCase().includes('awaiting confirmation') ? (
+                        ) : isAwaiting ? (
                           <div className="flex items-center gap-2 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2.5 text-xs text-amber-800">
                             <Truck className="w-4 h-4 shrink-0 opacity-60" />
                             <span className="font-medium">AWB locked — refresh to heal paid orders to Confirmed</span>
                           </div>
                         ) : (
-                          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-[#f8f9fa] rounded-lg p-3">
-                            <div className="flex items-center gap-2 text-xs text-gray-500 shrink-0"><Truck className="w-4 h-4 text-gray-400" /><span className="font-medium">AWB:</span></div>
-                            <input type="text" placeholder="ST Courier Docket e.g. STC241568974"
-                              value={shiprocketAwbInput[o.orderId] !== undefined ? shiprocketAwbInput[o.orderId] : (o.trackingNumber && !o.trackingNumber.startsWith('SHP-') ? o.trackingNumber : '')}
-                              onChange={(e) => setShiprocketAwbInput((p) => ({ ...p, [o.orderId]: e.target.value }))}
-                              className="flex-1 px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-mono uppercase placeholder:normal-case placeholder:text-gray-300 outline-none focus:border-[#2874f0] focus:ring-1 focus:ring-[#2874f0]/20 transition-all" />
-                            <button disabled={!!dispatchingOrderIds[o.orderId]} onClick={() => handleDispatch(o.orderId)}
-                              className="px-4 py-2 text-xs font-semibold text-white bg-[#2874f0] hover:bg-[#1a5dc8] disabled:bg-gray-300 disabled:cursor-not-allowed rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0">
-                              {dispatchingOrderIds[o.orderId] ? <><span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />Verifying...</> : <><Send className="w-3 h-3" />Dispatch</>}
-                            </button>
+                          <div className="space-y-2 bg-[#f8f9fa] rounded-xl p-3 border border-gray-100">
+                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                              <div className="flex items-center gap-1.5 text-xs text-gray-700 shrink-0 font-bold">
+                                <Truck className="w-4 h-4 text-blue-600" />
+                                <span>ST Courier AWB:</span>
+                              </div>
+                              <input
+                                type="text"
+                                placeholder="Enter ST Courier Docket e.g. STC241568974"
+                                value={shiprocketAwbInput[o.orderId] !== undefined ? shiprocketAwbInput[o.orderId] : (o.trackingNumber && !o.trackingNumber.startsWith('SHP-') ? o.trackingNumber : '')}
+                                onChange={(e) => setShiprocketAwbInput((p) => ({ ...p, [o.orderId]: e.target.value }))}
+                                className="flex-1 px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-mono uppercase placeholder:normal-case placeholder:text-gray-300 outline-none focus:border-[#2874f0] focus:ring-1 focus:ring-[#2874f0]/20 transition-all"
+                              />
+                              <button
+                                disabled={!!dispatchingOrderIds[o.orderId]}
+                                onClick={() => handleDispatch(o.orderId)}
+                                className="px-4 py-2 text-xs font-semibold text-white bg-[#2874f0] hover:bg-[#1a5dc8] disabled:bg-gray-300 disabled:cursor-not-allowed rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0"
+                              >
+                                {dispatchingOrderIds[o.orderId] ? (
+                                  <>
+                                    <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                    Syncing ST Courier...
+                                  </>
+                                ) : (
+                                  <>
+                                    <Send className="w-3 h-3" />
+                                    Dispatch &amp; Sync Live
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                            <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-gray-200/60 text-[10px]">
+                              <span className="text-gray-500 font-medium flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                Order status updates automatically from ST Courier live hub events
+                              </span>
+                              <button
+                                type="button"
+                                disabled={updatingStatusId === `${o.orderId}-CANCELLED`}
+                                onClick={() => handleUpdateOrderStatus(o, 'CANCELLED', 'Cancelled')}
+                                className="text-red-600 hover:text-red-800 font-bold hover:underline cursor-pointer"
+                              >
+                                Cancel Order
+                              </button>
+                            </div>
                           </div>
                         )}
                       </div>
