@@ -1,0 +1,11 @@
+Add stock reservation model: hold on Razorpay order create, confirm on payment, release on fail/expire
+
+Reserves books.stock the instant a Razorpay order is created (stock_holds
+ledger) so no other shopper can buy the same units while checkout is
+in-flight. POST /api/orders converts the hold into a real sale instead of
+decrementing again; failure to pay (dismiss, payment.failed webhook, or a
+~20-minute TTL sweeper for abandoned sessions) restores the stock. All
+transitions are single atomic UPDATE...RETURNING statements so concurrent
+release/confirm attempts can never double-restore or double-sell. Also wires
+real-time SSE stock push (admin + customer) and an admin "reserved stock"
+visibility banner so the whole surface stays honest about live availability.

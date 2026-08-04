@@ -2,6 +2,7 @@ import { isBackgroundLeader } from '@/lib/backgroundLeader';
 
 let leaderServicesRunning = false;
 let confirmExpireTimer: ReturnType<typeof setInterval> | null = null;
+let stockHoldSweepTimer: ReturnType<typeof setInterval> | null = null;
 let orphanRefundTimer: ReturnType<typeof setInterval> | null = null;
 
 /** Courier cron + legacy awaiting-confirm heal — leader replica only. */
@@ -43,7 +44,25 @@ export async function startLeaderBackgroundServices() {
     orphanRefundTimer = setInterval(() => void sweep(), 10 * 60 * 1000);
   }
 
-  console.log('[background] leader services started (courier cron, confirm-timeout, orphan-refund)');
+  // Abandoned Razorpay checkout sweeper — releases reserved stock for
+  // sessions where the customer never paid (closed tab, timed out, no
+  // webhook fired). Runs every 2 minutes so a ~20-minute hold TTL frees up
+  // stock within a couple minutes of expiring, not tens of minutes late.
+  if (!stockHoldSweepTimer) {
+    const sweepHolds = async () => {
+      try {
+        const { sweepExpiredStockHolds } = await import('@/lib/stockHold');
+        const n = await sweepExpiredStockHolds();
+        if (n > 0) console.log(`[stock-hold-sweep] released ${n} abandoned checkout reservation(s)`);
+      } catch (e: any) {
+        console.warn('[stock-hold-sweep]', e?.message || e);
+      }
+    };
+    setTimeout(() => void sweepHolds(), 60 * 1000);
+    stockHoldSweepTimer = setInterval(() => void sweepHolds(), 2 * 60 * 1000);
+  }
+
+  console.log('[background] leader services started (courier cron, confirm-timeout, orphan-refund, stock-hold-sweep)');
 }
 
 /** Release leader-only resources when another replica takes over. */
@@ -61,14 +80,22 @@ export async function stopLeaderBackgroundServices() {
     orphanRefundTimer = null;
   }
 
+  if (stockHoldSweepTimer) {
+    clearInterval(stockHoldSweepTimer);
+    stockHoldSweepTimer = null;
+  }
+
   const { stopCourierSyncCron } = await import('@/lib/courierCron');
   stopCourierSyncCron();
 
   console.log('[background] leader services stopped — standby mode');
 }
 
-/** Order SSE NOTIFY — safe on every replica (admin may hit any instance). */
+/** Order + stock SSE NOTIFY — safe on every replica (customers/admin may hit any instance). */
 export async function startSharedBackgroundServices() {
   const { startOrderListenBroker } = await import('@/app/api/orders/stream/route');
   startOrderListenBroker();
+
+  const { startStockListenBroker } = await import('@/app/api/stock/stream/route');
+  startStockListenBroker();
 }

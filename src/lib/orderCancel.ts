@@ -5,6 +5,7 @@
 import { queryDb } from '@/lib/db';
 import { paymentStatusAfterCancel, isOrderCancelled } from '@/lib/orderStatus';
 import { broadcastOrderChange, notifyOrderChanged } from '@/app/api/orders/stream/route';
+import { notifyStockChanged } from '@/app/api/stock/stream/route';
 import { needsRazorpayRefund, refundRazorpayPayment } from '@/lib/razorpayRefund';
 
 export type CancelActor = 'customer' | 'admin' | 'system';
@@ -107,6 +108,9 @@ export async function executeOrderCancel(opts: {
          WHERE id = $2`,
         [Number(item.quantity) || 0, item.book_id]
       );
+    }
+    if (items.rows.length > 0) {
+      void notifyStockChanged(items.rows.map((item: any) => item.book_id));
     }
 
     const payStatus = paymentStatusAfterCancel(row.payment_method, { refunded });

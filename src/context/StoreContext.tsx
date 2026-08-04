@@ -33,6 +33,14 @@ export interface CartItem extends Product {
   qty: number;
 }
 
+/** Payload shape pushed by `/api/stock/stream` on every `STOCK_CHANGED` event. */
+interface StockPushEntry {
+  id: string;
+  stock: number;
+  status: string;
+  inStock: boolean;
+}
+
 export interface UserData {
   id: number | string;
   name: string;
@@ -349,13 +357,108 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setHydrated(true);
   }, []);
 
-  // Live stock feel: re-poll the catalog every 15s so an admin marking a book
-  // out-of-stock (or changing qty) is reflected on product cards/pages without
-  // a manual refresh. Server memory cache is already invalidated on admin
-  // write, so this always resolves to a fresh DB read.
+  // Realtime stock push — SSE fed by Postgres LISTEN/NOTIFY (`/api/stock/stream`).
+  // Every write that changes books.stock/status (admin edit, Razorpay hold
+  // reserve/release, order placement, cancel restore) notifies this stream
+  // within milliseconds, so a book going out of stock greys out the card and
+  // disables ADD/BUY NOW instantly, without waiting on any poll.
+  const sseConnectedRef = useRef(false);
+
+  const applyStockPush = useCallback((incoming: StockPushEntry[]) => {
+    if (!Array.isArray(incoming) || incoming.length === 0) return;
+    const byId = new Map(incoming.map((b) => [String(b.id), b]));
+
+    setProducts((prev) => {
+      let changed = false;
+      const next = prev.map((p) => {
+        const upd = byId.get(String(p.id));
+        if (!upd) return p;
+        if (p.stock === upd.stock && p.inStock === upd.inStock) return p;
+        changed = true;
+        return { ...p, stock: upd.stock, inStock: upd.inStock };
+      });
+      if (changed) writeCatalogCache(next);
+      return changed ? next : prev;
+    });
+
+    // Mirror into the live cart too — cross-cutting: a card going OOS while
+    // it's already in someone's cart must disable checkout for it as well.
+    setCart((prev) => {
+      let changed = false;
+      const next = prev.map((item) => {
+        const upd = byId.get(String(item.id));
+        if (!upd) return item;
+        const clampedQty = upd.inStock ? Math.min(item.qty, Math.max(1, upd.stock)) : item.qty;
+        if (item.stock === upd.stock && item.inStock === upd.inStock && clampedQty === item.qty) return item;
+        changed = true;
+        return { ...item, stock: upd.stock, inStock: upd.inStock, qty: clampedQty };
+      });
+      if (changed) {
+        try {
+          localStorage.setItem('bpg_cart_next', JSON.stringify(next));
+        } catch {
+          /* ignore quota */
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof EventSource === 'undefined') return;
+    let es: EventSource | null = null;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let stopped = false;
+
+    const connect = () => {
+      if (stopped) return;
+      es = new EventSource('/api/stock/stream');
+
+      es.onopen = () => {
+        sseConnectedRef.current = true;
+      };
+
+      es.onmessage = (evt) => {
+        try {
+          const data = JSON.parse(evt.data);
+          if (data?.type === 'STOCK_CHANGED' && Array.isArray(data.books)) {
+            applyStockPush(data.books);
+          }
+        } catch {
+          /* ignore malformed frame */
+        }
+      };
+
+      es.onerror = () => {
+        sseConnectedRef.current = false;
+        // Browser EventSource auto-retries on transient errors; only take over
+        // reconnection once it gives up and the connection is fully closed
+        // (e.g. server rate-limited us or dropped the stream).
+        if (es && es.readyState === EventSource.CLOSED && !stopped) {
+          es.close();
+          retryTimer = setTimeout(connect, 5000);
+        }
+      };
+    };
+
+    connect();
+
+    return () => {
+      stopped = true;
+      sseConnectedRef.current = false;
+      if (retryTimer) clearTimeout(retryTimer);
+      if (es) es.close();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Fallback only: while the realtime stream is down (blocked network, cold
+  // start, server restart), fall back to polling so stock never goes stale
+  // for more than 15s. Skipped entirely while SSE is connected.
   useEffect(() => {
     const POLL_MS = 15_000;
     const interval = setInterval(() => {
+      if (sseConnectedRef.current) return;
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
       refreshProducts();
     }, POLL_MS);

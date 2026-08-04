@@ -176,6 +176,7 @@ export default function AdminPage() {
   const [editDiscountEnabled, setEditDiscountEnabled] = useState(true);
   const [editStock, setEditStock] = useState(50);
   const [lowStockAlerts, setLowStockAlerts] = useState<{ id: string; title: string; stock: number }[]>([]);
+  const [activeStockHolds, setActiveStockHolds] = useState<{ count: number; totalQty: number }>({ count: 0, totalQty: 0 });
   const [showAddForm, setShowAddForm] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newCls, setNewCls] = useState('10th');
@@ -264,6 +265,15 @@ export default function AdminPage() {
       if (r.ok) {
         const d = await r.json();
         if (Array.isArray(d.alerts)) setLowStockAlerts(d.alerts);
+      }
+    } catch {
+      /* ignore */
+    }
+    try {
+      const r2 = await fetch('/api/admin/users?view=stock_holds', { headers: authHeaders(user), credentials: 'include' });
+      if (r2.ok) {
+        const d2 = await r2.json();
+        setActiveStockHolds({ count: Number(d2.count) || 0, totalQty: Number(d2.totalQty) || 0 });
       }
     } catch {
       /* ignore */
@@ -821,6 +831,16 @@ export default function AdminPage() {
             >
               Update stock →
             </button>
+          </div>
+        )}
+
+        {activeStockHolds.count > 0 && (
+          <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 flex items-center gap-2 text-blue-800">
+            <ShieldCheck className="w-4 h-4 shrink-0" />
+            <span className="text-xs font-semibold">
+              🔒 {activeStockHolds.totalQty} unit(s) across {activeStockHolds.count} reservation(s) currently held —
+              customers on the Razorpay payment sheet right now. Auto-released if they don&apos;t pay.
+            </span>
           </div>
         )}
 

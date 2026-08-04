@@ -8,6 +8,7 @@ import {
 } from '@/lib/serverSecurity';
 import { priceCheckoutOrder } from '@/lib/checkoutPricing';
 import { verifyRazorpayPayment } from '@/lib/orderPricing';
+import { createStockHolds, attachRazorpayOrderId, releaseStockHolds, STOCK_HOLD_TTL_MINUTES } from '@/lib/stockHold';
 
 export async function POST(request: Request) {
   const session = await getAuthenticatedUser(request);
@@ -53,31 +54,60 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid order total' }, { status: 400 });
     }
 
-    const authHeader = `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString('base64')}`;
-    const rzpRes = await fetch('https://api.razorpay.com/v1/orders', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: authHeader,
-      },
-      body: JSON.stringify({
-        amount: amountInPaisa,
-        currency,
-        receipt: receipt || `rcpt_${Date.now()}`,
-        notes: {
-          userId: session.userId,
-        },
-      }),
+    // Reserve stock the instant we're about to send the customer to Razorpay —
+    // decrements books.stock now (visible everywhere: catalog, cart, other
+    // shoppers' checkout) so nobody else can buy the same units while this
+    // customer is on the payment sheet. Released automatically if they don't pay.
+    const hold = await createStockHolds({
+      items: checkout.verifiedItems.map((i: any) => ({ id: i.id, qty: i.qty, title: i.title })),
+      userId: session.userId,
     });
+    if (!hold.ok) {
+      return NextResponse.json({ error: hold.error }, { status: hold.status });
+    }
 
-    const rzpData = await rzpRes.json();
+    const authHeader = `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString('base64')}`;
+    let rzpRes: Response;
+    let rzpData: any;
+    try {
+      rzpRes = await fetch('https://api.razorpay.com/v1/orders', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: authHeader,
+        },
+        body: JSON.stringify({
+          amount: amountInPaisa,
+          currency,
+          receipt: receipt || `rcpt_${Date.now()}`,
+          notes: {
+            userId: session.userId,
+            holdGroupId: hold.holdGroupId,
+          },
+        }),
+      });
+      rzpData = await rzpRes.json();
+    } catch (fetchErr: any) {
+      // Razorpay unreachable — don't leave stock reserved for an order that never happened.
+      await releaseStockHolds({ holdGroupId: hold.holdGroupId }, 'razorpay_create_network_error');
+      return NextResponse.json(
+        { error: fetchErr?.message || 'Could not reach Razorpay. Please try again.' },
+        { status: 502 }
+      );
+    }
+
     if (!rzpRes.ok) {
       console.error('[Razorpay Order Error]', rzpData);
+      await releaseStockHolds({ holdGroupId: hold.holdGroupId }, 'razorpay_create_failed');
       return NextResponse.json(
         { error: rzpData.error?.description || 'Razorpay order creation failed.' },
         { status: rzpRes.status }
       );
     }
+
+    // Link the hold group to the real Razorpay order id so confirm/release
+    // (order placement, webhook, TTL sweep) can find it going forward.
+    await attachRazorpayOrderId(hold.holdGroupId, rzpData.id);
 
     return NextResponse.json({
       orderId: rzpData.id,
@@ -90,6 +120,7 @@ export async function POST(request: Request) {
       subtotal: checkout.subtotal,
       discountAmount: checkout.discountAmount,
       totalAmount: checkout.totalAmount,
+      stockHoldMinutes: STOCK_HOLD_TTL_MINUTES,
     });
   } catch (err: any) {
     console.error('[Razorpay Route Error]', err);

@@ -3,6 +3,7 @@ import { createHmac, timingSafeEqual } from 'crypto';
 import { getDbClient } from '@/lib/db';
 import { isOrderCancelled } from '@/lib/orderStatus';
 import { refundRazorpayPayment } from '@/lib/razorpayRefund';
+import { confirmStockHolds, releaseStockHolds } from '@/lib/stockHold';
 
 /**
  * Grace window before an orphan capture (payment succeeded, no matching order
@@ -80,9 +81,32 @@ export async function POST(request: Request) {
     eventName === 'payment.captured' ||
     eventName === 'order.paid' ||
     eventName === 'payment.authorized';
+  const isFailure = eventName === 'payment.failed';
 
-  if (!isCapture) {
+  if (!isCapture && !isFailure) {
     return NextResponse.json({ ok: true, ignored: eventName || 'unknown' });
+  }
+
+  if (isFailure) {
+    // Definitive "did not pay" signal — release the reservation immediately
+    // instead of waiting for the TTL sweeper. Idempotent (no-ops if the hold
+    // is already released/confirmed).
+    const failedEntity = event?.payload?.payment?.entity || null;
+    const failedOrderId = String(failedEntity?.order_id || '').trim();
+    if (failedOrderId) {
+      try {
+        const result = await releaseStockHolds({ razorpayOrderId: failedOrderId }, 'payment_failed_webhook');
+        return NextResponse.json({
+          ok: true,
+          action: result.releasedCount > 0 ? 'released_on_failure' : 'noop_already_settled',
+          razorpayOrderId: failedOrderId,
+        });
+      } catch (err: any) {
+        console.error('[razorpay-webhook] release on failure error:', err?.message || err);
+        return NextResponse.json({ error: 'Release failed' }, { status: 500 });
+      }
+    }
+    return NextResponse.json({ ok: true, note: 'payment.failed with no order id' });
   }
 
   const entity = paymentEntity(event);
@@ -114,6 +138,18 @@ export async function POST(request: Request) {
   }
 
   try {
+    // Payment is captured — keep the reserved stock no matter what happens
+    // below. Covers the "client closed the tab before POST /api/orders ran"
+    // orphan case: without this, the TTL sweeper would eventually release
+    // stock that was actually paid for. Idempotent no-op if already confirmed.
+    if (effectiveOrderId) {
+      try {
+        await confirmStockHolds(effectiveOrderId);
+      } catch (err: any) {
+        console.warn('[razorpay-webhook] confirmStockHolds failed:', err?.message || err);
+      }
+    }
+
     let order: any = null;
 
     if (effectivePaymentId) {

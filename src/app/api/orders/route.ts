@@ -1,6 +1,7 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { getDbClient } from '@/lib/db';
 import { broadcastOrderChange, notifyOrderChanged } from '@/app/api/orders/stream/route';
+import { notifyStockChanged } from '@/app/api/stock/stream/route';
 import {
   verifyAdminRequest,
   forbiddenResponse,
@@ -13,6 +14,7 @@ import { verifyRazorpayPayment } from '@/lib/orderPricing';
 import { priceCheckoutOrder } from '@/lib/checkoutPricing';
 import { blocksShippingActions, isOrderCancelled } from '@/lib/orderStatus';
 import { refundRazorpayPayment } from '@/lib/razorpayRefund';
+import { confirmStockHolds, recordConfirmedSale, shrinkConfirmedHold } from '@/lib/stockHold';
 
 /**
  * Money-safety net: payment is captured by Razorpay client-side BEFORE this
@@ -342,6 +344,15 @@ export async function POST(request: Request) {
       ]
     );
 
+    // Convert the Razorpay order's held stock into a real sale (no second
+    // decrement). Idempotent — a hold already confirmed by a racing webhook
+    // returns [] here and the fail-safe path below just no-ops per item.
+    const confirmedHolds = await confirmStockHolds(razorpayOrderId, client);
+    const heldQtyByBook = new Map<string, number>();
+    for (const h of confirmedHolds) {
+      heldQtyByBook.set(h.bookId, (heldQtyByBook.get(h.bookId) || 0) + h.qty);
+    }
+
     for (const item of verifiedItems) {
       const itemId = `item-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
       await client.query(
@@ -350,33 +361,62 @@ export async function POST(request: Request) {
         [itemId, id, item.id, item.title, item.price, item.qty, item.subtotal]
       );
 
-      const stockRes = await client.query(
-        `UPDATE books
-         SET stock = COALESCE(stock, 0) - $1,
-             status = CASE WHEN COALESCE(stock, 0) - $1 <= 0 THEN 'out_of_stock' ELSE status END,
-             updated_at = NOW()
-         WHERE id = $2 AND COALESCE(stock, 0) >= $1
-         RETURNING id, title, stock`,
-        [item.qty, item.id]
-      );
-      if (stockRes.rowCount === 0) {
-        await client.query('ROLLBACK');
-        // Someone else's order won this stock race after our payment was
-        // already captured — refund immediately, don't let money sit taken.
-        const refund = await refundOrphanedCapture(client, {
-          paymentId: razorpayPaymentId,
-          orderNumberAttempt: orderNumber,
-          amountRupees: totalAmount,
-          reason: `stock conflict on "${item.title}"`,
-        });
-        const message = refund.refunded
-          ? `"${item.title}" went out of stock while your payment was processing. Your payment of ₹${totalAmount} has been refunded automatically — it will reflect in your original payment method within 5-7 business days.`
-          : `"${item.title}" went out of stock while your payment was processing. We could not auto-refund immediately — our team has been notified and will refund your payment of ₹${totalAmount} within 24 hours. Please contact us with payment ID ${razorpayPaymentId} if you don't see it.`;
-        return NextResponse.json(
-          { error: message, refunded: refund.refunded, refundId: refund.refundId },
-          { status: 409 }
+      const heldQty = heldQtyByBook.get(String(item.id)) || 0;
+
+      if (heldQty > item.qty) {
+        // Cart shrank between "Pay" (hold created) and confirm — give the
+        // extra reserved units back to the shelf and shrink the ledger row.
+        const excess = heldQty - item.qty;
+        await client.query(
+          `UPDATE books
+           SET stock = COALESCE(stock, 0) + $1,
+               status = CASE WHEN COALESCE(stock, 0) + $1 > 0 THEN 'published' ELSE status END,
+               updated_at = NOW()
+           WHERE id = $2`,
+          [excess, item.id]
         );
+        await shrinkConfirmedHold(client, { razorpayOrderId, bookId: item.id, newQty: item.qty });
+      } else if (heldQty < item.qty) {
+        // Fail-safe: no hold (legacy flow) or the hold covered fewer units
+        // than this order needs — decrement the shortfall directly, same
+        // race-safe guard as before.
+        const shortfall = item.qty - heldQty;
+        const stockRes = await client.query(
+          `UPDATE books
+           SET stock = COALESCE(stock, 0) - $1,
+               status = CASE WHEN COALESCE(stock, 0) - $1 <= 0 THEN 'out_of_stock' ELSE status END,
+               updated_at = NOW()
+           WHERE id = $2 AND COALESCE(stock, 0) >= $1
+           RETURNING id, title, stock`,
+          [shortfall, item.id]
+        );
+        if (stockRes.rowCount === 0) {
+          await client.query('ROLLBACK');
+          // Someone else's order won this stock race after our payment was
+          // already captured — refund immediately, don't let money sit taken.
+          const refund = await refundOrphanedCapture(client, {
+            paymentId: razorpayPaymentId,
+            orderNumberAttempt: orderNumber,
+            amountRupees: totalAmount,
+            reason: `stock conflict on "${item.title}"`,
+          });
+          const message = refund.refunded
+            ? `"${item.title}" went out of stock while your payment was processing. Your payment of ₹${totalAmount} has been refunded automatically — it will reflect in your original payment method within 5-7 business days.`
+            : `"${item.title}" went out of stock while your payment was processing. We could not auto-refund immediately — our team has been notified and will refund your payment of ₹${totalAmount} within 24 hours. Please contact us with payment ID ${razorpayPaymentId} if you don't see it.`;
+          return NextResponse.json(
+            { error: message, refunded: refund.refunded, refundId: refund.refundId },
+            { status: 409 }
+          );
+        }
+        await recordConfirmedSale(client, {
+          razorpayOrderId,
+          bookId: item.id,
+          userId,
+          qty: shortfall,
+        });
       }
+      // heldQty === item.qty: fully covered by the hold already decremented
+      // at Razorpay-order-create time — nothing left to do for this item.
     }
 
     if (razorpayPaymentId) {
@@ -416,6 +456,10 @@ export async function POST(request: Request) {
       broadcastOrderChange(event);
       await notifyOrderChanged(event);
     } catch (_) {}
+    // Order confirm may have adjusted stock beyond the hold (excess return /
+    // fail-safe shortfall decrement above) — push a fresh snapshot for every
+    // purchased book so shoppers browsing right now see it instantly.
+    void notifyStockChanged(verifiedItems.map((i: any) => i.id));
 
     return NextResponse.json(
       {

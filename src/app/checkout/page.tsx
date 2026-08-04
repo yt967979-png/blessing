@@ -55,6 +55,7 @@ export default function CheckoutPage() {
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const orderSubmitLock = useRef(false);
   const idempotencyKeyRef = useRef<string | null>(null);
+  const pendingRazorpayOrderIdRef = useRef<string | null>(null);
   const [newAddr, setNewAddr] = useState({
     type: 'HOME',
     name: '',
@@ -188,6 +189,29 @@ export default function CheckoutPage() {
       setIsPlacingOrder(false);
     };
 
+    // Best-effort fast release — the moment we know the customer did NOT pay
+    // (modal closed, payment declined, client-side error), tell the server to
+    // give the reserved stock back right away instead of waiting for the
+    // ~20-minute TTL sweeper. Not required for correctness (webhook + sweeper
+    // are the reliable backstops) — purely speeds up availability for others.
+    const releasePendingHold = (reason: string) => {
+      const rzpOrderId = pendingRazorpayOrderIdRef.current;
+      if (!rzpOrderId) return;
+      pendingRazorpayOrderIdRef.current = null;
+      fetch('/api/razorpay/release', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(user.token ? { Authorization: `Bearer ${user.token}` } : {}),
+        },
+        body: JSON.stringify({ razorpayOrderId: rzpOrderId, reason }),
+        keepalive: true,
+      }).catch(() => {});
+    };
+    // A previous attempt's hold should already be released by one of the
+    // paths below, but never leak a reservation if it somehow wasn't.
+    releasePendingHold('superseded_by_new_attempt');
+
     // Final live stock gate before opening Razorpay — never trust the qty the
     // customer had when they started checkout.
     const clean = await validateCartStock();
@@ -230,13 +254,23 @@ export default function CheckoutPage() {
         const orderData = await orderRes.json();
         if (!orderRes.ok) {
           showToast(`❌ ${orderData.error || 'Order failed'}`);
+          // Order confirm failed after payment was captured — the server
+          // already refunds the payment (see /api/orders); the stock hold
+          // itself rolls back to 'held' automatically (same DB transaction),
+          // so it's still eligible for the TTL sweeper. Nothing to release
+          // here since this razorpay_order_id can't be retried once failed.
+          pendingRazorpayOrderIdRef.current = null;
           return false;
         }
         const serverOrderId = orderData.orderId;
         if (!serverOrderId) {
           showToast('❌ Order was not saved');
+          pendingRazorpayOrderIdRef.current = null;
           return false;
         }
+        // Payment confirmed and order created — the hold is now permanently
+        // 'confirmed' server-side, nothing left to release for this attempt.
+        pendingRazorpayOrderIdRef.current = null;
         clearCartAfterOrder();
         idempotencyKeyRef.current = null;
         setOrderSuccessData({
@@ -281,14 +315,26 @@ export default function CheckoutPage() {
         return;
       }
 
+      // Stock is reserved server-side as of this response (POST /api/razorpay
+      // already decremented books.stock and wrote the hold). Track the order
+      // id so we can release it fast if the customer doesn't end up paying.
+      pendingRazorpayOrderIdRef.current = rzpData.orderId;
+
       if (!(window as any).Razorpay) {
-        await new Promise<void>((resolve, reject) => {
-          const script = document.createElement('script');
-          script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-          script.onload = () => resolve();
-          script.onerror = () => reject(new Error('Razorpay SDK script failed to load.'));
-          document.body.appendChild(script);
-        });
+        try {
+          await new Promise<void>((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+            script.onload = () => resolve();
+            script.onerror = () => reject(new Error('Razorpay SDK script failed to load.'));
+            document.body.appendChild(script);
+          });
+        } catch (scriptErr: any) {
+          showToast(`❌ ${scriptErr?.message || 'Could not load payment gateway'}`);
+          releasePendingHold('razorpay_script_load_failed');
+          release();
+          return;
+        }
       }
 
       const options = {
@@ -320,6 +366,7 @@ export default function CheckoutPage() {
         modal: {
           ondismiss: function () {
             showToast('Payment window closed.');
+            releasePendingHold('modal_dismissed');
             release();
           },
         },
@@ -328,11 +375,13 @@ export default function CheckoutPage() {
       const rzp = new (window as any).Razorpay(options);
       rzp.on('payment.failed', function (resp: any) {
         showToast(`❌ Payment Failed: ${resp.error?.description || 'Declined'}`);
+        releasePendingHold('payment_failed');
         release();
       });
       rzp.open();
     } catch (e: any) {
       showToast(`❌ ${e?.message || 'Order failed'}`);
+      releasePendingHold('client_error');
       release();
     }
   };

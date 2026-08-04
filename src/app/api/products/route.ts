@@ -3,6 +3,7 @@ import { getDbClient, releaseDbClient, ensureDefaultCategories, queryDb } from '
 import { verifyAdminRequest, forbiddenResponse } from '@/lib/serverSecurity';
 import { getCatalogCacheTtlMs, getCatalogCdnHeaders } from '@/lib/launchScale';
 import { isBookInStock } from '@/lib/stock';
+import { notifyStockChanged } from '@/app/api/stock/stream/route';
 
 // Shared catalog cache: same search/class/slug reused without hitting DB again
 const queryCache = new Map<string, { data: any[]; timestamp: number }>();
@@ -322,6 +323,9 @@ export async function PATCH(request: Request) {
         params
       );
       invalidateProductsCache();
+      if (finalStatus !== undefined || finalStock !== undefined) {
+        void notifyStockChanged([id]);
+      }
     }
 
     return NextResponse.json({ success: true, id });

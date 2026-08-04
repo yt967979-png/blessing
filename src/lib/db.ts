@@ -1270,6 +1270,29 @@ async function runSchemaInit(client: any) {
         );
         CREATE INDEX IF NOT EXISTS idx_coupon_redemptions_coupon_user
           ON coupon_redemptions (coupon_id, user_id);
+
+        -- Stock reservation ledger: books.stock is decremented the instant a Razorpay
+        -- order is created (so no one else can buy the same units while the customer
+        -- is on the payment sheet). 'held' = reserved, unpaid. 'confirmed' = payment
+        -- succeeded and a real order now owns this stock (no further books.stock change).
+        -- 'released' = restored back to books.stock (cancelled/failed/expired/replaced).
+        CREATE TABLE IF NOT EXISTS stock_holds (
+          id VARCHAR(255) PRIMARY KEY,
+          hold_group_id VARCHAR(255) NOT NULL,
+          razorpay_order_id VARCHAR(255),
+          book_id VARCHAR(255) NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+          user_id VARCHAR(255),
+          qty INT NOT NULL,
+          status VARCHAR(20) NOT NULL DEFAULT 'held',
+          expires_at TIMESTAMP NOT NULL,
+          released_at TIMESTAMP,
+          release_reason VARCHAR(100),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_stock_holds_group ON stock_holds (hold_group_id);
+        CREATE INDEX IF NOT EXISTS idx_stock_holds_rzp_order ON stock_holds (razorpay_order_id);
+        CREATE INDEX IF NOT EXISTS idx_stock_holds_sweep ON stock_holds (status, expires_at);
       `);
     } catch (e) {
       /* schema already exists or partial — safe to continue */
@@ -1296,6 +1319,9 @@ async function runSchemaInit(client: any) {
       `ALTER TABLE books ADD COLUMN IF NOT EXISTS badge VARCHAR(100) DEFAULT ''`,
       `ALTER TABLE books ADD COLUMN IF NOT EXISTS stock INT DEFAULT 50`,
       `ALTER TABLE books ADD COLUMN IF NOT EXISTS discount_price NUMERIC`,
+      `ALTER TABLE stock_holds ADD COLUMN IF NOT EXISTS razorpay_order_id VARCHAR(255)`,
+      `ALTER TABLE stock_holds ADD COLUMN IF NOT EXISTS release_reason VARCHAR(100)`,
+      `ALTER TABLE stock_holds ADD COLUMN IF NOT EXISTS released_at TIMESTAMP`,
       `UPDATE courier_tracking SET awb_number = COALESCE(NULLIF(awb_number, ''), docket_number) WHERE awb_number IS NULL OR awb_number = ''`,
       `UPDATE courier_tracking SET status = COALESCE(NULLIF(status, ''), current_status) WHERE status IS NULL OR status = ''`,
       `UPDATE orders SET ordered_at = COALESCE(ordered_at, created_at, updated_at, NOW()) WHERE ordered_at IS NULL`,

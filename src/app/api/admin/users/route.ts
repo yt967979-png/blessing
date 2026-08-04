@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { queryDb } from '@/lib/db';
 import { forbiddenResponse, verifyAdminRequest, verifySuperAdminRequest } from '@/lib/serverSecurity';
+import { getActiveHoldsSummary } from '@/lib/stockHold';
 
 /** Admin: list customers + low-stock books */
 export async function GET(request: NextRequest) {
@@ -28,6 +29,15 @@ export async function GET(request: NextRequest) {
           price: Number(b.price || 0),
         })),
       });
+    }
+
+    // Units currently reserved for in-progress Razorpay checkouts (paid orders
+    // already moved these to 'confirmed' and are excluded — this is only the
+    // "someone is on the payment sheet right now" bucket).
+    if (view === 'stock_holds') {
+      const holds = await getActiveHoldsSummary(100);
+      const totalQty = holds.reduce((s, h) => s + h.qty, 0);
+      return NextResponse.json({ holds, totalQty, count: holds.length });
     }
 
     const res = await queryDb(
