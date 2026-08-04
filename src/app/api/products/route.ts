@@ -290,11 +290,11 @@ export async function PATCH(request: Request) {
     let finalStatus: string | undefined = undefined;
     let finalStock: number | undefined = undefined;
 
-    if (inStock !== undefined) {
+    if (inStock !== undefined && stock === undefined) {
       const available = Boolean(inStock);
       finalStatus = available ? 'published' : 'out_of_stock';
-      if (stock === undefined) {
-        finalStock = available ? 100 : 0;
+      if (!available) {
+        finalStock = 0;
       }
     }
 

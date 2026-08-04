@@ -472,7 +472,7 @@ export default function AdminPage() {
     setEditBadge(p.badge || '');
     setEditBadgeEnabled(!!p.badge);
     setEditDiscountEnabled(p.price < p.mrp);
-    setEditStock(Number(p.stock ?? 50));
+    setEditStock(Number(typeof p.stock === 'number' ? p.stock : 25));
   };
   const saveProductChanges = async (id: string | number) => {
     const mrp = Number(editMrp);
@@ -504,11 +504,19 @@ export default function AdminPage() {
       discount: hasDiscount ? Math.round(((mrp - fp) / mrp) * 100) : 0,
       badge: newBadgeEnabled ? newBadge : '',
       image: newImg,
+      stock: 50,
     });
     setShowAddForm(false); setNewTitle('');
   };
   const toggleStock = async (id: string | number, cur: boolean) => {
-    await updateProductInDb(id, { inStock: !Boolean(cur) });
+    const p = products.find((x) => String(x.id) === String(id));
+    const nextInStock = !Boolean(cur);
+    if (!nextInStock) {
+      await updateProductInDb(id, { inStock: false, stock: 0 });
+    } else {
+      const restoreQty = p && typeof p.stock === 'number' && p.stock > 0 ? p.stock : 25;
+      await updateProductInDb(id, { inStock: true, stock: restoreQty });
+    }
   };
   const handleDeleteProduct = async (id: string | number) => {
     if (!confirm('Delete this book permanently?')) return;
