@@ -110,11 +110,21 @@ sed -i "s|/opt/blessing|$APP_DIR|g" /etc/systemd/system/blessing.service
 systemctl daemon-reload
 systemctl start blessing
 
-echo "==> Install Nginx zero-downtime retry configuration"
-if [[ -f "$APP_DIR/deploy/aws/nginx-blessing.conf" ]]; then
+# Lightsail default for this shop is Caddy (HTTPS). Skip Nginx unless installed.
+if command -v nginx >/dev/null 2>&1 && [[ -f "$APP_DIR/deploy/aws/nginx-blessing.conf" ]]; then
+  echo "==> Install Nginx site config"
+  mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled
   cp "$APP_DIR/deploy/aws/nginx-blessing.conf" /etc/nginx/sites-available/blessing || true
   ln -sf /etc/nginx/sites-available/blessing /etc/nginx/sites-enabled/blessing || true
   nginx -t && systemctl reload nginx || true
+elif command -v caddy >/dev/null 2>&1; then
+  echo "==> Proxy is Caddy (skip Nginx) — reload if Caddyfile present"
+  if [[ -f "$APP_DIR/deploy/aws/Caddyfile" ]]; then
+    cp "$APP_DIR/deploy/aws/Caddyfile" /etc/caddy/Caddyfile 2>/dev/null || true
+    systemctl reload caddy 2>/dev/null || true
+  fi
+else
+  echo "==> No Nginx/Caddy detected — app listens on :3000 only"
 fi
 
 echo "==> Install Systemd Watchdog Timer (30s Proactive Health Checks)"
