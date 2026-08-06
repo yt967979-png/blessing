@@ -14,6 +14,17 @@ export function clientIp(request: Request): string {
 
 /** Rate limit memory store */
 const rateLimits = new Map<string, { count: number; resetAt: number }>();
+let lastRateLimitPruneAt = Date.now();
+
+function pruneExpiredRateLimits(now: number) {
+  if (now - lastRateLimitPruneAt < 60_000) return;
+  lastRateLimitPruneAt = now;
+  for (const [key, value] of rateLimits.entries()) {
+    if (now > value.resetAt) {
+      rateLimits.delete(key);
+    }
+  }
+}
 
 export function checkRateLimit(
   key: string,
@@ -21,6 +32,7 @@ export function checkRateLimit(
   windowMs: number
 ): { success: boolean; remaining: number } {
   const now = Date.now();
+  pruneExpiredRateLimits(now);
   const existing = rateLimits.get(key);
 
   if (!existing || now > existing.resetAt) {
