@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
 
   let client: any = null;
   try {
-    const body = await request.json();
+    const body = await request.json().catch(() => ({}));
     let rows: any[] = Array.isArray(body.rows) ? body.rows : [];
 
     if ((!rows.length || body.csv) && typeof body.csv === 'string') {

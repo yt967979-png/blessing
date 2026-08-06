@@ -212,7 +212,7 @@ export async function POST(request: Request) {
   if (!auth.isAdmin) return forbiddenResponse(auth.error);
 
   try {
-    const body = await request.json();
+    const body = await request.json().catch(() => ({}));
     const { title, cls, category, price, mrp, badge, image, description } = body;
 
     if (!title || price === undefined || price === null || price === '') {
@@ -270,7 +270,7 @@ export async function PATCH(request: Request) {
   if (!auth.isAdmin) return forbiddenResponse(auth.error);
 
   try {
-    const { id, title, price, mrp, inStock, stock, description, image, badge, hasDiscount } = await request.json();
+    const { id, title, price, mrp, inStock, stock, description, image, badge, hasDiscount } = await request.json().catch(() => ({}));
     if (!id) return NextResponse.json({ error: 'Product id is required' }, { status: 400 });
 
     const fields: string[] = [];

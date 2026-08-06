@@ -11,7 +11,8 @@ export async function POST(request: Request) {
 
   let client: any = null;
   try {
-    const { name, email, phone, subject, message } = await request.json();
+    const body = await request.json().catch(() => ({}));
+    const { name, email, phone, subject, message } = body;
 
     if (!name || !phone || !message) {
       return NextResponse.json({ error: 'Name, Phone, and Message are required fields.' }, { status: 400 });

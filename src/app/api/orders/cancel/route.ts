@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const body = await request.json();
+    const body = await request.json().catch(() => ({}));
     const orderId = String(body.orderId || '').trim();
     const reason = String(body.reason || 'Cancelled by admin').slice(0, 200);
     if (!orderId) {

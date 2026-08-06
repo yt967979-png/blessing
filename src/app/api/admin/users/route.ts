@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
   if (!superAdmin.isSuperAdmin) return forbiddenResponse(superAdmin.error);
 
   try {
-    const body = await request.json();
+    const body = await request.json().catch(() => ({}));
     const userId = String(body.userId || '').trim();
     const newRole = String(body.role || '').trim().toLowerCase();
 
@@ -111,7 +111,7 @@ export async function PATCH(request: NextRequest) {
   if (!admin.isAdmin) return forbiddenResponse(admin.error);
 
   try {
-    const body = await request.json();
+    const body = await request.json().catch(() => ({}));
     const userId = String(body.userId || '').trim();
     const status = String(body.status || '').trim();
     if (!userId || !['active', 'banned'].includes(status)) {

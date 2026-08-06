@@ -143,7 +143,8 @@ export async function PATCH(request: Request) {
 
   let client: any = null;
   try {
-    const { name, phone } = await request.json();
+    const body = await request.json().catch(() => ({}));
+    const { name, phone } = body;
     const cleanName = String(name || '').trim();
     const cleanPhone = normalizeMobileDigits(String(phone || ''));
 

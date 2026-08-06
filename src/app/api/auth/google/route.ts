@@ -93,7 +93,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Too many sign-in attempts. Please wait a minute.' }, { status: 429 });
     }
 
-    const { credential } = await request.json();
+    const body = await request.json().catch(() => ({}));
+    const { credential } = body;
     if (!credential) {
       return NextResponse.json({ error: 'Google sign-in failed. Please try again.' }, { status: 400 });
     }

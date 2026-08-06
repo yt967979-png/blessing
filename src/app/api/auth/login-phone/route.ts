@@ -9,7 +9,7 @@ export async function POST(request: Request) {
     const rateLimit = await applyRateLimitAsync(request, 'login-phone', 10, 60_000);
     if (!rateLimit.success && rateLimit.response) return rateLimit.response;
 
-    const body = await request.json();
+    const body = await request.json().catch(() => ({}));
     const rawInput = String(body.phone || body.email || '').trim();
     const passwordInput = String(body.password || '').trim();
 

@@ -9,7 +9,7 @@ export async function POST(request: Request) {
     const rateLimit = await applyRateLimitAsync(request, 'register-user', 10, 60_000);
     if (!rateLimit.success && rateLimit.response) return rateLimit.response;
 
-    const body = await request.json();
+    const body = await request.json().catch(() => ({}));
     const name = String(body.name || '').trim();
     const email = String(body.email || '').trim().toLowerCase();
     const rawPhone = String(body.phone || '').trim();

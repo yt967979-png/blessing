@@ -36,7 +36,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const body = await request.json();
+    const body = await request.json().catch(() => ({}));
     const { orderId, status, hubCity, remarks, awbNumber } = body;
 
     if (!orderId || !status) {

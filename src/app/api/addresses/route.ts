@@ -57,7 +57,7 @@ export async function GET(request: Request) {
 
 // POST /api/addresses — create one address
 export async function POST(request: Request) {
-  const body = await request.json();
+  const body = await request.json().catch(() => ({}));
   const userId = await resolveUserId(request);
   if (!userId) {
     return NextResponse.json({ error: 'Login required to save addresses.' }, { status: 401 });
@@ -117,7 +117,7 @@ export async function POST(request: Request) {
 
 // PATCH /api/addresses — update address
 export async function PATCH(request: Request) {
-  const body = await request.json();
+  const body = await request.json().catch(() => ({}));
   const userId = await resolveUserId(request);
   const id = body.id;
   if (!userId || !id) {

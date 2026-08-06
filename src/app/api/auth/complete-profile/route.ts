@@ -21,7 +21,8 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { name, phone } = await request.json();
+    const body = await request.json().catch(() => ({}));
+    const { name, phone } = body;
     const cleanPhone = normalizeMobileDigits(String(phone || ''));
     const cleanName = String(name || '').trim();
 

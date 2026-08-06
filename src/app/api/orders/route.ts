@@ -505,6 +505,8 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: NextRequest) {
   const auth = await verifyAdminRequest(request);
+  if (!auth.isAdmin) return forbiddenResponse(auth.error);
+
   let client: any = null;
   try {
     const body = await request.json().catch(() => ({}));

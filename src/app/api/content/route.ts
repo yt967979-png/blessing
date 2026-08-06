@@ -65,7 +65,7 @@ export async function POST(request: Request) {
   const auth = await verifyAdminRequest(request);
   if (!auth.isAdmin) return forbiddenResponse(auth.error);
 
-  const body = await request.json();
+  const body = await request.json().catch(() => ({}));
   const question = String(body.question || '').trim();
   const answer = String(body.answer || '').trim();
   const displayOrder = Number(body.display_order || 0);
@@ -98,7 +98,7 @@ export async function PATCH(request: Request) {
   const auth = await verifyAdminRequest(request);
   if (!auth.isAdmin) return forbiddenResponse(auth.error);
 
-  const body = await request.json();
+  const body = await request.json().catch(() => ({}));
   const id = body.id;
   if (!id) return NextResponse.json({ error: 'FAQ id required' }, { status: 400 });
 

@@ -102,7 +102,7 @@ export async function POST(request: NextRequest) {
   if (!session) return unauthorizedResponse('Login required to submit a review.');
 
   try {
-    const body = await request.json();
+    const body = await request.json().catch(() => ({}));
     const bookId = String(body.bookId || '').trim();
     const rating = Math.min(5, Math.max(1, Number(body.rating) || 0));
     const comment = String(body.comment || body.review || '').trim();
@@ -188,7 +188,7 @@ export async function PATCH(request: NextRequest) {
   if (!session) return unauthorizedResponse('Login required to edit your review.');
 
   try {
-    const body = await request.json();
+    const body = await request.json().catch(() => ({}));
     const reviewId = String(body.id || '').trim();
     const bookId = String(body.bookId || '').trim();
     const rating =
