@@ -4,7 +4,17 @@
 
 blessingpowerguide.duckdns.org {
 	encode gzip
-	reverse_proxy 127.0.0.1:3000
+
+	@sse path /api/stock/stream /api/orders/stream
+	handle @sse {
+		reverse_proxy 127.0.0.1:3000 {
+			flush_interval -1
+		}
+	}
+
+	handle {
+		reverse_proxy 127.0.0.1:3000
+	}
 }
 
 # Temporary HTTP by IP only (no HTTPS) — uncomment and comment DuckDNS block if needed:

@@ -152,6 +152,11 @@ export async function GET(request: Request) {
           const classMatch = safeTitle.match(/(6th|7th|8th|9th|10th|11th|12th)/i);
           const extractedClass = classMatch ? classMatch[0] : '10th';
 
+          const rawImg = String(d.cover_image || '').trim();
+          const safeImg = (!rawImg || rawImg.includes('localhost') || rawImg.includes('127.0.0.1'))
+            ? 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80'
+            : rawImg;
+
           return {
             id: d.id,
             slug: d.slug || d.id,
@@ -169,8 +174,8 @@ export async function GET(request: Request) {
             badgeColor: (d.badge && String(d.badge).trim())
               ? (String(d.badge).toUpperCase().includes('COMBO') ? 'bg-purple-600' : 'bg-blue-600')
               : 'bg-blue-600',
-            image: d.cover_image || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80',
-            hoverImage: d.cover_image || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80',
+            image: safeImg,
+            hoverImage: safeImg,
             description: d.description || 'Complete guide book for exam success.',
             features: ['Solved Papers', 'Chapter Notes'],
             inStock: mapBookInStock(d),
