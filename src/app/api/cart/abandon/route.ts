@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
   let client: any = null;
   try {
     const session = await getAuthenticatedUser(request);
-    const body = await request.json();
+    const body = await request.json().catch(() => ({}));
     const phone = normalizeMobileDigits(String(body.phone || ''));
     const name = String(body.name || 'Student').trim();
     const cart = Array.isArray(body.cart) ? body.cart : [];

@@ -20,7 +20,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const body = await request.json();
+    const body = await request.json().catch(() => ({}));
     const {
       items,
       currency = 'INR',
@@ -133,13 +133,14 @@ export async function PUT(request: Request) {
   if (!session) return unauthorizedResponse('Please login to verify payment.');
 
   try {
+    const body = await request.json().catch(() => ({}));
     const {
       razorpay_order_id,
       razorpay_payment_id,
       razorpay_signature,
       expectedRupees,
       items,
-    } = await request.json();
+    } = body;
 
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
       return NextResponse.json({ verified: false, error: 'Missing payment fields.' }, { status: 400 });

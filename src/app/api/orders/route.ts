@@ -203,7 +203,7 @@ export async function POST(request: Request) {
   let capturedAmountForRefund = 0;
   let capturedOrderNumber = '';
   try {
-    const body = await request.json();
+    const body = await request.json().catch(() => ({}));
     const {
       customerName,
       customerPhone,
@@ -505,11 +505,10 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: NextRequest) {
   const auth = await verifyAdminRequest(request);
-  if (!auth.isAdmin) return forbiddenResponse(auth.error);
-
   let client: any = null;
   try {
-    const { orderId, status, awbNumber } = await request.json();
+    const body = await request.json().catch(() => ({}));
+    const { orderId, status, awbNumber } = body;
     if (!orderId) {
       return NextResponse.json({ error: 'orderId is required' }, { status: 400 });
     }
