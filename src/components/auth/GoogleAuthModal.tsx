@@ -12,6 +12,9 @@ import {
   Mail,
   ArrowRight,
   ChevronDown,
+  Eye,
+  EyeOff,
+  Check,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useStore } from '@/context/StoreContext';
@@ -62,6 +65,8 @@ export function GoogleAuthModal({
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const profileIncomplete = Boolean(user?.needsProfile) || forceProfileStep;
 
@@ -473,34 +478,109 @@ export function GoogleAuthModal({
                           className="w-full pl-9 pr-3 py-2 text-xs border border-slate-300 rounded-xl outline-none focus:border-[#0044AA] bg-white"
                         />
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-2">
                         <div className="relative">
                           <KeyRound className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
                           <input
-                            type="password"
+                            type={showPassword ? 'text' : 'password'}
                             required
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
-                            placeholder="Password"
-                            className="w-full pl-9 pr-3 py-2 text-xs border border-slate-300 rounded-xl outline-none focus:border-[#0044AA] bg-white"
+                            placeholder="Create Password (min 6 chars)"
+                            className="w-full pl-9 pr-9 py-2 text-xs border border-slate-300 rounded-xl outline-none focus:border-[#0044AA] bg-white font-medium"
                           />
+                          <button
+                            type="button"
+                            onClick={() => setShowPassword((v) => !v)}
+                            className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 focus:outline-none cursor-pointer"
+                            aria-label={showPassword ? 'Hide password' : 'Show password'}
+                          >
+                            {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
                         </div>
                         <div className="relative">
                           <KeyRound className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
                           <input
-                            type="password"
+                            type={showConfirmPassword ? 'text' : 'password'}
                             required
                             value={confirmPassword}
                             onChange={(e) => setConfirmPassword(e.target.value)}
-                            placeholder="Confirm"
-                            className="w-full pl-9 pr-3 py-2 text-xs border border-slate-300 rounded-xl outline-none focus:border-[#0044AA] bg-white"
+                            placeholder="Confirm Password"
+                            className="w-full pl-9 pr-9 py-2 text-xs border border-slate-300 rounded-xl outline-none focus:border-[#0044AA] bg-white font-medium"
                           />
+                          <button
+                            type="button"
+                            onClick={() => setShowConfirmPassword((v) => !v)}
+                            className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 focus:outline-none cursor-pointer"
+                            aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+                          >
+                            {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
                         </div>
                       </div>
+
+                      {password.length > 0 && (
+                        <div className="bg-slate-100/90 border border-slate-200/80 rounded-xl p-2.5 space-y-1 text-[10px]">
+                          <p className="font-bold text-slate-600 mb-1">Password Requirements:</p>
+                          <div className="flex items-center gap-1.5">
+                            <div
+                              className={`w-3.5 h-3.5 rounded-full flex items-center justify-center transition-colors ${
+                                password.length >= 6 ? 'bg-emerald-500 text-white' : 'bg-slate-300 text-slate-600'
+                              }`}
+                            >
+                              <Check className="w-2.5 h-2.5 stroke-[3]" />
+                            </div>
+                            <span className={password.length >= 6 ? 'text-emerald-700 font-semibold' : 'text-slate-500'}>
+                              At least 6 characters
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <div
+                              className={`w-3.5 h-3.5 rounded-full flex items-center justify-center transition-colors ${
+                                /[A-Za-z]/.test(password) && /[0-9]/.test(password)
+                                  ? 'bg-emerald-500 text-white'
+                                  : 'bg-slate-300 text-slate-600'
+                              }`}
+                            >
+                              <Check className="w-2.5 h-2.5 stroke-[3]" />
+                            </div>
+                            <span
+                              className={
+                                /[A-Za-z]/.test(password) && /[0-9]/.test(password)
+                                  ? 'text-emerald-700 font-semibold'
+                                  : 'text-slate-500'
+                              }
+                            >
+                              Contains letter &amp; number
+                            </span>
+                          </div>
+                          {confirmPassword.length > 0 && (
+                            <div className="flex items-center gap-1.5">
+                              <div
+                                className={`w-3.5 h-3.5 rounded-full flex items-center justify-center transition-colors ${
+                                  password === confirmPassword ? 'bg-emerald-500 text-white' : 'bg-amber-400 text-white'
+                                }`}
+                              >
+                                <Check className="w-2.5 h-2.5 stroke-[3]" />
+                              </div>
+                              <span
+                                className={
+                                  password === confirmPassword
+                                    ? 'text-emerald-700 font-semibold'
+                                    : 'text-amber-700 font-semibold'
+                                }
+                              >
+                                {password === confirmPassword ? 'Passwords match' : 'Passwords do not match'}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       <button
                         type="submit"
                         disabled={isSubmitting}
-                        className="w-full bg-[#0044AA] hover:bg-[#003388] text-white font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 disabled:opacity-50"
+                        className="w-full bg-[#0044AA] hover:bg-[#003388] text-white font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 disabled:opacity-50 transition-colors shadow-md shadow-blue-900/10 cursor-pointer"
                       >
                         <span>{isSubmitting ? 'Registering…' : 'Create account'}</span>
                         <ArrowRight className="w-3.5 h-3.5" />
@@ -516,24 +596,32 @@ export function GoogleAuthModal({
                           value={phone}
                           onChange={(e) => setPhone(e.target.value)}
                           placeholder="Email or mobile number"
-                          className="w-full pl-9 pr-3 py-2 text-xs border border-slate-300 rounded-xl outline-none focus:border-[#0044AA] bg-white"
+                          className="w-full pl-9 pr-3 py-2 text-xs border border-slate-300 rounded-xl outline-none focus:border-[#0044AA] bg-white font-medium"
                         />
                       </div>
                       <div className="relative">
                         <KeyRound className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
                         <input
-                          type="password"
+                          type={showPassword ? 'text' : 'password'}
                           required
                           value={password}
                           onChange={(e) => setPassword(e.target.value)}
                           placeholder="Password"
-                          className="w-full pl-9 pr-3 py-2 text-xs border border-slate-300 rounded-xl outline-none focus:border-[#0044AA] bg-white"
+                          className="w-full pl-9 pr-9 py-2 text-xs border border-slate-300 rounded-xl outline-none focus:border-[#0044AA] bg-white font-medium"
                         />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword((v) => !v)}
+                          className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 focus:outline-none cursor-pointer"
+                          aria-label={showPassword ? 'Hide password' : 'Show password'}
+                        >
+                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
                       </div>
                       <button
                         type="submit"
                         disabled={isSubmitting}
-                        className="w-full bg-[#0044AA] hover:bg-[#003388] text-white font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 disabled:opacity-50"
+                        className="w-full bg-[#0044AA] hover:bg-[#003388] text-white font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 disabled:opacity-50 transition-colors shadow-md shadow-blue-900/10 cursor-pointer"
                       >
                         <span>{isSubmitting ? 'Signing in…' : 'Sign in'}</span>
                         <ArrowRight className="w-3.5 h-3.5" />
