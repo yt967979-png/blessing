@@ -230,13 +230,13 @@ export const Header = () => {
 
         {/* Actions */}
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-          {user && user.role === 'admin' && (
+          {user && (user.role === 'admin' || user.role === 'super_admin') && (
             <Link
               href="/admin"
-              className="bg-[#001B3A] text-amber-400 font-extrabold text-[10px] sm:text-[11px] px-2.5 sm:px-3 py-1.5 rounded-xl flex items-center gap-1 border border-amber-400/30 shrink-0"
+              className="bg-[#001B3A] text-amber-400 font-extrabold text-[10px] sm:text-[11px] px-2.5 sm:px-3 py-1.5 rounded-xl flex items-center gap-1 border border-amber-400/30 shrink-0 hover:bg-[#002B5B] transition-colors"
             >
-              <ShieldCheck className="w-3.5 h-3.5" />
-              <span>ADMIN</span>
+              <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+              <span>ADMIN PANEL</span>
             </Link>
           )}
 

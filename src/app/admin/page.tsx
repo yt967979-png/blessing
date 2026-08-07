@@ -195,7 +195,7 @@ export default function AdminPage() {
   const [newFaqQ, setNewFaqQ] = useState('');
   const [newFaqA, setNewFaqA] = useState('');
 
-  const isAdmin = !!user && user.role === 'admin';
+  const isAdmin = !!user && (user.role === 'admin' || user.role === 'super_admin');
 
   const loadContent = useCallback(async () => {
     if (!user) return;
@@ -346,7 +346,7 @@ export default function AdminPage() {
 
   // Unlock notification sound after admin gesture & save preference in localStorage (only prompt once)
   useEffect(() => {
-    if (!user?.id || user.role !== 'admin') return;
+    if (!user?.id || (user.role !== 'admin' && user.role !== 'super_admin')) return;
     
     // Check if admin previously enabled sound
     const storedPref = localStorage.getItem('bpg_admin_sound_enabled');
@@ -384,7 +384,7 @@ export default function AdminPage() {
 
   // ── Initial load + SSE stream
   useEffect(() => {
-    if (!user?.id || user.role !== 'admin') return;
+    if (!user?.id || (user.role !== 'admin' && user.role !== 'super_admin')) return;
     void loadLiveOrders();
     void loadAnalytics();
     void loadLowStock();
