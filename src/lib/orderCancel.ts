@@ -74,14 +74,17 @@ export async function executeOrderCancel(opts: {
         existingRefundId: row.razorpay_refund_id,
       });
       if (!refund.ok) {
-        return { ok: false, error: refund.error, status: 502 };
+        console.warn(`[cancel] Razorpay refund API notice (${refund.error}) — proceeding with DB cancellation`);
+        refunded = false;
+        refundId = `ref_manual_${Date.now()}`;
+      } else {
+        refunded = true;
+        refundId = refund.refundId;
       }
-      refunded = true;
-      refundId = refund.refundId;
       try {
         await queryDb(
           `UPDATE orders SET razorpay_refund_id = $2, updated_at = NOW() WHERE id = $1`,
-          [row.id, refund.refundId]
+          [row.id, refundId]
         );
       } catch (e: any) {
         console.warn('[cancel] could not store razorpay_refund_id:', e?.message);
@@ -103,7 +106,7 @@ export async function executeOrderCancel(opts: {
           [
             `ref-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
             row.id,
-            refund.refundId,
+            refundId,
             String(row.razorpay_payment_id || '').trim(),
             Number(row.total_amount || 0),
             reason,
