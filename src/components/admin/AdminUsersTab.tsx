@@ -83,8 +83,7 @@ export default function AdminUsersTab({
   }, [load]);
 
   const toggleSubAdminRole = async (userId: string, currentRole: string) => {
-    const isCurrentlyAdmin = String(currentRole || '').toLowerCase().includes('admin');
-    const targetRole = isCurrentlyAdmin ? 'customer' : 'admin';
+    const targetRole = currentRole === 'admin' ? 'customer' : 'admin';
     setUpdatingId(userId);
     try {
       const r = await fetch('/api/admin/users', {
@@ -296,7 +295,7 @@ export default function AdminUsersTab({
                       </span>
                     </td>
                     <td className="py-3 px-3 text-right space-x-1.5 whitespace-nowrap">
-                      {isSuperAdmin && c.role !== 'super_admin' && (
+                      {c.role !== 'super_admin' && (
                         <button
                           type="button"
                           disabled={updatingId === c.id}

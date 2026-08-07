@@ -1519,7 +1519,7 @@ export async function ensureAdminUser(client: any) {
       return;
     }
 
-    // Existing user found — do not overwrite their role or status on every connection check
+    // Existing admin: promote role / refresh profile, but do not silently reset password.
     if (forceReset) {
       if (production && !isStrongAdminPassword(password)) {
         console.error('[db] ADMIN_FORCE_PASSWORD_RESET ignored — password too weak for production.');
@@ -1528,13 +1528,24 @@ export async function ensureAdminUser(client: any) {
       await client.query(
         `UPDATE users
          SET name = $1, email = $2, phone = COALESCE(NULLIF($3, ''), phone),
-             password_hash = $4, updated_at = NOW()
+             password_hash = $4, role = 'admin', status = 'active', updated_at = NOW()
          WHERE id = $5`,
         [name, email, phone, passwordHash, target.id]
       );
       console.log(`[db] admin password force-reset for id=${target.id}`);
       return;
     }
+
+    await client.query(
+      `UPDATE users
+       SET name = $1,
+           email = $2,
+           phone = COALESCE(NULLIF($3, ''), phone),
+           status = 'active',
+           updated_at = NOW()
+       WHERE id = $4`,
+      [name, email, phone, target.id]
+    );
   } catch (err: any) {
     console.warn('[db] ensureAdminUser skipped:', err?.message || err);
   }
