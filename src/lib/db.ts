@@ -1293,6 +1293,39 @@ async function runSchemaInit(client: any) {
         CREATE INDEX IF NOT EXISTS idx_stock_holds_group ON stock_holds (hold_group_id);
         CREATE INDEX IF NOT EXISTS idx_stock_holds_rzp_order ON stock_holds (razorpay_order_id);
         CREATE INDEX IF NOT EXISTS idx_stock_holds_sweep ON stock_holds (status, expires_at);
+
+        CREATE TABLE IF NOT EXISTS refunds (
+          id VARCHAR(255) PRIMARY KEY,
+          order_id VARCHAR(255) REFERENCES orders(id) ON DELETE CASCADE,
+          razorpay_refund_id VARCHAR(255),
+          razorpay_payment_id VARCHAR(255),
+          amount NUMERIC NOT NULL,
+          status VARCHAR(50) DEFAULT 'PROCESSED',
+          reason TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_refunds_order_id ON refunds (order_id);
+
+        CREATE TABLE IF NOT EXISTS webhook_events (
+          id VARCHAR(255) PRIMARY KEY,
+          event_id VARCHAR(255) UNIQUE NOT NULL,
+          event_type VARCHAR(255) NOT NULL,
+          payload JSONB,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_webhook_events_event_id ON webhook_events (event_id);
+
+        CREATE TABLE IF NOT EXISTS audit_logs (
+          id VARCHAR(255) PRIMARY KEY,
+          actor_id VARCHAR(255),
+          action VARCHAR(255) NOT NULL,
+          target_type VARCHAR(100),
+          target_id VARCHAR(255),
+          details JSONB,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_audit_logs_actor ON audit_logs (actor_id);
+        CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON audit_logs (created_at DESC);
       `);
     } catch (e) {
       /* schema already exists or partial — safe to continue */

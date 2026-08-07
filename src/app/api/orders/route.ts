@@ -100,6 +100,7 @@ function mapOrderRow(o: any) {
     totalAmount: Number(o.total_amount || 0),
     paymentMethod: o.payment_method || 'Razorpay',
     paymentStatus: o.payment_status || 'Pending',
+    razorpayRefundId: o.razorpay_refund_id || null,
     courierStatus: o.order_status || 'Order Placed',
     orderStatus: o.order_status || 'Order Placed',
     isCancelled: isOrderCancelled(o.order_status),
@@ -306,7 +307,9 @@ export async function POST(request: Request) {
 
     const payStat = 'Payment Confirmed';
     const id = `ord-${Date.now()}`;
-    const orderNumber = 'BPG-' + Math.floor(1000 + Math.random() * 9000);
+    // Collision-resistant: timestamp (ms) + random suffix gives ~2.8 trillion unique values.
+    // Old code (Math.random() * 9000) had only 9000 values — birthday collision at ~6000 orders.
+    const orderNumber = 'BPG-' + Date.now().toString(36).toUpperCase().slice(-5) + Math.random().toString(36).slice(2, 5).toUpperCase();
     capturedOrderNumber = orderNumber;
     const ymd = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     const internalShipmentId = `SHP-${ymd}-${Math.floor(100000 + Math.random() * 900000)}`;

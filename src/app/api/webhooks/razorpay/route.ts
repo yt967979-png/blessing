@@ -138,6 +138,29 @@ export async function POST(request: Request) {
   }
 
   try {
+    const rzpEventId = String(event?.id || event?.event_id || '');
+    if (rzpEventId) {
+      try {
+        const dupCheck = await client.query(
+          `INSERT INTO webhook_events (id, event_id, event_type, payload)
+           VALUES ($1, $2, $3, $4)
+           ON CONFLICT (event_id) DO NOTHING
+           RETURNING id`,
+          [
+            `whe-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            rzpEventId,
+            eventName,
+            JSON.stringify(event),
+          ]
+        );
+        if (dupCheck.rowCount === 0) {
+          return NextResponse.json({ ok: true, action: 'noop_duplicate_webhook', eventId: rzpEventId });
+        }
+      } catch (e: any) {
+        console.warn('[razorpay-webhook] webhook_events log skipped:', e?.message);
+      }
+    }
+
     // Payment is captured — keep the reserved stock no matter what happens
     // below. Covers the "client closed the tab before POST /api/orders ran"
     // orphan case: without this, the TTL sweeper would eventually release

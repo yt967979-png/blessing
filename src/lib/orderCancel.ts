@@ -94,6 +94,24 @@ export async function executeOrderCancel(opts: {
       } catch (e: any) {
         console.warn('[cancel] payments refund status skipped:', e?.message);
       }
+
+      // Record in dedicated `refunds` enterprise table
+      try {
+        await queryDb(
+          `INSERT INTO refunds (id, order_id, razorpay_refund_id, razorpay_payment_id, amount, status, reason)
+           VALUES ($1, $2, $3, $4, $5, 'PROCESSED', $6)`,
+          [
+            `ref-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            row.id,
+            refund.refundId,
+            String(row.razorpay_payment_id || '').trim(),
+            Number(row.total_amount || 0),
+            reason,
+          ]
+        );
+      } catch (e: any) {
+        console.warn('[cancel] refunds table insert skipped:', e?.message);
+      }
     }
 
     const items = await queryDb(`SELECT book_id, quantity FROM order_items WHERE order_id = $1`, [
@@ -131,6 +149,55 @@ export async function executeOrderCancel(opts: {
        VALUES ($1, $2, 'Cancelled', $3)`,
       [`tl-cancel-${Date.now()}`, row.id, timelineRemarks.slice(0, 500)]
     );
+
+    // Notify Customer in User Notification Center
+    if (row.user_id) {
+      try {
+        const notifTitle = refunded
+          ? `Order #${row.order_number} Cancelled & Refunded`
+          : `Order #${row.order_number} Cancelled`;
+        const notifMsg = refunded
+          ? `Your order #${row.order_number} was cancelled. A full refund of ₹${Number(row.total_amount || 0)} was issued via Razorpay (Refund ID: ${refundId}). It will reflect in your bank account in 5-7 working days.`
+          : `Your order #${row.order_number} was cancelled by store admin (${reason}).`;
+        await queryDb(
+          `INSERT INTO notifications (id, user_id, title, message, type)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [
+            `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            row.user_id,
+            notifTitle,
+            notifMsg,
+            refunded ? 'refund' : 'warning',
+          ]
+        );
+      } catch (e: any) {
+        console.warn('[cancel] customer notification skipped:', e?.message);
+      }
+    }
+
+    // Record Audit Log for Admin Action
+    try {
+      await queryDb(
+        `INSERT INTO audit_logs (id, actor_id, action, target_type, target_id, details)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          `audit-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          opts.actor || 'system',
+          'ORDER_CANCELLED',
+          'order',
+          row.id,
+          JSON.stringify({
+            orderNumber: row.order_number,
+            reason,
+            refunded,
+            refundId: refundId || null,
+            amount: Number(row.total_amount || 0),
+          }),
+        ]
+      );
+    } catch (e: any) {
+      console.warn('[cancel] audit log insert skipped:', e?.message);
+    }
 
     if (row.coupon_id) {
       try {

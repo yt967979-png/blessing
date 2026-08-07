@@ -15,8 +15,10 @@ function getConnectionCandidates() {
 
   if (raw.length === 0 && process.env.PGHOST && process.env.PGUSER && process.env.PGPASSWORD) {
     const host = process.env.PGHOST;
-    const user = process.env.PGUSER;
-    const pass = process.env.PGPASSWORD;
+    // URL-encode user/pass so special chars (@, #, /, :) in passwords don't break the URL.
+    // db.ts does the same at line 30-35 — keep in sync.
+    const user = encodeURIComponent(process.env.PGUSER);
+    const pass = encodeURIComponent(process.env.PGPASSWORD);
     const db = process.env.PGDATABASE || 'railway';
     const port = process.env.PGPORT || 5432;
     raw.push(`postgresql://${user}:${pass}@${host}:${port}/${db}`);
@@ -279,7 +281,7 @@ async function migrateDatabase(connStr, dbName) {
       CREATE TABLE IF NOT EXISTS order_timeline (
         id VARCHAR(255) PRIMARY KEY,
         order_id VARCHAR(255) REFERENCES orders(id) ON DELETE CASCADE,
-        status VARCHAR(50) NOT NULL,
+        status VARCHAR(255) NOT NULL,
         remarks TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
@@ -306,9 +308,10 @@ async function migrateDatabase(connStr, dbName) {
 
       CREATE TABLE IF NOT EXISTS notifications (
         id VARCHAR(255) PRIMARY KEY,
-        user_id VARCHAR(255) NOT NULL,
+        user_id VARCHAR(255),
         title VARCHAR(255) NOT NULL,
         message TEXT NOT NULL,
+        type VARCHAR(50) DEFAULT 'info',
         is_read BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
@@ -327,11 +330,77 @@ async function migrateDatabase(connStr, dbName) {
         site_name VARCHAR(255) DEFAULT 'BLESSING POWER GUIDE',
         support_email VARCHAR(255) DEFAULT 'blessingpowerguide@gmail.com',
         support_phone VARCHAR(255) DEFAULT '+91 98404 18228',
-        razorpay_key VARCHAR(255) DEFAULT 'rzp_test_BPG10023490',
-        shiprocket_token TEXT,
+        razorpay_key VARCHAR(255),
         shipping_charge NUMERIC DEFAULT 0,
-        tax_percentage NUMERIC DEFAULT 0
+        tax_percentage NUMERIC DEFAULT 0,
+        admin_alert_phones TEXT DEFAULT ''
       );
+
+      CREATE TABLE IF NOT EXISTS faqs (
+        id VARCHAR(255) PRIMARY KEY,
+        question TEXT NOT NULL,
+        answer TEXT NOT NULL,
+        display_order INT DEFAULT 0,
+        status VARCHAR(50) DEFAULT 'active',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS rate_limits (
+        key TEXT PRIMARY KEY,
+        count INTEGER NOT NULL DEFAULT 0,
+        reset_at TIMESTAMPTZ NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS stock_holds (
+        id VARCHAR(255) PRIMARY KEY,
+        hold_group_id VARCHAR(255) NOT NULL,
+        razorpay_order_id VARCHAR(255),
+        book_id VARCHAR(255) NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+        user_id VARCHAR(255),
+        qty INT NOT NULL,
+        status VARCHAR(20) NOT NULL DEFAULT 'held',
+        expires_at TIMESTAMP NOT NULL,
+        released_at TIMESTAMP,
+        release_reason VARCHAR(100),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_stock_holds_group ON stock_holds (hold_group_id);
+      CREATE INDEX IF NOT EXISTS idx_stock_holds_rzp_order ON stock_holds (razorpay_order_id);
+      CREATE INDEX IF NOT EXISTS idx_stock_holds_sweep ON stock_holds (status, expires_at);
+
+      CREATE TABLE IF NOT EXISTS refunds (
+        id VARCHAR(255) PRIMARY KEY,
+        order_id VARCHAR(255) REFERENCES orders(id) ON DELETE CASCADE,
+        razorpay_refund_id VARCHAR(255),
+        razorpay_payment_id VARCHAR(255),
+        amount NUMERIC NOT NULL,
+        status VARCHAR(50) DEFAULT 'PROCESSED',
+        reason TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_refunds_order_id ON refunds (order_id);
+
+      CREATE TABLE IF NOT EXISTS webhook_events (
+        id VARCHAR(255) PRIMARY KEY,
+        event_id VARCHAR(255) UNIQUE NOT NULL,
+        event_type VARCHAR(255) NOT NULL,
+        payload JSONB,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_webhook_events_event_id ON webhook_events (event_id);
+
+      CREATE TABLE IF NOT EXISTS audit_logs (
+        id VARCHAR(255) PRIMARY KEY,
+        actor_id VARCHAR(255),
+        action VARCHAR(255) NOT NULL,
+        target_type VARCHAR(100),
+        target_id VARCHAR(255),
+        details JSONB,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_audit_logs_actor ON audit_logs (actor_id);
+      CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON audit_logs (created_at DESC);
 
       CREATE TABLE IF NOT EXISTS email_otps (
         id VARCHAR(255) PRIMARY KEY,

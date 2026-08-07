@@ -4,11 +4,12 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { Search, Heart, ShoppingBag, User, ShieldCheck } from 'lucide-react';
+import { Search, Heart, ShoppingBag, User, ShieldCheck, Bell, CheckCheck, RefreshCw } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { BrandLogo } from '@/components/ui/BrandLogo';
 import { imageNeedsUnoptimized } from '@/lib/productImage';
 import { useCartBadgeBump } from '@/hooks/useCartBadgeBump';
+import { authHeaders } from '@/lib/clientAuth';
 
 export const Header = () => {
   const router = useRouter();
@@ -27,6 +28,49 @@ export const Header = () => {
   const [showSearchDropdown, setShowSearchDropdown] = useState(false);
   const [localQuery, setLocalQuery] = useState(searchQuery);
   const cartBump = useCartBadgeBump(cartCount);
+
+  const [unreadNotifCount, setUnreadNotifCount] = useState(0);
+  const [notificationsList, setNotificationsList] = useState<any[]>([]);
+  const [showNotifDropdown, setShowNotifDropdown] = useState(false);
+
+  const fetchNotifications = async () => {
+    if (!user) return;
+    try {
+      const res = await fetch('/api/notifications', { headers: authHeaders(user) });
+      if (res.ok) {
+        const data = await res.json();
+        setNotificationsList(data.notifications || []);
+        setUnreadNotifCount(data.unreadCount || 0);
+      }
+    } catch {
+      /* best-effort */
+    }
+  };
+
+  useEffect(() => {
+    if (user) {
+      fetchNotifications();
+      const timer = setInterval(fetchNotifications, 20000);
+      return () => clearInterval(timer);
+    } else {
+      setNotificationsList([]);
+      setUnreadNotifCount(0);
+    }
+  }, [user]);
+
+  const handleMarkAllRead = async () => {
+    try {
+      await fetch('/api/notifications', {
+        method: 'PATCH',
+        headers: authHeaders(user, { 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ markAllRead: true }),
+      });
+      setUnreadNotifCount(0);
+      setNotificationsList((prev) => prev.map((n) => ({ ...n, isRead: true })));
+    } catch {
+      /* best-effort */
+    }
+  };
 
   useEffect(() => {
     setLocalQuery(searchQuery);
@@ -194,6 +238,83 @@ export const Header = () => {
               <ShieldCheck className="w-3.5 h-3.5" />
               <span>ADMIN</span>
             </Link>
+          )}
+
+          {user && (
+            <div className="relative shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowNotifDropdown(!showNotifDropdown);
+                  if (!showNotifDropdown) fetchNotifications();
+                }}
+                className="relative flex p-2 rounded-xl text-slate-700 hover:bg-slate-100 min-h-10 min-w-10 sm:min-h-11 sm:min-w-11 items-center justify-center cursor-pointer touch-manipulation"
+                aria-label="Notifications"
+              >
+                <Bell className="w-5 h-5 text-slate-700" />
+                {unreadNotifCount > 0 && (
+                  <span className="absolute top-0.5 right-0.5 w-4 h-4 bg-amber-500 text-white text-[10px] font-extrabold rounded-full flex items-center justify-center shadow-xs animate-pulse">
+                    {unreadNotifCount > 9 ? '9+' : unreadNotifCount}
+                  </span>
+                )}
+              </button>
+
+              {showNotifDropdown && (
+                <div className="absolute top-full right-0 mt-2 w-80 sm:w-96 bg-white border border-slate-200 rounded-2xl shadow-2xl z-50 overflow-hidden text-xs">
+                  <div className="p-3 bg-slate-900 text-white flex items-center justify-between">
+                    <div className="flex items-center gap-2 font-bold">
+                      <Bell className="w-4 h-4 text-amber-400" />
+                      <span>Notifications</span>
+                      {unreadNotifCount > 0 && (
+                        <span className="bg-amber-500 text-white px-2 py-0.5 rounded-full text-[10px] font-extrabold">
+                          {unreadNotifCount} new
+                        </span>
+                      )}
+                    </div>
+                    {unreadNotifCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleMarkAllRead}
+                        className="text-[11px] text-amber-300 hover:text-white flex items-center gap-1 font-semibold"
+                      >
+                        <CheckCheck className="w-3.5 h-3.5" />
+                        Mark read
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
+                    {notificationsList.length === 0 ? (
+                      <div className="p-6 text-center text-slate-500">
+                        <Bell className="w-8 h-8 mx-auto text-slate-300 mb-2" />
+                        <p className="font-medium text-slate-600">No notifications yet</p>
+                        <p className="text-[11px] text-slate-400 mt-1">Order status and refund updates will appear here.</p>
+                      </div>
+                    ) : (
+                      notificationsList.map((n) => (
+                        <div
+                          key={n.id}
+                          className={`p-3.5 transition-colors ${
+                            !n.isRead ? 'bg-amber-50/60 border-l-4 border-l-amber-500' : 'hover:bg-slate-50'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <h4 className="font-bold text-[#001B3A] text-xs">{n.title}</h4>
+                            <span className="text-[10px] text-slate-400 shrink-0">
+                              {new Date(n.createdAt).toLocaleDateString('en-IN', {
+                                month: 'short',
+                                day: 'numeric',
+                              })}
+                            </span>
+                          </div>
+                          <p className="text-slate-600 text-[11px] leading-relaxed mt-1">{n.message}</p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           )}
 
           <Link

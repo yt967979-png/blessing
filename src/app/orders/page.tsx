@@ -538,6 +538,28 @@ function OrdersContent() {
                 </div>
               </div>
 
+              {/* Granular Refund Banner */}
+              {orderIsCancelled && (
+                <div className="bg-red-500/10 border border-red-500/30 rounded-2xl p-4 text-xs space-y-2 mt-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2 font-bold text-red-200">
+                    <span className="flex items-center gap-2">
+                      <RefreshCw className="w-4 h-4 text-amber-400" />
+                      <span>REFUND STATUS: {searchedOrderData.paymentStatus || 'Refunded'}</span>
+                    </span>
+                    {searchedOrderData.razorpayRefundId && (
+                      <span className="font-mono text-[11px] bg-red-950/80 px-2.5 py-1 rounded-lg border border-red-700/50 text-amber-300">
+                        REF ID: {searchedOrderData.razorpayRefundId}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-slate-300 text-[11px] leading-relaxed">
+                    {searchedOrderData.paymentStatus?.toLowerCase().includes('refund') || searchedOrderData.razorpayRefundId
+                      ? `A full refund of ₹${searchedOrderData.totalAmount || 0} has been processed back to your original payment method via Razorpay. Standard bank processing time: 5-7 working days.`
+                      : 'This order was cancelled by the store administrator. No amount will be debited.'}
+                  </p>
+                </div>
+              )}
+
               {/* Direct Actions Banner */}
               <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3">
                 <div className="text-xs text-slate-300 flex items-center gap-2">
@@ -804,6 +826,19 @@ function OrdersContent() {
                     <span>{listCancelled ? 'Cancelled' : (ord.courierStatus || 'Order Placed')}</span>
                   </span>
                 </div>
+                {listCancelled && (
+                  <div className="bg-red-50 border border-red-200/80 rounded-xl p-2.5 text-xs flex flex-wrap items-center justify-between gap-2 text-red-800">
+                    <span className="font-bold flex items-center gap-1.5">
+                      <RefreshCw className="w-3.5 h-3.5 text-red-600" />
+                      <span>{ord.paymentStatus || 'Refunded'}</span>
+                    </span>
+                    {ord.razorpayRefundId && (
+                      <span className="font-mono text-[10px] bg-red-100 px-2 py-0.5 rounded text-red-900 font-extrabold">
+                        Refund ID: {ord.razorpayRefundId}
+                      </span>
+                    )}
+                  </div>
+                )}
 
                 <div className="flex flex-wrap items-center justify-between gap-3 text-xs pt-1">
                   <div className="space-y-1">
