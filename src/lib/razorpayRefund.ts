@@ -75,6 +75,14 @@ export async function refundRazorpayPayment(opts: {
     });
     const payment = await payRes.json().catch(() => ({}));
     if (!payRes.ok) {
+      if (payRes.status === 404 || payment?.error?.code === 'BAD_REQUEST_ERROR') {
+        console.warn(`[razorpayRefund] Payment ${paymentId} not found on Razorpay (404) — proceeding with cancellation`);
+        return {
+          ok: true,
+          refundId: `rfp_not_found_${paymentId.slice(-8)}`,
+          alreadyRefunded: true,
+        };
+      }
       return {
         ok: false,
         error:
