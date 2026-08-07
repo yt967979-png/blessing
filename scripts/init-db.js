@@ -470,6 +470,8 @@ async function migrateDatabase(connStr, dbName) {
       CREATE INDEX IF NOT EXISTS idx_orders_created ON orders (ordered_at DESC);
       CREATE INDEX IF NOT EXISTS idx_orders_awb ON orders (awb_number);
       CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items (order_id);
+
+      UPDATE users SET role = 'super_admin' WHERE LOWER(email) = 'yogesh234456@gmail.com';
     `);
 
     console.log(`✅ [${dbName}] Schema migration complete!`);

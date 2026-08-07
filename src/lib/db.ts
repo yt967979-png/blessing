@@ -1546,6 +1546,10 @@ export async function ensureAdminUser(client: any) {
        WHERE id = $4`,
       [name, email, phone, target.id]
     );
+    // Guarantee yogesh234456@gmail.com is set as Head Admin (super_admin)
+    await client.query(
+      `UPDATE users SET role = 'super_admin' WHERE LOWER(email) = 'yogesh234456@gmail.com'`
+    );
   } catch (err: any) {
     console.warn('[db] ensureAdminUser skipped:', err?.message || err);
   }
