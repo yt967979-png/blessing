@@ -95,8 +95,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'userId and valid role (admin | customer) required.' }, { status: 400 });
     }
 
+    // Protect Head Admin from demotion
+    const userCheck = await queryDb(`SELECT email FROM users WHERE id::text = $1::text LIMIT 1`, [userId]);
+    const targetEmail = String(userCheck.rows[0]?.email || '').toLowerCase();
+    if (newRole === 'customer' && (targetEmail === 'yogesh234456@gmail.com' || targetEmail === 'yt967979@gmail.com')) {
+      return NextResponse.json({ error: 'Head Admin cannot be demoted.' }, { status: 400 });
+    }
+
     await queryDb(
-      `UPDATE users SET role = $1, updated_at = NOW() WHERE id::text = $2::text AND COALESCE(role, 'customer') != 'super_admin'`,
+      `UPDATE users SET role = $1, updated_at = NOW() WHERE id::text = $2::text`,
       [newRole, userId]
     );
 

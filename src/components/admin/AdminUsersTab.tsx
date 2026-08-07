@@ -266,11 +266,7 @@ export default function AdminUsersTab({
                     </td>
                     <td className="py-3 px-3 text-gray-600 whitespace-nowrap">{c.phone}</td>
                     <td className="py-3 px-3">
-                      {c.role === 'super_admin' ? (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 rounded-md">
-                          ⭐ Super Admin
-                        </span>
-                      ) : c.role === 'admin' ? (
+                      {c.role === 'admin' || c.role === 'super_admin' ? (
                         <span className="inline-flex items-center gap-1 text-[10px] font-extrabold bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-md">
                           🛡️ Admin
                         </span>
@@ -295,19 +291,19 @@ export default function AdminUsersTab({
                       </span>
                     </td>
                     <td className="py-3 px-3 text-right space-x-1.5 whitespace-nowrap">
-                      {c.role !== 'super_admin' && (
+                      {!['yogesh234456@gmail.com', 'yt967979@gmail.com'].includes((c.email || '').toLowerCase()) && (
                         <button
                           type="button"
                           disabled={updatingId === c.id}
                           onClick={() => toggleSubAdminRole(c.id, c.role)}
                           className={`inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold rounded-lg cursor-pointer disabled:opacity-50 ${
-                            c.role === 'admin'
+                            c.role === 'admin' || c.role === 'super_admin'
                               ? 'text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200'
                               : 'text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200'
                           }`}
                         >
                           <Shield className="w-3 h-3" />
-                          {c.role === 'admin' ? 'Remove Admin' : 'Make Admin'}
+                          {c.role === 'admin' || c.role === 'super_admin' ? 'Remove Admin' : 'Make Admin'}
                         </button>
                       )}
 
