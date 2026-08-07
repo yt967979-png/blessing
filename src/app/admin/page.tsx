@@ -344,14 +344,25 @@ export default function AdminPage() {
     }
   }, [user, analyticsRange]);
 
-  // Unlock notification sound after first admin gesture (browser autoplay policy)
+  // Unlock notification sound after admin gesture & save preference in localStorage (only prompt once)
   useEffect(() => {
     if (!user?.id || user.role !== 'admin') return;
-    if (soundUnlockedRef.current) return;
-    setSoundHintVisible(true);
+    
+    // Check if admin previously enabled sound
+    const storedPref = localStorage.getItem('bpg_admin_sound_enabled');
+    if (storedPref === 'true') {
+      soundUnlockedRef.current = true;
+      setSoundHintVisible(false);
+    } else {
+      setSoundHintVisible(true);
+    }
+
     const unlock = () => {
       soundUnlockedRef.current = true;
       setSoundHintVisible(false);
+      try {
+        localStorage.setItem('bpg_admin_sound_enabled', 'true');
+      } catch {}
       try {
         const AC = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
         if (AC) {
@@ -360,9 +371,15 @@ export default function AdminPage() {
         }
       } catch { /* ignore */ }
       window.removeEventListener('pointerdown', unlock);
+      window.removeEventListener('click', unlock);
     };
+
     window.addEventListener('pointerdown', unlock, { once: true });
-    return () => window.removeEventListener('pointerdown', unlock);
+    window.addEventListener('click', unlock, { once: true });
+    return () => {
+      window.removeEventListener('pointerdown', unlock);
+      window.removeEventListener('click', unlock);
+    };
   }, [user?.id, user?.role]);
 
   // ── Initial load + SSE stream
@@ -920,6 +937,9 @@ export default function AdminPage() {
               onClick={() => {
                 soundUnlockedRef.current = true;
                 setSoundHintVisible(false);
+                try {
+                  localStorage.setItem('bpg_admin_sound_enabled', 'true');
+                } catch {}
                 playAdminNewOrderBeep();
               }}
               className="ml-auto text-[11px] font-bold text-white bg-[#2874f0] hover:bg-[#1a5dc8] px-2.5 py-1 rounded-lg cursor-pointer"
