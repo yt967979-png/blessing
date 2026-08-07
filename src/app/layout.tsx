@@ -13,9 +13,13 @@ export const metadata: Metadata = {
     'Quality guides for better preparation and brighter results for 6th to 12th standard students. Tamil Nadu State Board, CBSE & Matriculation.',
   manifest: '/manifest.json',
   icons: {
-    icon: [{ url: '/logo.png', type: 'image/png' }],
+    icon: [
+      { url: '/favicon.ico' },
+      { url: '/logo.png', type: 'image/png' },
+      { url: '/icon.png', type: 'image/png' },
+    ],
+    shortcut: ['/favicon.ico', '/logo.png'],
     apple: [{ url: '/apple-touch-icon.png' }],
-    shortcut: '/logo.png',
   },
   openGraph: {
     title: 'Blessing Power Guide',
