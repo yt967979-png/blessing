@@ -81,10 +81,10 @@ export async function GET(request: NextRequest) {
   }
 }
 
-/** Super Admin ONLY — Promote to Sub-Admin (admin) or Revoke */
+/** Admin: Promote user to Admin or Revoke Admin role */
 export async function POST(request: NextRequest) {
-  const superAdmin = await verifySuperAdminRequest(request);
-  if (!superAdmin.isSuperAdmin) return forbiddenResponse(superAdmin.error);
+  const admin = await verifyAdminRequest(request);
+  if (!admin.isAdmin) return forbiddenResponse(admin.error);
 
   try {
     const body = await request.json().catch(() => ({}));

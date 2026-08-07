@@ -92,7 +92,7 @@ export default function AdminUsersTab({
         body: JSON.stringify({ userId, role: targetRole }),
       });
       if (r.ok) {
-        showToast(targetRole === 'admin' ? '🛡️ User granted Sub-Admin privileges' : '👤 Sub-Admin privileges removed');
+        showToast(targetRole === 'admin' ? '🛡️ User granted Admin privileges' : '👤 Admin privileges removed');
         setCustomers((prev) => prev.map((c) => (c.id === userId ? { ...c, role: targetRole } : c)));
       } else {
         const d = await r.json();
@@ -210,27 +210,27 @@ export default function AdminUsersTab({
         <div>
           <h2 className="text-base font-bold text-gray-900 flex items-center gap-2">
             <Users className="w-4 h-4 text-[#2874f0]" />
-            User Management & Sub-Admin Roles
+            User Management
           </h2>
           <p className="text-xs text-gray-400 mt-0.5">
-            {customers.length} registered users — {isSuperAdmin ? 'Super Admin can manage sub-admins & delete accounts' : 'View users & packing privileges'}
+            {customers.length} registered users — manage user accounts and grant Admin privileges
           </p>
         </div>
         <div className="flex items-center gap-2">
           <input
-            type="search"
-            placeholder="Search name, email, phone…"
+            type="text"
+            placeholder="Search users..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="px-3 py-2 text-xs border border-gray-200 rounded-lg outline-none focus:border-[#2874f0] w-full sm:w-48"
+            className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs outline-none focus:border-[#2874f0]"
           />
           <button
             type="button"
             onClick={exportCsv}
-            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-[#2874f0] bg-blue-50 hover:bg-blue-100 rounded-lg cursor-pointer shrink-0"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-lg cursor-pointer transition-colors"
           >
             <Download className="w-3.5 h-3.5" />
-            CSV
+            Export CSV
           </button>
         </div>
       </div>
@@ -272,7 +272,7 @@ export default function AdminUsersTab({
                         </span>
                       ) : c.role === 'admin' ? (
                         <span className="inline-flex items-center gap-1 text-[10px] font-extrabold bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-md">
-                          🛡️ Sub-Admin
+                          🛡️ Admin
                         </span>
                       ) : (
                         <span className="text-[10px] font-semibold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-md">
@@ -307,7 +307,7 @@ export default function AdminUsersTab({
                           }`}
                         >
                           <Shield className="w-3 h-3" />
-                          {c.role === 'admin' ? 'Remove Sub-Admin' : 'Make Sub-Admin'}
+                          {c.role === 'admin' ? 'Remove Admin' : 'Make Admin'}
                         </button>
                       )}
 
