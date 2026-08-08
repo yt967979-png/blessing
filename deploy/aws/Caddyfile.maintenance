@@ -1,0 +1,20 @@
+# Temporary config while redeploy is running — users only see the Updating page.
+# redeploy.sh swaps this in, then restores Caddyfile when health is OK.
+
+blessingpowerguide.duckdns.org {
+	encode gzip
+	root * /var/www/blessing-maintenance
+	rewrite * /maintenance.html
+	file_server
+	header Cache-Control "no-store"
+	header Retry-After "60"
+}
+
+# Custom domain later (keep in sync with Caddyfile):
+# blessingpowerguide.in, www.blessingpowerguide.in {
+# 	encode gzip
+# 	root * /var/www/blessing-maintenance
+# 	rewrite * /maintenance.html
+# 	file_server
+# 	header Cache-Control "no-store"
+# }

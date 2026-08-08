@@ -55,6 +55,26 @@ fi
 # systemd EnvironmentFile breaks on Windows CRLF
 sed -i 's/\r$//' "$ENV_FILE"
 
+# Friendly “Updating…” page while we rebuild (Caddyfile swap — most reliable)
+MAINT_DIR="/var/www/blessing-maintenance"
+mkdir -p "$MAINT_DIR"
+if [[ -f "$CLONE_PATH/deploy/aws/maintenance.html" ]]; then
+  cp "$CLONE_PATH/deploy/aws/maintenance.html" "$MAINT_DIR/maintenance.html"
+fi
+if [[ ! -f "$MAINT_DIR/maintenance.html" ]]; then
+  printf '%s\n' '<!doctype html><title>Updating</title><h1>Updating — please wait</h1>' > "$MAINT_DIR/maintenance.html"
+fi
+if command -v caddy >/dev/null 2>&1; then
+  if [[ -f "$CLONE_PATH/deploy/aws/Caddyfile.maintenance" ]]; then
+    cp "$CLONE_PATH/deploy/aws/Caddyfile.maintenance" /etc/caddy/Caddyfile
+  elif [[ -f "$CLONE_PATH/deploy/aws/Caddyfile" ]]; then
+    cp "$CLONE_PATH/deploy/aws/Caddyfile" /etc/caddy/Caddyfile
+  fi
+  echo "==> Maintenance Caddyfile ON (users see Updating screen)"
+  caddy validate --config /etc/caddy/Caddyfile 2>/dev/null || true
+  systemctl reload caddy 2>/dev/null || systemctl restart caddy 2>/dev/null || true
+fi
+
 echo "==> Rsync $CLONE_PATH → $APP_DIR"
 mkdir -p "$APP_DIR"
 rsync -a --delete \
@@ -191,18 +211,30 @@ done
 
 echo "--- /api/health ---"
 curl -fsS --max-time 8 "http://127.0.0.1:3000/api/health" || {
-  echo "ERROR: /api/health failed"
+  echo "ERROR: /api/health failed — leaving maintenance page ON"
   journalctl -u blessing -n 40 --no-pager || true
   exit 1
 }
 echo ""
 echo "--- /api/ready ---"
 curl -fsS --max-time 15 "http://127.0.0.1:3000/api/ready" || {
-  echo "ERROR: /api/ready failed"
+  echo "ERROR: /api/ready failed — leaving maintenance page ON"
   journalctl -u blessing -n 40 --no-pager || true
   exit 1
 }
 echo ""
+
+# App is healthy — restore normal Caddy reverse-proxy config
+if command -v caddy >/dev/null 2>&1; then
+  if [[ -f "$APP_DIR/deploy/aws/Caddyfile" ]]; then
+    cp "$APP_DIR/deploy/aws/Caddyfile" /etc/caddy/Caddyfile
+  elif [[ -f "$CLONE_PATH/deploy/aws/Caddyfile" ]]; then
+    cp "$CLONE_PATH/deploy/aws/Caddyfile" /etc/caddy/Caddyfile
+  fi
+  echo "==> Maintenance Caddyfile OFF (shop live again)"
+  caddy validate --config /etc/caddy/Caddyfile 2>/dev/null || true
+  systemctl reload caddy 2>/dev/null || systemctl restart caddy 2>/dev/null || true
+fi
 
 echo "==> Running Automated Route Test Suite (14 Core Pages & APIs)"
 node "$APP_DIR/scripts/test-all-routes.js" "http://127.0.0.1:3000" || {

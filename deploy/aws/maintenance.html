@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="refresh" content="20" />
+  <title>Updating — Blessing Power Guide</title>
+  <style>
+    :root {
+      --navy: #001b3a;
+      --amber: #fbbf24;
+      --muted: #64748b;
+      --bg: #f8fafc;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background:
+        radial-gradient(ellipse at top, #e2e8f0 0%, transparent 55%),
+        linear-gradient(180deg, #fff 0%, var(--bg) 100%);
+      color: var(--navy);
+      padding: 24px;
+    }
+    .card {
+      width: 100%;
+      max-width: 440px;
+      text-align: center;
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 20px;
+      padding: 40px 28px;
+      box-shadow: 0 12px 40px rgba(0, 27, 58, 0.08);
+    }
+    .badge {
+      display: inline-block;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--navy);
+      background: var(--amber);
+      padding: 6px 12px;
+      border-radius: 999px;
+      margin-bottom: 18px;
+    }
+    h1 {
+      margin: 0 0 10px;
+      font-size: 1.55rem;
+      font-weight: 900;
+      letter-spacing: -0.02em;
+    }
+    p {
+      margin: 0 auto 22px;
+      max-width: 32ch;
+      color: var(--muted);
+      font-size: 0.95rem;
+      line-height: 1.5;
+    }
+    .spinner {
+      width: 36px;
+      height: 36px;
+      margin: 0 auto 18px;
+      border: 3px solid #e2e8f0;
+      border-top-color: var(--navy);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .hint {
+      font-size: 0.75rem;
+      color: #94a3b8;
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <div class="badge">Blessing Power Guide</div>
+    <div class="spinner" aria-hidden="true"></div>
+    <h1>We’re updating the shop</h1>
+    <p>
+      Please wait a moment. Your books, cart, and orders are safe.
+      This page refreshes automatically.
+    </p>
+    <p class="hint">Usually back in under a minute.</p>
+  </main>
+</body>
+</html>

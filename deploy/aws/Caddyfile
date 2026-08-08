@@ -1,5 +1,4 @@
-# Reverse proxy for Blessing Power Guide on Lightsail.
-# Active: DuckDNS + automatic HTTPS (Let's Encrypt).
+# Normal production proxy — DuckDNS + Let's Encrypt HTTPS.
 # Install: sudo cp deploy/aws/Caddyfile /etc/caddy/Caddyfile && sudo systemctl reload caddy
 
 blessingpowerguide.duckdns.org {
@@ -15,16 +14,25 @@ blessingpowerguide.duckdns.org {
 	handle {
 		reverse_proxy 127.0.0.1:3000
 	}
+
+	# If Node is restarting → friendly Updating page (not raw 502)
+	handle_errors {
+		rewrite * /maintenance.html
+		root * /var/www/blessing-maintenance
+		file_server
+		header Cache-Control "no-store"
+		header Retry-After "30"
+	}
 }
 
-# Temporary HTTP by IP only (no HTTPS) — uncomment and comment DuckDNS block if needed:
-# :80 {
-# 	encode gzip
-# 	reverse_proxy 127.0.0.1:3000
-# }
-
-# Custom domain later:
+# Custom domain later — uncomment and comment DuckDNS block above:
 # blessingpowerguide.in, www.blessingpowerguide.in {
 # 	encode gzip
 # 	reverse_proxy 127.0.0.1:3000
+# 	handle_errors {
+# 		rewrite * /maintenance.html
+# 		root * /var/www/blessing-maintenance
+# 		file_server
+# 		header Cache-Control "no-store"
+# 	}
 # }
