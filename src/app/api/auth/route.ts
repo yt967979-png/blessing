@@ -9,6 +9,7 @@ import {
 } from '@/lib/serverSecurity';
 import { isValidMobileNumber, normalizeMobileDigits } from '@/lib/authValidation';
 import { userNeedsProfile } from '@/lib/userProfile';
+import { isBookInStock } from '@/lib/stock';
 
 const LEGACY_AUTH_DISABLED =
   'Email/password login is disabled. Please sign in with Google.';
@@ -107,7 +108,8 @@ export async function GET(request: Request) {
       badgeColor: 'bg-blue-600',
       description: 'Official guide book.',
       features: ['Solved Papers'],
-      inStock: row.status !== 'out_of_stock' && Number(row.stock || 1) > 0,
+      inStock: isBookInStock(row),
+      stock: Number(row.stock ?? 0),
     }));
 
     const wishRes = await client.query('SELECT book_id FROM wishlist WHERE user_id = $1', [user.id]);

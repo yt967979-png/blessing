@@ -3,6 +3,7 @@ import { queryDb } from '@/lib/db';
 import { createSessionToken, sessionCookieOptions } from '@/lib/auth';
 import { getAuthenticatedUser, unauthorizedResponse, applyRateLimitAsync, clientIp } from '@/lib/serverSecurity';
 import { isValidMobileNumber, normalizeMobileDigits } from '@/lib/authValidation';
+import { isBookInStock } from '@/lib/stock';
 
 function setSessionCookie(response: NextResponse, token: string) {
   response.cookies.set('bpg_session', token, sessionCookieOptions());
@@ -78,7 +79,8 @@ export async function POST(request: Request) {
       badgeColor: 'bg-blue-600',
       description: 'Official guide book.',
       features: ['Solved Papers'],
-      inStock: row.status !== 'out_of_stock' && Number(row.stock || 1) > 0,
+      inStock: isBookInStock(row),
+      stock: Number(row.stock ?? 0),
     }));
     const wishRes = await queryDb('SELECT book_id FROM wishlist WHERE user_id = $1', [user.id]);
 

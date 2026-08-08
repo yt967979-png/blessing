@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import ProductDetailClient from './ProductDetailClient';
 import { queryDb } from '@/lib/db';
+import { isBookInStock } from '@/lib/stock';
 
 type Props = { params: Promise<{ slug: string }> };
 
@@ -63,7 +64,7 @@ export default async function ProductPage({ params }: Props) {
 
   const price = Number(book?.discount_price || book?.price || 0);
   const mrp = Number(book?.price || price);
-  const inStock = book ? (book.status !== 'out_of_stock' && Number(book.stock || 1) > 0) : true;
+  const inStock = book ? isBookInStock(book) : true;
 
   // Schema.org JSON-LD for Google Search Console, Merchant Center & Rich Results
   const jsonLd = book ? {
