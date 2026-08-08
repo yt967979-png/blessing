@@ -229,7 +229,7 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
 
   if (stillLoading) {
     return (
-      <main className="min-h-screen bg-slate-50 flex flex-col pb-36 md:pb-0">
+      <main className="min-h-screen bg-slate-50 flex flex-col page-mobile-nav md:pb-0">
         <AnnouncementBar />
         <Header />
         <NavBar />
@@ -262,7 +262,7 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
 
   if (!product) {
     return (
-      <main className="min-h-screen bg-slate-50 flex flex-col pb-36 md:pb-0">
+      <main className="min-h-screen bg-slate-50 flex flex-col page-mobile-nav md:pb-0">
         <AnnouncementBar />
         <Header />
         <NavBar />
@@ -333,7 +333,7 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
   };
 
   return (
-    <main className="min-h-screen bg-slate-50 flex flex-col pb-36 md:pb-0">
+    <main className="min-h-screen bg-slate-50 flex flex-col page-mobile-nav md:pb-0">
       {/* Schema.org Rich Snippet JSON-LD for Google Search Indexing */}
       <script
         type="application/ld+json"
@@ -558,8 +558,8 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
 
 
 
-            {/* Actions */}
-            <div className="flex gap-3 mt-auto">
+            {/* Actions — desktop/tablet; mobile uses sticky bar below */}
+            <div className="hidden sm:flex gap-3 mt-auto">
               {product.inStock === false ? (
                 <button
                   disabled
@@ -574,7 +574,7 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
                     onClick={() => {
                       addToCart(product);
                     }}
-                    className="flex-1 bg-[#0044AA] text-white font-extrabold text-sm py-3.5 px-4 rounded-xl shadow-md flex items-center justify-center gap-2 uppercase tracking-wider"
+                    className="flex-1 bg-[#0044AA] text-white font-extrabold text-sm py-3.5 px-4 rounded-xl shadow-md flex items-center justify-center gap-2 uppercase tracking-wider min-h-12"
                   >
                     <ShoppingBag className="w-4 h-4 text-amber-400" />
                     <span>ADD TO CART</span>
@@ -582,11 +582,12 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
                   <button
                     type="button"
                     onClick={() => {
+                      if (!user) { setIsAuthOpen(true); return; }
                       addToCart(product);
                       setIsCheckoutOpen(true);
                       router.push('/checkout');
                     }}
-                    className="flex-1 bg-gradient-to-r from-amber-400 to-amber-500 text-[#001B3A] font-extrabold text-sm py-3.5 px-4 rounded-xl shadow-md uppercase tracking-wider"
+                    className="flex-1 bg-gradient-to-r from-amber-400 to-amber-500 text-[#001B3A] font-extrabold text-sm py-3.5 px-4 rounded-xl shadow-md uppercase tracking-wider min-h-12"
                   >
                     BUY NOW
                   </button>
@@ -796,30 +797,52 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
         )}
       </div>
 
-      {/* Sticky Mobile CTA — sits above bottom nav + safe area */}
+      {/* Sticky Mobile CTA — above bottom nav; ADD + BUY NOW */}
       <div
-        className="fixed inset-x-0 bg-white/95 backdrop-blur-md border-t border-slate-200 p-3 z-40 sm:hidden flex items-center gap-2 shadow-2xl"
-        style={{ bottom: 'calc(3.75rem + env(safe-area-inset-bottom, 0px))' }}
+        className="fixed inset-x-0 bg-white/95 backdrop-blur-md border-t border-slate-200 p-2.5 z-40 sm:hidden flex items-center gap-2 shadow-2xl"
+        style={{ bottom: 'calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px))' }}
       >
         <button
+          type="button"
           onClick={() => toggleWishlist(product.id)}
-          className="p-3.5 rounded-xl border border-slate-300 text-slate-700 bg-slate-50 flex-shrink-0 min-h-12 min-w-12"
+          className="p-3 rounded-xl border border-slate-300 text-slate-700 bg-slate-50 flex-shrink-0 min-h-12 min-w-12 touch-manipulation"
+          aria-label="Wishlist"
         >
           <Heart className={`w-5 h-5 ${isWishlisted ? 'text-red-500 fill-red-500' : 'text-slate-400'}`} />
         </button>
 
-        <button
-          onClick={() => {
-            if (!user) { setIsAuthOpen(true); return; }
-            if (product.inStock === false) return;
-            addToCart(product);
-          }}
-          disabled={product.inStock === false}
-          className="flex-1 bg-[#0044AA] hover:bg-[#001B3A] disabled:bg-slate-300 disabled:text-slate-500 text-white font-extrabold text-xs py-3.5 rounded-xl flex items-center justify-center gap-1.5 shadow-md uppercase tracking-wider cursor-pointer disabled:cursor-not-allowed min-h-12"
-        >
-          <ShoppingBag className="w-4 h-4 text-amber-400" />
-          <span>{product.inStock === false ? 'OUT OF STOCK' : 'ADD TO CART'}</span>
-        </button>
+        {product.inStock === false ? (
+          <button
+            type="button"
+            disabled
+            className="flex-1 bg-slate-200 text-slate-500 font-extrabold text-xs py-3.5 rounded-xl uppercase tracking-wider cursor-not-allowed min-h-12"
+          >
+            OUT OF STOCK
+          </button>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={() => addToCart(product)}
+              className="flex-1 bg-[#0044AA] active:bg-[#001B3A] text-white font-extrabold text-[11px] py-3.5 rounded-xl flex items-center justify-center gap-1 shadow-md uppercase tracking-wider min-h-12 touch-manipulation"
+            >
+              <ShoppingBag className="w-3.5 h-3.5 text-amber-400" />
+              <span>ADD</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (!user) { setIsAuthOpen(true); return; }
+                addToCart(product);
+                setIsCheckoutOpen(true);
+                router.push('/checkout');
+              }}
+              className="flex-[1.2] bg-gradient-to-r from-amber-400 to-amber-500 text-[#001B3A] font-extrabold text-[11px] py-3.5 rounded-xl uppercase tracking-wider min-h-12 touch-manipulation shadow-md"
+            >
+              BUY NOW
+            </button>
+          </>
+        )}
       </div>
 
       <Footer />

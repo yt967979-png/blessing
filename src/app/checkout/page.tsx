@@ -487,7 +487,7 @@ export default function CheckoutPage() {
                       <input
                         value={newAddr.name}
                         onChange={(e) => setNewAddr({ ...newAddr, name: e.target.value })}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white outline-none focus:border-blue-600"
+                        className="w-full px-3 py-3 min-h-12 border border-slate-300 rounded-xl bg-white outline-none focus:border-blue-600 text-sm"
                         placeholder="Recipient name"
                       />
                     </div>
@@ -497,7 +497,7 @@ export default function CheckoutPage() {
                         maxLength={10}
                         value={newAddr.phone}
                         onChange={(e) => setNewAddr({ ...newAddr, phone: e.target.value.replace(/\D/g, '') })}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white outline-none focus:border-blue-600"
+                        className="w-full px-3 py-3 min-h-12 border border-slate-300 rounded-xl bg-white outline-none focus:border-blue-600 text-sm"
                         placeholder="10-digit mobile"
                       />
                     </div>
@@ -507,7 +507,7 @@ export default function CheckoutPage() {
                     <input
                       value={newAddr.address}
                       onChange={(e) => setNewAddr({ ...newAddr, address: e.target.value })}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white outline-none focus:border-blue-600"
+                      className="w-full px-3 py-3 min-h-12 border border-slate-300 rounded-xl bg-white outline-none focus:border-blue-600 text-sm"
                       placeholder="Door no., Street name, Landmark"
                     />
                   </div>
@@ -517,7 +517,7 @@ export default function CheckoutPage() {
                       <input
                         value={newAddr.city}
                         onChange={(e) => setNewAddr({ ...newAddr, city: e.target.value })}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white outline-none focus:border-blue-600"
+                        className="w-full px-3 py-3 min-h-12 border border-slate-300 rounded-xl bg-white outline-none focus:border-blue-600 text-sm"
                         placeholder="City"
                       />
                     </div>
@@ -527,7 +527,7 @@ export default function CheckoutPage() {
                         maxLength={6}
                         value={newAddr.pincode}
                         onChange={(e) => setNewAddr({ ...newAddr, pincode: e.target.value.replace(/\D/g, '') })}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white outline-none focus:border-blue-600"
+                        className="w-full px-3 py-3 min-h-12 border border-slate-300 rounded-xl bg-white outline-none focus:border-blue-600 text-sm"
                         placeholder="6-digit pincode"
                       />
                     </div>
@@ -547,7 +547,7 @@ export default function CheckoutPage() {
                 type="button"
                 disabled={cartCount < 4}
                 onClick={() => void goToReview()}
-                className="w-full bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-[#001B3A] font-extrabold text-sm py-3.5 rounded-xl uppercase tracking-wider disabled:opacity-50 transition-all"
+                className="w-full bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-[#001B3A] font-extrabold text-sm py-3.5 rounded-xl uppercase tracking-wider disabled:opacity-50 transition-all min-h-12 touch-manipulation"
               >
                 Deliver Here →
               </button>
@@ -772,7 +772,7 @@ export default function CheckoutPage() {
                 type="button"
                 disabled={isPlacingOrder || cart.length === 0 || cartCount < 4 || hasBlockingItem}
                 onClick={() => void handlePlaceOrder()}
-                className="w-full bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 hover:from-amber-500 hover:to-amber-700 text-[#001B3A] font-black text-sm py-4 rounded-xl uppercase tracking-wider shadow-lg shadow-amber-500/20 disabled:opacity-60 transition-all hover:scale-[1.01]"
+                className="w-full bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 hover:from-amber-500 hover:to-amber-700 text-[#001B3A] font-black text-sm py-4 rounded-xl uppercase tracking-wider shadow-lg shadow-amber-500/20 disabled:opacity-60 transition-all hover:scale-[1.01] min-h-12 touch-manipulation"
               >
                 {isPlacingOrder ? 'Opening Razorpay…' : `Confirm order · Pay ₹${cartGrandTotal}`}
               </button>

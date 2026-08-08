@@ -41,7 +41,7 @@ export const ProductCard = ({ product }: { product: Product }) => {
 
   return (
     <article
-      className={`product-card-shell group border rounded-2xl p-2.5 sm:p-4 flex flex-col relative h-full shadow-sm transition-all duration-300 ${
+      className={`product-card-shell group border rounded-2xl p-3 sm:p-4 flex flex-col relative h-full shadow-sm transition-all duration-300 ${
         isOutOfStock
           ? 'bg-slate-100/95 border-slate-300 grayscale'
           : 'bg-white border-slate-200/90 hover:shadow-xl hover:border-blue-300/80 hover:-translate-y-1'
@@ -145,11 +145,11 @@ export const ProductCard = ({ product }: { product: Product }) => {
         </div>
         <span className="text-[9px] font-extrabold text-emerald-700 flex items-center gap-0.5">
           <Truck className="w-3 h-3 text-emerald-600" />
-          <span className="hidden xs:inline sm:inline">ST Courier</span>
+          <span className="hidden sm:inline">ST Courier</span>
         </span>
       </div>
 
-      <div className="flex items-baseline gap-1.5 mt-auto mb-2.5">
+      <div className="flex items-baseline gap-1.5 mt-auto mb-2">
         <span className={`font-black text-base sm:text-lg ${isOutOfStock ? 'text-slate-500' : 'text-[#001226]'}`}>₹{product.price}</span>
         {product.mrp > product.price && (
           <span className="text-[11px] text-slate-400 line-through font-bold">₹{product.mrp}</span>
@@ -160,8 +160,8 @@ export const ProductCard = ({ product }: { product: Product }) => {
       </div>
 
       {isOutOfStock && (
-        <p className="mb-2.5 text-[10px] sm:text-xs font-bold text-slate-500">
-          This guide is unavailable right now. Admin stock updates appear here live.
+        <p className="mb-2 text-[10px] sm:text-xs font-bold text-slate-500 line-clamp-2">
+          Unavailable — stock updates live.
         </p>
       )}
 
@@ -170,7 +170,7 @@ export const ProductCard = ({ product }: { product: Product }) => {
           type="button"
           disabled={isOutOfStock}
           onClick={handleAddToCart}
-          className={`font-extrabold text-[10px] sm:text-xs py-2.5 sm:py-3 rounded-xl flex items-center justify-center gap-1 uppercase touch-manipulation disabled:cursor-not-allowed min-h-11 transition-all duration-300 ${
+          className={`font-extrabold text-[11px] sm:text-xs py-3 rounded-xl flex items-center justify-center gap-1 uppercase touch-manipulation disabled:cursor-not-allowed min-h-12 transition-all duration-300 ${
             isAdded
               ? 'bg-emerald-600 text-white animate-success-pop shadow-md shadow-emerald-600/30'
               : 'bg-[#0044AA] hover:bg-[#003388] active:bg-[#001B3A] disabled:bg-slate-300 disabled:text-slate-500 text-white'
@@ -179,7 +179,7 @@ export const ProductCard = ({ product }: { product: Product }) => {
           {isAdded ? (
             <>
               <Check className="w-4 h-4 text-white animate-bounce" />
-              <span>ADDED!</span>
+              <span>ADDED</span>
             </>
           ) : (
             <>
@@ -201,9 +201,9 @@ export const ProductCard = ({ product }: { product: Product }) => {
             setIsCheckoutOpen(true);
             router.push('/checkout');
           }}
-          className="bg-amber-400 hover:bg-amber-500 active:bg-amber-600 disabled:bg-slate-200 disabled:text-slate-500 text-[#001B3A] font-extrabold text-[10px] sm:text-xs py-2.5 sm:py-3 rounded-xl uppercase touch-manipulation disabled:cursor-not-allowed min-h-11 shadow-sm hover:shadow-md transition-all"
+          className="bg-amber-400 hover:bg-amber-500 active:bg-amber-600 disabled:bg-slate-200 disabled:text-slate-500 text-[#001B3A] font-extrabold text-[11px] sm:text-xs py-3 rounded-xl uppercase touch-manipulation disabled:cursor-not-allowed min-h-12 shadow-sm hover:shadow-md transition-all"
         >
-          {isOutOfStock ? 'UNAVAILABLE' : 'BUY NOW'}
+          {isOutOfStock ? 'N/A' : 'BUY'}
         </button>
       </div>
     </article>

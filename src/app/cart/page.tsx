@@ -80,7 +80,7 @@ export default function CartPage() {
       <Header />
       <NavBar />
 
-      <div className="max-w-7xl mx-auto px-4 py-8 flex-1 w-full">
+      <div className="max-w-7xl mx-auto px-4 py-8 flex-1 w-full pb-28 lg:pb-8">
         <div className="flex items-center gap-2 mb-6">
           <Link href="/" className="text-xs font-bold text-slate-500 hover:text-blue-600 flex items-center gap-1 min-h-11">
             <ArrowLeft className="w-4 h-4" />
@@ -356,6 +356,40 @@ export default function CartPage() {
       </div>
 
       <Footer />
+
+      {/* Mobile sticky checkout bar */}
+      {cart.length > 0 && (
+        <div
+          className="fixed inset-x-0 z-40 lg:hidden border-t border-slate-200 bg-white/95 backdrop-blur-md p-3 shadow-2xl"
+          style={{ bottom: 'calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px))' }}
+        >
+          <div className="flex items-center gap-3 max-w-7xl mx-auto">
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold text-slate-500 uppercase">Total</p>
+              <p className="font-black text-lg text-[#001B3A] leading-none">₹{cartGrandTotal}</p>
+            </div>
+            <button
+              type="button"
+              onClick={async () => {
+                if (!user) {
+                  setIsAuthOpen(true);
+                  return;
+                }
+                if (!pincodeOk || hasBlockingItem) return;
+                const clean = await validateCartStock();
+                if (!clean) return;
+                setCheckoutTotal(cartGrandTotal);
+                setIsCheckoutOpen(true);
+                router.push('/checkout');
+              }}
+              disabled={!pincodeOk || hasBlockingItem}
+              className="flex-1 bg-gradient-to-r from-amber-400 to-amber-500 disabled:opacity-50 text-[#001B3A] font-extrabold text-xs py-3.5 rounded-xl uppercase tracking-wider min-h-12 touch-manipulation"
+            >
+              PLACE ORDER
+            </button>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

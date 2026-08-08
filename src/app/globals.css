@@ -10,13 +10,19 @@
   --accent-gold-hover: #F0C14B;
   /* Sticky header height: announcement + logo row + mobile search */
   --header-sticky-offset: 118px;
-  --bottom-nav-height: 4.75rem;
+  /* Matches MobileBottomNav (~52px content + safe padding) */
+  --bottom-nav-height: 4.25rem;
 }
 
 @media (min-width: 640px) {
   :root {
     --header-sticky-offset: 72px;
   }
+}
+
+/* Sticky action bars above bottom nav (cart / product / checkout helpers) */
+.sticky-above-bottom-nav {
+  bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px));
 }
 
 body {
