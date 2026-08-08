@@ -28,6 +28,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { downloadTaxInvoice } from '@/lib/invoiceGenerator';
+import { customerRefundStage } from '@/lib/orderStatus';
 import { getSTCourierDeliveryEstimate } from '@/lib/deliveryEstimator';
 import { imageNeedsUnoptimized } from '@/lib/productImage';
 import { shopWhatsAppChatUrl } from '@/lib/shopContact';
@@ -539,12 +540,18 @@ function OrdersContent() {
               </div>
 
               {/* Granular Refund Banner */}
-              {orderIsCancelled && (
-                <div className="bg-red-500/10 border border-red-500/30 rounded-2xl p-4 text-xs space-y-2 mt-2">
+              {orderIsCancelled && (() => {
+                const refundUi = customerRefundStage({
+                  orderCancelled: true,
+                  paymentStatus: searchedOrderData.paymentStatus,
+                  razorpayRefundId: searchedOrderData.razorpayRefundId,
+                });
+                return (
+                <div className="bg-red-500/10 border border-red-500/30 rounded-2xl p-4 text-xs space-y-3 mt-2">
                   <div className="flex flex-wrap items-center justify-between gap-2 font-bold text-red-200">
                     <span className="flex items-center gap-2">
                       <RefreshCw className="w-4 h-4 text-amber-400" />
-                      <span>REFUND STATUS: {searchedOrderData.paymentStatus || 'Refunded'}</span>
+                      <span>REFUND: {refundUi.label || searchedOrderData.paymentStatus || '—'}</span>
                     </span>
                     {searchedOrderData.razorpayRefundId && (
                       <span className="font-mono text-[11px] bg-red-950/80 px-2.5 py-1 rounded-lg border border-red-700/50 text-amber-300">
@@ -552,13 +559,35 @@ function OrdersContent() {
                       </span>
                     )}
                   </div>
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    {(['initiated', 'processing', 'successful'] as const).map((s) => {
+                      const done =
+                        (s === 'initiated' && refundUi.stage !== 'none') ||
+                        (s === 'processing' && (refundUi.stage === 'processing' || refundUi.stage === 'successful')) ||
+                        (s === 'successful' && refundUi.stage === 'successful');
+                      return (
+                        <div
+                          key={s}
+                          className={`rounded-xl px-2 py-2 border ${
+                            done ? 'bg-emerald-500/15 border-emerald-400/40 text-emerald-200' : 'bg-white/5 border-white/10 text-slate-500'
+                          }`}
+                        >
+                          <div className="text-[9px] font-black uppercase tracking-wide">
+                            {s === 'initiated' ? '1. Initiated' : s === 'processing' ? '2. Razorpay' : '3. Done'}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                   <p className="text-slate-300 text-[11px] leading-relaxed">
-                    {searchedOrderData.paymentStatus?.toLowerCase().includes('refund') || searchedOrderData.razorpayRefundId
-                      ? `A full refund of ₹${searchedOrderData.totalAmount || 0} has been processed back to your original payment method via Razorpay. Standard bank processing time: 5-7 working days.`
-                      : 'This order was cancelled by the store administrator. No amount will be debited.'}
+                    {refundUi.detail ||
+                      (refundUi.stage === 'none'
+                        ? 'This order was cancelled. No online payment refund applies.'
+                        : `A full refund of ₹${searchedOrderData.totalAmount || 0} was issued via Razorpay.`)}
                   </p>
                 </div>
-              )}
+                );
+              })()}
 
               {/* Direct Actions Banner */}
               <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3">
@@ -826,19 +855,31 @@ function OrdersContent() {
                     <span>{listCancelled ? 'Cancelled' : (ord.courierStatus || 'Order Placed')}</span>
                   </span>
                 </div>
-                {listCancelled && (
-                  <div className="bg-red-50 border border-red-200/80 rounded-xl p-2.5 text-xs flex flex-wrap items-center justify-between gap-2 text-red-800">
-                    <span className="font-bold flex items-center gap-1.5">
-                      <RefreshCw className="w-3.5 h-3.5 text-red-600" />
-                      <span>{ord.paymentStatus || 'Refunded'}</span>
-                    </span>
-                    {ord.razorpayRefundId && (
-                      <span className="font-mono text-[10px] bg-red-100 px-2 py-0.5 rounded text-red-900 font-extrabold">
-                        Refund ID: {ord.razorpayRefundId}
+                {listCancelled && (() => {
+                  const refundUi = customerRefundStage({
+                    orderCancelled: true,
+                    paymentStatus: ord.paymentStatus,
+                    razorpayRefundId: ord.razorpayRefundId,
+                  });
+                  return (
+                  <div className="bg-red-50 border border-red-200/80 rounded-xl p-2.5 text-xs space-y-1.5 text-red-800">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-bold flex items-center gap-1.5">
+                        <RefreshCw className="w-3.5 h-3.5 text-red-600" />
+                        <span>{refundUi.label || ord.paymentStatus || 'Cancelled'}</span>
                       </span>
+                      {ord.razorpayRefundId && (
+                        <span className="font-mono text-[10px] bg-red-100 px-2 py-0.5 rounded text-red-900 font-extrabold">
+                          Refund ID: {ord.razorpayRefundId}
+                        </span>
+                      )}
+                    </div>
+                    {refundUi.detail && (
+                      <p className="text-[10px] text-red-700/90 leading-relaxed font-medium">{refundUi.detail}</p>
                     )}
                   </div>
-                )}
+                  );
+                })()}
 
                 <div className="flex flex-wrap items-center justify-between gap-3 text-xs pt-1">
                   <div className="space-y-1">

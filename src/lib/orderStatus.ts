@@ -36,3 +36,44 @@ export function paymentStatusAfterCancel(
 export function isPaymentRefunded(paymentStatus: string | null | undefined): boolean {
   return String(paymentStatus || '').toLowerCase().includes('refund');
 }
+
+/**
+ * Customer-facing refund stages after admin cancel.
+ * Razorpay "processed" ≠ money already in bank — bank credit is usually 5–7 working days.
+ */
+export function customerRefundStage(opts: {
+  orderCancelled: boolean;
+  paymentStatus?: string | null;
+  razorpayRefundId?: string | null;
+}): {
+  stage: 'none' | 'initiated' | 'processing' | 'successful';
+  label: string;
+  detail: string;
+} {
+  if (!opts.orderCancelled) {
+    return { stage: 'none', label: '', detail: '' };
+  }
+  const refunded = isPaymentRefunded(opts.paymentStatus) || Boolean(String(opts.razorpayRefundId || '').trim());
+  if (!refunded) {
+    return {
+      stage: 'none',
+      label: 'No refund due',
+      detail: 'This cancelled order did not have a successful online payment to refund.',
+    };
+  }
+  const id = String(opts.razorpayRefundId || '').trim();
+  if (id.startsWith('ref_manual') || id.startsWith('rfp_not_found')) {
+    return {
+      stage: 'processing',
+      label: 'Refund processing',
+      detail: 'Refund is being completed. Contact the shop with your order number if money is not returned in 5–7 working days.',
+    };
+  }
+  // Razorpay accepted the refund — show success on gateway side; bank lag is normal.
+  return {
+    stage: 'successful',
+    label: 'Refund successful (Razorpay)',
+    detail:
+      'Razorpay has accepted the full refund to your original UPI/card/bank. Banks usually show the credit in 5–7 working days (sometimes sooner).',
+  };
+}

@@ -67,6 +67,7 @@ export async function executeOrderCancel(opts: {
     // Paid Razorpay: refund FIRST — abort cancel if refund fails (admin can retry).
     let refunded = false;
     let refundId: string | undefined;
+    let razorpayRefundStatus: string | undefined;
     if (needsRazorpayRefund(row)) {
       const refund = await refundRazorpayPayment({
         paymentId: String(row.razorpay_payment_id || '').trim(),
@@ -74,13 +75,15 @@ export async function executeOrderCancel(opts: {
         existingRefundId: row.razorpay_refund_id,
       });
       if (!refund.ok) {
-        console.warn(`[cancel] Razorpay refund API notice (${refund.error}) — proceeding with DB cancellation`);
-        refunded = false;
-        refundId = `ref_manual_${Date.now()}`;
-      } else {
-        refunded = true;
-        refundId = refund.refundId;
+        return {
+          ok: false,
+          error: refund.error || 'Razorpay refund failed. Cancel aborted — fix payment then retry.',
+          status: 502,
+        };
       }
+      refunded = true;
+      refundId = refund.refundId;
+      razorpayRefundStatus = refund.razorpayStatus || (refund.alreadyRefunded ? 'processed' : 'processed');
       try {
         await queryDb(
           `UPDATE orders SET razorpay_refund_id = $2, updated_at = NOW() WHERE id = $1`,
@@ -100,15 +103,18 @@ export async function executeOrderCancel(opts: {
 
       // Record in dedicated `refunds` enterprise table
       try {
+        const dbRefundStatus =
+          String(razorpayRefundStatus || '').toLowerCase() === 'pending' ? 'PENDING' : 'PROCESSED';
         await queryDb(
           `INSERT INTO refunds (id, order_id, razorpay_refund_id, razorpay_payment_id, amount, status, reason)
-           VALUES ($1, $2, $3, $4, $5, 'PROCESSED', $6)`,
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
           [
             `ref-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
             row.id,
             refundId,
             String(row.razorpay_payment_id || '').trim(),
             Number(row.total_amount || 0),
+            dbRefundStatus,
             reason,
           ]
         );
@@ -160,7 +166,7 @@ export async function executeOrderCancel(opts: {
           ? `Order #${row.order_number} Cancelled & Refunded`
           : `Order #${row.order_number} Cancelled`;
         const notifMsg = refunded
-          ? `Your order #${row.order_number} was cancelled. A full refund of ₹${Number(row.total_amount || 0)} was issued via Razorpay (Refund ID: ${refundId}). It will reflect in your bank account in 5-7 working days.`
+          ? `Your order #${row.order_number} was cancelled. Razorpay refund of ₹${Number(row.total_amount || 0)} succeeded (ID: ${refundId}). Money usually reaches your UPI/card in 5–7 working days.`
           : `Your order #${row.order_number} was cancelled by store admin (${reason}).`;
         await queryDb(
           `INSERT INTO notifications (id, user_id, title, message, type)

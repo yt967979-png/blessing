@@ -4,7 +4,14 @@
  */
 
 export type RefundResult =
-  | { ok: true; refundId: string; alreadyRefunded?: boolean; amountPaise?: number }
+  | {
+      ok: true;
+      refundId: string;
+      alreadyRefunded?: boolean;
+      amountPaise?: number;
+      /** Razorpay refund object status: pending | processed | failed */
+      razorpayStatus?: string;
+    }
   | { ok: false; error: string };
 
 function razorpayAuthHeader(): string | null {
@@ -75,14 +82,6 @@ export async function refundRazorpayPayment(opts: {
     });
     const payment = await payRes.json().catch(() => ({}));
     if (!payRes.ok) {
-      if (payRes.status === 404 || payment?.error?.code === 'BAD_REQUEST_ERROR') {
-        console.warn(`[razorpayRefund] Payment ${paymentId} not found on Razorpay (404) — proceeding with cancellation`);
-        return {
-          ok: true,
-          refundId: `rfp_not_found_${paymentId.slice(-8)}`,
-          alreadyRefunded: true,
-        };
-      }
       return {
         ok: false,
         error:
@@ -109,7 +108,7 @@ export async function refundRazorpayPayment(opts: {
       } catch {
         /* keep synthetic id */
       }
-      return { ok: true, refundId, alreadyRefunded: true, amountPaise: amount };
+      return { ok: true, refundId, alreadyRefunded: true, amountPaise: amount, razorpayStatus: 'processed' };
     }
 
     if (status !== 'captured' && status !== 'authorized') {
@@ -155,6 +154,7 @@ export async function refundRazorpayPayment(opts: {
             refundId: String(refundData?.id || `already_${paymentId}`),
             alreadyRefunded: true,
             amountPaise: Number(againPay.amount || amount),
+            razorpayStatus: 'processed',
           };
         }
       }
@@ -169,7 +169,12 @@ export async function refundRazorpayPayment(opts: {
       return { ok: false, error: 'Razorpay refund succeeded but returned no refund id. Cancel aborted.' };
     }
 
-    return { ok: true, refundId, amountPaise: amount };
+    return {
+      ok: true,
+      refundId,
+      amountPaise: amount,
+      razorpayStatus: String(refundData.status || 'processed').toLowerCase(),
+    };
   } catch (err: any) {
     return {
       ok: false,
