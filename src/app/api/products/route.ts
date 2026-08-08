@@ -213,11 +213,21 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json().catch(() => ({}));
-    const { title, cls, category, price, mrp, badge, image, description } = body;
+    const { title, cls, category, price, mrp, badge, image, description, stock } = body;
 
     if (!title || price === undefined || price === null || price === '') {
       return NextResponse.json({ error: 'Title and price are required' }, { status: 400 });
     }
+
+    // Never invent inventory — missing/invalid stock → 0 (not for sale until admin sets qty)
+    const stockQty = Math.max(0, Math.floor(Number(stock)));
+    if (!Number.isFinite(Number(stock)) || Number(stock) < 0) {
+      return NextResponse.json(
+        { error: 'Initial stock is required (use 0 if not yet available)' },
+        { status: 400 }
+      );
+    }
+    const bookStatus = stockQty > 0 ? 'published' : 'out_of_stock';
 
     const id = `bpg-${Date.now()}`;
     const slug = slugFromTitle(String(title), id);
@@ -235,7 +245,7 @@ export async function POST(request: Request) {
 
     const sql = `
       INSERT INTO books (id, title, slug, category_id, price, discount_price, cover_image, description, status, featured, badge, stock)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'published', TRUE, $9, 50)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, TRUE, $10, $11)
       RETURNING *
     `;
     const res = await queryDb(sql, [
@@ -247,9 +257,12 @@ export async function POST(request: Request) {
       finalDiscountPrice,
       finalImg,
       finalDesc,
+      bookStatus,
       finalBadge,
+      stockQty,
     ]);
     invalidateProductsCache();
+    void notifyStockChanged([id]);
     return NextResponse.json(res.rows[0], { status: 201 });
   } catch (err: any) {
     console.error('POST /api/products failed:', err?.message || err);
@@ -349,6 +362,7 @@ export async function DELETE(request: Request) {
 
     await queryDb(`DELETE FROM books WHERE id = $1`, [id]);
     invalidateProductsCache();
+    void notifyStockChanged([id]);
     return NextResponse.json({ success: true, deletedId: id });
   } catch (err: any) {
     console.error('DELETE /api/products failed:', err?.message || err);

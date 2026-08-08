@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { authHeaders } from '@/lib/clientAuth';
+import { isOrderCancelled } from '@/lib/orderStatus';
 import { BrandLogo } from '@/components/ui/BrandLogo';
 import { openShippingLabelPrint } from '@/lib/shippingLabel';
 
@@ -176,7 +177,8 @@ export default function AdminPage() {
   const [editBadge, setEditBadge] = useState('');
   const [editBadgeEnabled, setEditBadgeEnabled] = useState(true);
   const [editDiscountEnabled, setEditDiscountEnabled] = useState(true);
-  const [editStock, setEditStock] = useState(50);
+  const [editStock, setEditStock] = useState(0);
+  const [editStockTouched, setEditStockTouched] = useState(false);
   const [lowStockAlerts, setLowStockAlerts] = useState<{ id: string; title: string; stock: number }[]>([]);
   const [activeStockHolds, setActiveStockHolds] = useState<{ count: number; totalQty: number }>({ count: 0, totalQty: 0 });
   const [showAddForm, setShowAddForm] = useState(false);
@@ -188,6 +190,7 @@ export default function AdminPage() {
   const [newBadge, setNewBadge] = useState('BESTSELLER');
   const [newBadgeEnabled, setNewBadgeEnabled] = useState(true);
   const [newDiscountEnabled, setNewDiscountEnabled] = useState(true);
+  const [newStock, setNewStock] = useState(0);
   const [newImg, setNewImg] = useState('https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80');
 
   // ── Content (FAQs)
@@ -475,11 +478,11 @@ export default function AdminPage() {
   }, [orders, filterStatus, filterPayment, orderSearch, filterDateFrom, filterDateTo]);
 
   const totalRevenue = orders.reduce((s, o) => {
-    if ((o.courierStatus || '').toLowerCase().includes('cancel')) return s;
+    if (isOrderCancelled(o.courierStatus)) return s;
     return s + Number(o.totalAmount || 0);
   }, 0);
   const activeOrderCount = orders.filter(
-    (o) => !(o.courierStatus || '').toLowerCase().includes('cancel')
+    (o) => !isOrderCancelled(o.courierStatus)
   ).length;
   const uniqueStatuses = useMemo(() => ['all', ...Array.from(new Set(orders.map((o) => o.courierStatus).filter(Boolean)))], [orders]);
 
@@ -491,29 +494,43 @@ export default function AdminPage() {
     setEditBadge(p.badge || '');
     setEditBadgeEnabled(!!p.badge);
     setEditDiscountEnabled(p.price < p.mrp);
-    setEditStock(Number(typeof p.stock === 'number' ? p.stock : 25));
+    setEditStock(typeof p.stock === 'number' && Number.isFinite(p.stock) ? Math.max(0, Math.floor(p.stock)) : 0);
+    setEditStockTouched(false);
   };
   const saveProductChanges = async (id: string | number) => {
     const mrp = Number(editMrp);
     const fp = editDiscountEnabled ? Number(editPrice) : mrp;
     const hasDiscount = editDiscountEnabled && fp > 0 && fp < mrp;
     const fb = editBadgeEnabled ? (editBadge.trim() || 'BESTSELLER') : '';
-    await updateProductInDb(id, {
+    const payload: {
+      price: number;
+      mrp: number;
+      discount: number;
+      badge: string;
+      hasDiscount: boolean;
+      stock?: number;
+    } = {
       price: hasDiscount ? fp : mrp,
       mrp,
       discount: hasDiscount ? Math.round(((mrp - fp) / mrp) * 100) : 0,
       badge: fb,
       hasDiscount,
-      stock: Math.max(0, Math.floor(Number(editStock) || 0)),
-    });
+    };
+    // Only rewrite inventory when admin actually edited the Stock field
+    if (editStockTouched) {
+      payload.stock = Math.max(0, Math.floor(Number(editStock) || 0));
+    }
+    await updateProductInDb(id, payload);
     void loadLowStock();
     setEditingId(null);
+    setEditStockTouched(false);
   };
   const handleCreateProduct = (e: React.FormEvent) => {
     e.preventDefault();
     const mrp = Number(newMrp);
     const fp = newDiscountEnabled ? Number(newPrice) : mrp;
     const hasDiscount = newDiscountEnabled && fp > 0 && fp < mrp;
+    const stockQty = Math.max(0, Math.floor(Number(newStock) || 0));
     addNewProductToDb({
       title: newTitle,
       cls: newCls,
@@ -523,9 +540,11 @@ export default function AdminPage() {
       discount: hasDiscount ? Math.round(((mrp - fp) / mrp) * 100) : 0,
       badge: newBadgeEnabled ? newBadge : '',
       image: newImg,
-      stock: 50,
+      stock: stockQty,
     });
-    setShowAddForm(false); setNewTitle('');
+    setShowAddForm(false);
+    setNewTitle('');
+    setNewStock(0);
   };
   const toggleStock = async (id: string | number, cur: boolean) => {
     const p = products.find((x) => String(x.id) === String(id));
@@ -563,7 +582,7 @@ export default function AdminPage() {
   const handleDispatch = async (orderId: string) => {
     const order = orders.find((x) => x.orderId === orderId);
     const st = (order?.courierStatus || '').toLowerCase();
-    if (st.includes('cancel')) {
+    if (isOrderCancelled(order?.courierStatus)) {
       showToast('❌ Cannot add AWB — order is cancelled');
       return;
     }
@@ -772,7 +791,7 @@ export default function AdminPage() {
     }
   };
   const handlePrintLabel = (o: Order) => {
-    if ((o.courierStatus || '').toLowerCase().includes('cancel')) {
+    if (isOrderCancelled(o.courierStatus)) {
       if (!confirm(`Order ${o.orderId} is CANCELLED.\nPrint label with CANCELLED watermark anyway?`)) return;
     }
     // Default: 1 sticker on A4 (normal home printer paper).
@@ -796,7 +815,7 @@ export default function AdminPage() {
   };
 
   const handleBatchPrintLabels = () => {
-    const activeOrders = filteredOrders.filter((o) => !(o.courierStatus || '').toLowerCase().includes('cancel'));
+    const activeOrders = filteredOrders.filter((o) => !isOrderCancelled(o.courierStatus));
     if (activeOrders.length === 0) {
       showToast('No active orders to print');
       return;
@@ -1101,7 +1120,7 @@ export default function AdminPage() {
                         {analytics.orderStatuses.map((s) => {
                           const total = analytics.orderStatuses.reduce((sum, x) => sum + x.count, 0);
                           const isDelivered = s.status.toLowerCase().includes('deliver');
-                          const isCancelledStatus = s.status.toLowerCase().includes('cancel');
+                          const isCancelledStatus = isOrderCancelled(s.status);
                           const isInTransit = s.status.toLowerCase().includes('transit') || s.status.toLowerCase().includes('courier');
                           const col = isCancelledStatus ? 'bg-red-500' : isDelivered ? 'bg-green-500' : isInTransit ? 'bg-blue-500' : 'bg-amber-400';
                           return (
@@ -1302,7 +1321,7 @@ export default function AdminPage() {
               <div className="space-y-3">
                 {filteredOrders.map((o) => {
                   const allSteps = ['Confirmed', 'Packed', 'Handed to ST Courier', 'In Transit', 'Out for Delivery', 'Delivered'];
-                  const isCancelled = (o.courierStatus || '').toLowerCase().includes('cancel');
+                  const isCancelled = isOrderCancelled(o.courierStatus);
                   const isAwaiting = (o.courierStatus || '').toLowerCase().includes('awaiting confirmation');
                   const stNorm = (o.courierStatus || '').toLowerCase();
                   const statusForStep =
@@ -1549,6 +1568,19 @@ export default function AdminPage() {
                     <input type="text" disabled={!newBadgeEnabled} placeholder="e.g. BESTSELLER" value={newBadge} onChange={(e) => setNewBadge(e.target.value)} className={`w-full px-3 py-2 border rounded-lg text-sm uppercase outline-none ${newBadgeEnabled ? 'border-[#2874f0]' : 'border-gray-200 text-gray-400 bg-gray-50'}`} />
                   </div>
                   <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Initial stock *</label>
+                    <input
+                      type="number"
+                      required
+                      min={0}
+                      step={1}
+                      value={newStock}
+                      onChange={(e) => setNewStock(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm outline-none focus:border-[#2874f0] focus:ring-1 focus:ring-[#2874f0]/20"
+                      placeholder="0 = not for sale yet"
+                    />
+                  </div>
+                  <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">Cover Image</label>
                     <input type="file" accept="image/*" onChange={handleImageFileUpload} className="w-full text-xs text-gray-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-[#2874f0] cursor-pointer" />
                   </div>
@@ -1595,7 +1627,10 @@ export default function AdminPage() {
                                   type="number"
                                   min={0}
                                   value={editStock}
-                                  onChange={(e) => setEditStock(Number(e.target.value))}
+                                  onChange={(e) => {
+                                    setEditStock(Math.max(0, Math.floor(Number(e.target.value) || 0)));
+                                    setEditStockTouched(true);
+                                  }}
                                   className="w-14 px-2 py-1 border border-[#2874f0] rounded text-xs font-semibold outline-none"
                                 />
                               ) : (

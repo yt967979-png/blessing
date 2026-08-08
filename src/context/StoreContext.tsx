@@ -913,8 +913,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       hoverImage: newProdData.image || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80',
       description: newProdData.description || `Complete ${newProdData.cls || '10th'} Standard ${newProdData.title} guide.`,
       features: ['Solved Papers', 'Chapter Notes'],
-      inStock: true,
-      stock: 50,
+      inStock: Math.max(0, Math.floor(Number(newProdData.stock) || 0)) > 0,
+      stock: Math.max(0, Math.floor(Number(newProdData.stock) || 0)),
       isBestSeller: String(newProdData.badge || '').toUpperCase().includes('BEST'),
     };
 
@@ -933,6 +933,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           image: newProdData.image,
           description: newProdData.description,
           badge: newProdData.badge || '',
+          stock: Math.max(0, Math.floor(Number(newProdData.stock) || 0)),
         }),
       });
       const data = await res.json().catch(() => ({}));

@@ -28,7 +28,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { downloadTaxInvoice } from '@/lib/invoiceGenerator';
-import { customerRefundStage } from '@/lib/orderStatus';
+import { customerRefundStage, isOrderCancelled } from '@/lib/orderStatus';
 import { getSTCourierDeliveryEstimate } from '@/lib/deliveryEstimator';
 import { imageNeedsUnoptimized } from '@/lib/productImage';
 import { shopWhatsAppChatUrl } from '@/lib/shopContact';
@@ -51,11 +51,9 @@ function OrdersContent() {
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
   const [orderTab, setOrderTab] = useState<'all' | 'active' | 'delivered' | 'cancelled'>('all');
 
-  const isCancelledStatus = (status: string) => (status || '').toLowerCase().includes('cancel');
-
   const getCurrentStepIndex = (status: string) => {
     const s = (status || '').toLowerCase();
-    if (s.includes('cancel')) return -1;
+    if (isOrderCancelled(status)) return -1;
     if (s.includes('delivered')) return 6;
     if (s.includes('out for delivery')) return 5;
     if (s.includes('in transit') || s.includes('shipped')) return 4;
@@ -96,11 +94,11 @@ function OrdersContent() {
   };
 
   const filteredOrders = userOrders.filter((o) => {
-    const s = String(o.courierStatus || o.status || '').toLowerCase();
+    const s = String(o.courierStatus || o.status || '');
     if (orderTab === 'all') return true;
-    if (orderTab === 'cancelled') return s.includes('cancel');
-    if (orderTab === 'delivered') return s.includes('delivered');
-    if (orderTab === 'active') return !s.includes('cancel') && !s.includes('delivered');
+    if (orderTab === 'cancelled') return isOrderCancelled(s);
+    if (orderTab === 'delivered') return s.toLowerCase().includes('delivered');
+    if (orderTab === 'active') return !isOrderCancelled(s) && !s.toLowerCase().includes('delivered');
     return true;
   });
 
@@ -264,7 +262,7 @@ function OrdersContent() {
 
   const currentStepIdx = searchedOrderData ? getCurrentStepIndex(searchedOrderData.courierStatus || searchedOrderData.status) : 0;
   const orderIsCancelled = searchedOrderData
-    ? isCancelledStatus(searchedOrderData.courierStatus || searchedOrderData.status || '')
+    ? isOrderCancelled(searchedOrderData.courierStatus || searchedOrderData.status || '')
     : false;
   const isOfficialAwb = searchedOrderData?.trackingNumber && (searchedOrderData.trackingNumber.startsWith('STC') || !searchedOrderData.trackingNumber.startsWith('SHP-'));
   const progressPercent = orderIsCancelled
@@ -810,7 +808,7 @@ function OrdersContent() {
               </div>
             ) : null}
             {filteredOrders.map((ord: any) => {
-              const listCancelled = isCancelledStatus(ord.courierStatus || ord.status || '');
+              const listCancelled = isOrderCancelled(ord.courierStatus || ord.status || '');
               return (
               <div
                 key={ord.orderId}
