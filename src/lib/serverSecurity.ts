@@ -155,7 +155,7 @@ export async function verifyAdminRequest(
   }
 }
 
-/** Super Admin ONLY — required for WhatsApp QR connect/disconnect and changing alternative alert numbers */
+/** Super Admin ONLY — role promotions, and other owner-only controls */
 export async function verifySuperAdminRequest(
   request: Request
 ): Promise<{ isSuperAdmin: boolean; error?: string; user?: { userId: string; role: string } }> {
@@ -164,7 +164,7 @@ export async function verifySuperAdminRequest(
     return { isSuperAdmin: false, error: check.error };
   }
   if (!check.isSuperAdmin) {
-    return { isSuperAdmin: false, error: 'Forbidden: Super Admin privilege required for WhatsApp control' };
+    return { isSuperAdmin: false, error: 'Forbidden: Super Admin privilege required' };
   }
   return { isSuperAdmin: true, user: check.user };
 }

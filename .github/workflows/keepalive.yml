@@ -22,8 +22,9 @@ jobs:
           fi
           BASE="${BASE%/}"
           echo "Pinging $BASE/api/health"
-          curl -fsS --max-time 20 "$BASE/api/health" | head -c 400 || true
+          curl -fsS --max-time 20 "$BASE/api/health" | head -c 400
           echo ""
           echo "Pinging $BASE/api/ready"
-          curl -fsS --max-time 25 "$BASE/api/ready" | head -c 400 || true
+          curl -fsS --max-time 25 "$BASE/api/ready" | head -c 400
           echo ""
+          echo "Keep-alive OK"

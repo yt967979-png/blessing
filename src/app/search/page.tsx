@@ -35,7 +35,7 @@ function SearchContent() {
 
   const filteredProducts = useMemo(() => {
     let result = products.filter((p) => {
-      if (!p.inStock) return false;
+      // Keep OOS visible (grey card) — same as home Featured grid
 
       // Class Filter
       if (selectedClass !== 'all' && p.cls?.toLowerCase() !== selectedClass.toLowerCase()) {

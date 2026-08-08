@@ -156,7 +156,11 @@ fi
 echo "==> Install Daily Database Backup Cron & Logrotate Protection"
 if [[ -f "$APP_DIR/deploy/aws/backup-db.sh" ]]; then
   chmod +x "$APP_DIR/deploy/aws/backup-db.sh"
+  chmod +x "$APP_DIR/deploy/aws/restore-db.sh" 2>/dev/null || true
+  chmod +x "$APP_DIR/deploy/aws/pre-launch-check.sh" 2>/dev/null || true
   (crontab -l 2>/dev/null | grep -v "backup-db.sh" ; echo "0 3 * * * /bin/bash $APP_DIR/deploy/aws/backup-db.sh >/var/log/blessing-backup.log 2>&1") | crontab - || true
+  # First backup immediately so disk is never empty after a fresh deploy
+  /bin/bash "$APP_DIR/deploy/aws/backup-db.sh" >>/var/log/blessing-backup.log 2>&1 || echo "==> WARNING: initial backup failed (check Postgres / DATABASE_URL)"
 fi
 if [[ -f "$APP_DIR/deploy/aws/logrotate-blessing.conf" ]]; then
   cp "$APP_DIR/deploy/aws/logrotate-blessing.conf" /etc/logrotate.d/blessing || true

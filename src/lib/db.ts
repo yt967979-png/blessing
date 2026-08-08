@@ -1454,8 +1454,10 @@ function isStrongAdminPassword(password: string): boolean {
 }
 
 /**
- * Ensure a default admin exists. Production never hardcodes weak credentials and
- * never resets an existing admin password unless ADMIN_FORCE_PASSWORD_RESET=true.
+ * Ensure a default admin exists from env only (ADMIN_EMAIL + ADMIN_PASSWORD).
+ * Production never hardcodes credentials and never resets an existing password
+ * unless ADMIN_FORCE_PASSWORD_RESET=true.
+ * SUPER_ADMIN_EMAIL (falls back to ADMIN_EMAIL) is promoted to super_admin.
  */
 export async function ensureAdminUser(client: any) {
   try {
@@ -1469,6 +1471,9 @@ export async function ensureAdminUser(client: any) {
       .slice(-10);
     const forceReset = String(process.env.ADMIN_FORCE_PASSWORD_RESET || '').toLowerCase() === 'true';
     const production = isProductionDeployRuntime();
+    const superAdminEmail = String(process.env.SUPER_ADMIN_EMAIL || process.env.ADMIN_EMAIL || '')
+      .toLowerCase()
+      .trim();
 
     if (!email || !password) {
       if (production) {
@@ -1488,6 +1493,8 @@ export async function ensureAdminUser(client: any) {
 
     const passwordHash = hashPassword(password);
     const adminId = 'admin-bpg-001';
+    const bootstrapRole =
+      superAdminEmail && email === superAdminEmail ? 'super_admin' : 'admin';
 
     const byEmail = await client.query(`SELECT id, email, role FROM users WHERE LOWER(email) = $1 LIMIT 1`, [
       email,
@@ -1498,14 +1505,14 @@ export async function ensureAdminUser(client: any) {
     if (!target) {
       await client.query(
         `INSERT INTO users (id, name, email, phone, password_hash, role, status)
-         VALUES ($1, $2, $3, $4, $5, 'admin', 'active')`,
-        [adminId, name, email, phone || null, passwordHash]
+         VALUES ($1, $2, $3, $4, $5, $6, 'active')`,
+        [adminId, name, email, phone || null, passwordHash, bootstrapRole]
       );
       await client.query(
         `INSERT INTO cart (id, user_id) VALUES ($1, $2) ON CONFLICT (user_id) DO NOTHING`,
         [`cart-${adminId}`, adminId]
       );
-      console.log(`[db] admin created for ${email}`);
+      console.log(`[db] admin created for ${email} as ${bootstrapRole}`);
       return;
     }
 
@@ -1518,9 +1525,9 @@ export async function ensureAdminUser(client: any) {
       await client.query(
         `UPDATE users
          SET name = $1, email = $2, phone = COALESCE(NULLIF($3, ''), phone),
-             password_hash = $4, role = 'admin', status = 'active', updated_at = NOW()
-         WHERE id = $5`,
-        [name, email, phone, passwordHash, target.id]
+             password_hash = $4, role = $5, status = 'active', updated_at = NOW()
+         WHERE id = $6`,
+        [name, email, phone, passwordHash, bootstrapRole, target.id]
       );
       console.log(`[db] admin password force-reset for id=${target.id}`);
       return;
@@ -1536,10 +1543,15 @@ export async function ensureAdminUser(client: any) {
        WHERE id = $4`,
       [name, email, phone, target.id]
     );
-    // Guarantee yogesh234456@gmail.com is set as Head Admin (super_admin)
-    await client.query(
-      `UPDATE users SET role = 'super_admin' WHERE LOWER(email) = 'yogesh234456@gmail.com'`
-    );
+
+    // Env-only Super Admin (never hardcode personal emails in source)
+    if (superAdminEmail) {
+      await client.query(
+        `UPDATE users SET role = 'super_admin', updated_at = NOW()
+         WHERE LOWER(email) = $1 AND COALESCE(role, 'customer') != 'super_admin'`,
+        [superAdminEmail]
+      );
+    }
   } catch (err: any) {
     console.warn('[db] ensureAdminUser skipped:', err?.message || err);
   }

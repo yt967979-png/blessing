@@ -297,10 +297,8 @@ export async function PATCH(request: Request) {
 
     if (inStock !== undefined && stock === undefined) {
       const available = Boolean(inStock);
+      // Status-only toggle — do NOT invent or wipe stock counts (keeps qty consistent).
       finalStatus = available ? 'published' : 'out_of_stock';
-      if (!available) {
-        finalStock = 0;
-      }
     }
 
     if (stock !== undefined) {

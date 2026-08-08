@@ -531,11 +531,18 @@ export default function AdminPage() {
     const p = products.find((x) => String(x.id) === String(id));
     const nextInStock = !Boolean(cur);
     if (!nextInStock) {
-      await updateProductInDb(id, { inStock: false, stock: 0 });
-    } else {
-      const restoreQty = p && typeof p.stock === 'number' && p.stock > 0 ? p.stock : 25;
-      await updateProductInDb(id, { inStock: true, stock: restoreQty });
+      // Mark unavailable without wiping the saved qty — restores cleanly later
+      await updateProductInDb(id, { inStock: false });
+      showToast('Marked out of stock (quantity preserved)');
+      return;
     }
+    const qty = typeof p?.stock === 'number' ? p.stock : 0;
+    if (qty <= 0) {
+      showToast('Set stock quantity first (edit → Stock), then turn On');
+      return;
+    }
+    await updateProductInDb(id, { inStock: true, stock: qty });
+    showToast(`Back in stock (${qty} left)`);
   };
   const handleDeleteProduct = async (id: string | number) => {
     if (!confirm('Delete this book permanently?')) return;

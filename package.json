@@ -11,7 +11,9 @@
     "start": "next start --hostname 0.0.0.0",
     "db:init": "node scripts/init-db.js",
     "db:seed-admin": "node scripts/init-db.js",
-    "lint": "eslint"
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test:routes": "node scripts/test-all-routes.js"
   },
   "dependencies": {
     "framer-motion": "^12.42.2",

@@ -4,6 +4,7 @@ import { createSessionToken, hashPassword, sessionCookieOptions } from '@/lib/au
 import { applyRateLimitAsync, clientIp } from '@/lib/serverSecurity';
 import { verifyGoogleIdToken } from '@/lib/googleAuth';
 import { userNeedsProfile } from '@/lib/userProfile';
+import { isBookInStock } from '@/lib/stock';
 
 function setSessionCookie(response: NextResponse, token: string) {
   response.cookies.set('bpg_session', token, sessionCookieOptions());
@@ -45,7 +46,8 @@ async function loadUserSessionData(queryFn: any, userId: string) {
       badgeColor: 'bg-blue-600',
       description: 'Official guide book.',
       features: ['Solved Papers'],
-      inStock: row.status !== 'out_of_stock' && Number(row.stock || 1) > 0,
+      stock: Number(row.stock ?? 0),
+      inStock: isBookInStock(row),
     }));
 
     const addresses = addrRes.rows.map((row: any) => ({
@@ -123,12 +125,23 @@ export async function POST(request: Request) {
     }
 
     const adminEmail = String(process.env.ADMIN_EMAIL || '').toLowerCase().trim();
-    const shouldBeAdmin = adminEmail && googleUser.email.toLowerCase().trim() === adminEmail;
+    const superAdminEmail = String(process.env.SUPER_ADMIN_EMAIL || process.env.ADMIN_EMAIL || '')
+      .toLowerCase()
+      .trim();
+    const googleEmail = googleUser.email.toLowerCase().trim();
+    // Only the env-configured owner email auto-receives elevated role on Google login.
+    // Regular admins are promoted only by Super Admin in Admin → Users.
+    const bootstrapRole =
+      superAdminEmail && googleEmail === superAdminEmail
+        ? 'super_admin'
+        : adminEmail && googleEmail === adminEmail
+          ? 'admin'
+          : null;
 
     if (!dbUser) {
       const userId = `usr-g-${Date.now()}`;
       const passHash = hashPassword(crypto.randomBytes(32).toString('hex'));
-      const role = shouldBeAdmin ? 'admin' : 'customer';
+      const role = bootstrapRole || 'customer';
 
       await queryDb(
         `INSERT INTO users (id, name, email, phone, password_hash, google_id, profile_image, profile_completed, role, status)
@@ -161,9 +174,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'This account is disabled. Contact support.' }, { status: 403 });
     } else {
       let activeRole = dbUser.role || 'customer';
-      if (shouldBeAdmin && activeRole !== 'admin') {
+      if (bootstrapRole === 'super_admin' && activeRole !== 'super_admin') {
+        activeRole = 'super_admin';
+        await queryDb(`UPDATE users SET role = 'super_admin' WHERE id = $1`, [dbUser.id]);
+      } else if (bootstrapRole === 'admin' && activeRole === 'customer') {
+        // Do not demote an existing super_admin; only lift customers to admin for ADMIN_EMAIL
         activeRole = 'admin';
-        await queryDb(`UPDATE users SET role = 'admin' WHERE id = $1`, [dbUser.id]);
+        await queryDb(`UPDATE users SET role = 'admin' WHERE id = $1 AND COALESCE(role, 'customer') = 'customer'`, [
+          dbUser.id,
+        ]);
       }
       await queryDb(
         `UPDATE users SET name = COALESCE(NULLIF($1, ''), name),

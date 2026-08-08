@@ -471,8 +471,18 @@ async function migrateDatabase(connStr, dbName) {
       CREATE INDEX IF NOT EXISTS idx_orders_awb ON orders (awb_number);
       CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items (order_id);
 
-      UPDATE users SET role = 'super_admin' WHERE LOWER(email) = 'yogesh234456@gmail.com';
+      -- Super Admin is set from env only (no hardcoded emails in source)
     `);
+
+    const superEmail = String(process.env.SUPER_ADMIN_EMAIL || process.env.ADMIN_EMAIL || '')
+      .toLowerCase()
+      .trim();
+    if (superEmail) {
+      await client.query(
+        `UPDATE users SET role = 'super_admin' WHERE LOWER(email) = $1`,
+        [superEmail]
+      );
+    }
 
     console.log(`✅ [${dbName}] Schema migration complete!`);
     await client.end();

@@ -81,10 +81,12 @@ export async function GET(request: NextRequest) {
   }
 }
 
-/** Admin: Promote user to Admin or Revoke Admin role */
+/** Super Admin only: promote customer → admin, or revoke admin → customer */
 export async function POST(request: NextRequest) {
-  const admin = await verifyAdminRequest(request);
-  if (!admin.isAdmin) return forbiddenResponse(admin.error);
+  const admin = await verifySuperAdminRequest(request);
+  if (!admin.isSuperAdmin) {
+    return forbiddenResponse(admin.error || 'Only Super Admin can change admin roles.');
+  }
 
   try {
     const body = await request.json().catch(() => ({}));
@@ -95,15 +97,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'userId and valid role (admin | customer) required.' }, { status: 400 });
     }
 
-    // Protect Head Admin from demotion
-    const userCheck = await queryDb(`SELECT email FROM users WHERE id::text = $1::text LIMIT 1`, [userId]);
-    const targetEmail = String(userCheck.rows[0]?.email || '').toLowerCase();
-    if (newRole === 'customer' && (targetEmail === 'yogesh234456@gmail.com' || targetEmail === 'yt967979@gmail.com')) {
-      return NextResponse.json({ error: 'Head Admin cannot be demoted.' }, { status: 400 });
+    // Never demote / reassign Super Admin via this endpoint (role-based, not hardcoded emails)
+    const userCheck = await queryDb(
+      `SELECT id, email, role FROM users WHERE id::text = $1::text LIMIT 1`,
+      [userId]
+    );
+    if (!userCheck.rows[0]) {
+      return NextResponse.json({ error: 'User not found.' }, { status: 404 });
+    }
+    const targetRole = String(userCheck.rows[0].role || '').toLowerCase();
+    if (targetRole === 'super_admin') {
+      return NextResponse.json({ error: 'Super Admin role cannot be changed here.' }, { status: 400 });
+    }
+    if (String(userCheck.rows[0].id) === String(admin.user?.userId) && newRole === 'customer') {
+      return NextResponse.json({ error: 'You cannot remove your own admin access.' }, { status: 400 });
     }
 
     await queryDb(
-      `UPDATE users SET role = $1, updated_at = NOW() WHERE id::text = $2::text`,
+      `UPDATE users SET role = $1, updated_at = NOW()
+       WHERE id::text = $2::text AND COALESCE(role, 'customer') != 'super_admin'`,
       [newRole, userId]
     );
 
