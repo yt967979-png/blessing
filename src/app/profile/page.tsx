@@ -523,7 +523,7 @@ export default function ProfilePage() {
                     <Package className="w-12 h-12 mx-auto mb-3 text-amber-500 opacity-60" />
                     <h3 className="font-heading font-black text-slate-800 text-base">No active orders found yet</h3>
                     <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1 leading-relaxed">
-                      When you purchase study guides or combo packs via Checkout, your live order status &amp; ST Courier dockets will appear here!
+                      When you purchase study guides via Checkout, your live order status &amp; ST Courier dockets will appear here!
                     </p>
                     <Link
                       href="/products"

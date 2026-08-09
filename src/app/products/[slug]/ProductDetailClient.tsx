@@ -277,8 +277,7 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
   const relatedProducts = (() => {
     const others = products.filter((p: any) => p.id !== product.id && p.inStock !== false);
     const sameClass = others.filter((p: any) => p.cls === product.cls);
-    const combos = others.filter((p: any) => p.category === 'combo');
-    const pool = [...combos, ...sameClass, ...others];
+    const pool = [...sameClass, ...others];
     const seen = new Set<string | number>();
     return pool.filter((p) => {
       if (seen.has(p.id)) return false;
@@ -286,13 +285,6 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
       return true;
     }).slice(0, 4);
   })();
-  const comboUpsell = products.find(
-    (p: any) =>
-      p.id !== product.id &&
-      p.category === 'combo' &&
-      p.inStock !== false &&
-      (p.cls === product.cls || String(p.title || '').includes(product.cls))
-  );
 
   const checkPincode = (e: React.FormEvent) => {
     e.preventDefault();
@@ -781,9 +773,7 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
         {relatedProducts.length > 0 && (
           <section className="mt-12">
             <h3 className="font-heading font-extrabold text-xl text-[#001B3A] mb-6 uppercase tracking-wide">
-              {comboUpsell || relatedProducts.some((p) => p.category === 'combo')
-                ? 'COMBOS & RELATED GUIDES'
-                : 'RECOMMENDED FOR YOU'}
+              RECOMMENDED FOR YOU
             </h3>
             <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-4">
               {relatedProducts.map((p) => (
