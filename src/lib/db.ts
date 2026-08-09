@@ -1504,8 +1504,15 @@ export async function ensureDefaultCategories(client: any) {
     { id: 'cat-11th', name: '11th Standard Guides', slug: '11th' },
     { id: 'cat-12th', name: '12th Standard Guides', slug: '12th' },
   ];
+  const run =
+    typeof client === 'function'
+      ? (sql: string, params?: any[]) => client(sql, params)
+      : client && typeof client.query === 'function'
+        ? (sql: string, params?: any[]) => client.query(sql, params)
+        : (sql: string, params?: any[]) => queryDb(sql, params);
+
   for (const cat of categories) {
-    await client.query(
+    await run(
       `INSERT INTO categories (id, name, slug, status)
        VALUES ($1, $2, $3, 'active')
        ON CONFLICT (id) DO NOTHING`,
