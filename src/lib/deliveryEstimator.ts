@@ -55,7 +55,8 @@ export function getSTCourierDeliveryEstimate(stateOrCity: string = 'Tamil Nadu')
 
   const formattedDate = `${dayName}, ${getOrdinal(dayOfMonth)} ${monthName}`;
   const formattedTime = 'before 9 PM';
-  const fullEstimateString = `Arriving by ${formattedDate} ${formattedTime}`;
+  // Shop estimate only — never present as official ST Courier ETA
+  const fullEstimateString = `Usually by ${formattedDate} ${formattedTime} (shop estimate)`;
 
   const diffTime = Math.abs(targetDate.getTime() - now.getTime());
   const daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));

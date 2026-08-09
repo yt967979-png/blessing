@@ -262,6 +262,15 @@ export default function ProfilePage() {
             {/* Mobile horizontal tabs */}
             <div className="lg:hidden overflow-x-auto scroll-chips -mx-1 px-1">
               <div className="flex gap-2 min-w-max pb-0.5">
+                {user && (user.role === 'admin' || user.role === 'super_admin') && (
+                  <Link
+                    href="/admin"
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-full text-xs font-extrabold touch-manipulation min-h-11 border transition-colors bg-[#001B3A] text-amber-400 border-amber-400/40"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    Admin
+                  </Link>
+                )}
                 {(
                   [
                     { id: 'orders' as const, label: `Orders (${liveOrders.length})`, Icon: Package },
@@ -313,7 +322,7 @@ export default function ProfilePage() {
               >
                 <div className="flex items-center gap-3">
                   <Package className="w-4 h-4 text-amber-500" />
-                  <span>My Orders &amp; Live Tracking ({liveOrders.length})</span>
+                  <span>My Orders &amp; Tracking ({liveOrders.length})</span>
                 </div>
                 <ChevronRight className="w-4 h-4 text-slate-400" />
               </button>
@@ -483,7 +492,7 @@ export default function ProfilePage() {
                 <div className="flex justify-between items-center mb-6 pb-4 border-b border-slate-100">
                   <div>
                     <h2 className="font-heading font-black text-xl text-[#001B3A]">
-                      My Orders & Live Tracking
+                      My Orders & Tracking
                     </h2>
                     <p className="text-xs text-slate-500">
                       Track live shipments and download tax invoices

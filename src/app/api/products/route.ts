@@ -3,11 +3,23 @@ import { getDbClient, releaseDbClient, ensureDefaultCategories, queryDb } from '
 import { verifyAdminRequest, forbiddenResponse } from '@/lib/serverSecurity';
 import { getCatalogCacheTtlMs, getCatalogCdnHeaders } from '@/lib/launchScale';
 import { isBookInStock } from '@/lib/stock';
-import { notifyStockChanged } from '@/app/api/stock/stream/route';
 
 // Shared catalog cache: same search/class/slug reused without hitting DB again
 const queryCache = new Map<string, { data: any[]; timestamp: number }>();
 const MAX_CACHE_KEYS = 120;
+
+const PLACEHOLDER_COVER =
+  'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80';
+
+/** Catalog must never ship multi‑MB data: URLs — they OOM / 500 under load. */
+function safeCatalogImage(raw: unknown): string {
+  const img = String(raw || '').trim();
+  if (!img) return PLACEHOLDER_COVER;
+  if (img.startsWith('data:')) return PLACEHOLDER_COVER;
+  if (img.length > 2048) return PLACEHOLDER_COVER;
+  if (img.includes('localhost') || img.includes('127.0.0.1')) return PLACEHOLDER_COVER;
+  return img;
+}
 
 export function invalidateProductsCache() {
   queryCache.clear();
@@ -153,9 +165,7 @@ export async function GET(request: Request) {
           const extractedClass = classMatch ? classMatch[0] : '10th';
 
           const rawImg = String(d.cover_image || '').trim();
-          const safeImg = (!rawImg || rawImg.includes('localhost') || rawImg.includes('127.0.0.1'))
-            ? 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80'
-            : rawImg;
+          const safeImg = safeCatalogImage(rawImg);
 
           return {
             id: d.id,
@@ -193,7 +203,10 @@ export async function GET(request: Request) {
 
     let timer: ReturnType<typeof setTimeout> | undefined;
     const raced = await Promise.race([
-      load.finally(() => {
+      load.catch((err: any) => {
+        console.error('Error fetching products from DB:', err?.message || err);
+        return staleFallback();
+      }).finally(() => {
         if (timer) clearTimeout(timer);
       }),
       new Promise<NextResponse>((resolve) => {
@@ -236,7 +249,14 @@ export async function POST(request: Request) {
     const hasSale = Number.isFinite(sale) && sale > 0 && sale < finalMrp;
     const finalDiscountPrice = hasSale ? sale : null;
     const categoryId = category === 'combo' ? 'cat-combos' : `cat-${cls || '10th'}`;
-    const finalImg = image || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80';
+    const finalImgRaw = String(image || '').trim();
+    if (finalImgRaw.startsWith('data:')) {
+      return NextResponse.json(
+        { error: 'Cover image must be an uploaded URL (not base64). Use the image upload button.' },
+        { status: 400 }
+      );
+    }
+    const finalImg = finalImgRaw || PLACEHOLDER_COVER;
     const finalDesc = description || `Complete ${cls || '10th'} Standard ${title} guide.`;
     const finalBadge = String(badge || '').trim().slice(0, 100);
 
@@ -262,7 +282,10 @@ export async function POST(request: Request) {
       stockQty,
     ]);
     invalidateProductsCache();
-    void notifyStockChanged([id]);
+    try {
+      const { notifyStockChanged } = await import('@/app/api/stock/stream/route');
+      void notifyStockChanged([id]);
+    } catch (_) {}
     return NextResponse.json(res.rows[0], { status: 201 });
   } catch (err: any) {
     console.error('POST /api/products failed:', err?.message || err);
@@ -303,7 +326,17 @@ export async function PATCH(request: Request) {
       values.push(noSale ? null : saleNum);
     }
     if (description !== undefined) { fields.push(`description = $${idx++}`); values.push(description); }
-    if (image !== undefined) { fields.push(`cover_image = $${idx++}`); values.push(image); }
+    if (image !== undefined) {
+      const img = String(image || '').trim();
+      if (img.startsWith('data:')) {
+        return NextResponse.json(
+          { error: 'Cover image must be an uploaded URL (not base64). Use the image upload button.' },
+          { status: 400 }
+        );
+      }
+      fields.push(`cover_image = $${idx++}`);
+      values.push(img || PLACEHOLDER_COVER);
+    }
     if (badge !== undefined) { fields.push(`badge = $${idx++}`); values.push(String(badge || '').trim().slice(0, 100)); }
     let finalStatus: string | undefined = undefined;
     let finalStock: number | undefined = undefined;
@@ -340,7 +373,10 @@ export async function PATCH(request: Request) {
       );
       invalidateProductsCache();
       if (finalStatus !== undefined || finalStock !== undefined) {
-        void notifyStockChanged([id]);
+        try {
+          const { notifyStockChanged } = await import('@/app/api/stock/stream/route');
+          void notifyStockChanged([id]);
+        } catch (_) {}
       }
     }
 
@@ -362,7 +398,10 @@ export async function DELETE(request: Request) {
 
     await queryDb(`DELETE FROM books WHERE id = $1`, [id]);
     invalidateProductsCache();
-    void notifyStockChanged([id]);
+    try {
+      const { notifyStockChanged } = await import('@/app/api/stock/stream/route');
+      void notifyStockChanged([id]);
+    } catch (_) {}
     return NextResponse.json({ success: true, deletedId: id });
   } catch (err: any) {
     console.error('DELETE /api/products failed:', err?.message || err);

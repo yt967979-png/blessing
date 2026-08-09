@@ -206,10 +206,17 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string, request?: Reque
       (awb ? `https://stcourier.com/track/shipment?docket=${encodeURIComponent(awb)}` : null);
 
     const delivered = String(status).toLowerCase().includes('deliver');
+    // Shop estimate only — not an official ST Courier ETA (ST rarely returns one)
+    const shopEta = getSTCourierDeliveryEstimate(addr.city || addr.state || 'Tamil Nadu');
     const eta = delivered
       ? 'Delivered'
-      : getSTCourierDeliveryEstimate(addr.city || addr.state || 'Tamil Nadu').fullEstimateString;
+      : `Usually ${shopEta.daysRemaining <= 2 ? '2–3' : '2–4'} business days (shop estimate)`;
     const lastScan = !cancelled && scans.length > 0 ? scans[0] : null;
+    const lastUpdatedAt =
+      lastScan?.time ||
+      (live?.updated || live?.verified ? new Date().toISOString() : null) ||
+      o.ordered_at ||
+      null;
 
     return NextResponse.json({
       success: true,
@@ -231,6 +238,8 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string, request?: Reque
         paymentStatus: o.payment_status,
         placedAt: o.ordered_at,
         estimatedArrival: cancelled ? null : eta,
+        estimatedArrivalHint: cancelled || delivered ? null : `Rough guide around ${shopEta.formattedDate}`,
+        lastUpdatedAt: cancelled ? null : lastUpdatedAt,
         lastLocation: lastScan?.location || null,
         lastActivity: lastScan?.activity || null,
         customer: {

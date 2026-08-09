@@ -409,6 +409,7 @@ export async function syncAllActiveAwbOrders(): Promise<{ checked: number; updat
        WHERE awb_number IS NOT NULL
          AND awb_number NOT ILIKE 'SHP-%'
          AND COALESCE(order_status, '') NOT ILIKE '%delivered%'
+         AND COALESCE(order_status, '') NOT ILIKE '%rto%'
          AND COALESCE(order_status, '') NOT ILIKE '%cancel%'
          AND COALESCE(order_status, '') NOT ILIKE '%awaiting confirmation%'
        LIMIT 40`

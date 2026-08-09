@@ -49,6 +49,8 @@ function OrdersContent() {
   const [trackRefreshing, setTrackRefreshing] = useState(false);
   const [trackMeta, setTrackMeta] = useState<{
     estimatedArrival?: string;
+    estimatedArrivalHint?: string;
+    lastUpdatedAt?: string;
     liveSynced?: boolean;
     status?: string;
   }>({});
@@ -173,11 +175,15 @@ function OrdersContent() {
   // Live ST Courier scans while order detail is open (and when tracking modal is open)
   useEffect(() => {
     if (!searchedOrderData || !user) return;
-    if (isOrderCancelled(searchedOrderData.courierStatus || searchedOrderData.status)) {
+    const statusStr = searchedOrderData.courierStatus || searchedOrderData.status || '';
+    if (isOrderCancelled(statusStr)) {
       setLiveTrackingScans([]);
       setTrackMeta({});
       return;
     }
+    const statusLower = String(statusStr).toLowerCase();
+    const isTerminal =
+      statusLower.includes('deliver') || statusLower.includes('rto');
 
     const targetDocket =
       searchedOrderData.trackingNumber || searchedOrderData.orderId || searchedOrderData.id;
@@ -197,6 +203,8 @@ function OrdersContent() {
         setLiveTrackingScans(scans);
         setTrackMeta({
           estimatedArrival: ord?.estimatedArrival,
+          estimatedArrivalHint: ord?.estimatedArrivalHint,
+          lastUpdatedAt: ord?.lastUpdatedAt,
           liveSynced: !!(ord?.liveSynced || ord?.autoUpdated),
           status: ord?.status,
         });
@@ -208,7 +216,16 @@ function OrdersContent() {
     };
 
     void fetchScans();
-    const interval = setInterval(() => void fetchScans(), showTrackingModal ? 5000 : 15000);
+    // Stop frequent polling after Delivered / RTO
+    if (isTerminal) {
+      return () => {
+        cancelled = true;
+      };
+    }
+    const interval = setInterval(
+      () => void fetchScans(),
+      showTrackingModal ? 30_000 : 45_000
+    );
     return () => {
       cancelled = true;
       clearInterval(interval);
@@ -321,13 +338,13 @@ function OrdersContent() {
         <div className="max-w-2xl">
           <span className="text-[10px] font-extrabold text-amber-300 uppercase tracking-widest bg-amber-400/10 border border-amber-400/30 px-3 py-1 rounded-full flex items-center gap-1.5 w-fit">
             <Sparkles className="w-3 h-3 text-amber-400" />
-            <span>ST COURIER LIVE EXPRESS LOGISTICS</span>
+            <span>SHIPMENT TRACKING POWERED BY ST COURIER</span>
           </span>
           <h1 className="font-heading font-black text-2xl sm:text-4xl text-white mt-3 mb-2">
-            My Orders &amp; Live Tracking
+            My Orders &amp; Tracking
           </h1>
           <p className="text-xs sm:text-sm text-slate-300 mb-6">
-            View realtime shipment location, ST Courier transit log, estimated delivery, and tax invoice.
+            Hub-scan status from ST Courier, AWB timeline, shop delivery estimate, and tax invoice.
           </p>
 
           <form onSubmit={handleSearchOrder} className="flex gap-2">
@@ -400,7 +417,7 @@ function OrdersContent() {
 
               <div>
                 <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider block">
-                  {orderIsCancelled ? 'ORDER STATUS' : 'ESTIMATED DELIVERY'}
+                  {orderIsCancelled ? 'ORDER STATUS' : 'ESTIMATED DELIVERY (SHOP)'}
                 </span>
                 {orderIsCancelled ? (
                   <span className="font-extrabold text-red-700 text-sm flex items-center gap-1.5 bg-red-50 border border-red-200 px-3 py-1 rounded-xl">
@@ -410,7 +427,17 @@ function OrdersContent() {
                 ) : (
                   <span className="font-extrabold text-emerald-700 text-sm flex items-center gap-1.5 bg-emerald-50 border border-emerald-200/80 px-3 py-1 rounded-xl">
                     <Truck className="w-4 h-4 text-emerald-600" />
-                    <span>Arriving by {getSTCourierDeliveryEstimate(searchedOrderData?.shippingAddress?.city).formattedDate} before 11 PM</span>
+                    <span>
+                      Usually by{' '}
+                      {
+                        getSTCourierDeliveryEstimate(
+                          searchedOrderData?.shippingAddress?.city ||
+                            searchedOrderData?.city ||
+                            'Tamil Nadu'
+                        ).formattedDate
+                      }{' '}
+                      — shop estimate
+                    </span>
                   </span>
                 )}
               </div>
@@ -518,8 +545,8 @@ function OrdersContent() {
                   </span>
                 ) : (
                   <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-extrabold text-xs px-3.5 py-1.5 rounded-full flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                    <span>LIVE DATABASE TRACKING ACTIVE</span>
+                    <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                    <span>ST COURIER TRACKING</span>
                   </span>
                 )}
               </div>
@@ -532,16 +559,20 @@ function OrdersContent() {
                 </div>
 
                 <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
-                  <span className="text-[10px] text-slate-400 font-bold uppercase block mb-1">DOCKET / SHIPMENT ID</span>
+                  <span className="text-[10px] text-slate-400 font-bold uppercase block mb-1">YOUR AWB / DOCKET</span>
                   {isOfficialAwb ? (
                     <>
-                      <div className="font-mono font-black text-amber-400 text-sm">{searchedOrderData.trackingNumber}</div>
-                      <div className="text-[11px] text-emerald-400 font-bold mt-0.5">Official ST Courier Docket</div>
+                      <div className="font-mono font-black text-amber-400 text-sm sm:text-base tracking-wide">
+                        {searchedOrderData.trackingNumber}
+                      </div>
+                      <div className="text-[11px] text-emerald-400 font-bold mt-0.5">
+                        Use this number on ST Courier website
+                      </div>
                     </>
                   ) : (
                     <>
-                      <div className="font-mono font-bold text-amber-300 text-xs">{searchedOrderData.shipmentId || searchedOrderData.trackingNumber || 'SHP-20260726-000101'}</div>
-                      <div className="text-[11px] text-slate-400 mt-0.5">Pending Official Booking</div>
+                      <div className="font-mono font-bold text-amber-300 text-xs">{searchedOrderData.shipmentId || searchedOrderData.trackingNumber || 'Pending'}</div>
+                      <div className="text-[11px] text-slate-400 mt-0.5">AWB assigned after packing / booking</div>
                     </>
                   )}
                 </div>
@@ -614,12 +645,17 @@ function OrdersContent() {
                   ) : (
                     <>
                       <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                      <span>Order confirmed for <strong>+91 {searchedOrderData.customerPhone}</strong> — live ST updates below</span>
+                      <span>
+                        Order confirmed for <strong>+91 {searchedOrderData.customerPhone}</strong>
+                        {isOfficialAwb
+                          ? ' — track below; if it does not update, use Track on ST Courier'
+                          : ' — AWB appears after we book with ST Courier'}
+                      </span>
                     </>
                   )}
                 </div>
 
-                <div className="flex gap-2 w-full sm:w-auto">
+                <div className="flex flex-wrap gap-2 w-full sm:w-auto">
                   {!orderIsCancelled && (
                     <button
                       type="button"
@@ -627,8 +663,25 @@ function OrdersContent() {
                       className="flex-1 sm:flex-initial bg-amber-400 hover:bg-amber-500 text-[#001B3A] font-extrabold text-xs px-5 py-3 rounded-xl transition-all shadow-md flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer"
                     >
                       <Truck className="w-4 h-4" />
-                      <span>FULL TRACKING</span>
+                      <span>TRACK HERE</span>
                     </button>
+                  )}
+
+                  {!orderIsCancelled && isOfficialAwb && (
+                    <a
+                      href={
+                        searchedOrderData.trackingUrl ||
+                        `https://stcourier.com/track/shipment?docket=${encodeURIComponent(
+                          String(searchedOrderData.trackingNumber)
+                        )}`
+                      }
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1 sm:flex-initial bg-white hover:bg-slate-100 text-[#001B3A] font-extrabold text-xs px-5 py-3 rounded-xl transition-all shadow-md flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer border border-white/40"
+                    >
+                      <ExternalLink className="w-4 h-4 text-amber-600" />
+                      <span>TRACK ON ST COURIER</span>
+                    </a>
                   )}
 
                   <a
@@ -645,7 +698,7 @@ function OrdersContent() {
               </div>
             </div>
 
-            {/* Flipkart-style ST: where now, ETA, hub scans */}
+            {/* ST Courier hub-scan tracking (not GPS) */}
             <ShipmentTrackingCard
               orderId={searchedOrderData.orderId}
               status={trackMeta.status || searchedOrderData.courierStatus || searchedOrderData.status}
@@ -661,10 +714,25 @@ function OrdersContent() {
                 trackMeta.estimatedArrival ||
                 (orderIsCancelled
                   ? undefined
-                  : getSTCourierDeliveryEstimate(
-                      searchedOrderData.city || searchedOrderData.state || 'Tamil Nadu'
-                    ).fullEstimateString)
+                  : `Usually ${
+                      getSTCourierDeliveryEstimate(
+                        searchedOrderData.city || searchedOrderData.state || 'Tamil Nadu'
+                      ).daysRemaining <= 2
+                        ? '2–3'
+                        : '2–4'
+                    } business days (shop estimate)`)
               }
+              estimatedArrivalHint={
+                trackMeta.estimatedArrivalHint ||
+                (orderIsCancelled
+                  ? null
+                  : `Rough guide around ${
+                      getSTCourierDeliveryEstimate(
+                        searchedOrderData.city || searchedOrderData.state || 'Tamil Nadu'
+                      ).formattedDate
+                    }`)
+              }
+              lastUpdatedAt={trackMeta.lastUpdatedAt}
               refreshing={trackRefreshing}
               onRefresh={() => {
                 const targetDocket =
@@ -681,6 +749,8 @@ function OrdersContent() {
                     setLiveTrackingScans(Array.isArray(ord?.scans) ? ord.scans : []);
                     setTrackMeta({
                       estimatedArrival: ord?.estimatedArrival,
+                      estimatedArrivalHint: ord?.estimatedArrivalHint,
+                      lastUpdatedAt: ord?.lastUpdatedAt,
                       liveSynced: !!(ord?.liveSynced || ord?.autoUpdated),
                       status: ord?.status,
                     });
@@ -742,8 +812,26 @@ function OrdersContent() {
 
                 <div className="space-y-3 text-xs">
                   <div>
-                    <span className="text-slate-400 font-bold block text-[10px] uppercase">TRACKING DOCKET (AWB)</span>
-                    <span className="font-mono font-black text-slate-900 text-sm">{searchedOrderData.trackingNumber || searchedOrderData.shipmentId || 'Generating...'}</span>
+                    <span className="text-slate-400 font-bold block text-[10px] uppercase">YOUR AWB NUMBER</span>
+                    <span className="font-mono font-black text-slate-900 text-base tracking-wide">
+                      {searchedOrderData.trackingNumber || searchedOrderData.shipmentId || 'Generating...'}
+                    </span>
+                    {isOfficialAwb && (
+                      <a
+                        href={
+                          searchedOrderData.trackingUrl ||
+                          `https://stcourier.com/track/shipment?docket=${encodeURIComponent(
+                            String(searchedOrderData.trackingNumber)
+                          )}`
+                        }
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-extrabold text-[#0044AA] hover:underline"
+                      >
+                        Track this AWB on ST Courier website
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                    )}
                   </div>
 
                   <div>
@@ -1062,7 +1150,9 @@ function OrdersContent() {
           >
             <div className="sticky top-0 z-10 bg-white/95 border-b border-slate-200 px-4 py-3 flex items-center justify-between">
               <div>
-                <p className="text-[10px] font-extrabold text-amber-600 uppercase tracking-wider">Live tracking</p>
+                <p className="text-[10px] font-extrabold text-amber-600 uppercase tracking-wider">
+                  ST Courier tracking
+                </p>
                 <p className="font-heading font-black text-sm text-[#001B3A]">Order #{searchedOrderData.orderId}</p>
               </div>
               <button
@@ -1088,10 +1178,23 @@ function OrdersContent() {
                 liveSynced={!!trackMeta.liveSynced}
                 estimatedArrival={
                   trackMeta.estimatedArrival ||
-                  getSTCourierDeliveryEstimate(
-                    searchedOrderData.city || searchedOrderData.state || 'Tamil Nadu'
-                  ).fullEstimateString
+                  `Usually ${
+                    getSTCourierDeliveryEstimate(
+                      searchedOrderData.city || searchedOrderData.state || 'Tamil Nadu'
+                    ).daysRemaining <= 2
+                      ? '2–3'
+                      : '2–4'
+                  } business days (shop estimate)`
                 }
+                estimatedArrivalHint={
+                  trackMeta.estimatedArrivalHint ||
+                  `Rough guide around ${
+                    getSTCourierDeliveryEstimate(
+                      searchedOrderData.city || searchedOrderData.state || 'Tamil Nadu'
+                    ).formattedDate
+                  }`
+                }
+                lastUpdatedAt={trackMeta.lastUpdatedAt}
                 refreshing={trackRefreshing}
                 onRefresh={() => {
                   const targetDocket =
@@ -1108,6 +1211,8 @@ function OrdersContent() {
                       setLiveTrackingScans(Array.isArray(ord?.scans) ? ord.scans : []);
                       setTrackMeta({
                         estimatedArrival: ord?.estimatedArrival,
+                        estimatedArrivalHint: ord?.estimatedArrivalHint,
+                        lastUpdatedAt: ord?.lastUpdatedAt,
                         liveSynced: !!(ord?.liveSynced || ord?.autoUpdated),
                         status: ord?.status,
                       });

@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Home, BookOpen, ShoppingBag, User, ShieldCheck } from 'lucide-react';
+import { Home, BookOpen, ShoppingBag, User } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { useCartBadgeBump } from '@/hooks/useCartBadgeBump';
 
@@ -74,17 +74,6 @@ export const MobileBottomNav = () => {
       },
     },
   ];
-
-  if (user?.role === 'admin' || user?.role === 'super_admin') {
-    items.push({
-      key: 'admin',
-      label: 'Admin',
-      href: '/admin',
-      active: false,
-      icon: ShieldCheck,
-      onEnter: () => router.prefetch('/admin'),
-    });
-  }
 
   return (
     <nav

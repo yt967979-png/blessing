@@ -48,12 +48,14 @@ function TrackForm() {
     }
   }, [user]);
 
-  const runTrack = async (oid?: string, ph?: string) => {
+  const runTrack = async (oid?: string, ph?: string, opts?: { soft?: boolean }) => {
     const id = (oid ?? orderId).trim();
     const mobile = (ph ?? phone ?? user?.phone ?? '').trim();
     setError(null);
-    setLoading(true);
-    setOrder(null);
+    if (!opts?.soft) {
+      setLoading(true);
+      setOrder(null);
+    }
     try {
       const res = await fetch('/api/track', {
         method: 'POST',
@@ -62,14 +64,16 @@ function TrackForm() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || 'Could not track order. Please verify Order ID and Mobile number.');
+        if (!opts?.soft) {
+          setError(data.error || 'Could not track order. Please verify Order ID and Mobile number.');
+        }
         return;
       }
       setOrder(data.order);
     } catch {
-      setError('Network error. Please try again.');
+      if (!opts?.soft) setError('Network error. Please try again.');
     } finally {
-      setLoading(false);
+      if (!opts?.soft) setLoading(false);
     }
   };
 
@@ -84,19 +88,34 @@ function TrackForm() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, user]);
 
+  // Auto-refresh while Track page is open — stop after delivered / cancelled
+  useEffect(() => {
+    if (!order?.orderId) return;
+    if (order.cancelled) return;
+    const st = String(order.status || '').toLowerCase();
+    if (st.includes('deliver') || st.includes('rto')) return;
+    const mobile = phone || user?.phone || '';
+    if (!mobile) return;
+    const t = window.setInterval(() => {
+      void runTrack(order.orderId, mobile, { soft: true });
+    }, 45_000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [order?.orderId, order?.cancelled, order?.status, phone, user?.phone]);
+
   return (
     <div className="max-w-2xl mx-auto w-full space-y-6">
       <div className="text-center space-y-2">
         <BrandLogo size={56} className="w-14 h-14 mx-auto mb-1" />
         <div className="inline-flex items-center gap-2 text-amber-700 text-xs font-bold uppercase tracking-wider">
           <Truck className="w-4 h-4" />
-          ST Courier Live Tracking
+          Shipment tracking powered by ST Courier
         </div>
         <h1 className="font-heading font-black text-2xl md:text-3xl text-[#001B3A]">Track Your Order</h1>
         <p className="text-sm text-slate-500">
           {user
-            ? `Welcome back, ${user.name}! Select any order below or enter Order ID to track live ST Courier status.`
-            : 'No login needed — enter Order ID + the 10-digit mobile number used at checkout.'}
+            ? `Welcome back, ${user.name}! Select an order below or enter Order ID — status comes from ST Courier hub scans.`
+            : 'No login needed — enter Order ID + the 10-digit mobile used at checkout.'}
         </p>
       </div>
 
@@ -131,7 +150,7 @@ function TrackForm() {
                   </p>
                 </div>
                 <div className="flex items-center gap-1 text-xs font-bold text-[#0044AA] group-hover:translate-x-1 transition-transform">
-                  <span>Track Live</span>
+                  <span>Track</span>
                   <ChevronRight className="w-4 h-4" />
                 </div>
               </button>
@@ -180,7 +199,7 @@ function TrackForm() {
           className="w-full bg-[#001B3A] hover:bg-blue-700 text-white font-extrabold text-xs py-3.5 rounded-xl uppercase tracking-wider min-h-12 flex items-center justify-center gap-2 disabled:opacity-60 cursor-pointer shadow-md transition-all"
         >
           <Search className="w-4 h-4" />
-          {loading ? 'Tracking Order…' : 'Track Live Order'}
+          {loading ? 'Checking ST Courier…' : 'Track shipment'}
         </button>
       </form>
 
@@ -264,8 +283,10 @@ function TrackForm() {
             scans={order.scans}
             liveSynced={!!order.liveSynced || !!order.autoUpdated}
             estimatedArrival={order.estimatedArrival}
+            estimatedArrivalHint={order.estimatedArrivalHint}
+            lastUpdatedAt={order.lastUpdatedAt}
             refreshing={loading}
-            onRefresh={() => void runTrack(order.orderId, phone || user?.phone || '')}
+            onRefresh={() => void runTrack(order.orderId, phone || user?.phone || '', { soft: true })}
           />
 
           {Array.isArray(order.items) && order.items.length > 0 && (

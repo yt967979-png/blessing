@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { Search, Heart, ShoppingBag, User, ShieldCheck, Bell, CheckCheck, RefreshCw } from 'lucide-react';
+import { Search, Heart, ShoppingBag, User, Bell, CheckCheck, RefreshCw } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { BrandLogo } from '@/components/ui/BrandLogo';
 import { imageNeedsUnoptimized } from '@/lib/productImage';
@@ -230,17 +230,6 @@ export const Header = () => {
 
         {/* Actions */}
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-          {user && (user.role === 'admin' || user.role === 'super_admin') && (
-            <Link
-              href="/admin"
-              className="bg-[#001B3A] text-amber-400 font-extrabold text-[11px] px-2 sm:px-3 py-1.5 rounded-xl flex items-center gap-1 border border-amber-400/30 shrink-0 hover:bg-[#002B5B] transition-colors min-h-10 min-w-10 sm:min-w-0 justify-center"
-              aria-label="Admin panel"
-            >
-              <ShieldCheck className="w-4 h-4 text-amber-400" />
-              <span className="hidden sm:inline">ADMIN PANEL</span>
-            </Link>
-          )}
-
           {user && (
             <div className="relative shrink-0">
               <button

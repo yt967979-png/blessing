@@ -286,7 +286,7 @@ export const ModalsBundle = () => {
                 >
                   <div className="flex items-center gap-2.5">
                     <Truck className="w-4 h-4 text-amber-500" />
-                    <span>My Orders & Live Tracking</span>
+                    <span>My Orders & Tracking</span>
                   </div>
                   <Tag className="w-3.5 h-3.5 text-slate-400" />
                 </button>
@@ -416,8 +416,8 @@ export const ModalsBundle = () => {
                   <div>
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">What happens next</span>
                     <p className="font-semibold text-[#001B3A] text-xs leading-relaxed">
-                      1) Packing → 2) ST Courier dispatch → 3) Delivery by{' '}
-                      {getSTCourierDeliveryEstimate(orderSuccessData.city).formattedDate} (before 11 PM)
+                      1) Packing → 2) ST Courier dispatch → 3) Usually by{' '}
+                      {getSTCourierDeliveryEstimate(orderSuccessData.city).formattedDate} (shop estimate)
                     </p>
                   </div>
                 </div>
