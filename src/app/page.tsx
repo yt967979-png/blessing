@@ -20,7 +20,7 @@ export default function Home() {
   const { user } = useStore();
 
   useEffect(() => {
-    if (user && user.role === 'admin') {
+    if (user && (user.role === 'admin' || user.role === 'super_admin')) {
       router.replace('/admin');
     }
   }, [user, router]);
