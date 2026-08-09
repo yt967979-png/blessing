@@ -624,6 +624,28 @@ export default function AdminPage() {
     }
   };
 
+  const handleClearAwb = async (orderId: string) => {
+    if (!user || !confirm(`Clear AWB number from order #${orderId}?`)) return;
+    setDispatchingOrderIds((p) => ({ ...p, [orderId]: true }));
+    try {
+      const res = await fetch(`/api/courier/track?orderId=${encodeURIComponent(orderId)}&action=clear`, {
+        headers: authHeaders(user),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast(`🗑️ AWB cleared for #${orderId}`);
+        setShiprocketAwbInput((p) => ({ ...p, [orderId]: '' }));
+        loadLiveOrders();
+      } else {
+        showToast(`❌ ${data.error || 'Failed to clear AWB'}`);
+      }
+    } catch {
+      showToast('❌ Clear AWB network error');
+    } finally {
+      setDispatchingOrderIds((p) => ({ ...p, [orderId]: false }));
+    }
+  };
+
   // ── Export Comprehensive Excel / CSV Report (Date Filtered + Full Product Breakdown)
   const handleExportCsv = () => {
     if (!filteredOrders.length) {
@@ -1448,6 +1470,19 @@ export default function AdminPage() {
                                   </>
                                 )}
                               </button>
+
+                              {o.trackingNumber && (
+                                <button
+                                  type="button"
+                                  disabled={!!dispatchingOrderIds[o.orderId]}
+                                  onClick={() => handleClearAwb(o.orderId)}
+                                  className="px-3 py-2 text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 disabled:opacity-50 rounded-lg transition-colors cursor-pointer flex items-center gap-1 shrink-0"
+                                  title="Clear / reset AWB number"
+                                >
+                                  <X className="w-3 h-3" />
+                                  <span>Clear AWB</span>
+                                </button>
+                              )}
                             </div>
                             <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-gray-200/60 text-[10px]">
                               <span className="text-gray-500 font-medium flex items-center gap-1">

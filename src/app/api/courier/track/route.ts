@@ -23,6 +23,41 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const docket = cleanDocket(searchParams.get('docket') || '');
   const orderId = searchParams.get('orderId') || '';
+  const action = searchParams.get('action') || '';
+
+  // Admin AWB clear action
+  if (orderId && (action === 'clear' || searchParams.get('clear') === 'true')) {
+    const admin = await verifyAdminRequest(request);
+    if (!admin.isAdmin) {
+      if (!admin.user) return unauthorizedResponse(admin.error || 'Unauthorized');
+      return forbiddenResponse('Admin privilege required to clear AWB');
+    }
+
+    const { getDbClient, releaseDbClient } = await import('@/lib/db');
+    const client = await getDbClient();
+    try {
+      if (client) {
+        await client.query(
+          `UPDATE orders
+           SET awb_number = NULL,
+               tracking_url = NULL,
+               order_status = CASE WHEN order_status ILIKE '%handed%' OR order_status ILIKE '%transit%' THEN 'Confirmed' ELSE order_status END,
+               updated_at = NOW()
+           WHERE (id = $1 OR order_number = $1)`,
+          [orderId]
+        );
+      }
+    } finally {
+      releaseDbClient(client);
+    }
+
+    return NextResponse.json({
+      success: true,
+      cleared: true,
+      orderId,
+      message: 'AWB cleared from order.',
+    });
+  }
 
   if (!VALID_DOCKET_PATTERN.test(docket)) {
     return NextResponse.json(

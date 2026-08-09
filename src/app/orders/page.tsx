@@ -844,26 +844,28 @@ function OrdersContent() {
 
                 <div className="space-y-3 text-xs">
                   <div>
-                    <span className="text-slate-400 font-bold block text-[10px] uppercase">YOUR AWB NUMBER</span>
-                    <span className="font-mono font-black text-slate-900 text-base tracking-wide">
-                      {searchedOrderData.trackingNumber || searchedOrderData.shipmentId || 'Generating...'}
-                    </span>
-                    {isOfficialAwb && (
-                      <a
-                        href={
-                          searchedOrderData.trackingUrl ||
-                          `https://stcourier.com/track/shipment?docket=${encodeURIComponent(
-                            String(searchedOrderData.trackingNumber)
-                          )}`
-                        }
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-extrabold text-[#0044AA] hover:underline"
-                      >
-                        Track this AWB on ST Courier website
-                        <ExternalLink className="w-3.5 h-3.5" />
-                      </a>
-                    )}
+                    <span className="text-slate-400 font-bold block text-[10px] uppercase mb-1">YOUR AWB NUMBER</span>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span className="font-mono font-black text-slate-900 text-base tracking-wide bg-white px-3 py-1 rounded-xl border border-slate-200 shadow-sm">
+                        {searchedOrderData.trackingNumber || searchedOrderData.shipmentId || 'Generating...'}
+                      </span>
+                      {isOfficialAwb && (
+                        <a
+                          href={
+                            searchedOrderData.trackingUrl ||
+                            `https://stcourier.com/track/shipment?docket=${encodeURIComponent(
+                              String(searchedOrderData.trackingNumber)
+                            )}`
+                          }
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 text-xs font-extrabold text-[#0044AA] bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-xl border border-blue-200/80 transition-colors"
+                        >
+                          <span>Track on ST Courier website</span>
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </a>
+                      )}
+                    </div>
                   </div>
 
                   <div>
