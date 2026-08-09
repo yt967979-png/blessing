@@ -44,6 +44,7 @@ export async function GET(request: Request) {
       return forbiddenResponse('Admin privilege required to assign AWB');
     }
 
+    // Check if order is eligible for shipping
     const { getDbClient, releaseDbClient } = await import('@/lib/db');
     const client = await getDbClient();
     try {
@@ -70,11 +71,36 @@ export async function GET(request: Request) {
             );
           }
         }
-        await client.query(
+      }
+    } finally {
+      releaseDbClient(client);
+    }
+
+    // FIRST: Verify docket on ST Courier portal before saving to DB
+    const synced = await syncOrderByAwb(docket);
+    if (!synced.verified) {
+      return NextResponse.json(
+        {
+          isValid: false,
+          verified: false,
+          error: synced.error || 'ST Courier docket not found or not booked yet. Please verify the AWB number.',
+          docket,
+          trackingUrl: synced.trackingUrl,
+        },
+        { status: 404 }
+      );
+    }
+
+    // DOCKET VERIFIED: Now safely save AWB to database
+    const client2 = await getDbClient();
+    try {
+      if (client2) {
+        await client2.query(
           `UPDATE orders
            SET awb_number = $1,
                tracking_url = $2,
                courier_name = 'ST Courier Express',
+               order_status = CASE WHEN order_status ILIKE '%packed%' OR order_status ILIKE '%confirmed%' THEN 'Handed to ST Courier' ELSE order_status END,
                updated_at = NOW()
            WHERE (id = $3 OR order_number = $3)
              AND COALESCE(order_status, '') NOT ILIKE '%cancel%'
@@ -83,21 +109,7 @@ export async function GET(request: Request) {
         );
       }
     } finally {
-      releaseDbClient(client);
-    }
-
-    const synced = await syncOrderByAwb(docket);
-    if (!synced.verified) {
-      return NextResponse.json(
-        {
-          isValid: false,
-          verified: false,
-          error: synced.error || 'ST Courier docket not found / not booked yet.',
-          docket,
-          trackingUrl: synced.trackingUrl,
-        },
-        { status: 404 }
-      );
+      releaseDbClient(client2);
     }
 
     return NextResponse.json({
