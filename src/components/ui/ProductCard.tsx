@@ -90,12 +90,12 @@ export const ProductCard = ({ product }: { product: Product }) => {
 
       <Link
         href={productHref}
-        className={`relative h-36 sm:h-52 rounded-xl flex items-center justify-center mb-2.5 overflow-hidden mt-1 border ${
+        className={`relative h-32 sm:h-48 rounded-xl flex items-center justify-center mb-2 overflow-hidden mt-1 border ${
           isOutOfStock ? 'bg-slate-100 border-slate-200' : 'bg-slate-50/80 border-slate-100'
         }`}
       >
         {isOutOfStock && (
-          <div className="absolute inset-x-3 bottom-3 z-10 rounded-full bg-slate-900/85 text-white text-[10px] font-black uppercase tracking-wide text-center px-3 py-1.5">
+          <div className="absolute inset-x-2 bottom-2 z-10 rounded-full bg-slate-900/85 text-white text-[9px] font-black uppercase tracking-wide text-center px-2 py-1">
             Out of Stock
           </div>
         )}
@@ -129,48 +129,48 @@ export const ProductCard = ({ product }: { product: Product }) => {
 
       <Link
         href={productHref}
-        className={`font-heading font-black text-xs sm:text-sm leading-snug mb-1.5 line-clamp-2 min-h-[2.5rem] transition-colors ${
+        className={`font-heading font-black text-xs sm:text-sm leading-snug mb-1 line-clamp-2 min-h-[2.25rem] transition-colors ${
           isOutOfStock ? 'text-slate-500' : 'text-[#001226] group-hover:text-blue-700'
         }`}
       >
         {product.title}
       </Link>
 
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex items-center justify-between mb-1.5">
         <div className="flex items-center gap-1 bg-amber-50 border border-amber-200/60 px-1.5 py-0.5 rounded-full">
-          <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-          <span className="text-[10px] font-black text-slate-900">
+          <Star className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-amber-400 text-amber-400" />
+          <span className="text-[9px] sm:text-[10px] font-black text-slate-900">
             {(product.reviews ?? 0) > 0 ? (product.rating || 0).toFixed(1) : 'New'}
           </span>
         </div>
         <span className="text-[9px] font-extrabold text-emerald-700 flex items-center gap-0.5">
-          <Truck className="w-3 h-3 text-emerald-600" />
-          <span className="hidden sm:inline">ST Courier</span>
+          <Truck className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-emerald-600" />
+          <span className="inline">ST Courier</span>
         </span>
       </div>
 
-      <div className="flex items-baseline gap-1.5 mt-auto mb-2">
-        <span className={`font-black text-base sm:text-lg ${isOutOfStock ? 'text-slate-500' : 'text-[#001226]'}`}>₹{product.price}</span>
+      <div className="flex items-baseline gap-1 mt-auto mb-1.5 flex-wrap">
+        <span className={`font-black text-sm sm:text-base ${isOutOfStock ? 'text-slate-500' : 'text-[#001226]'}`}>₹{product.price}</span>
         {product.mrp > product.price && (
-          <span className="text-[11px] text-slate-400 line-through font-bold">₹{product.mrp}</span>
+          <span className="text-[10px] sm:text-[11px] text-slate-400 line-through font-bold">₹{product.mrp}</span>
         )}
         {product.mrp > product.price && product.discount > 0 && (
-          <span className="text-[10px] font-black text-emerald-600">{product.discount}% OFF</span>
+          <span className="text-[9px] sm:text-[10px] font-black text-emerald-600">{product.discount}% OFF</span>
         )}
       </div>
 
       {isOutOfStock && (
-        <p className="mb-2 text-[10px] sm:text-xs font-bold text-slate-500 line-clamp-2">
+        <p className="mb-1.5 text-[9px] sm:text-xs font-bold text-slate-500 line-clamp-1">
           Unavailable — stock updates live.
         </p>
       )}
 
-      <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
+      <div className="grid grid-cols-2 gap-1 sm:gap-2">
         <button
           type="button"
           disabled={isOutOfStock}
           onClick={handleAddToCart}
-          className={`font-extrabold text-[11px] sm:text-xs py-3 rounded-xl flex items-center justify-center gap-1 uppercase touch-manipulation disabled:cursor-not-allowed min-h-12 transition-all duration-300 ${
+          className={`font-extrabold text-[10px] sm:text-xs py-2 sm:py-2.5 rounded-xl flex items-center justify-center gap-1 uppercase touch-manipulation disabled:cursor-not-allowed min-h-9 sm:min-h-10 transition-all duration-300 cursor-pointer ${
             isAdded
               ? 'bg-emerald-600 text-white animate-success-pop shadow-md shadow-emerald-600/30'
               : 'bg-[#0044AA] hover:bg-[#003388] active:bg-[#001B3A] disabled:bg-slate-300 disabled:text-slate-500 text-white'
