@@ -216,12 +216,22 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       signal: AbortSignal.timeout(10_000),
     };
     fetch(url, opts)
-      .then((res) => res.json())
+      .then(async (res) => {
+        if (!res.ok) {
+          throw new Error(`Catalog HTTP ${res.status}`);
+        }
+        return res.json();
+      })
       .then((data) => {
         if (Array.isArray(data)) {
+          // Don't blank a working shop if the API returns [] after a blip
+          if (data.length === 0 && productsRef.current.length > 0) {
+            return;
+          }
           setProducts(data);
-          // Cache even empty arrays so a later timeout can soft-fail without hanging UX.
-          writeCatalogCache(data);
+          if (data.length > 0) {
+            writeCatalogCache(data);
+          }
         }
       })
       .catch(() => {

@@ -123,8 +123,16 @@ export async function GET(request: Request) {
   try {
     const load = (async () => {
       // Prefer pool.query for catalog reads (cheaper than holding a checkout client)
+      // Never pull huge base64 cover_image blobs into Node — that caused /api/products 500s.
       let sql = `
-        SELECT b.*, 
+        SELECT b.id, b.slug, b.title, b.subject, b.price, b.discount_price, b.stock, b.status,
+               b.badge, b.description, b.category_id, b.created_at,
+               CASE
+                 WHEN b.cover_image IS NULL OR b.cover_image = '' THEN NULL
+                 WHEN b.cover_image LIKE 'data:%' THEN NULL
+                 WHEN length(b.cover_image) > 2048 THEN NULL
+                 ELSE b.cover_image
+               END AS cover_image,
                COALESCE(COUNT(r.id), 0)::int as review_count,
                COALESCE(AVG(r.rating), 0)::numeric(3,1) as avg_rating
         FROM books b
@@ -146,27 +154,14 @@ export async function GET(request: Request) {
       }
 
       if (search && search.trim()) {
-        sql += ` AND (b.title ILIKE $${count} OR b.subject ILIKE $${count} OR b.description ILIKE $${count})`;
+        sql += ` AND (b.title ILIKE $${count} OR COALESCE(b.subject, '') ILIKE $${count} OR COALESCE(b.description, '') ILIKE $${count})`;
         params.push(`%${search.trim()}%`);
         count++;
       }
 
       sql += ' GROUP BY b.id ORDER BY b.created_at DESC';
 
-      // Never SELECT huge base64 covers into Node memory — catalog crashes under load
-      const res = await queryDb(
-        sql.replace(
-          'SELECT b.*,',
-          `SELECT b.id, b.slug, b.title, b.subject, b.price, b.discount_price, b.stock, b.status, b.badge, b.description, b.category_id, b.created_at,
-               CASE
-                 WHEN b.cover_image IS NULL OR b.cover_image = '' THEN NULL
-                 WHEN b.cover_image LIKE 'data:%' THEN NULL
-                 WHEN length(b.cover_image) > 2048 THEN NULL
-                 ELSE b.cover_image
-               END AS cover_image,`
-        ),
-        params
-      );
+      const res = await queryDb(sql, params);
 
       if (res.rows) {
         const mapped = res.rows.map((d: any) => {
@@ -206,9 +201,15 @@ export async function GET(request: Request) {
             isBestSeller: String(d.badge || '').toUpperCase().includes('BEST'),
           };
         });
-        writeCache(key, mapped);
+        // Never cache an empty miss for long — a DB blip would blank the whole shop
+        if (mapped.length > 0) {
+          writeCache(key, mapped);
+        }
         return NextResponse.json(mapped, {
-          headers: catalogHeaders({ 'X-Cache-Status': 'MISS_DB' }),
+          headers: catalogHeaders({
+            'X-Cache-Status': mapped.length > 0 ? 'MISS_DB' : 'MISS_DB_EMPTY',
+            'X-Catalog-Count': String(mapped.length),
+          }),
         });
       }
       return staleFallback();
