@@ -10,119 +10,160 @@ import {
 
 export const Footer = () => {
   return (
-    <footer id="footer" className="bg-[#001226] text-slate-400 text-xs pt-12">
-      <div className="max-w-7xl mx-auto px-4 grid grid-cols-1 md:grid-cols-4 gap-8 pb-10">
-        {/* Col 1 */}
-        <div>
-          <div className="flex items-center gap-2 mb-3">
-            <BrandLogo size={32} className="w-8 h-8" />
+    <footer id="footer" className="bg-gradient-to-b from-[#001226] via-[#000d1c] to-[#000812] text-slate-400 text-xs pt-14 border-t border-slate-800">
+      <div className="max-w-7xl mx-auto px-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-8 pb-12">
+        {/* Col 1: Brand & Social (4 cols) */}
+        <div className="lg:col-span-4 space-y-4">
+          <div className="flex items-center gap-2.5">
+            <BrandLogo size={36} className="w-9 h-9" />
             <div>
-              <h4 className="font-heading font-extrabold text-sm text-white">
+              <h3 className="font-heading font-black text-base text-white tracking-wide">
                 BLESSING POWER GUIDE
-              </h4>
-              <span className="text-[9px] text-amber-400 font-semibold uppercase">
+              </h3>
+              <span className="text-[10px] text-amber-400 font-extrabold uppercase tracking-wider block">
                 Your Success, Our Mission
               </span>
             </div>
           </div>
-          <p className="text-slate-400 leading-relaxed mb-4">
-            Quality Guides for Better Preparation and Brighter Results for 6th to 12th Standard Students.
+          
+          <p className="text-slate-400 text-xs leading-relaxed font-medium">
+            Tamil Nadu State Board &amp; CBSE guides tailored for 6th to 12th standard students. Exam-oriented chapter notes, model question papers, and instant ST Courier delivery.
           </p>
-          <div className="flex flex-wrap gap-2">
-            <a
-              href="https://www.facebook.com/share/1KRUWogPcN/?mibextid=wwXIfr"
-              target="_blank"
-              rel="noreferrer"
-              className="bg-white/5 border border-white/10 px-2.5 py-1 rounded text-[10px] text-slate-300 font-medium cursor-pointer hover:bg-blue-600 hover:text-white transition-colors"
-            >
-              📘 Facebook
-            </a>
-            <a
-              href="https://www.instagram.com/blessingtuition_centre?igsh=N2czeThwbDE2ZHBm&utm_source=qr"
-              target="_blank"
-              rel="noreferrer"
-              className="bg-white/5 border border-white/10 px-2.5 py-1 rounded text-[10px] text-slate-300 font-medium cursor-pointer hover:bg-pink-600 hover:text-white transition-colors"
-            >
-              📸 Instagram
-            </a>
-            <a
-              href="https://youtube.com/@blessingtuitioncentre?si=QlOx5IxcCoabTAMl"
-              target="_blank"
-              rel="noreferrer"
-              className="bg-white/5 border border-white/10 px-2.5 py-1 rounded text-[10px] text-slate-300 font-medium cursor-pointer hover:bg-red-600 hover:text-white transition-colors"
-            >
-              ▶️ YouTube
-            </a>
+
+          <div className="pt-1">
+            <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-2.5">
+              CONNECT WITH US ON SOCIAL
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <a
+                href="https://www.facebook.com/share/1KRUWogPcN/?mibextid=wwXIfr"
+                target="_blank"
+                rel="noreferrer"
+                className="bg-blue-600/15 hover:bg-blue-600 border border-blue-500/30 text-blue-300 hover:text-white px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+              >
+                <span>📘 Facebook</span>
+              </a>
+              <a
+                href="https://www.instagram.com/blessingtuition_centre?igsh=N2czeThwbDE2ZHBm&utm_source=qr"
+                target="_blank"
+                rel="noreferrer"
+                className="bg-pink-600/15 hover:bg-pink-600 border border-pink-500/30 text-pink-300 hover:text-white px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+              >
+                <span>📸 Instagram</span>
+              </a>
+              <a
+                href="https://youtube.com/@blessingtuitioncentre?si=QlOx5IxcCoabTAMl"
+                target="_blank"
+                rel="noreferrer"
+                className="bg-red-600/15 hover:bg-red-600 border border-red-500/30 text-red-300 hover:text-white px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+              >
+                <span>▶️ YouTube</span>
+              </a>
+            </div>
           </div>
         </div>
 
-        {/* Col 2 */}
-        <div>
-          <h4 className="font-heading font-bold text-sm text-white uppercase tracking-wider mb-4">
+        {/* Col 2: Quick Links (2 cols) */}
+        <div className="lg:col-span-2">
+          <h4 className="font-heading font-black text-xs text-white uppercase tracking-widest mb-4 border-b border-white/10 pb-2">
             QUICK LINKS
           </h4>
-          <ul className="space-y-2 font-medium">
+          <ul className="space-y-2.5 font-semibold text-slate-300 text-xs">
             <li>
-              <a href="/" className="hover:text-amber-400 transition-colors">Home</a>
+              <a href="/" className="hover:text-amber-400 transition-colors flex items-center gap-1.5">
+                <span>•</span> Home Store
+              </a>
             </li>
             <li>
-              <a href="/search" className="hover:text-amber-400 transition-colors">Search Catalog</a>
+              <a href="/search" className="hover:text-amber-400 transition-colors flex items-center gap-1.5">
+                <span>•</span> Book Catalog
+              </a>
             </li>
             <li>
-              <a href="/orders" className="hover:text-amber-400 transition-colors">My Orders & Tracking</a>
-            </li>
-          </ul>
-        </div>
-
-        {/* Col 3 */}
-        <div>
-          <h4 className="font-heading font-bold text-sm text-white uppercase tracking-wider mb-4">
-            HELP & POLICIES
-          </h4>
-          <ul className="space-y-2 font-medium">
-            <li>
-              <a href="/shipping-policy" className="hover:text-amber-400 transition-colors">Shipping & Delivery Policy</a>
+              <a href="/orders" className="hover:text-amber-400 transition-colors flex items-center gap-1.5">
+                <span>•</span> My Orders &amp; Track
+              </a>
             </li>
             <li>
-              <a href="/privacy-policy" className="hover:text-amber-400 transition-colors">Privacy Policy</a>
-            </li>
-            <li>
-              <a href="/terms-of-service" className="hover:text-amber-400 transition-colors">Terms & Conditions</a>
+              <a href="/cart" className="hover:text-amber-400 transition-colors flex items-center gap-1.5">
+                <span>•</span> Shopping Cart
+              </a>
             </li>
           </ul>
         </div>
 
-        {/* Col 4 */}
-        <div>
-          <h4 className="font-heading font-bold text-sm text-white uppercase tracking-wider mb-4">
-            CONTACT & LOCATION
+        {/* Col 3: Policies & Support (3 cols) */}
+        <div className="lg:col-span-3">
+          <h4 className="font-heading font-black text-xs text-white uppercase tracking-widest mb-4 border-b border-white/10 pb-2">
+            POLICIES &amp; LEGAL
           </h4>
-          <div className="space-y-2 font-medium text-slate-300">
-            <p className="font-bold text-white">
+          <ul className="space-y-2.5 font-semibold text-slate-300 text-xs">
+            <li>
+              <a href="/shipping-policy" className="hover:text-amber-400 transition-colors flex items-center gap-1.5">
+                <span>•</span> Shipping &amp; ST Courier Policy
+              </a>
+            </li>
+            <li>
+              <a href="/privacy-policy" className="hover:text-amber-400 transition-colors flex items-center gap-1.5">
+                <span>•</span> Privacy Policy
+              </a>
+            </li>
+            <li>
+              <a href="/terms-of-service" className="hover:text-amber-400 transition-colors flex items-center gap-1.5">
+                <span>•</span> Terms &amp; Conditions
+              </a>
+            </li>
+          </ul>
+        </div>
+
+        {/* Col 4: Contact & Office (3 cols) */}
+        <div className="lg:col-span-3 space-y-2.5">
+          <h4 className="font-heading font-black text-xs text-white uppercase tracking-widest mb-4 border-b border-white/10 pb-2">
+            CONTACT &amp; STORE LOCATION
+          </h4>
+          <div className="space-y-2 font-medium text-slate-300 text-xs">
+            <p className="font-bold text-white text-xs">
               {OFFICE_COMPANY_NAME}
             </p>
-            <p className="text-slate-400">BLESSING TUITION & TUTORIAL CENTRE</p>
-            <p className="text-slate-400 leading-relaxed">
+            <p className="text-slate-400 text-[11px]">
               {OFFICE_ADDRESS_LINES[1]}
             </p>
             <a
               href={OFFICE_MAPS_SEARCH_URL}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-1 text-[11px] text-blue-400 hover:text-amber-400 font-bold underline transition-colors pt-1"
+              className="inline-flex items-center gap-1.5 text-xs text-amber-400 hover:text-amber-300 font-extrabold transition-colors pt-1"
             >
-              📍 Open Google Maps Location
+              <span>📍 View on Google Maps</span>
             </a>
-            <p className="text-amber-400 font-bold pt-1">📞 +91 98404 18228</p>
-            <p className="text-slate-400">✉️ blessingpowerguide@gmail.com</p>
+            <div className="pt-2 space-y-1">
+              <p className="text-amber-300 font-black text-xs flex items-center gap-1.5">
+                <span>📞</span> +91 98404 18228
+              </p>
+              <p className="text-slate-300 font-medium text-[11px] flex items-center gap-1.5">
+                <span>✉️</span> blessingpowerguide@gmail.com
+              </p>
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="border-t border-white/5 py-4 text-center text-slate-500 text-[11px]">
-        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row justify-between items-center gap-2">
-          <span>© 2026 Blessing Power Guide. All Rights Reserved.</span>
-          <span>Designed for Student Success ❤️</span>
+      {/* Bottom Legal & Payment Badges Bar */}
+      <div className="border-t border-white/10 bg-[#000812] py-5">
+        <div className="max-w-7xl mx-auto px-4 flex flex-col md:flex-row justify-between items-center gap-3 text-slate-400 text-xs font-semibold text-center md:text-left">
+          <div>
+            <span>© 2026 Blessing Power Guide. All Rights Reserved.</span>
+            <span className="text-slate-500 block sm:inline sm:ml-2">Official State Board &amp; CBSE Guides.</span>
+          </div>
+
+          <div className="flex items-center gap-3 text-[11px] text-slate-300">
+            <span className="bg-white/5 border border-white/10 px-2.5 py-1 rounded-lg font-bold flex items-center gap-1">
+              🔒 100% Safe Razorpay UPI
+            </span>
+            <span className="bg-white/5 border border-white/10 px-2.5 py-1 rounded-lg font-bold flex items-center gap-1">
+              🚚 ST Courier Express
+            </span>
+          </div>
         </div>
       </div>
     </footer>
