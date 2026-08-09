@@ -15,7 +15,6 @@ function emptyAnalytics(days: number, error?: string) {
       totalRevenue: 0,
       avgOrderValue: 0,
       paidOrders: 0,
-      codOrders: 0,
       todayOrders: 0,
       todayRevenue: 0,
     },
@@ -92,7 +91,6 @@ export async function GET(request: Request) {
           COALESCE(SUM(total_amount) FILTER (WHERE ${ACTIVE}), 0)::numeric              AS total_revenue,
           COALESCE(AVG(total_amount) FILTER (WHERE ${ACTIVE}), 0)::numeric              AS avg_order_value,
           COUNT(*) FILTER (WHERE ${ACTIVE} AND (payment_status ILIKE '%confirm%' OR payment_status ILIKE '%paid%'))::int AS paid_orders,
-          COUNT(*) FILTER (WHERE ${ACTIVE} AND payment_method ILIKE '%cod%')::int   AS cod_orders,
           COUNT(*) FILTER (WHERE ${ACTIVE} AND (ordered_at AT TIME ZONE 'Asia/Kolkata')::date = (NOW() AT TIME ZONE 'Asia/Kolkata')::date)::int AS today_orders,
           COALESCE(SUM(total_amount) FILTER (WHERE ${ACTIVE} AND (ordered_at AT TIME ZONE 'Asia/Kolkata')::date = (NOW() AT TIME ZONE 'Asia/Kolkata')::date), 0)::numeric AS today_revenue,
           COUNT(*) FILTER (WHERE ${ACTIVE} AND DATE_TRUNC('month', ordered_at AT TIME ZONE 'Asia/Kolkata') = DATE_TRUNC('month', NOW() AT TIME ZONE 'Asia/Kolkata'))::int AS month_orders,
@@ -105,9 +103,7 @@ export async function GET(request: Request) {
         SELECT
           DATE(ordered_at AT TIME ZONE 'Asia/Kolkata') AS day,
           COUNT(*)::int                                AS orders,
-          COALESCE(SUM(total_amount), 0)::numeric      AS revenue,
-          COALESCE(SUM(total_amount) FILTER (WHERE payment_method NOT ILIKE '%cod%'), 0)::numeric AS online_revenue,
-          COALESCE(SUM(total_amount) FILTER (WHERE payment_method ILIKE '%cod%'), 0)::numeric     AS cod_revenue
+          COALESCE(SUM(total_amount), 0)::numeric      AS revenue
         FROM orders
         WHERE ordered_at >= NOW() - ($1::int * INTERVAL '1 day')
           AND ${ACTIVE}
@@ -194,7 +190,6 @@ export async function GET(request: Request) {
             totalRevenue: Number(summary.total_revenue || 0),
             avgOrderValue: Math.round(Number(summary.avg_order_value || 0)),
             paidOrders: Number(summary.paid_orders || 0),
-            codOrders: Number(summary.cod_orders || 0),
             todayOrders: Number(summary.today_orders || 0),
             todayRevenue: Number(summary.today_revenue || 0),
             monthOrders: Number(summary.month_orders || 0),
@@ -204,8 +199,6 @@ export async function GET(request: Request) {
             day: r.day,
             orders: Number(r.orders),
             revenue: Number(r.revenue),
-            onlineRevenue: Number(r.online_revenue),
-            codRevenue: Number(r.cod_revenue),
           })),
           paymentMethods: paymentMethodRes.rows.map((r: any) => ({
             method: r.payment_method || 'Unknown',

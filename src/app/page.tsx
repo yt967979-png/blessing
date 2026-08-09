@@ -34,6 +34,16 @@ export default function Home() {
     }
   }, [router]);
 
+  // NavBar chips from other pages land on /#products or /#why
+  useEffect(() => {
+    const hash = window.location.hash.replace('#', '');
+    if (!hash) return;
+    const t = window.setTimeout(() => {
+      document.getElementById(hash)?.scrollIntoView({ behavior: 'smooth' });
+    }, 120);
+    return () => clearTimeout(t);
+  }, []);
+
   return (
     <main className="min-h-screen bg-slate-50 flex flex-col page-mobile-nav">
       <AnnouncementBar />

@@ -333,7 +333,7 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
   };
 
   return (
-    <main className="min-h-screen bg-slate-50 flex flex-col page-mobile-nav md:pb-0">
+    <main className="min-h-screen bg-slate-50 flex flex-col page-mobile-nav-pdp md:pb-0">
       {/* Schema.org Rich Snippet JSON-LD for Google Search Indexing */}
       <script
         type="application/ld+json"

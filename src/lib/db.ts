@@ -1064,33 +1064,12 @@ async function runSchemaInit(client: any) {
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
-        CREATE TABLE IF NOT EXISTS whatsapp_otps (
-          id VARCHAR(255) PRIMARY KEY,
-          phone VARCHAR(255) NOT NULL,
-          email VARCHAR(255),
-          otp VARCHAR(10) NOT NULL,
-          expires_at TIMESTAMP NOT NULL,
-          verified BOOLEAN DEFAULT FALSE,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-
         CREATE TABLE IF NOT EXISTS order_timeline (
           id VARCHAR(255) PRIMARY KEY,
           order_id VARCHAR(255) REFERENCES orders(id) ON DELETE CASCADE,
           status VARCHAR(255) NOT NULL,
           remarks TEXT,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-
-        CREATE TABLE IF NOT EXISTS whatsapp_sessions (
-          id VARCHAR(255) PRIMARY KEY DEFAULT 'default',
-          status VARCHAR(100) NOT NULL DEFAULT 'INITIALIZING',
-          connected BOOLEAN DEFAULT FALSE,
-          qr_image TEXT,
-          pairing_code VARCHAR(50),
-          message TEXT,
-          session_data JSONB,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
         CREATE TABLE IF NOT EXISTS courier_tracking (
@@ -1111,28 +1090,6 @@ async function runSchemaInit(client: any) {
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
-
-        CREATE TABLE IF NOT EXISTS whatsapp_logs (
-          id VARCHAR(255) PRIMARY KEY,
-          order_id VARCHAR(255),
-          phone VARCHAR(100) NOT NULL,
-          message TEXT NOT NULL,
-          provider VARCHAR(100) DEFAULT 'BAILEYS_FREE_UNLIMITED',
-          status VARCHAR(50) DEFAULT 'SENT',
-          sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-
-        CREATE TABLE IF NOT EXISTS whatsapp_outbox (
-          id VARCHAR(255) PRIMARY KEY,
-          phone VARCHAR(32) NOT NULL,
-          message TEXT NOT NULL,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          sent_at TIMESTAMP,
-          last_error TEXT
-        );
-        CREATE INDEX IF NOT EXISTS idx_whatsapp_outbox_pending
-          ON whatsapp_outbox (created_at)
-          WHERE sent_at IS NULL;
 
         CREATE TABLE IF NOT EXISTS coupons (
           id VARCHAR(255) PRIMARY KEY,
@@ -1349,6 +1306,11 @@ async function runSchemaInit(client: any) {
       `UPDATE courier_tracking SET status = COALESCE(NULLIF(status, ''), current_status) WHERE status IS NULL OR status = ''`,
       `UPDATE orders SET ordered_at = COALESCE(ordered_at, created_at, updated_at, NOW()) WHERE ordered_at IS NULL`,
       `UPDATE orders SET created_at = COALESCE(created_at, ordered_at, updated_at, NOW()) WHERE created_at IS NULL`,
+      // Drop unused Baileys / WhatsApp bot tables (wa.me chat links do not need these)
+      `DROP TABLE IF EXISTS whatsapp_outbox CASCADE`,
+      `DROP TABLE IF EXISTS whatsapp_logs CASCADE`,
+      `DROP TABLE IF EXISTS whatsapp_sessions CASCADE`,
+      `DROP TABLE IF EXISTS whatsapp_otps CASCADE`,
     ];
     for (const sql of heals) {
       try {
@@ -1358,8 +1320,9 @@ async function runSchemaInit(client: any) {
       }
     }
 
-    // Heal: cancelled orders must not look like collectible COD / paid sales
+    // Heal: cancelled orders must not look like collectible / paid sales
     // Do not overwrite Refunded (admin cancel + Razorpay refund).
+    // Legacy COD rows (if any) stay marked non-collectible.
     try {
       await client.query(`
         UPDATE orders
@@ -1380,7 +1343,7 @@ async function runSchemaInit(client: any) {
       /* ignore */
     }
 
-    // Heal: prepaid Razorpay orders stuck on legacy WhatsApp YES gate → Confirmed
+    // Heal: prepaid Razorpay orders stuck on legacy awaiting-confirmation gate → Confirmed
     try {
       await client.query(`
         UPDATE orders

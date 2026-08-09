@@ -1,10 +1,12 @@
 'use client';
 
 import React from 'react';
-import { Tag } from 'lucide-react';
+import { usePathname, useRouter } from 'next/navigation';
 import { useStore } from '@/context/StoreContext';
 
 export const NavBar = () => {
+  const pathname = usePathname();
+  const router = useRouter();
   const {
     selectedClass,
     selectedCategory,
@@ -13,15 +15,23 @@ export const NavBar = () => {
     setSearchQuery,
   } = useStore();
 
+  const goHomeSection = (hash: string) => {
+    if (pathname === '/') {
+      document.getElementById(hash)?.scrollIntoView({ behavior: 'smooth' });
+      return;
+    }
+    router.push(`/#${hash}`);
+  };
+
   const handleSelectFilter = (cls: string, cat: string) => {
     setSelectedClass(cls);
     setSelectedCategory(cat);
     setSearchQuery('');
-    document.getElementById('products')?.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  const scrollToSection = (id: string) => {
-    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
+    if (pathname === '/') {
+      document.getElementById('products')?.scrollIntoView({ behavior: 'smooth' });
+      return;
+    }
+    router.push('/#products');
   };
 
   const chip = (active: boolean) =>
@@ -61,7 +71,7 @@ export const NavBar = () => {
           </button>
           <button
             type="button"
-            onClick={() => scrollToSection('why')}
+            onClick={() => goHomeSection('why')}
             className={chip(false)}
           >
             Why Us

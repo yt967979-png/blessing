@@ -481,7 +481,7 @@ export default function CheckoutPage() {
 
               {(selectedAddrId === 'new' || savedAddresses.length === 0) && (
                 <div className="space-y-3 pt-2">
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="block font-bold text-slate-700 mb-1">Full Name *</label>
                       <input
@@ -511,7 +511,7 @@ export default function CheckoutPage() {
                       placeholder="Door no., Street name, Landmark"
                     />
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="block font-bold text-slate-700 mb-1">City / District *</label>
                       <input

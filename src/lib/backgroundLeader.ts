@@ -31,19 +31,15 @@ function forceLeader(): boolean {
   return process.env.FORCE_BACKGROUND_LEADER === 'true';
 }
 
-/** True when this process may run WhatsApp socket, LISTEN broker, and courier cron. */
+/** True when this process may run LISTEN broker, courier cron, and orphan-refund sweep. */
 export function isBackgroundLeader(): boolean {
   if (backgroundJobsDisabled()) return false;
   if (forceLeader()) return true;
   if (isLeader) return true;
 
-  // Single soft/Free instance (testing or 1 Railway replica): always allow WhatsApp QR.
-  // Avoids Next.js module-split / lock races that leave Admin stuck on "Reconnecting".
+  // Single instance (Lightsail / 1 replica): always allow background jobs.
   const replicas = Number(process.env.APP_REPLICA_COUNT || process.env.RAILWAY_NUM_REPLICAS || '1');
-  if (replicas <= 1) {
-    if (process.env.ALLOW_WHATSAPP_WITHOUT_LEADER === 'false') return false;
-    return true;
-  }
+  if (replicas <= 1) return true;
 
   return false;
 }
@@ -155,7 +151,7 @@ async function tryAcquireLockOnce(): Promise<boolean> {
 
 /**
  * Automatic leader election — no manual env needed when scaling 1–5 replicas.
- * One replica runs WhatsApp/cron; others queue WhatsApp to outbox.
+ * One replica runs courier cron + LISTEN broker; others stay idle for those jobs.
  * If the leader restarts, another replica takes over within ~30s.
  */
 export function startAutomaticLeaderElection(

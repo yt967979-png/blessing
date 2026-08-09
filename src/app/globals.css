@@ -8,15 +8,17 @@
   --primary-blue: #0044AA;
   --accent-gold: #D4A843;
   --accent-gold-hover: #F0C14B;
-  /* Sticky header height: announcement + logo row + mobile search */
-  --header-sticky-offset: 118px;
+  /* Sticky header height: logo row + mobile search (announcement hidden on mobile) */
+  --header-sticky-offset: 104px;
   /* Matches MobileBottomNav (~52px content + safe padding) */
   --bottom-nav-height: 4.25rem;
+  /* Product page sticky ADD/BUY bar height */
+  --pdp-sticky-cta: 4.5rem;
 }
 
 @media (min-width: 640px) {
   :root {
-    --header-sticky-offset: 72px;
+    --header-sticky-offset: 96px;
   }
 }
 
@@ -55,8 +57,22 @@ html {
   padding-bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px));
 }
 
+/* Product detail — clears bottom nav + sticky ADD/BUY bar */
+.page-mobile-nav-pdp {
+  padding-bottom: calc(
+    var(--bottom-nav-height) + var(--pdp-sticky-cta) + env(safe-area-inset-bottom, 0px) + 0.75rem
+  );
+}
+
+@media (min-width: 640px) {
+  .page-mobile-nav-pdp {
+    padding-bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px));
+  }
+}
+
 @media (min-width: 768px) {
-  .page-mobile-nav {
+  .page-mobile-nav,
+  .page-mobile-nav-pdp {
     padding-bottom: 0;
   }
 }

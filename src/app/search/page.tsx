@@ -86,14 +86,14 @@ function SearchContent() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] text-slate-800 page-mobile-nav" style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
+    <div className="min-h-screen bg-[#f8fafc] text-slate-800 page-mobile-nav">
       <AnnouncementBar />
       <Header />
       <NavBar />
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
         {/* Header Breadcrumb */}
-        <div className="flex items-center gap-2 text-xs text-slate-500 mb-6">
+        <div className="flex items-center gap-2 text-xs text-slate-500 mb-4 sm:mb-6">
           <button onClick={() => router.push('/')} className="hover:text-blue-600 flex items-center gap-1 cursor-pointer">
             <ArrowLeft className="w-3.5 h-3.5" /> Home
           </button>
@@ -101,8 +101,8 @@ function SearchContent() {
           <span className="font-semibold text-slate-800">Search Catalog</span>
         </div>
 
-        {/* Top Search Input Box */}
-        <div className="bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-xs mb-8">
+        {/* Desktop/tablet search — phones use header search bar */}
+        <div className="hidden sm:block bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-xs mb-8">
           <div className="relative max-w-2xl mx-auto">
             <Search className="w-5 h-5 absolute left-4 top-3.5 text-slate-400" />
             <input

@@ -170,7 +170,7 @@ export const Header = () => {
       <div className="max-w-7xl mx-auto px-3 sm:px-4 py-2 sm:py-3 flex items-center justify-between gap-2 sm:gap-6">
         <Link
           href="/"
-          className="flex items-center gap-2 flex-shrink-0 group min-w-0 max-w-[58%] sm:max-w-none"
+          className="flex items-center gap-2 flex-shrink-0 group min-w-0 max-w-[72%] sm:max-w-none"
         >
           <BrandLogo
             size={40}
@@ -178,7 +178,7 @@ export const Header = () => {
             className="w-9 h-9 sm:w-11 sm:h-11 shadow-md"
           />
           <div className="min-w-0">
-            <h1 className="font-heading font-bold text-[11px] sm:text-lg text-[#001B3A] tracking-tight leading-tight truncate">
+            <h1 className="font-heading font-bold text-sm sm:text-lg text-[#001B3A] tracking-tight leading-tight truncate">
               BLESSING POWER GUIDE
             </h1>
             <p className="text-[9px] text-blue-600 font-semibold tracking-wider uppercase hidden sm:block truncate">
@@ -233,10 +233,11 @@ export const Header = () => {
           {user && (user.role === 'admin' || user.role === 'super_admin') && (
             <Link
               href="/admin"
-              className="bg-[#001B3A] text-amber-400 font-extrabold text-[10px] sm:text-[11px] px-2.5 sm:px-3 py-1.5 rounded-xl flex items-center gap-1 border border-amber-400/30 shrink-0 hover:bg-[#002B5B] transition-colors"
+              className="bg-[#001B3A] text-amber-400 font-extrabold text-[11px] px-2 sm:px-3 py-1.5 rounded-xl flex items-center gap-1 border border-amber-400/30 shrink-0 hover:bg-[#002B5B] transition-colors min-h-10 min-w-10 sm:min-w-0 justify-center"
+              aria-label="Admin panel"
             >
-              <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
-              <span>ADMIN PANEL</span>
+              <ShieldCheck className="w-4 h-4 text-amber-400" />
+              <span className="hidden sm:inline">ADMIN PANEL</span>
             </Link>
           )}
 
@@ -317,6 +318,7 @@ export const Header = () => {
             </div>
           )}
 
+          {/* Profile + Cart live in bottom nav on phones — keep wishlist + notifs here */}
           <Link
             href={user ? '/profile' : '#'}
             onClick={(e) => {
@@ -325,7 +327,7 @@ export const Header = () => {
                 setIsAuthOpen(true);
               }
             }}
-            className="flex p-2 rounded-xl text-slate-700 hover:bg-slate-100 min-h-10 min-w-10 sm:min-h-11 sm:min-w-11 items-center justify-center shrink-0 cursor-pointer"
+            className="hidden sm:flex p-2 rounded-xl text-slate-700 hover:bg-slate-100 min-h-11 min-w-11 items-center justify-center shrink-0 cursor-pointer"
             aria-label={user ? 'Profile' : 'Login'}
           >
             <User className="w-5 h-5 text-blue-600" />
@@ -351,7 +353,7 @@ export const Header = () => {
           <Link
             href="/cart"
             onPointerEnter={() => router.prefetch('/cart')}
-            className="relative flex p-2 rounded-xl text-slate-700 hover:bg-slate-100 min-h-10 min-w-10 sm:min-h-11 sm:min-w-11 items-center justify-center shrink-0 cursor-pointer"
+            className="relative hidden sm:flex p-2 rounded-xl text-slate-700 hover:bg-slate-100 min-h-11 min-w-11 items-center justify-center shrink-0 cursor-pointer"
             aria-label="Cart"
           >
             <ShoppingBag className="w-5 h-5" />

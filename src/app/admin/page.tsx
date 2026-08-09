@@ -8,7 +8,7 @@ import {
   Plus, Trash2, Truck, Send, ShieldCheck,
   Download, X, Search, RefreshCw, TrendingUp, IndianRupee,
   Box, Clock, CheckCircle2, LogOut, BarChart2,
-  CreditCard, Banknote, Smartphone, Star, AlertCircle, Tag, Gift, Upload,
+  CreditCard, Smartphone, Star, AlertCircle, Tag, Gift, Upload,
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { authHeaders } from '@/lib/clientAuth';
@@ -33,10 +33,10 @@ interface Order {
 }
 interface AnalyticsSummary {
   totalOrders: number; totalRevenue: number; avgOrderValue: number;
-  paidOrders: number; codOrders: number; todayOrders: number; todayRevenue: number;
+  paidOrders: number; todayOrders: number; todayRevenue: number;
   monthOrders?: number; monthRevenue?: number;
 }
-interface DailyPoint { day: string; orders: number; revenue: number; onlineRevenue: number; codRevenue: number; }
+interface DailyPoint { day: string; orders: number; revenue: number; }
 interface MethodBreakdown { method: string; count: number; revenue: number; }
 interface StatusBreakdown { status: string; count: number; revenue: number; }
 interface TopProduct { title: string; totalQty: number; totalRevenue: number; orderCount: number; }
@@ -53,7 +53,7 @@ function emptyAnalytics(days: number): Analytics {
   return {
     summary: {
       totalOrders: 0, totalRevenue: 0, avgOrderValue: 0,
-      paidOrders: 0, codOrders: 0, todayOrders: 0, todayRevenue: 0,
+      paidOrders: 0, todayOrders: 0, todayRevenue: 0,
       monthOrders: 0, monthRevenue: 0,
     },
     daily: [], paymentMethods: [], orderStatuses: [], paymentStatuses: [],
@@ -306,7 +306,6 @@ export default function AdminPage() {
             totalRevenue: data.summary.totalRevenue || 0,
             avgOrderValue: data.summary.avgOrderValue || 0,
             paidOrders: data.summary.paidOrders || 0,
-            codOrders: data.summary.codOrders || 0,
             todayOrders: data.summary.todayOrders || 0,
             todayRevenue: data.summary.todayRevenue || 0,
           },
@@ -450,10 +449,10 @@ export default function AdminPage() {
   const filteredOrders = useMemo(() => {
     return orders.filter((o) => {
       if (filterStatus !== 'all' && (o.courierStatus || '').toLowerCase() !== filterStatus.toLowerCase()) return false;
-      if (filterPayment !== 'all') {
+      if (filterPayment === 'online') {
         const pm = (o.paymentMethod || '').toLowerCase();
-        if (filterPayment === 'cod' && !pm.includes('cod')) return false;
-        if (filterPayment === 'online' && pm.includes('cod')) return false;
+        // Razorpay-only shop — exclude any legacy COD rows from "Online" filter
+        if (pm.includes('cod')) return false;
       }
       if (orderSearch.trim()) {
         const q = orderSearch.toLowerCase();
@@ -725,11 +724,12 @@ export default function AdminPage() {
       return;
     }
     if (statusKey === 'CANCELLED') {
-      const paidHint =
-        String(o.paymentMethod || '').toLowerCase().includes('cod')
-          ? 'Stock will be restored.'
-          : 'If this order was paid via Razorpay, a full refund will be issued to the customer’s original payment method before cancel completes. If refund fails, cancel is aborted — retry after fixing Razorpay.';
-      if (!confirm(`Cancel order ${o.orderId}?\n\n${paidHint}`)) return;
+      if (
+        !confirm(
+          `Cancel order ${o.orderId}?\n\nA full Razorpay refund will be issued to the customer’s original payment method before cancel completes. If refund fails, cancel is aborted — retry after fixing Razorpay. Stock will be restored.`
+        )
+      )
+        return;
       setUpdatingStatusId(`${o.orderId}-${statusKey}`);
       try {
         const r = await fetch('/api/orders/cancel', {
@@ -1090,12 +1090,11 @@ export default function AdminPage() {
                       <div className="space-y-3">
                         {analytics.paymentMethods.map((m) => {
                           const total = analytics.paymentMethods.reduce((s, x) => s + x.revenue, 0);
-                          const isCod = m.method.toLowerCase().includes('cod');
                           return (
                             <div key={m.method}>
                               <div className="flex items-center justify-between text-xs mb-1">
                                 <div className="flex items-center gap-2">
-                                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isCod ? 'bg-amber-400' : 'bg-blue-500'}`} />
+                                  <span className="w-2 h-2 rounded-full flex-shrink-0 bg-blue-500" />
                                   <span className="font-medium text-gray-700 truncate max-w-[120px]">{m.method}</span>
                                   <span className="text-gray-400">× {m.count}</span>
                                 </div>
@@ -1104,7 +1103,7 @@ export default function AdminPage() {
                                   <span className="text-gray-400 ml-1">({pct(m.revenue, total)}%)</span>
                                 </div>
                               </div>
-                              <MiniBar value={m.revenue} max={total} color={isCod ? 'bg-amber-400' : 'bg-blue-500'} />
+                              <MiniBar value={m.revenue} max={total} color="bg-blue-500" />
                             </div>
                           );
                         })}
@@ -1331,7 +1330,6 @@ export default function AdminPage() {
                       : (o.courierStatus || 'Confirmed');
                   const foundIdx = allSteps.findIndex((s) => s.toLowerCase() === statusForStep.toLowerCase());
                   const stepIdx = isCancelled || isAwaiting ? -1 : Math.max(0, foundIdx);
-                  const isCod = (o.paymentMethod || '').toLowerCase().includes('cod');
                   const isDelivered = !isCancelled && !isAwaiting && stepIdx >= 5;
                   return (
                     <div key={o.orderId} className={`bg-white rounded-xl border overflow-hidden hover:shadow-sm transition-shadow ${isCancelled ? 'border-red-200' : isAwaiting ? 'border-amber-300' : 'border-gray-200'}`}>

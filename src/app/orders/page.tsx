@@ -421,48 +421,43 @@ function OrdersContent() {
               </div>
             ) : (
             <div className="pt-2 pb-4">
-              <div className="relative">
-                {/* Background Line */}
-                <div className="absolute left-0 top-5 w-full h-1.5 bg-slate-100 rounded-full z-0" />
-
-                {/* Animated Gradient Active Progress Line */}
-                <div
-                  className="absolute left-0 top-5 h-1.5 bg-gradient-to-r from-emerald-500 via-amber-400 to-blue-600 rounded-full z-0 transition-all duration-700 shadow-sm"
-                  style={{ width: `${progressPercent}%` }}
-                />
-
-                {/* 4 Major E-Commerce Milestones — indices match ALL_STATUS_STEPS */}
-                <div className="relative z-10 grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-2 sm:flex sm:justify-between items-start text-center">
-                  <div className="flex flex-col items-center min-w-0">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shadow-md ring-4 ring-white ${currentStepIdx >= 0 ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-400'}`}>
-                      <Check className="w-5 h-5" />
+              {/* Single-row stepper on all sizes — avoids broken 2×2 progress line on phones */}
+              <div className="relative overflow-x-auto scroll-chips pb-1">
+                <div className="relative min-w-[320px] sm:min-w-0 px-1">
+                  <div className="absolute left-5 right-5 top-5 h-1.5 bg-slate-100 rounded-full z-0" />
+                  <div
+                    className="absolute left-5 top-5 h-1.5 bg-gradient-to-r from-emerald-500 via-amber-400 to-blue-600 rounded-full z-0 transition-all duration-700 shadow-sm"
+                    style={{ width: `calc(${progressPercent}% - 2.5rem)` }}
+                  />
+                  <div className="relative z-10 flex justify-between items-start text-center gap-2">
+                    <div className="flex flex-col items-center min-w-[4.5rem] flex-1">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shadow-md ring-4 ring-white ${currentStepIdx >= 0 ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-400'}`}>
+                        <Check className="w-5 h-5" />
+                      </div>
+                      <span className="font-heading font-black text-[11px] sm:text-xs text-slate-900 mt-2">Confirmed</span>
+                      <span className="text-[9px] sm:text-[10px] font-semibold text-slate-500 mt-0.5 line-clamp-2 px-0.5">{searchedOrderData.createdAt}</span>
                     </div>
-                    <span className="font-heading font-black text-[11px] sm:text-xs text-slate-900 mt-2 sm:mt-3">Confirmed</span>
-                    <span className="text-[9px] sm:text-[10px] font-semibold text-slate-500 mt-0.5 line-clamp-2 px-1">{searchedOrderData.createdAt}</span>
-                  </div>
-
-                  <div className="flex flex-col items-center min-w-0">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shadow-md ring-4 ring-white ${currentStepIdx >= 2 ? 'bg-emerald-600 text-white' : currentStepIdx >= 1 ? 'bg-amber-400 text-[#001B3A] animate-pulse' : 'bg-slate-200 text-slate-400'}`}>
-                      <PackageCheck className="w-5 h-5" />
+                    <div className="flex flex-col items-center min-w-[4.5rem] flex-1">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shadow-md ring-4 ring-white ${currentStepIdx >= 2 ? 'bg-emerald-600 text-white' : currentStepIdx >= 1 ? 'bg-amber-400 text-[#001B3A] animate-pulse' : 'bg-slate-200 text-slate-400'}`}>
+                        <PackageCheck className="w-5 h-5" />
+                      </div>
+                      <span className="font-heading font-black text-[11px] sm:text-xs text-slate-900 mt-2">Packed</span>
+                      <span className="text-[9px] sm:text-[10px] font-semibold text-slate-500 mt-0.5 line-clamp-2 px-0.5">{searchedOrderData.packedAt || 'Fulfillment'}</span>
                     </div>
-                    <span className="font-heading font-black text-[11px] sm:text-xs text-slate-900 mt-2 sm:mt-3">Packed</span>
-                    <span className="text-[9px] sm:text-[10px] font-semibold text-slate-500 mt-0.5 line-clamp-2 px-1">{searchedOrderData.packedAt || 'Fulfillment'}</span>
-                  </div>
-
-                  <div className="flex flex-col items-center min-w-0">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shadow-md ring-4 ring-white ${currentStepIdx >= 4 ? 'bg-emerald-600 text-white' : currentStepIdx >= 3 ? 'bg-blue-600 text-white animate-bounce' : 'bg-slate-200 text-slate-400'}`}>
-                      <Truck className="w-5 h-5" />
+                    <div className="flex flex-col items-center min-w-[4.5rem] flex-1">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shadow-md ring-4 ring-white ${currentStepIdx >= 4 ? 'bg-emerald-600 text-white' : currentStepIdx >= 3 ? 'bg-blue-600 text-white animate-bounce' : 'bg-slate-200 text-slate-400'}`}>
+                        <Truck className="w-5 h-5" />
+                      </div>
+                      <span className="font-heading font-black text-[11px] sm:text-xs text-slate-900 mt-2">In Transit</span>
+                      <span className="text-[9px] sm:text-[10px] font-semibold text-slate-500 mt-0.5 line-clamp-2 px-0.5">{searchedOrderData.shippedAt || 'ST Courier'}</span>
                     </div>
-                    <span className="font-heading font-black text-[11px] sm:text-xs text-slate-900 mt-2 sm:mt-3">In Transit</span>
-                    <span className="text-[9px] sm:text-[10px] font-semibold text-slate-500 mt-0.5 line-clamp-2 px-1">{searchedOrderData.shippedAt || 'ST Courier'}</span>
-                  </div>
-
-                  <div className="flex flex-col items-center min-w-0">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shadow-md ring-4 ring-white ${currentStepIdx >= 6 ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-400'}`}>
-                      <CheckCircle2 className="w-5 h-5" />
+                    <div className="flex flex-col items-center min-w-[4.5rem] flex-1">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shadow-md ring-4 ring-white ${currentStepIdx >= 6 ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-400'}`}>
+                        <CheckCircle2 className="w-5 h-5" />
+                      </div>
+                      <span className="font-heading font-black text-[11px] sm:text-xs text-slate-900 mt-2">Delivered</span>
+                      <span className="text-[9px] sm:text-[10px] font-semibold text-slate-500 mt-0.5 line-clamp-2 px-0.5">{searchedOrderData.deliveredAt || '2–3 days'}</span>
                     </div>
-                    <span className="font-heading font-black text-[11px] sm:text-xs text-slate-900 mt-2 sm:mt-3">Delivered</span>
-                    <span className="text-[9px] sm:text-[10px] font-semibold text-slate-500 mt-0.5 line-clamp-2 px-1">{searchedOrderData.deliveredAt || '2–3 days'}</span>
                   </div>
                 </div>
               </div>
@@ -648,28 +643,30 @@ function OrdersContent() {
                 </h3>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 text-center pt-2">
-                {ALL_STATUS_STEPS.map((step, idx) => {
-                  const isDone = idx <= currentStepIdx;
-                  const isCurrent = idx === currentStepIdx;
-                  return (
-                    <div
-                      key={step.key}
-                      className={`p-2.5 rounded-2xl border text-[11px] transition-all ${
-                        isCurrent
-                          ? 'bg-blue-600 text-white border-blue-600 shadow-md font-black scale-105'
-                          : isDone
-                          ? 'bg-emerald-50 text-emerald-900 border-emerald-200 font-extrabold'
-                          : 'bg-slate-50 text-slate-400 border-slate-200 font-medium'
-                      }`}
-                    >
-                      <div className="w-5 h-5 rounded-full mx-auto mb-1 flex items-center justify-center text-[10px] font-bold">
-                        {isDone ? '✓' : idx + 1}
+              <div className="overflow-x-auto scroll-chips pt-2 -mx-1 px-1">
+                <div className="flex gap-2 min-w-max sm:min-w-0 sm:grid sm:grid-cols-4 lg:grid-cols-8 text-center">
+                  {ALL_STATUS_STEPS.map((step, idx) => {
+                    const isDone = idx <= currentStepIdx;
+                    const isCurrent = idx === currentStepIdx;
+                    return (
+                      <div
+                        key={step.key}
+                        className={`p-2.5 rounded-2xl border text-[11px] transition-all w-[5.5rem] sm:w-auto shrink-0 ${
+                          isCurrent
+                            ? 'bg-blue-600 text-white border-blue-600 shadow-md font-black'
+                            : isDone
+                            ? 'bg-emerald-50 text-emerald-900 border-emerald-200 font-extrabold'
+                            : 'bg-slate-50 text-slate-400 border-slate-200 font-medium'
+                        }`}
+                      >
+                        <div className="w-5 h-5 rounded-full mx-auto mb-1 flex items-center justify-center text-[10px] font-bold">
+                          {isDone ? '✓' : idx + 1}
+                        </div>
+                        <div className="truncate">{step.label}</div>
                       </div>
-                      <div className="truncate">{step.label}</div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
             </div>
             )}

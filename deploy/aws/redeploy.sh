@@ -81,8 +81,6 @@ rsync -a --delete \
   --exclude node_modules \
   --exclude .next \
   --exclude .git \
-  --exclude whatsapp_session \
-  --exclude 'whatsapp_session_*' \
   "$CLONE_PATH"/ "$APP_DIR"/
 
 # Bad rsync source (e.g. parent of clone) nests a second tree — remove junk

@@ -120,9 +120,28 @@ export const HeroSection = () => {
               )}
             </h1>
 
-            <p className="text-slate-300 text-sm sm:text-base max-w-xl mx-auto lg:mx-0 mb-6 font-medium leading-relaxed line-clamp-2 sm:line-clamp-3">
+            <p className="text-slate-300 text-sm sm:text-base max-w-xl mx-auto lg:mx-0 mb-4 sm:mb-6 font-medium leading-relaxed line-clamp-2 sm:line-clamp-3">
               {currentSlide.subtitle}
             </p>
+
+            {/* Mobile book cover — phones have no side showcase */}
+            <div className="sm:hidden flex justify-center mb-5">
+              <div className="relative w-36 aspect-[3/4] rounded-xl overflow-hidden border border-white/25 bg-slate-900/80 shadow-xl">
+                <Image
+                  src={currentSlide.image}
+                  alt={currentSlide.titleLine2}
+                  fill
+                  className="object-contain p-2"
+                  sizes="144px"
+                  priority
+                />
+                {currentSlide.discount > 0 && (
+                  <div className="absolute top-2 right-2 bg-amber-400 text-slate-950 text-[10px] font-black px-2 py-0.5 rounded-full">
+                    {currentSlide.discount}% OFF
+                  </div>
+                )}
+              </div>
+            </div>
 
             {/* Feature Chips Row */}
             <div className="grid grid-cols-3 gap-2.5 mb-6 max-w-md mx-auto lg:mx-0">

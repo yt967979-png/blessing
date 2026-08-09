@@ -242,20 +242,19 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 py-8 flex-1 w-full">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          {/* Dynamic Account Sidebar Navigation */}
-          <div className="lg:col-span-4 space-y-4">
-            {/* Dynamic User Header Box */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex items-center gap-4">
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#001B3A] to-[#003B73] text-amber-400 font-extrabold text-2xl flex items-center justify-center shadow-md uppercase">
+      <div className="max-w-7xl mx-auto px-4 py-5 sm:py-8 flex-1 w-full">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-8">
+          {/* Account sidebar — compact chips on mobile, full nav on desktop */}
+          <div className="lg:col-span-4 space-y-3 lg:space-y-4">
+            <div className="bg-white border border-slate-200 rounded-2xl p-3.5 sm:p-5 shadow-xs flex items-center gap-3 sm:gap-4">
+              <div className="w-11 h-11 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-br from-[#001B3A] to-[#003B73] text-amber-400 font-extrabold text-xl sm:text-2xl flex items-center justify-center shadow-md uppercase shrink-0">
                 {user.name[0]}
               </div>
               <div className="min-w-0">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                   Hello,
                 </span>
-                <h3 className="font-heading font-black text-lg text-[#001B3A] truncate">
+                <h3 className="font-heading font-black text-base sm:text-lg text-[#001B3A] truncate">
                   {user.name}
                 </h3>
                 <span className="text-xs text-blue-600 font-semibold truncate block">
@@ -264,9 +263,37 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            {/* Navigation Tabs */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-2 shadow-xs text-xs font-bold divide-y divide-slate-100">
-              {user && user.role === 'admin' && (
+            {/* Mobile horizontal tabs */}
+            <div className="lg:hidden overflow-x-auto scroll-chips -mx-1 px-1">
+              <div className="flex gap-2 min-w-max pb-0.5">
+                {(
+                  [
+                    { id: 'orders' as const, label: `Orders (${liveOrders.length})`, Icon: Package },
+                    { id: 'profile' as const, label: 'Profile', Icon: User },
+                    { id: 'addresses' as const, label: `Address (${addresses.length})`, Icon: MapPin },
+                    { id: 'wishlist' as const, label: `Wishlist (${wishlist.length})`, Icon: Heart },
+                  ] as const
+                ).map(({ id, label, Icon }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setActiveTab(id)}
+                    className={`inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-full text-xs font-extrabold touch-manipulation min-h-11 border transition-colors ${
+                      activeTab === id
+                        ? 'bg-[#2874f0] text-white border-[#2874f0] shadow-sm'
+                        : 'bg-white text-slate-700 border-slate-200'
+                    }`}
+                  >
+                    <Icon className="w-3.5 h-3.5" />
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Desktop vertical nav */}
+            <div className="hidden lg:block bg-white border border-slate-200 rounded-2xl p-2 shadow-xs text-xs font-bold divide-y divide-slate-100">
+              {user && (user.role === 'admin' || user.role === 'super_admin') && (
                 <Link
                   href="/admin"
                   className="w-full text-left px-4 py-3.5 rounded-xl flex items-center justify-between transition-colors bg-gradient-to-r from-[#001B3A] to-[#002B5B] text-amber-400 hover:brightness-110"
@@ -280,6 +307,7 @@ export default function ProfilePage() {
               )}
 
               <button
+                type="button"
                 onClick={() => setActiveTab('orders')}
                 className={`w-full text-left px-4 py-3.5 rounded-xl flex items-center justify-between transition-colors ${
                   activeTab === 'orders'
@@ -295,6 +323,7 @@ export default function ProfilePage() {
               </button>
 
               <button
+                type="button"
                 onClick={() => setActiveTab('profile')}
                 className={`w-full text-left px-4 py-3.5 rounded-xl flex items-center justify-between transition-colors ${
                   activeTab === 'profile'
@@ -310,6 +339,7 @@ export default function ProfilePage() {
               </button>
 
               <button
+                type="button"
                 onClick={() => setActiveTab('addresses')}
                 className={`w-full text-left px-4 py-3.5 rounded-xl flex items-center justify-between transition-colors ${
                   activeTab === 'addresses'
@@ -325,6 +355,7 @@ export default function ProfilePage() {
               </button>
 
               <button
+                type="button"
                 onClick={() => setActiveTab('wishlist')}
                 className={`w-full text-left px-4 py-3.5 rounded-xl flex items-center justify-between transition-colors ${
                   activeTab === 'wishlist'
@@ -340,13 +371,13 @@ export default function ProfilePage() {
               </button>
             </div>
 
-            {/* Logout Card */}
             <button
+              type="button"
               onClick={() => {
                 logoutUser();
                 router.push('/');
               }}
-              className="w-full bg-white border border-red-200 hover:bg-red-50 text-red-600 font-bold text-xs p-4 rounded-2xl flex items-center justify-center gap-2 shadow-xs transition-colors"
+              className="hidden lg:flex w-full bg-white border border-red-200 hover:bg-red-50 text-red-600 font-bold text-xs p-4 rounded-2xl items-center justify-center gap-2 shadow-xs transition-colors"
             >
               <LogOut className="w-4 h-4" />
               <span>LOGOUT FROM ACCOUNT</span>
@@ -354,7 +385,7 @@ export default function ProfilePage() {
           </div>
 
           {/* Right Main Dynamic Content Panel */}
-          <div className="lg:col-span-8">
+          <div className="lg:col-span-8 space-y-4">
             {/* 1. Personal Information */}
             {activeTab === 'profile' && (
               <div className="bg-white border border-slate-200 rounded-2xl p-6 md:p-8 shadow-xs space-y-6">
@@ -840,6 +871,19 @@ export default function ProfilePage() {
                 )}
               </div>
             )}
+
+            {/* Mobile logout — after content so tabs stay first */}
+            <button
+              type="button"
+              onClick={() => {
+                logoutUser();
+                router.push('/');
+              }}
+              className="lg:hidden w-full bg-white border border-red-200 active:bg-red-50 text-red-600 font-bold text-xs p-4 rounded-2xl flex items-center justify-center gap-2 shadow-xs touch-manipulation min-h-12"
+            >
+              <LogOut className="w-4 h-4" />
+              <span>LOGOUT</span>
+            </button>
 
           </div>
         </div>

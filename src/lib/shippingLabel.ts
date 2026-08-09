@@ -48,7 +48,6 @@ function numberToWords(num: number): string {
 
 /** Compact face for pasting on courier packet (normal paper + tape). */
 function stickerFaceHtml(o: ShippingLabelOrder, opts: {
-  isCod: boolean;
   isCancelled: boolean;
   hasOfficialAwb: boolean;
   totalAmount: number;
@@ -59,7 +58,7 @@ function stickerFaceHtml(o: ShippingLabelOrder, opts: {
   totalItems: number;
 }): string {
   const {
-    isCod, isCancelled, hasOfficialAwb, totalAmount, orderDate,
+    isCancelled, hasOfficialAwb, totalAmount, orderDate,
     barcodeUrl, qrUrl, itemsLine, totalItems,
   } = opts;
 
@@ -74,8 +73,8 @@ function stickerFaceHtml(o: ShippingLabelOrder, opts: {
       <div class="oid">#${esc(o.orderId)}</div>
     </div>
 
-    <div class="pay-row ${isCancelled ? 'pay-cancel' : isCod ? 'pay-cod' : 'pay-paid'}">
-      <span>${isCancelled ? 'CANCELLED — DO NOT COLLECT' : isCod ? '₹ COD — COLLECT ON DELIVERY' : '✓ PREPAID — DO NOT COLLECT'}</span>
+    <div class="pay-row ${isCancelled ? 'pay-cancel' : 'pay-paid'}">
+      <span>${isCancelled ? 'CANCELLED — DO NOT COLLECT' : '✓ PREPAID — DO NOT COLLECT'}</span>
       <strong>₹${totalAmount.toLocaleString('en-IN')}</strong>
     </div>
 
@@ -126,7 +125,6 @@ function stickerFaceHtml(o: ShippingLabelOrder, opts: {
 }
 
 function a5FullHtml(o: ShippingLabelOrder, opts: {
-  isCod: boolean;
   isCancelled: boolean;
   hasOfficialAwb: boolean;
   totalAmount: number;
@@ -139,7 +137,7 @@ function a5FullHtml(o: ShippingLabelOrder, opts: {
   estWeight: number;
 }): string {
   const {
-    isCod, isCancelled, hasOfficialAwb, totalAmount, orderDate, invoiceNum,
+    isCancelled, hasOfficialAwb, totalAmount, orderDate, invoiceNum,
     barcodeUrl, qrUrl, itemsHtml, totalItems, estWeight,
   } = opts;
 
@@ -164,7 +162,7 @@ function a5FullHtml(o: ShippingLabelOrder, opts: {
     <div class="meta-item"><div class="lbl">ORDER ID</div><div class="val">#${esc(o.orderId)}</div></div>
     <div class="meta-item"><div class="lbl">INVOICE NO.</div><div class="val-sm">${esc(invoiceNum)}</div></div>
     <div class="meta-item"><div class="lbl">ORDER DATE</div><div class="val-sm">${esc(orderDate)}</div></div>
-    <div class="meta-item"><div class="lbl">PAYMENT</div><div class="val-sm">${isCod ? 'COD' : 'PREPAID'}</div></div>
+    <div class="meta-item"><div class="lbl">PAYMENT</div><div class="val-sm">PREPAID</div></div>
   </div>
 
   <div class="shipping-row" style="${hasOfficialAwb ? '' : 'grid-template-columns:1fr;'}">
@@ -193,8 +191,8 @@ function a5FullHtml(o: ShippingLabelOrder, opts: {
   </div>
 
   <div class="payment-bar">
-    <div class="${isCancelled ? 'badge-cod' : isCod ? 'badge-cod' : 'badge-prepaid'}" style="${isCancelled ? 'background:#fef2f2;border-color:#991b1b;color:#991b1b;' : ''}">
-      ${isCancelled ? '🚫 CANCELLED — DO NOT COLLECT / DO NOT SHIP' : isCod ? '₹ COLLECT ON DELIVERY' : '✓ PREPAID — DO NOT COLLECT'}
+    <div class="${isCancelled ? 'badge-cod' : 'badge-prepaid'}" style="${isCancelled ? 'background:#fef2f2;border-color:#991b1b;color:#991b1b;' : ''}">
+      ${isCancelled ? '🚫 CANCELLED — DO NOT COLLECT / DO NOT SHIP' : '✓ PREPAID — DO NOT COLLECT'}
     </div>
     <div class="total-amount-display">₹${totalAmount.toLocaleString('en-IN')}</div>
   </div>
@@ -210,7 +208,7 @@ function a5FullHtml(o: ShippingLabelOrder, opts: {
   <div class="metrics-grid">
     <div class="metric-box"><div class="metric-icon">📦</div><div class="metric-val">${totalItems}</div><div class="metric-lbl">ITEMS</div></div>
     <div class="metric-box"><div class="metric-icon">⚖</div><div class="metric-val">${estWeight}g</div><div class="metric-lbl">EST. WT</div></div>
-    <div class="metric-box"><div class="metric-icon">💳</div><div class="metric-val">${isCod ? 'COD' : 'PAID'}</div><div class="metric-lbl">PAYMENT</div></div>
+    <div class="metric-box"><div class="metric-icon">💳</div><div class="metric-val">PAID</div><div class="metric-lbl">PAYMENT</div></div>
     <div class="metric-box"><div class="metric-icon">🚚</div><div class="metric-val">${esc((o.courierName || 'ST Courier').slice(0, 12))}</div><div class="metric-lbl">COURIER</div></div>
   </div>
 
@@ -372,7 +370,6 @@ export function generateShippingLabelHtml(
   initialSize: ShippingLabelSize = 'a4'
 ): string {
   const isCancelled = String(o.courierStatus || '').toLowerCase().includes('cancel');
-  const isCod = String(o.paymentMethod || '').toLowerCase().includes('cod');
   const orderDate = o.createdAt
     ? new Date(o.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
     : new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -404,7 +401,6 @@ export function generateShippingLabelHtml(
     .join('');
 
   const faceOpts = {
-    isCod,
     isCancelled,
     hasOfficialAwb,
     totalAmount,

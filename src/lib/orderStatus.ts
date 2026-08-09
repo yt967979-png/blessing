@@ -21,7 +21,8 @@ export function blocksShippingActions(status: string | null | undefined): boolea
 /**
  * payment_status after cancel.
  * Paid Razorpay admin-cancel → Refunded (money returned via Razorpay).
- * Legacy COD → not collectible. Unpaid / no payment id → Cancelled.
+ * Unpaid / no payment id → Cancelled.
+ * Legacy COD rows (if any ever existed) → not collectible.
  */
 export function paymentStatusAfterCancel(
   paymentMethod: string | null | undefined,

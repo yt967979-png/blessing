@@ -9,13 +9,11 @@ import { shopWhatsAppChatUrl } from '@/lib/shopContact';
 export const AnnouncementBar = () => {
   const { user, setIsAuthOpen } = useStore();
 
+  // Hidden on phones — bottom nav + header cover Help / Track / Login
   return (
-    <div className="bg-[#001226] text-slate-300 text-[10px] sm:text-xs py-1.5 sm:py-2 border-b border-slate-800">
-      <div className="max-w-7xl mx-auto px-4 flex justify-between sm:justify-end items-center gap-2">
-        <span className="text-amber-300 font-bold sm:hidden truncate text-[10px]">
-          📚 Tamil Nadu State Board Guides
-        </span>
-        <div className="flex items-center gap-2.5 sm:gap-4 font-medium flex-shrink-0">
+    <div className="hidden sm:block bg-[#001226] text-slate-300 text-xs py-2 border-b border-slate-800">
+      <div className="max-w-7xl mx-auto px-4 flex justify-end items-center gap-2">
+        <div className="flex items-center gap-4 font-medium flex-shrink-0">
           <a
             href={shopWhatsAppChatUrl('Hello Blessing Power Guide Support')}
             target="_blank"

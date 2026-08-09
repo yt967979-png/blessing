@@ -993,7 +993,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setCheckoutTotal(cartGrandTotal);
   }, [cartGrandTotal]);
 
-  /** Debounced abandoned-cart ping for WhatsApp reminder (no SMS). */
+  /** Debounced abandoned-cart ping (analytics only — no SMS / no bot messages). */
   useEffect(() => {
     if (!hydrated || !user?.phone || cart.length === 0) return;
     const t = setTimeout(() => {

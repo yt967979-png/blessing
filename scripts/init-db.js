@@ -411,26 +411,10 @@ async function migrateDatabase(connStr, dbName) {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
 
-      CREATE TABLE IF NOT EXISTS whatsapp_otps (
-        id VARCHAR(255) PRIMARY KEY,
-        phone VARCHAR(255) NOT NULL,
-        email VARCHAR(255),
-        otp VARCHAR(10) NOT NULL,
-        expires_at TIMESTAMP NOT NULL,
-        verified BOOLEAN DEFAULT FALSE,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-
-      CREATE TABLE IF NOT EXISTS whatsapp_sessions (
-        id VARCHAR(255) PRIMARY KEY DEFAULT 'default',
-        status VARCHAR(100) NOT NULL DEFAULT 'INITIALIZING',
-        connected BOOLEAN DEFAULT FALSE,
-        qr_image TEXT,
-        pairing_code VARCHAR(50),
-        message TEXT,
-        session_data JSONB,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
+      DROP TABLE IF EXISTS whatsapp_outbox CASCADE;
+      DROP TABLE IF EXISTS whatsapp_logs CASCADE;
+      DROP TABLE IF EXISTS whatsapp_sessions CASCADE;
+      DROP TABLE IF EXISTS whatsapp_otps CASCADE;
 
       ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_address TEXT;
       ALTER TABLE orders ADD COLUMN IF NOT EXISTS packed_at TIMESTAMP;
