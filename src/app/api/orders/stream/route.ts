@@ -4,7 +4,13 @@ import { getDbClient, releaseDbClient, resolveDbConnectionConfig } from '@/lib/d
 import { getAuthenticatedUser, verifyAdminRequest } from '@/lib/serverSecurity';
 import { resolveTunedNumber, shouldRunBackgroundTask } from '@/lib/runtimeProfile';
 
-const clients = new Set<ReadableStreamDefaultController>();
+type StreamClient = {
+  controller: ReadableStreamDefaultController;
+  userId: string;
+  isAdmin: boolean;
+};
+
+const clients = new Set<StreamClient>();
 let listenReady: Promise<void> | null = null;
 let listenClient: Client | null = null;
 let listenPingInterval: NodeJS.Timeout | null = null;
@@ -12,16 +18,25 @@ let listenBackoffMs = 1000;
 const LISTEN_BACKOFF_MAX = 30000;
 let reconnectScheduled = false;
 
+function clientMayReceive(meta: StreamClient, data: any): boolean {
+  if (meta.isAdmin) return true;
+  if (data?.type === 'CONNECTED') return true;
+  // Customers only see their own order events (never other users' AWB/status)
+  const eventUser = data?.userId != null ? String(data.userId) : '';
+  return Boolean(eventUser) && eventUser === String(meta.userId);
+}
+
 export function broadcastOrderChange(data: any) {
   const message = `data: ${JSON.stringify(data)}\n\n`;
   const encoder = new TextEncoder();
   const encoded = encoder.encode(message);
 
-  for (const client of clients) {
+  for (const meta of [...clients]) {
+    if (!clientMayReceive(meta, data)) continue;
     try {
-      client.enqueue(encoded);
+      meta.controller.enqueue(encoded);
     } catch {
-      clients.delete(client);
+      clients.delete(meta);
     }
   }
 }
@@ -123,7 +138,7 @@ function ensureListen() {
   return listenReady;
 }
 
-/** Start NOTIFY listener at boot — keeps admin order stream aligned 24/7. */
+/** Start NOTIFY listener at boot — keeps admin + customer order streams aligned. */
 export function startOrderListenBroker() {
   if (process.env.DISABLE_ORDER_LISTEN === 'true') {
     console.log('[order-listen] disabled (DISABLE_ORDER_LISTEN=true)');
@@ -133,7 +148,6 @@ export function startOrderListenBroker() {
   const hasUnpooled = Boolean(
     process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_DIRECT_URL
   );
-  // Neon pooled (PgBouncer) cannot LISTEN; without a direct URL, skip instead of reconnect-storm.
   if (dbUrl.includes('neon.tech') && dbUrl.includes('-pooler.') && !hasUnpooled) {
     console.log(
       '[order-listen] skipped — Neon pooler URL has no LISTEN support; set DATABASE_URL_UNPOOLED or DISABLE_ORDER_LISTEN=true'
@@ -149,33 +163,30 @@ export function startOrderListenBroker() {
 
 export async function GET(req: NextRequest) {
   const session = await getAuthenticatedUser(req);
-  if (!session) {
+  if (!session?.userId) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
       headers: { 'Content-Type': 'application/json' },
     });
   }
 
-  // Full order bus is admin-only (prevents customers seeing other orders' AWB/status).
   const admin = await verifyAdminRequest(req);
-  if (!admin.isAdmin) {
-    return new Response(JSON.stringify({ error: 'Forbidden' }), {
-      status: 403,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
+  const isAdmin = Boolean(admin.isAdmin);
+  const userId = String(session.userId);
 
   void ensureListen();
 
-  let controllerRef: ReadableStreamDefaultController | null = null;
+  let metaRef: StreamClient | null = null;
 
   const stream = new ReadableStream({
     start(controller) {
-      controllerRef = controller;
-      clients.add(controller);
+      metaRef = { controller, userId, isAdmin };
+      clients.add(metaRef);
       const encoder = new TextEncoder();
       controller.enqueue(
-        encoder.encode(`data: ${JSON.stringify({ type: 'CONNECTED', timestamp: Date.now() })}\n\n`)
+        encoder.encode(
+          `data: ${JSON.stringify({ type: 'CONNECTED', isAdmin, timestamp: Date.now() })}\n\n`
+        )
       );
 
       const heartbeat = setInterval(() => {
@@ -188,7 +199,7 @@ export async function GET(req: NextRequest) {
 
       const cleanup = () => {
         clearInterval(heartbeat);
-        clients.delete(controller);
+        if (metaRef) clients.delete(metaRef);
         try {
           controller.close();
         } catch (_) {}
@@ -197,7 +208,7 @@ export async function GET(req: NextRequest) {
       req.signal.addEventListener('abort', cleanup);
     },
     cancel() {
-      if (controllerRef) clients.delete(controllerRef);
+      if (metaRef) clients.delete(metaRef);
     },
   });
 

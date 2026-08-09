@@ -33,6 +33,7 @@ import { getSTCourierDeliveryEstimate } from '@/lib/deliveryEstimator';
 import { imageNeedsUnoptimized } from '@/lib/productImage';
 import { shopWhatsAppChatUrl } from '@/lib/shopContact';
 import { ShipmentTrackingCard } from '@/components/orders/ShipmentTrackingCard';
+import { useOrderLiveSync } from '@/hooks/useOrderLiveSync';
 
 function OrdersContent() {
   const { user, showToast, setIsAuthOpen, addToCart, setIsCheckoutOpen, products } = useStore();
@@ -161,16 +162,47 @@ function OrdersContent() {
 
     fetchOrders();
 
-    // Silent 5-second polling for background updates without UI flickering
+    // Backup poll — primary updates come from order SSE (useOrderLiveSync)
     const interval = setInterval(() => {
       fetchOrders();
-    }, 5000);
+    }, 30_000);
 
     return () => {
       isMounted = false;
       clearInterval(interval);
     };
   }, [user, queryOrderId]);
+
+  useOrderLiveSync(Boolean(user?.id), () => {
+    if (!user) return;
+    void (async () => {
+      try {
+        if (queryOrderId) {
+          const res = await fetch(`/api/orders?orderId=${encodeURIComponent(queryOrderId)}`, {
+            headers: authHeaders(user),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.length > 0) setSearchedOrderData(data[0]);
+          }
+        }
+        const res = await fetch(`/api/orders`, { headers: authHeaders(user) });
+        if (res.ok) {
+          const data = await res.json();
+          setUserOrders(data);
+          if (!queryOrderId) {
+            setSearchedOrderData((prev: any) => {
+              if (!prev?.orderId) return prev;
+              const match = data.find((o: any) => o.orderId === prev.orderId);
+              return match || prev;
+            });
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+    })();
+  });
 
   // Live ST Courier scans while order detail is open (and when tracking modal is open)
   useEffect(() => {
@@ -930,7 +962,7 @@ function OrdersContent() {
                   key={key}
                   type="button"
                   onClick={() => setOrderTab(key)}
-                  className={`px-3 py-1.5 rounded-full text-[11px] font-extrabold border transition-colors ${
+                  className={`min-h-11 px-3.5 py-2.5 rounded-full text-xs font-extrabold border transition-colors touch-manipulation ${
                     orderTab === key
                       ? 'bg-[#2874f0] text-white border-[#2874f0]'
                       : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300'
@@ -950,6 +982,10 @@ function OrdersContent() {
             ) : null}
             {filteredOrders.map((ord: any) => {
               const listCancelled = isOrderCancelled(ord.courierStatus || ord.status || '');
+              const listOfficialAwb =
+                ord.trackingNumber &&
+                (String(ord.trackingNumber).startsWith('STC') ||
+                  !String(ord.trackingNumber).startsWith('SHP-'));
               return (
               <div
                 key={ord.orderId}
@@ -968,6 +1004,9 @@ function OrdersContent() {
                     <div>
                       <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider block">ORDER ID</span>
                       <span className="font-heading font-black text-lg text-[#001B3A]">{ord.orderId}</span>
+                      <p className={`mt-0.5 text-xs font-mono font-bold ${listOfficialAwb ? 'text-[#001B3A]' : 'text-slate-400'}`}>
+                        {listOfficialAwb ? `AWB · ${ord.trackingNumber}` : 'AWB pending'}
+                      </p>
                     </div>
                   </div>
 

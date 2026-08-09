@@ -534,7 +534,7 @@ export default function CheckoutPage() {
                     type="button"
                     disabled={savingAddress}
                     onClick={() => void handleSaveInlineAddress()}
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold py-2.5 rounded-lg disabled:opacity-60 transition-all"
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold min-h-12 py-3 rounded-lg disabled:opacity-60 transition-all touch-manipulation"
                   >
                     {savingAddress ? 'Saving Address…' : 'Save Address'}
                   </button>
@@ -545,7 +545,7 @@ export default function CheckoutPage() {
                 type="button"
                 disabled={cartCount < 4}
                 onClick={() => void goToReview()}
-                className="w-full bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-[#001B3A] font-extrabold text-sm py-3.5 rounded-xl uppercase tracking-wider disabled:opacity-50 transition-all min-h-12 touch-manipulation"
+                className="hidden sm:flex w-full items-center justify-center bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-[#001B3A] font-extrabold text-sm py-3.5 rounded-xl uppercase tracking-wider disabled:opacity-50 transition-all min-h-12 touch-manipulation"
               >
                 Deliver Here →
               </button>
@@ -770,7 +770,7 @@ export default function CheckoutPage() {
                 type="button"
                 disabled={isPlacingOrder || cart.length === 0 || cartCount < 4 || hasBlockingItem}
                 onClick={() => void handlePlaceOrder()}
-                className="w-full bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 hover:from-amber-500 hover:to-amber-700 text-[#001B3A] font-black text-sm py-4 rounded-xl uppercase tracking-wider shadow-lg shadow-amber-500/20 disabled:opacity-60 transition-all hover:scale-[1.01] min-h-12 touch-manipulation"
+                className="hidden sm:flex w-full items-center justify-center bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 hover:from-amber-500 hover:to-amber-700 text-[#001B3A] font-black text-sm py-4 rounded-xl uppercase tracking-wider shadow-lg shadow-amber-500/20 disabled:opacity-60 transition-all hover:scale-[1.01] min-h-12 touch-manipulation"
               >
                 {isPlacingOrder ? 'Opening Razorpay…' : `Confirm order · Pay ₹${cartGrandTotal}`}
               </button>
@@ -796,6 +796,40 @@ export default function CheckoutPage() {
       </div>
 
       <Footer />
+
+      {/* Mobile sticky primary CTA — mirrors cart bar */}
+      {(step === 1 || step === 3) && (
+        <div
+          className="fixed inset-x-0 z-40 sm:hidden border-t border-slate-200 bg-white/95 backdrop-blur-md p-3 shadow-2xl"
+          style={{ bottom: 'calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px))' }}
+        >
+          {step === 1 ? (
+            <button
+              type="button"
+              disabled={cartCount < 4}
+              onClick={() => void goToReview()}
+              className="w-full bg-gradient-to-r from-amber-400 to-amber-500 disabled:opacity-50 text-[#001B3A] font-extrabold text-xs py-3.5 rounded-xl uppercase tracking-wider min-h-12 touch-manipulation"
+            >
+              Deliver Here →
+            </button>
+          ) : (
+            <div className="flex items-center gap-3 max-w-7xl mx-auto">
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold text-slate-500 uppercase">Pay</p>
+                <p className="font-black text-lg text-[#001B3A] leading-none">₹{cartGrandTotal}</p>
+              </div>
+              <button
+                type="button"
+                disabled={isPlacingOrder || cart.length === 0 || cartCount < 4 || hasBlockingItem}
+                onClick={() => void handlePlaceOrder()}
+                className="flex-1 bg-gradient-to-r from-amber-400 to-amber-500 disabled:opacity-50 text-[#001B3A] font-extrabold text-xs py-3.5 rounded-xl uppercase tracking-wider min-h-12 touch-manipulation"
+              >
+                {isPlacingOrder ? 'Opening Razorpay…' : 'Confirm order'}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </main>
   );
 }

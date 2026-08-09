@@ -72,17 +72,52 @@ export async function notifyStockChanged(bookIds: Array<string | number | null |
       const { invalidateProductsCache } = await import('@/app/api/products/route');
       invalidateProductsCache();
     } catch (_) {}
+    const payload = { type: 'STOCK_CHANGED', books, timestamp: Date.now() };
+    // Same-process SSE clients must get the event even if LISTEN is down/slow
+    broadcastStockChange(payload);
     const client = await getDbClient();
     if (!client) return;
     try {
-      await client.query(`SELECT pg_notify('stock_changed', $1)`, [
-        JSON.stringify({ type: 'STOCK_CHANGED', books, timestamp: Date.now() }),
-      ]);
+      await client.query(`SELECT pg_notify('stock_changed', $1)`, [JSON.stringify(payload)]);
     } finally {
       releaseDbClient(client);
     }
   } catch (err: any) {
     console.error('[stock-notify] failed:', err?.message || err);
+  }
+}
+
+/**
+ * Full catalog refresh signal — use after product create / delete / title-price
+ * edits. Stock-only patches use `notifyStockChanged`; those cannot invent a new
+ * card on the shop home for an id the client has never seen.
+ */
+export async function notifyCatalogChanged(
+  bookIds?: Array<string | number | null | undefined>
+): Promise<void> {
+  const ids = bookIds
+    ? [...new Set(bookIds.map((id) => (id == null ? '' : String(id))).filter(Boolean))]
+    : [];
+  try {
+    try {
+      const { invalidateProductsCache } = await import('@/app/api/products/route');
+      invalidateProductsCache();
+    } catch (_) {}
+    const payload = {
+      type: 'CATALOG_CHANGED',
+      bookIds: ids,
+      timestamp: Date.now(),
+    };
+    broadcastStockChange(payload);
+    const client = await getDbClient();
+    if (!client) return;
+    try {
+      await client.query(`SELECT pg_notify('stock_changed', $1)`, [JSON.stringify(payload)]);
+    } finally {
+      releaseDbClient(client);
+    }
+  } catch (err: any) {
+    console.error('[catalog-notify] failed:', err?.message || err);
   }
 }
 

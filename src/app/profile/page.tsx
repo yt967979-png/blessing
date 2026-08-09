@@ -25,6 +25,7 @@ import {
 import { useStore } from '@/context/StoreContext';
 import { createUserAddress, deleteUserAddress, migrateLocalAddressesToDb, updateUserAddress } from '@/lib/addresses';
 import { authHeaders } from '@/lib/clientAuth';
+import { useOrderLiveSync } from '@/hooks/useOrderLiveSync';
 import { Header } from '@/components/layout/Header';
 import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
 import { Footer } from '@/components/layout/Footer';
@@ -97,6 +98,16 @@ export default function ProfilePage() {
       clearInterval(interval);
     };
   }, [user]);
+
+  useOrderLiveSync(Boolean(user?.id), () => {
+    if (!user) return;
+    fetch(`/api/orders`, { headers: authHeaders(user) })
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data)) setLiveOrders(data);
+      })
+      .catch(() => {});
+  });
 
   // Save updated user profile info to Railway PostgreSQL
   const handleSaveProfile = async (e: React.FormEvent) => {

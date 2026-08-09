@@ -18,6 +18,7 @@ import { BrandLogo } from '@/components/ui/BrandLogo';
 import { ShipmentTrackingCard } from '@/components/orders/ShipmentTrackingCard';
 import { useStore } from '@/context/StoreContext';
 import { authHeaders } from '@/lib/clientAuth';
+import { useOrderLiveSync } from '@/hooks/useOrderLiveSync';
 
 function TrackForm() {
   const searchParams = useSearchParams();
@@ -102,6 +103,16 @@ function TrackForm() {
     return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order?.orderId, order?.cancelled, order?.status, phone, user?.phone]);
+
+  // Instant soft re-track when admin updates this order
+  useOrderLiveSync(Boolean(user?.id && orderId.trim()), (evt) => {
+    const oid = orderId.trim();
+    if (!oid) return;
+    if (evt.orderId && String(evt.orderId) !== oid) return;
+    const mobile = (phone || user?.phone || '').trim();
+    if (!mobile) return;
+    void runTrack(oid, mobile, { soft: true });
+  });
 
   return (
     <div className="max-w-2xl mx-auto w-full space-y-6">
@@ -219,7 +230,11 @@ function TrackForm() {
               className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full border ${
                 order.cancelled
                   ? 'bg-red-50 text-red-800 border-red-200'
-                  : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                  : String(order.status || '')
+                        .toLowerCase()
+                        .includes('deliver')
+                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                    : 'bg-blue-50 text-blue-800 border-blue-200'
               }`}
             >
               {order.cancelled ? (

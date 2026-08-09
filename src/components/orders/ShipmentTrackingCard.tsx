@@ -242,7 +242,7 @@ export function ShipmentTrackingCard({
                   <button
                     type="button"
                     onClick={() => void copyAwb()}
-                    className="shrink-0 inline-flex items-center gap-1 px-2 py-1.5 rounded-lg border border-slate-200 bg-white text-[10px] font-bold text-slate-600 hover:border-amber-400 hover:text-[#001B3A] touch-manipulation min-h-9"
+                    className="shrink-0 inline-flex items-center gap-1 px-2.5 py-2 rounded-lg border border-slate-200 bg-white text-[10px] font-bold text-slate-600 hover:border-amber-400 hover:text-[#001B3A] touch-manipulation min-h-11"
                     aria-label="Copy AWB number"
                   >
                     {copied ? (

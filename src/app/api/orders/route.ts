@@ -479,6 +479,7 @@ export async function POST(request: Request) {
       type: 'ORDER_CREATED',
       orderId: orderNumber,
       status: initialStatus,
+      userId: String(userId),
       timestamp: Date.now(),
     };
     try {
@@ -548,7 +549,7 @@ export async function PATCH(request: NextRequest) {
     client = await getDbClient();
 
     const existing = await client.query(
-      `SELECT order_status FROM orders WHERE order_number = $1 OR id = $1 LIMIT 1`,
+      `SELECT order_status, user_id, order_number FROM orders WHERE order_number = $1 OR id = $1 LIMIT 1`,
       [orderId]
     );
     if (!existing.rows.length) {
@@ -608,7 +609,14 @@ export async function PATCH(request: NextRequest) {
       );
     } catch (_) {}
 
-    const event = { type: 'ORDER_UPDATED', orderId, status: newStatus, awbNumber, timestamp: Date.now() };
+    const event = {
+      type: 'ORDER_UPDATED',
+      orderId: existing.rows[0].order_number || orderId,
+      status: newStatus,
+      awbNumber,
+      userId: existing.rows[0].user_id ? String(existing.rows[0].user_id) : null,
+      timestamp: Date.now(),
+    };
     try {
       broadcastOrderChange(event);
       await notifyOrderChanged(event);

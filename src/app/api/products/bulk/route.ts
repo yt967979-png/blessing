@@ -130,8 +130,8 @@ export async function POST(request: NextRequest) {
     invalidateProductsCache();
     if (createdIds.length) {
       try {
-        const { notifyStockChanged } = await import('@/app/api/stock/stream/route');
-        void notifyStockChanged(createdIds);
+        const { notifyCatalogChanged } = await import('@/app/api/stock/stream/route');
+        void notifyCatalogChanged(createdIds);
       } catch (_) { /* non-fatal */ }
     }
     return NextResponse.json({ success: true, created, skipped, errors: errors.slice(0, 20) });

@@ -515,20 +515,21 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
                 <Truck className="w-4 h-4 text-blue-600" />
                 <span>DELIVERY OPTIONS</span>
               </h4>
-              <form onSubmit={checkPincode} className="flex gap-2 max-w-sm">
-                <div className="flex-1 relative">
-                  <input
-                    type="text"
-                    maxLength={6}
-                    placeholder="Enter delivery pincode"
-                    value={pincode}
-                    onChange={(e) => setPincode(e.target.value.replace(/\D/g, ''))}
-                    className="w-full px-3.5 py-2.5 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-600 font-bold pr-16"
-                  />
-                  <button type="submit" className="absolute right-1 top-1 bottom-1 bg-blue-600 text-white font-extrabold text-[10px] px-3 rounded-md hover:bg-blue-700 transition-colors uppercase cursor-pointer">
-                    CHECK
-                  </button>
-                </div>
+              <form onSubmit={checkPincode} className="flex gap-2 max-w-sm items-stretch">
+                <input
+                  type="text"
+                  maxLength={6}
+                  placeholder="Enter delivery pincode"
+                  value={pincode}
+                  onChange={(e) => setPincode(e.target.value.replace(/\D/g, ''))}
+                  className="flex-1 min-h-12 px-3.5 border border-slate-300 rounded-lg text-sm outline-none focus:border-blue-600 font-bold"
+                />
+                <button
+                  type="submit"
+                  className="min-h-12 px-4 bg-blue-600 text-white font-extrabold text-xs rounded-lg hover:bg-blue-700 transition-colors uppercase cursor-pointer touch-manipulation shrink-0"
+                >
+                  CHECK
+                </button>
               </form>
 
               {pincodeMsg && (

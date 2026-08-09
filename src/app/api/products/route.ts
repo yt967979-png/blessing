@@ -327,8 +327,8 @@ export async function POST(request: Request) {
     ]);
     invalidateProductsCache();
     try {
-      const { notifyStockChanged } = await import('@/app/api/stock/stream/route');
-      void notifyStockChanged([id]);
+      const { notifyCatalogChanged } = await import('@/app/api/stock/stream/route');
+      void notifyCatalogChanged([id]);
     } catch (_) {}
     return NextResponse.json(res.rows[0], { status: 201 });
   } catch (err: any) {
@@ -416,12 +416,14 @@ export async function PATCH(request: Request) {
         params
       );
       invalidateProductsCache();
-      if (finalStatus !== undefined || finalStock !== undefined) {
-        try {
-          const { notifyStockChanged } = await import('@/app/api/stock/stream/route');
+      try {
+        const { notifyStockChanged, notifyCatalogChanged } = await import('@/app/api/stock/stream/route');
+        if (finalStatus !== undefined || finalStock !== undefined) {
           void notifyStockChanged([id]);
-        } catch (_) {}
-      }
+        }
+        // Title/price/image edits also need a shop-side catalog refresh
+        void notifyCatalogChanged([id]);
+      } catch (_) {}
     }
 
     return NextResponse.json({ success: true, id });
@@ -443,8 +445,9 @@ export async function DELETE(request: Request) {
     await queryDb(`DELETE FROM books WHERE id = $1`, [id]);
     invalidateProductsCache();
     try {
-      const { notifyStockChanged } = await import('@/app/api/stock/stream/route');
-      void notifyStockChanged([id]);
+      // Book row is gone — stock notify would no-op; force full catalog refresh
+      const { notifyCatalogChanged } = await import('@/app/api/stock/stream/route');
+      void notifyCatalogChanged([id]);
     } catch (_) {}
     return NextResponse.json({ success: true, deletedId: id });
   } catch (err: any) {

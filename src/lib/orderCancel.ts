@@ -230,6 +230,7 @@ export async function executeOrderCancel(opts: {
       type: 'ORDER_UPDATED',
       orderId: row.order_number,
       status: 'Cancelled',
+      userId: row.user_id ? String(row.user_id) : null,
       timestamp: Date.now(),
     };
     try {

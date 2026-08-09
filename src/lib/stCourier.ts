@@ -287,7 +287,7 @@ export async function syncOrderByAwb(docketInput: string): Promise<{
   }
   try {
     const orderRes = await client.query(
-      `SELECT id, order_number, order_status, awb_number, shipping_address
+      `SELECT id, order_number, order_status, awb_number, shipping_address, user_id
        FROM orders
        WHERE UPPER(REPLACE(awb_number, ' ', '')) = $1
           OR id = $1 OR order_number = $1
@@ -373,6 +373,7 @@ export async function syncOrderByAwb(docketInput: string): Promise<{
         orderId: order.order_number || order.id,
         status: nextStatus,
         awbNumber: tracked.docket,
+        userId: order.user_id ? String(order.user_id) : null,
         timestamp: Date.now(),
         source: 'st_courier_auto',
       };

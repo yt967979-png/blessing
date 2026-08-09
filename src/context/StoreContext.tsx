@@ -335,6 +335,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const applyStockPush = useCallback((incoming: StockPushEntry[]) => {
     if (!Array.isArray(incoming) || incoming.length === 0) return;
     const byId = new Map(incoming.map((b) => [String(b.id), b]));
+    const known = new Set(productsRef.current.map((p) => String(p.id)));
+    const unknownIds = [...byId.keys()].some((id) => !known.has(id));
 
     setProducts((prev) => {
       let changed = false;
@@ -348,6 +350,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (changed) writeCatalogCache(next);
       return changed ? next : prev;
     });
+
+    if (unknownIds) {
+      // New book id — stock patch alone cannot invent a product card
+      queueMicrotask(() => refreshProducts(true));
+    }
 
     // Mirror into the live cart too — cross-cutting: a card going OOS while
     // it's already in someone's cart must disable checkout for it as well.
@@ -389,6 +396,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       es.onmessage = (evt) => {
         try {
           const data = JSON.parse(evt.data);
+          if (data?.type === 'CATALOG_CHANGED') {
+            // Admin added/edited/deleted a book — soft-refresh full catalog
+            refreshProducts(true);
+            return;
+          }
           if (data?.type === 'STOCK_CHANGED' && Array.isArray(data.books)) {
             applyStockPush(data.books);
           }
@@ -420,17 +432,24 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Fallback only: while the realtime stream is down (blocked network, cold
-  // start, server restart), fall back to polling so stock never goes stale
-  // for more than 15s. Skipped entirely while SSE is connected.
+  // Slow catalog poll always — catches missed SSE (new books / price edits).
+  // Faster 15s poll only while SSE is down.
   useEffect(() => {
-    const POLL_MS = 15_000;
-    const interval = setInterval(() => {
-      if (sseConnectedRef.current) return;
+    const CATALOG_POLL_MS = 20_000;
+    const STOCK_FALLBACK_MS = 15_000;
+    const tick = (forceFresh = false) => {
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
-      refreshProducts();
-    }, POLL_MS);
-    return () => clearInterval(interval);
+      refreshProducts(forceFresh);
+    };
+    const catalogInterval = setInterval(() => tick(true), CATALOG_POLL_MS);
+    const stockFallback = setInterval(() => {
+      if (sseConnectedRef.current) return;
+      tick(true);
+    }, STOCK_FALLBACK_MS);
+    return () => {
+      clearInterval(catalogInterval);
+      clearInterval(stockFallback);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -838,6 +857,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || 'Update failed');
       }
+      refreshProducts(true);
       showToast(
         rest.stock !== undefined
           ? `✓ Stock updated — ${Math.max(0, Math.floor(Number(rest.stock) || 0))} units`
@@ -911,6 +931,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (data?.id) {
         setProducts((prev) => prev.map((p) => (p.id === tempId ? { ...p, id: data.id, slug: data.slug || data.id } : p)));
       }
+      // Pull authoritative mapped catalog so every open shop tab (and this one) match DB
+      refreshProducts(true);
       showToast(`🎉 Book "${newProdData.title}" saved to database`);
     } catch (err: any) {
       setProducts((prev) => prev.filter((p) => p.id !== tempId));
@@ -930,6 +952,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         headers: getAdminHeaders(),
       });
       if (!res.ok) throw new Error('Delete failed');
+      refreshProducts(true);
       showToast(`🗑️ Book removed from database`);
     } catch {
       setProducts(previousProducts);

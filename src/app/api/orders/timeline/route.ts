@@ -101,6 +101,25 @@ export async function POST(request: Request) {
       );
     }
 
+    try {
+      const { broadcastOrderChange, notifyOrderChanged } = await import(
+        '@/app/api/orders/stream/route'
+      );
+      const event = {
+        type: 'ORDER_UPDATED',
+        orderId: order.order_number || order.id,
+        status: statusLabel,
+        awbNumber: awb || null,
+        userId: order.user_id ? String(order.user_id) : null,
+        timestamp: Date.now(),
+        source: 'admin_timeline',
+      };
+      broadcastOrderChange(event);
+      await notifyOrderChanged(event);
+    } catch (e: any) {
+      console.warn('[timeline] order broadcast failed:', e?.message || e);
+    }
+
     return NextResponse.json({ success: true, eventId, status, statusLabel });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
