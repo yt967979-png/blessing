@@ -217,33 +217,28 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     };
     fetch(url, opts)
       .then(async (res) => {
-        if (!res.ok) {
-          throw new Error(`Catalog HTTP ${res.status}`);
+        // Redeploy maintenance HTML / 5xx must never blank the shop or spam as a fatal app error
+        const ctype = res.headers.get('content-type') || '';
+        if (!res.ok || !ctype.includes('application/json')) {
+          throw new Error(`catalog unavailable (${res.status})`);
         }
         return res.json();
       })
       .then((data) => {
-        if (Array.isArray(data)) {
-          // Don't blank a working shop if the API returns [] after a blip
-          if (data.length === 0 && productsRef.current.length > 0) {
-            return;
-          }
-          setProducts(data);
-          if (data.length > 0) {
-            writeCatalogCache(data);
-          }
-        }
+        if (!Array.isArray(data)) return;
+        // Keep last good catalog if API soft-returns []
+        if (data.length === 0 && productsRef.current.length > 0) return;
+        setProducts(data);
+        if (data.length > 0) writeCatalogCache(data);
       })
       .catch(() => {
-        // Keep session cache / in-memory catalog; only clear when we never had products.
         if (productsRef.current.length === 0) {
           const cached = readCatalogCache(true);
           if (cached?.length) {
             productsRef.current = cached;
             setProducts(cached);
-          } else {
-            setProducts([]);
           }
+          // leave [] only when we truly never had products — no throw, no console spam
         }
       })
       .finally(() => setProductsLoading(false));

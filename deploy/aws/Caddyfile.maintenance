@@ -1,20 +1,42 @@
 # Temporary config while redeploy is running — users only see the Updating page.
+# API routes return JSON 503 (not HTML) so the shop never treats maintenance as a fatal 500.
 # redeploy.sh swaps this in, then restores Caddyfile when health is OK.
 
 blessingpowerguide.duckdns.org {
 	encode gzip
-	root * /var/www/blessing-maintenance
-	rewrite * /maintenance.html
-	file_server
-	header Cache-Control "no-store"
-	header Retry-After "60"
+
+	@api path /api/*
+	handle @api {
+		header Content-Type "application/json; charset=utf-8"
+		header Cache-Control "no-store"
+		header Retry-After "60"
+		respond `{"ok":false,"updating":true,"products":[]}` 503
+	}
+
+	handle {
+		root * /var/www/blessing-maintenance
+		rewrite * /maintenance.html
+		file_server
+		header Cache-Control "no-store"
+		header Retry-After "60"
+	}
 }
 
 # Custom domain later (keep in sync with Caddyfile):
 # blessingpowerguide.in, www.blessingpowerguide.in {
 # 	encode gzip
-# 	root * /var/www/blessing-maintenance
-# 	rewrite * /maintenance.html
-# 	file_server
-# 	header Cache-Control "no-store"
+# 	@api path /api/*
+# 	handle @api {
+# 		header Content-Type "application/json; charset=utf-8"
+# 		header Cache-Control "no-store"
+# 		header Retry-After "60"
+# 		respond `{"ok":false,"updating":true,"products":[]}` 503
+# 	}
+# 	handle {
+# 		root * /var/www/blessing-maintenance
+# 		rewrite * /maintenance.html
+# 		file_server
+# 		header Cache-Control "no-store"
+# 		header Retry-After "60"
+# 	}
 # }

@@ -90,42 +90,101 @@ function slugFromTitle(title: string, id: string) {
 
 const CATALOG_GET_BUDGET_MS = Number(process.env.CATALOG_GET_TIMEOUT_MS || 8_000);
 
+function mapCatalogRows(rows: any[]) {
+  return (rows || []).map((d: any) => {
+    const { price, mrp, discount } = mapBookPrices(d);
+    const safeTitle = String(d.title || '');
+    const isCombo = d.category_id === 'cat-combos' || safeTitle.toLowerCase().includes('combo');
+    const classMatch = safeTitle.match(/(6th|7th|8th|9th|10th|11th|12th)/i);
+    const extractedClass = classMatch ? classMatch[0] : '10th';
+    const safeImg = safeCatalogImage(d.cover_image);
+
+    return {
+      id: d.id,
+      slug: d.slug || d.id,
+      title: safeTitle || 'Guide Book',
+      subtitle: `${extractedClass} Standard Guide`,
+      cls: extractedClass,
+      category: isCombo ? 'combo' : 'guide',
+      subject: d.subject || 'State Board',
+      price,
+      mrp,
+      discount,
+      rating: Number(d.review_count) > 0 ? Number(d.avg_rating || 0) : 0,
+      reviews: Number(d.review_count || 0),
+      badge: (d.badge && String(d.badge).trim()) || '',
+      badgeColor: (d.badge && String(d.badge).trim())
+        ? String(d.badge).toUpperCase().includes('COMBO')
+          ? 'bg-purple-600'
+          : 'bg-blue-600'
+        : 'bg-blue-600',
+      image: safeImg,
+      hoverImage: safeImg,
+      description: d.description || 'Complete guide book for exam success.',
+      features: ['Solved Papers', 'Chapter Notes'],
+      inStock: mapBookInStock(d),
+      stock: Number(d.stock ?? 0),
+      isBestSeller: String(d.badge || '').toUpperCase().includes('BEST'),
+    };
+  });
+}
+
+/** Always 200 JSON for the shop — never surface DB/schema faults as HTTP 500. */
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const cls = searchParams.get('cls');
-  const search = searchParams.get('search');
-  const slug = searchParams.get('slug');
-  const key = cacheKey(cls, search, slug);
+  try {
+    const { searchParams } = new URL(request.url);
+    const cls = searchParams.get('cls');
+    const search = searchParams.get('search');
+    const slug = searchParams.get('slug');
+    const key = cacheKey(cls, search, slug);
+    const forceFresh = searchParams.get('fresh') === '1';
 
-  const cached = readCache(key);
-  // Bypass memory cache when client asks for a fresh catalog (admin edits / stock toggle)
-  const forceFresh = searchParams.get('fresh') === '1';
-  if (cached && !forceFresh) {
-    return NextResponse.json(cached, {
-      headers: catalogHeaders({ 'X-Cache-Status': 'HIT_MEMORY' }),
-    });
-  }
-
-  const staleFallback = () => {
-    const stale = readCache(key, true);
-    if (stale) {
-      return NextResponse.json(stale, {
-        headers: catalogHeaders({ 'X-Cache-Status': 'STALE_MEMORY' }),
+    const cached = readCache(key);
+    if (cached && !forceFresh) {
+      return NextResponse.json(cached, {
+        headers: catalogHeaders({ 'X-Cache-Status': 'HIT_MEMORY' }),
       });
     }
-    // Empty Neon or DB down — never hang; shop UI soft-fails to empty catalog.
-    return NextResponse.json([], {
-      status: 200,
-      headers: catalogHeaders({ 'X-Cache-Status': 'EMPTY_OR_TIMEOUT' }),
-    });
-  };
 
-  try {
-    const load = (async () => {
-      // Prefer pool.query for catalog reads (cheaper than holding a checkout client)
-      // Never pull huge base64 cover_image blobs into Node — that caused /api/products 500s.
-      let sql = `
-        SELECT b.id, b.slug, b.title, b.subject, b.price, b.discount_price, b.stock, b.status,
+    const emptyOk = (cacheStatus: string) => {
+      const stale = readCache(key, true);
+      if (stale && stale.length > 0) {
+        return NextResponse.json(stale, {
+          headers: catalogHeaders({ 'X-Cache-Status': 'STALE_MEMORY' }),
+        });
+      }
+      return NextResponse.json([], {
+        status: 200,
+        headers: catalogHeaders({ 'X-Cache-Status': cacheStatus }),
+      });
+    };
+
+    const buildFilters = () => {
+      let where = ' WHERE 1=1';
+      const params: any[] = [];
+      let count = 1;
+      if (slug) {
+        where += ` AND (b.slug = $${count} OR b.id = $${count})`;
+        params.push(slug);
+        count++;
+      }
+      if (cls && cls !== 'all' && cls !== 'ALL') {
+        where += ` AND b.title ILIKE $${count++}`;
+        params.push(`%${cls}%`);
+      }
+      if (search && search.trim()) {
+        where += ` AND (b.title ILIKE $${count} OR COALESCE(b.description, '') ILIKE $${count})`;
+        params.push(`%${search.trim()}%`);
+        count++;
+      }
+      return { where, params };
+    };
+
+    const loadPrimary = async () => {
+      const { where, params } = buildFilters();
+      // Avoid selecting huge base64 covers; skip subject in filter for older schemas.
+      const sql = `
+        SELECT b.id, b.slug, b.title, b.price, b.discount_price, b.stock, b.status,
                b.badge, b.description, b.category_id, b.created_at,
                CASE
                  WHEN b.cover_image IS NULL OR b.cover_image = '' THEN NULL
@@ -137,100 +196,69 @@ export async function GET(request: Request) {
                COALESCE(AVG(r.rating), 0)::numeric(3,1) as avg_rating
         FROM books b
         LEFT JOIN reviews r ON b.id = r.book_id
-        WHERE 1=1
+        ${where}
+        GROUP BY b.id
+        ORDER BY b.created_at DESC
       `;
-      const params: any[] = [];
-      let count = 1;
+      return queryDb(sql, params);
+    };
 
-      if (slug) {
-        sql += ` AND (b.slug = $${count} OR b.id = $${count})`;
-        params.push(slug);
-        count++;
+    /** Minimal fallback if reviews join / columns fail — still never 500. */
+    const loadFallback = async () => {
+      const { where, params } = buildFilters();
+      const sql = `
+        SELECT b.id, b.slug, b.title, b.price, b.discount_price, b.stock, b.status,
+               b.badge, b.description, b.category_id, b.created_at,
+               NULL::text AS cover_image,
+               0::int as review_count,
+               0::numeric as avg_rating
+        FROM books b
+        ${where}
+        ORDER BY b.created_at DESC
+        LIMIT 200
+      `;
+      return queryDb(sql, params);
+    };
+
+    const load = (async () => {
+      let res: { rows?: any[] };
+      try {
+        res = await loadPrimary();
+      } catch (primaryErr: any) {
+        console.warn('[products] primary catalog query failed, using fallback:', primaryErr?.message || primaryErr);
+        res = await loadFallback();
       }
-
-      if (cls && cls !== 'all' && cls !== 'ALL') {
-        sql += ` AND b.title ILIKE $${count++}`;
-        params.push(`%${cls}%`);
-      }
-
-      if (search && search.trim()) {
-        sql += ` AND (b.title ILIKE $${count} OR COALESCE(b.subject, '') ILIKE $${count} OR COALESCE(b.description, '') ILIKE $${count})`;
-        params.push(`%${search.trim()}%`);
-        count++;
-      }
-
-      sql += ' GROUP BY b.id ORDER BY b.created_at DESC';
-
-      const res = await queryDb(sql, params);
-
-      if (res.rows) {
-        const mapped = res.rows.map((d: any) => {
-          const { price, mrp, discount } = mapBookPrices(d);
-
-          const safeTitle = String(d.title || '');
-          const isCombo = d.category_id === 'cat-combos' || safeTitle.toLowerCase().includes('combo');
-          const classMatch = safeTitle.match(/(6th|7th|8th|9th|10th|11th|12th)/i);
-          const extractedClass = classMatch ? classMatch[0] : '10th';
-
-          const rawImg = String(d.cover_image || '').trim();
-          const safeImg = safeCatalogImage(rawImg);
-
-          return {
-            id: d.id,
-            slug: d.slug || d.id,
-            title: safeTitle || 'Guide Book',
-            subtitle: `${extractedClass} Standard Guide`,
-            cls: extractedClass,
-            category: isCombo ? 'combo' : 'guide',
-            subject: d.subject || 'State Board',
-            price,
-            mrp,
-            discount,
-            rating: Number(d.review_count) > 0 ? Number(d.avg_rating || 0) : 0,
-            reviews: Number(d.review_count || 0),
-            badge: (d.badge && String(d.badge).trim()) || '',
-            badgeColor: (d.badge && String(d.badge).trim())
-              ? (String(d.badge).toUpperCase().includes('COMBO') ? 'bg-purple-600' : 'bg-blue-600')
-              : 'bg-blue-600',
-            image: safeImg,
-            hoverImage: safeImg,
-            description: d.description || 'Complete guide book for exam success.',
-            features: ['Solved Papers', 'Chapter Notes'],
-            inStock: mapBookInStock(d),
-            stock: Number(d.stock ?? 0),
-            isBestSeller: String(d.badge || '').toUpperCase().includes('BEST'),
-          };
-        });
-        // Never cache an empty miss for long — a DB blip would blank the whole shop
-        if (mapped.length > 0) {
-          writeCache(key, mapped);
-        }
-        return NextResponse.json(mapped, {
-          headers: catalogHeaders({
-            'X-Cache-Status': mapped.length > 0 ? 'MISS_DB' : 'MISS_DB_EMPTY',
-            'X-Catalog-Count': String(mapped.length),
-          }),
-        });
-      }
-      return staleFallback();
+      const mapped = mapCatalogRows(res.rows || []);
+      if (mapped.length > 0) writeCache(key, mapped);
+      return NextResponse.json(mapped, {
+        headers: catalogHeaders({
+          'X-Cache-Status': mapped.length > 0 ? 'MISS_DB' : 'MISS_DB_EMPTY',
+          'X-Catalog-Count': String(mapped.length),
+        }),
+      });
     })();
 
     let timer: ReturnType<typeof setTimeout> | undefined;
     const raced = await Promise.race([
-      load.catch((err: any) => {
-        console.error('Error fetching products from DB:', err?.message || err);
-        return staleFallback();
-      }).finally(() => {
-        if (timer) clearTimeout(timer);
-      }),
+      load
+        .catch((err: any) => {
+          console.error('[products] catalog load failed:', err?.message || err);
+          return emptyOk('EMPTY_OR_ERROR');
+        })
+        .finally(() => {
+          if (timer) clearTimeout(timer);
+        }),
       new Promise<NextResponse>((resolve) => {
-        timer = setTimeout(() => resolve(staleFallback()), CATALOG_GET_BUDGET_MS);
+        timer = setTimeout(() => resolve(emptyOk('EMPTY_OR_TIMEOUT')), CATALOG_GET_BUDGET_MS);
       }),
     ]);
     return raced;
   } catch (err: any) {
-    console.error('Error fetching products from DB:', err?.message || err);
-    return staleFallback();
+    console.error('[products] GET fatal (returning []):', err?.message || err);
+    return NextResponse.json([], {
+      status: 200,
+      headers: catalogHeaders({ 'X-Cache-Status': 'FATAL_SOFT' }),
+    });
   }
 }
 
