@@ -321,6 +321,17 @@ export async function POST(request: Request) {
           await client.query(`UPDATE payments SET status = 'REFUNDED' WHERE payment_id = $1`, [
             effectivePaymentId,
           ]);
+          // Free reserved inventory — otherwise books stay locked forever after orphan refund
+          if (effectiveOrderId) {
+            try {
+              await releaseStockHolds(
+                { razorpayOrderId: effectiveOrderId },
+                'orphan_capture_refunded'
+              );
+            } catch (err: any) {
+              console.warn('[razorpay-webhook] releaseStockHolds after orphan refund failed:', err?.message || err);
+            }
+          }
           console.warn(
             `[razorpay-webhook] Auto-refunded orphan capture ${effectivePaymentId}. refundId=${refund.refundId}`
           );

@@ -14,7 +14,7 @@ import { verifyRazorpayPayment } from '@/lib/orderPricing';
 import { priceCheckoutOrder } from '@/lib/checkoutPricing';
 import { blocksShippingActions, isOrderCancelled } from '@/lib/orderStatus';
 import { refundRazorpayPayment } from '@/lib/razorpayRefund';
-import { confirmStockHolds, recordConfirmedSale, shrinkConfirmedHold } from '@/lib/stockHold';
+import { confirmStockHolds, recordConfirmedSale, shrinkConfirmedHold, releaseStockHolds } from '@/lib/stockHold';
 
 /**
  * Money-safety net: payment is captured by Razorpay client-side BEFORE this
@@ -26,7 +26,13 @@ import { confirmStockHolds, recordConfirmedSale, shrinkConfirmedHold } from '@/l
  */
 async function refundOrphanedCapture(
   client: any,
-  opts: { paymentId: string; orderNumberAttempt?: string; amountRupees: number; reason: string }
+  opts: {
+    paymentId: string;
+    orderNumberAttempt?: string;
+    amountRupees: number;
+    reason: string;
+    razorpayOrderId?: string | null;
+  }
 ): Promise<{ refunded: boolean; refundId?: string; error?: string }> {
   const refund = await refundRazorpayPayment({
     paymentId: opts.paymentId,
@@ -48,8 +54,14 @@ async function refundOrphanedCapture(
     } else {
       await client.query(
         `INSERT INTO payments (id, order_id, payment_id, transaction_id, amount, status)
-         VALUES ($1, NULL, $2, $2, $3, $4)`,
-        [`pay-orphan-${Date.now()}`, opts.paymentId, opts.amountRupees, status]
+         VALUES ($1, NULL, $2, $3, $4, $5)`,
+        [
+          `pay-orphan-${Date.now()}`,
+          opts.paymentId,
+          opts.razorpayOrderId || opts.paymentId,
+          opts.amountRupees,
+          status,
+        ]
       );
     }
   } catch (e: any) {
@@ -57,6 +69,17 @@ async function refundOrphanedCapture(
   }
 
   if (refund.ok) {
+    if (opts.razorpayOrderId) {
+      try {
+        await releaseStockHolds(
+          { razorpayOrderId: opts.razorpayOrderId },
+          `checkout_refund:${opts.reason}`.slice(0, 100),
+          client
+        );
+      } catch (e: any) {
+        console.warn('[orders] releaseStockHolds after refund failed:', e?.message || e);
+      }
+    }
     console.warn(
       `[orders] Auto-refunded captured payment ${opts.paymentId} after checkout failure (${opts.reason}). refundId=${refund.refundId}`
     );
@@ -201,6 +224,7 @@ export async function POST(request: Request) {
   // needed to know whether a captured payment must be refunded on failure.
   let paymentAlreadyVerified = false;
   let capturedPaymentId: string | null = null;
+  let capturedRazorpayOrderId: string | null = null;
   let capturedAmountForRefund = 0;
   let capturedOrderNumber = '';
   try {
@@ -220,6 +244,7 @@ export async function POST(request: Request) {
       idempotencyKey,
     } = body;
     capturedPaymentId = razorpayPaymentId || null;
+    capturedRazorpayOrderId = razorpayOrderId || null;
 
     const userId = session.userId;
     const isRazorpay = String(paymentMethod || '').toLowerCase().includes('razorpay');
@@ -348,8 +373,8 @@ export async function POST(request: Request) {
     );
 
     // Convert the Razorpay order's held stock into a real sale (no second
-    // decrement). Idempotent — a hold already confirmed by a racing webhook
-    // returns [] here and the fail-safe path below just no-ops per item.
+    // decrement). Idempotent across webhook races — confirmStockHolds returns
+    // already-confirmed rows when the webhook flipped them first.
     const confirmedHolds = await confirmStockHolds(razorpayOrderId, client);
     const heldQtyByBook = new Map<string, number>();
     for (const h of confirmedHolds) {
@@ -402,6 +427,7 @@ export async function POST(request: Request) {
             orderNumberAttempt: orderNumber,
             amountRupees: totalAmount,
             reason: `stock conflict on "${item.title}"`,
+            razorpayOrderId,
           });
           const message = refund.refunded
             ? `"${item.title}" went out of stock while your payment was processing. Your payment of ₹${totalAmount} has been refunded automatically — it will reflect in your original payment method within 5-7 business days.`
@@ -490,6 +516,7 @@ export async function POST(request: Request) {
         orderNumberAttempt: capturedOrderNumber,
         amountRupees: capturedAmountForRefund,
         reason: `order creation error: ${err?.message || 'unknown'}`,
+        razorpayOrderId: capturedRazorpayOrderId || null,
       });
       const message = refund.refunded
         ? 'We could not complete your order due to a system error, but your payment has been refunded automatically — it will reflect in your original payment method within 5-7 business days.'

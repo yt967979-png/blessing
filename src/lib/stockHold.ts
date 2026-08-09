@@ -141,10 +141,9 @@ export interface ConfirmedHoldItem {
 
 /**
  * Payment succeeded — convert this Razorpay order's holds from 'held' to
- * 'confirmed'. Idempotent: a second call (retry, webhook racing the client)
- * finds nothing left in 'held' and returns []. Pass the order's own
- * transactional `client` so a later rollback in the same request correctly
- * un-confirms these rows back to 'held' too.
+ * 'confirmed'. Idempotent across webhook ↔ place-order races: if another
+ * path already confirmed, return the existing confirmed rows so callers
+ * never treat reserved stock as missing and double-decrement / false-OOS.
  */
 export async function confirmStockHolds(razorpayOrderId: string, client?: any): Promise<ConfirmedHoldItem[]> {
   const rzpOrderId = String(razorpayOrderId || '').trim();
@@ -157,7 +156,23 @@ export async function confirmStockHolds(razorpayOrderId: string, client?: any): 
      RETURNING book_id, qty`,
     [rzpOrderId]
   );
-  return (res.rows || []).map((r: any) => ({ bookId: String(r.book_id), qty: Number(r.qty) || 0 }));
+  const flipped = (res.rows || []).map((r: any) => ({
+    bookId: String(r.book_id),
+    qty: Number(r.qty) || 0,
+  }));
+  if (flipped.length > 0) return flipped;
+
+  // Race: webhook (or prior retry) already confirmed — reuse those quantities.
+  const existing = await execQuery(
+    client,
+    `SELECT book_id, qty FROM stock_holds
+     WHERE razorpay_order_id = $1 AND status = 'confirmed'`,
+    [rzpOrderId]
+  );
+  return (existing.rows || []).map((r: any) => ({
+    bookId: String(r.book_id),
+    qty: Number(r.qty) || 0,
+  }));
 }
 
 /**

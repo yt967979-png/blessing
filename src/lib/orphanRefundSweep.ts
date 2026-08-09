@@ -13,12 +13,13 @@
  */
 import { queryDb } from '@/lib/db';
 import { refundRazorpayPayment } from '@/lib/razorpayRefund';
+import { releaseStockHolds } from '@/lib/stockHold';
 
 export async function refundStaleOrphanCaptures(maxAgeMinutes = 10): Promise<number> {
   let refunded = 0;
   try {
     const stale = await queryDb(
-      `SELECT id, payment_id FROM payments
+      `SELECT id, payment_id, transaction_id FROM payments
        WHERE status = 'ORPHAN_CAPTURED'
          AND order_id IS NULL
          AND paid_at < NOW() - ($1::int * INTERVAL '1 minute')
@@ -48,6 +49,14 @@ export async function refundStaleOrphanCaptures(maxAgeMinutes = 10): Promise<num
       const refund = await refundRazorpayPayment({ paymentId });
       if (refund.ok) {
         await queryDb(`UPDATE payments SET status = 'REFUNDED' WHERE id = $1`, [row.id]);
+        const rzpOrderId = String(row.transaction_id || '').trim();
+        if (rzpOrderId && rzpOrderId !== paymentId) {
+          try {
+            await releaseStockHolds({ razorpayOrderId: rzpOrderId }, 'orphan_sweep_refunded');
+          } catch (e: any) {
+            console.warn('[orphan-refund] releaseStockHolds failed:', e?.message || e);
+          }
+        }
         refunded++;
         console.warn(
           `[orphan-refund] Auto-refunded stale orphan capture ${paymentId}. refundId=${refund.refundId}`

@@ -153,7 +153,20 @@ export async function GET(request: Request) {
 
       sql += ' GROUP BY b.id ORDER BY b.created_at DESC';
 
-      const res = await queryDb(sql, params);
+      // Never SELECT huge base64 covers into Node memory — catalog crashes under load
+      const res = await queryDb(
+        sql.replace(
+          'SELECT b.*,',
+          `SELECT b.id, b.slug, b.title, b.subject, b.price, b.discount_price, b.stock, b.status, b.badge, b.description, b.category_id, b.created_at,
+               CASE
+                 WHEN b.cover_image IS NULL OR b.cover_image = '' THEN NULL
+                 WHEN b.cover_image LIKE 'data:%' THEN NULL
+                 WHEN length(b.cover_image) > 2048 THEN NULL
+                 ELSE b.cover_image
+               END AS cover_image,`
+        ),
+        params
+      );
 
       if (res.rows) {
         const mapped = res.rows.map((d: any) => {

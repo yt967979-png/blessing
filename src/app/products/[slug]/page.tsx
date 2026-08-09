@@ -8,9 +8,16 @@ type Props = { params: Promise<{ slug: string }> };
 async function getBookMeta(slug: string) {
   try {
     const res = await queryDb(
-      `SELECT b.title, b.description, b.cover_image, b.discount_price, b.price, b.subject, b.status, b.stock,
+      `SELECT b.title, b.description,
+              CASE
+                WHEN b.cover_image IS NULL OR b.cover_image = '' THEN NULL
+                WHEN b.cover_image LIKE 'data:%' THEN NULL
+                WHEN length(b.cover_image) > 2048 THEN NULL
+                ELSE b.cover_image
+              END AS cover_image,
+              b.discount_price, b.price, b.subject, b.status, b.stock,
               COALESCE(COUNT(r.id), 0)::int as review_count,
-              COALESCE(AVG(r.rating), 5.0)::numeric(3,1) as avg_rating
+              COALESCE(AVG(r.rating), 0)::numeric(3,1) as avg_rating
        FROM books b
        LEFT JOIN reviews r ON b.id = r.book_id
        WHERE b.slug = $1 OR b.id = $1
@@ -48,7 +55,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       title,
       description,
       url: `${siteUrl}/products/${slug}`,
-      images: book.cover_image ? [{ url: book.cover_image }] : undefined,
+      images:
+        book.cover_image &&
+        !String(book.cover_image).startsWith('data:') &&
+        String(book.cover_image).length <= 2048
+          ? [{ url: String(book.cover_image) }]
+          : undefined,
       type: 'website',
     },
     alternates: {
@@ -63,39 +75,51 @@ export default async function ProductPage({ params }: Props) {
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://blessingpowerguide.duckdns.org';
 
   const price = Number(book?.discount_price || book?.price || 0);
-  const mrp = Number(book?.price || price);
   const inStock = book ? isBookInStock(book) : true;
+  const reviewCount = Number(book?.review_count || 0);
+  const safeCover =
+    book?.cover_image &&
+    !String(book.cover_image).startsWith('data:') &&
+    String(book.cover_image).length <= 2048
+      ? String(book.cover_image)
+      : 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=600';
 
-  // Schema.org JSON-LD for Google Search Console, Merchant Center & Rich Results
-  const jsonLd = book ? {
-    '@context': 'https://schema.org',
-    '@type': 'Product',
-    'name': book.title,
-    'image': [book.cover_image || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=600'],
-    'description': book.description || `Official ${book.title} guide book by Blessing Power Guide.`,
-    'brand': {
-      '@type': 'Brand',
-      'name': 'Blessing Power Guide',
-    },
-    'offers': {
-      '@type': 'Offer',
-      'url': `${siteUrl}/products/${slug}`,
-      'priceCurrency': 'INR',
-      'price': price,
-      'priceValidUntil': new Date(Date.now() + 31536000000).toISOString().slice(0, 10),
-      'itemCondition': 'https://schema.org/NewCondition',
-      'availability': inStock ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
-      'seller': {
-        '@type': 'Organization',
-        'name': 'Blessing Power Guide',
-      },
-    },
-    'aggregateRating': {
-      '@type': 'AggregateRating',
-      'ratingValue': Number(book.avg_rating || 5.0),
-      'reviewCount': Math.max(1, Number(book.review_count || 1)),
-    },
-  } : null;
+  // Schema.org JSON-LD — only real ratings, never invent review counts
+  const jsonLd = book
+    ? {
+        '@context': 'https://schema.org',
+        '@type': 'Product',
+        name: book.title,
+        image: [safeCover],
+        description: book.description || `Official ${book.title} guide book by Blessing Power Guide.`,
+        brand: {
+          '@type': 'Brand',
+          name: 'Blessing Power Guide',
+        },
+        offers: {
+          '@type': 'Offer',
+          url: `${siteUrl}/products/${slug}`,
+          priceCurrency: 'INR',
+          price,
+          priceValidUntil: new Date(Date.now() + 31536000000).toISOString().slice(0, 10),
+          itemCondition: 'https://schema.org/NewCondition',
+          availability: inStock ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
+          seller: {
+            '@type': 'Organization',
+            name: 'Blessing Power Guide',
+          },
+        },
+        ...(reviewCount > 0
+          ? {
+              aggregateRating: {
+                '@type': 'AggregateRating',
+                ratingValue: Number(book.avg_rating || 0),
+                reviewCount,
+              },
+            }
+          : {}),
+      }
+    : null;
 
   return (
     <>
