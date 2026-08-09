@@ -27,13 +27,7 @@ export default function Home() {
     }
   }, [user, router]);
 
-  // Prefetch critical shop routes on mount for Flipkart-like instant nav
-  useEffect(() => {
-    const routes = ['/search', '/cart', '/orders', '/profile', '/track'];
-    for (const href of routes) {
-      router.prefetch(href);
-    }
-  }, [router]);
+
 
   // Deep links like /#products or /#why
   useEffect(() => {
