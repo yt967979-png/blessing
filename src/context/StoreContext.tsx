@@ -52,36 +52,6 @@ export interface UserData {
   isGuest?: boolean;
 }
 
-/** Coupons are product-disabled; types kept so stale imports compile cleanly. */
-export interface PublicCoupon {
-  id: string;
-  code: string;
-  title: string;
-  description: string;
-  offerType: 'discount' | 'free_book';
-  discountType: 'percentage' | 'fixed';
-  discountValue: number;
-  minimumAmount: number;
-  minimumQuantity: number;
-  conditionMode: string;
-  expiryDate: string | null;
-  label: string;
-  allowedClasses?: string[];
-  allowedCategories?: string[];
-}
-
-export interface AppliedCoupon {
-  code: string;
-  label: string;
-  offerType: 'discount' | 'free_book';
-  discountAmount: number;
-  total: number;
-  freeBookId?: string;
-  freeBookTitle?: string;
-  allowedClasses?: string[];
-  allowedCategories?: string[];
-}
-
 interface StoreContextType {
   products: Product[];
   cart: CartItem[];
@@ -132,15 +102,8 @@ interface StoreContextType {
   cartCount: number;
   checkoutTotal: number;
   setCheckoutTotal: (amount: number) => void;
-  publicCoupons: PublicCoupon[];
-  appliedCoupon: AppliedCoupon | null;
-  couponDiscount: number;
   shippingFee: number;
   cartGrandTotal: number;
-  applyCouponCode: (code: string, freeBookId?: string) => Promise<boolean>;
-  clearAppliedCoupon: () => void;
-  setPendingCouponCode: (code: string) => void;
-  pendingCouponCode: string;
   productsLoading: boolean;
   orderSuccessData: any | null;
   setOrderSuccessData: (data: any | null) => void;
@@ -974,20 +937,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // Free shipping for 5+ books, ₹150 for <5 books
   const shippingFee = cartCount >= 5 ? 0 : (cartCount > 0 ? 150 : 0);
   const [checkoutTotal, setCheckoutTotal] = useState(0);
-  /** Coupons disabled — always empty / zero; no customer apply path. */
-  const publicCoupons: PublicCoupon[] = [];
-  const appliedCoupon: AppliedCoupon | null = null;
-  const pendingCouponCode = '';
-  const couponDiscount = 0;
   const cartGrandTotal = cartCount > 0 ? cartTotal + shippingFee : 0;
-
-  const applyCouponCode = async (_code: string, _freeBookId?: string): Promise<boolean> => {
-    showToast('Coupons are no longer available');
-    return false;
-  };
-
-  const clearAppliedCoupon = () => {};
-  const setPendingCouponCode = (_code: string) => {};
 
   useEffect(() => {
     setCheckoutTotal(cartGrandTotal);
@@ -1060,15 +1010,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         cartCount,
         checkoutTotal,
         setCheckoutTotal,
-        publicCoupons,
-        appliedCoupon,
-        couponDiscount,
         shippingFee,
         cartGrandTotal,
-        applyCouponCode,
-        clearAppliedCoupon,
-        pendingCouponCode,
-        setPendingCouponCode,
         orderSuccessData,
         setOrderSuccessData,
         showToast,

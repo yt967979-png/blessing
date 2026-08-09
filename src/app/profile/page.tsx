@@ -17,7 +17,6 @@ import {
   CreditCard,
   Plus,
   Trash2,
-  Gift,
   AlertCircle,
   ShoppingBag,
   Download,
@@ -27,7 +26,6 @@ import { useStore } from '@/context/StoreContext';
 import { createUserAddress, deleteUserAddress, migrateLocalAddressesToDb, updateUserAddress } from '@/lib/addresses';
 import { authHeaders } from '@/lib/clientAuth';
 import { Header } from '@/components/layout/Header';
-import { NavBar } from '@/components/layout/NavBar';
 import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
 import { Footer } from '@/components/layout/Footer';
 
@@ -204,7 +202,6 @@ export default function ProfilePage() {
       <main className="min-h-screen bg-slate-50 flex flex-col page-mobile-nav">
         <AnnouncementBar />
         <Header />
-        <NavBar />
         <div className="max-w-md mx-auto my-16 p-8 bg-white border border-slate-200 rounded-3xl shadow-xl text-center space-y-4">
           <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mx-auto border border-blue-200">
             <User className="w-8 h-8" />
@@ -229,7 +226,6 @@ export default function ProfilePage() {
     <main className="min-h-screen bg-slate-50 flex flex-col page-mobile-nav">
       <AnnouncementBar />
       <Header />
-      <NavBar />
 
       {/* Breadcrumb */}
       <div className="bg-white border-b border-slate-200 py-3">

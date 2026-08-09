@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { AlertCircle, RefreshCw, ShoppingBag, Home } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
-import { NavBar } from '@/components/layout/NavBar';
 import { Footer } from '@/components/layout/Footer';
 import { useStore } from '@/context/StoreContext';
 
@@ -26,7 +25,6 @@ export default function PaymentFailedPage() {
   return (
     <main className="min-h-screen bg-slate-50 flex flex-col page-mobile-nav">
       <Header />
-      <NavBar />
 
       <div className="flex-1 max-w-lg mx-auto w-full px-4 py-12 flex flex-col items-center text-center">
         <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mb-4">

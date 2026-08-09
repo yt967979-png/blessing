@@ -1,6 +1,5 @@
 import React from 'react';
 import { Header } from '@/components/layout/Header';
-import { NavBar } from '@/components/layout/NavBar';
 import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
 import { Footer } from '@/components/layout/Footer';
 import { FileText, CheckCircle2, Shield, AlertTriangle } from 'lucide-react';
@@ -15,7 +14,6 @@ export default function TermsOfServicePage() {
     <div className="min-h-screen bg-[#f8fafc] text-slate-800" style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
       <AnnouncementBar />
       <Header />
-      <NavBar />
 
       <main className="max-w-4xl mx-auto px-4 sm:px-6 py-10">
         <div className="bg-white rounded-2xl border border-slate-200 p-6 sm:p-10 shadow-xs space-y-8">

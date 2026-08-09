@@ -4,7 +4,6 @@ import React, { useState, useEffect, useMemo, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Search, Filter, BookOpen, Sparkles, ArrowLeft, RefreshCcw, SlidersHorizontal } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
-import { NavBar } from '@/components/layout/NavBar';
 import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
 import { Footer } from '@/components/layout/Footer';
 import { ProductCard } from '@/components/ui/ProductCard';
@@ -89,7 +88,6 @@ function SearchContent() {
     <div className="min-h-screen bg-[#f8fafc] text-slate-800 page-mobile-nav">
       <AnnouncementBar />
       <Header />
-      <NavBar />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
         {/* Header Breadcrumb */}

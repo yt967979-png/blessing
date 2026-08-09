@@ -21,7 +21,7 @@ surface map over a single-file patch.
 - Payment: **Razorpay only** (UPI / cards / netbanking). **COD disabled** in API and all checkout UIs — do not re-offer Cash on Delivery
 - Checkout confirm: **Before Razorpay**, checkout must ask **Confirm order** or **No**. **No** → return to cart/previous (do not open payment). **Confirm** → create Razorpay order + checkout
 - Post-payment: Order is **Confirmed** immediately after successful Razorpay place. Show Flipkart-style confirmation **on the success screen** (order #, amount paid, items, next steps)
-- Coupons: **Disabled** product-wide (APIs return 410; no customer/admin apply UI). Historical `coupon_*` DB columns/tables may remain; cancel rollback must stay a safe no-op
+- Coupons: **Removed** — no APIs, no customer/admin UI, no `coupons` tables. Orders may still have null `coupon_*` columns; cancel rollback stays a safe no-op if legacy rows exist
 - Courier: **ST Courier Express** — admin pastes real AWB; site verifies + syncs
 - Comms: **No Baileys / no bot / no transactional WhatsApp**. Only a UI message icon that opens `wa.me/<shop phone>` (`ADMIN_PHONE` / `NEXT_PUBLIC_ADMIN_PHONE`, see `src/lib/shopContact.ts`). Track status on-site / My Orders
 - Admin: New paid orders appear in Admin → Orders; play a short notification sound when a new order arrives while the admin tab is open (SSE). No Admin WhatsApp pairing tab
@@ -105,8 +105,8 @@ Search for the status/field name and close every hit.
 - Low-stock admin alerts stay accurate after cancel restore
 
 ### Coupons
-- Product-disabled. Do not re-wire customer apply or admin coupon tab without an explicit product decision.
-- If historical redemptions exist, cancel rollback must remain try/catch safe.
+- Fully removed. Do not re-add without an explicit product decision.
+- Cancel may try legacy coupon rollback; must remain try/catch safe if tables are gone.
 
 ## Quality bar before “done”
 

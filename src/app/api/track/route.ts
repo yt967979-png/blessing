@@ -3,6 +3,7 @@ import { getDbClient, releaseDbClient } from '@/lib/db';
 import { applyRateLimitAsync, clientIp, getAuthenticatedUser } from '@/lib/serverSecurity';
 import { isOfficialAwb, syncOrderByAwb } from '@/lib/stCourier';
 import { isOrderCancelled, isAwaitingConfirmation } from '@/lib/orderStatus';
+import { getSTCourierDeliveryEstimate } from '@/lib/deliveryEstimator';
 
 const CUSTOMER_STEPS = [
   { key: 'Confirmed', label: 'Confirmed', short: 'Confirmed' },
@@ -166,9 +167,9 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string, request?: Reque
         [o.id, o.awb_number || '']
       );
       scans = ct.rows.map((r: any) => ({
-        activity: r.status,
-        location: r.location,
-        time: r.remarks || r.event_time || r.created_at,
+        activity: r.status || r.remarks || 'Update',
+        location: r.location || '',
+        time: r.event_time || r.created_at || '',
       }));
     } catch (_) {}
 
@@ -186,7 +187,11 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string, request?: Reque
           o.order_status = live.status;
         }
         if (live.events?.length) {
-          scans = live.events;
+          scans = live.events.map((e: any) => ({
+            activity: e.activity || 'Update',
+            location: e.location || '',
+            time: e.time || '',
+          }));
         }
       } catch (_) {}
     }
@@ -199,6 +204,12 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string, request?: Reque
     const trackingUrl =
       o.tracking_url ||
       (awb ? `https://stcourier.com/track/shipment?docket=${encodeURIComponent(awb)}` : null);
+
+    const delivered = String(status).toLowerCase().includes('deliver');
+    const eta = delivered
+      ? 'Delivered'
+      : getSTCourierDeliveryEstimate(addr.city || addr.state || 'Tamil Nadu').fullEstimateString;
+    const lastScan = !cancelled && scans.length > 0 ? scans[0] : null;
 
     return NextResponse.json({
       success: true,
@@ -214,15 +225,20 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string, request?: Reque
           active: cancelled ? false : i === currentStep,
         })),
         awb: cancelled ? null : awb,
+        trackingNumber: cancelled ? null : awb,
         courierName: o.courier_name || 'ST Courier Express',
         trackingUrl: cancelled ? null : trackingUrl,
         paymentStatus: o.payment_status,
         placedAt: o.ordered_at,
+        estimatedArrival: cancelled ? null : eta,
+        lastLocation: lastScan?.location || null,
+        lastActivity: lastScan?.activity || null,
         customer: {
           name: isAuthorized ? (addr.name || 'Customer') : maskName(addr.name || 'Customer'),
           phone: isAuthorized ? (addr.phone || '') : maskPhone(addr.phone || ''),
           city: addr.city || '',
           pincode: addr.pincode || '',
+          state: addr.state || 'Tamil Nadu',
         },
         items: Array.isArray(o.items)
           ? o.items.map((it: any) => ({ title: it.title, qty: it.qty }))

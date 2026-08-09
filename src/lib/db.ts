@@ -1091,17 +1091,6 @@ async function runSchemaInit(client: any) {
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
-        CREATE TABLE IF NOT EXISTS coupons (
-          id VARCHAR(255) PRIMARY KEY,
-          code VARCHAR(50) UNIQUE NOT NULL,
-          discount_type VARCHAR(20) DEFAULT 'percentage',
-          discount_value NUMERIC NOT NULL,
-          minimum_amount NUMERIC DEFAULT 0,
-          expiry_date TIMESTAMP,
-          usage_limit INT DEFAULT 100,
-          status VARCHAR(50) DEFAULT 'active'
-        );
-
         CREATE TABLE IF NOT EXISTS faqs (
           id VARCHAR(255) PRIMARY KEY,
           question TEXT NOT NULL,
@@ -1176,19 +1165,9 @@ async function runSchemaInit(client: any) {
         ALTER TABLE users ADD COLUMN IF NOT EXISTS security_answer_hash VARCHAR(255);
         ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_completed BOOLEAN DEFAULT FALSE;
 
-        ALTER TABLE coupons ADD COLUMN IF NOT EXISTS title VARCHAR(255);
-        ALTER TABLE coupons ADD COLUMN IF NOT EXISTS description TEXT;
-        ALTER TABLE coupons ADD COLUMN IF NOT EXISTS minimum_quantity INT DEFAULT 0;
-        ALTER TABLE coupons ADD COLUMN IF NOT EXISTS offer_type VARCHAR(30) DEFAULT 'discount';
-        ALTER TABLE coupons ADD COLUMN IF NOT EXISTS condition_mode VARCHAR(20) DEFAULT 'any';
-        ALTER TABLE coupons ADD COLUMN IF NOT EXISTS used_count INT DEFAULT 0;
-        ALTER TABLE coupons ADD COLUMN IF NOT EXISTS show_in_hero BOOLEAN DEFAULT true;
-        ALTER TABLE coupons ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
-        ALTER TABLE coupons ADD COLUMN IF NOT EXISTS per_user_limit INT DEFAULT 1;
-        ALTER TABLE coupons ADD COLUMN IF NOT EXISTS allowed_classes TEXT;
-        ALTER TABLE coupons ADD COLUMN IF NOT EXISTS allowed_categories TEXT;
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS ordered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+        -- Legacy coupon columns (always NULL on new orders; coupons removed)
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS coupon_code VARCHAR(50);
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS coupon_id VARCHAR(255);
 
@@ -1207,16 +1186,6 @@ async function runSchemaInit(client: any) {
         ALTER TABLE courier_tracking ADD COLUMN IF NOT EXISTS docket_number VARCHAR(255);
         ALTER TABLE courier_tracking ADD COLUMN IF NOT EXISTS current_status VARCHAR(255);
         ALTER TABLE courier_tracking ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
-
-        CREATE TABLE IF NOT EXISTS coupon_redemptions (
-          id VARCHAR(255) PRIMARY KEY,
-          coupon_id VARCHAR(255) REFERENCES coupons(id) ON DELETE SET NULL,
-          user_id VARCHAR(255),
-          order_id VARCHAR(255),
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-        CREATE INDEX IF NOT EXISTS idx_coupon_redemptions_coupon_user
-          ON coupon_redemptions (coupon_id, user_id);
 
         -- Stock reservation ledger: books.stock is decremented the instant a Razorpay
         -- order is created (so no one else can buy the same units while the customer
@@ -1311,6 +1280,9 @@ async function runSchemaInit(client: any) {
       `DROP TABLE IF EXISTS whatsapp_logs CASCADE`,
       `DROP TABLE IF EXISTS whatsapp_sessions CASCADE`,
       `DROP TABLE IF EXISTS whatsapp_otps CASCADE`,
+      // Coupons product-removed — drop unused promo tables
+      `DROP TABLE IF EXISTS coupon_redemptions CASCADE`,
+      `DROP TABLE IF EXISTS coupons CASCADE`,
     ];
     for (const sql of heals) {
       try {

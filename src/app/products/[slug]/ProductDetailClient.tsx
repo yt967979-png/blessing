@@ -15,7 +15,6 @@ import {
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { Header } from '@/components/layout/Header';
-import { NavBar } from '@/components/layout/NavBar';
 import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
 import { Footer } from '@/components/layout/Footer';
 import { ProductCard } from '@/components/ui/ProductCard';
@@ -232,7 +231,6 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
       <main className="min-h-screen bg-slate-50 flex flex-col page-mobile-nav md:pb-0">
         <AnnouncementBar />
         <Header />
-        <NavBar />
         <div className="max-w-7xl mx-auto px-4 py-8 flex-1 w-full">
           <div className="h-4 w-64 bg-slate-200 rounded animate-pulse mb-6" />
           <div className="bg-white border border-slate-200 rounded-2xl p-6 md:p-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -265,7 +263,6 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
       <main className="min-h-screen bg-slate-50 flex flex-col page-mobile-nav md:pb-0">
         <AnnouncementBar />
         <Header />
-        <NavBar />
         <div className="flex-1 flex flex-col items-center justify-center gap-4 p-8">
           <h1 className="text-xl font-bold text-slate-800">Product not found</h1>
           <p className="text-sm text-slate-500">This book is not in the catalog.</p>
@@ -366,7 +363,6 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
 
       <AnnouncementBar />
       <Header />
-      <NavBar />
 
       {/* Breadcrumb */}
       <div className="bg-white border-b border-slate-200 py-3">

@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { useStore } from '@/context/StoreContext';
 import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
 import { Header } from '@/components/layout/Header';
-import { NavBar } from '@/components/layout/NavBar';
 import { HeroSection } from '@/components/home/HeroSection';
 import { ClassPicker } from '@/components/home/ClassPicker';
 import { ProductGrid } from '@/components/home/ProductGrid';
@@ -34,7 +33,7 @@ export default function Home() {
     }
   }, [router]);
 
-  // NavBar chips from other pages land on /#products or /#why
+  // Deep links like /#products or /#why
   useEffect(() => {
     const hash = window.location.hash.replace('#', '');
     if (!hash) return;
@@ -48,7 +47,6 @@ export default function Home() {
     <main className="min-h-screen bg-slate-50 flex flex-col page-mobile-nav">
       <AnnouncementBar />
       <Header />
-      <NavBar />
       <HeroSection />
       <ClassPicker />
       <ProductGrid />

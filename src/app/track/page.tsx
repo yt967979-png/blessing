@@ -4,22 +4,18 @@ import React, { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import {
-  Package,
   Truck,
   Search,
   CheckCircle2,
-  MapPin,
-  ExternalLink,
-  Phone,
   X,
   ChevronRight,
   ShoppingBag,
 } from 'lucide-react';
-import { isOrderCancelled } from '@/lib/orderStatus';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
 import { BrandLogo } from '@/components/ui/BrandLogo';
+import { ShipmentTrackingCard } from '@/components/orders/ShipmentTrackingCard';
 import { useStore } from '@/context/StoreContext';
 import { authHeaders } from '@/lib/clientAuth';
 
@@ -188,54 +184,50 @@ function TrackForm() {
         </button>
       </form>
 
-      {/* Live Tracking Result */}
+      {/* Flipkart-style live ST result */}
       {order && (
-        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-6">
-          <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="space-y-4">
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="text-[10px] font-bold text-slate-400 uppercase">Order Details</p>
+              <p className="text-[10px] font-bold text-slate-400 uppercase">Order</p>
               <p className="font-heading font-black text-xl text-[#001B3A]">#{order.orderId}</p>
               <p className="text-xs text-slate-500 mt-1">
-                {order.customer?.name} · {order.customer?.phone}
-                {order.customer?.city ? ` · ${order.customer.city}` : ''}
+                {order.customer?.name}
+                {order.customer?.phone ? ` · ${order.customer.phone}` : ''}
               </p>
             </div>
-            <div className="text-right">
-              {order.cancelled || isOrderCancelled(order.status) ? (
-                <span className="inline-flex items-center gap-1.5 bg-red-50 text-red-800 border border-red-200 text-xs font-bold px-3 py-1.5 rounded-full">
-                  <X className="w-3.5 h-3.5" />
-                  Cancelled
-                </span>
+            <span
+              className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full border ${
+                order.cancelled
+                  ? 'bg-red-50 text-red-800 border-red-200'
+                  : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+              }`}
+            >
+              {order.cancelled ? (
+                <>
+                  <X className="w-3.5 h-3.5" /> Cancelled
+                </>
               ) : (
-                <span className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold px-3 py-1.5 rounded-full">
+                <>
                   <CheckCircle2 className="w-3.5 h-3.5" />
                   {String(order.status || '').toLowerCase().includes('awaiting')
                     ? 'Confirmed'
                     : order.status}
-                </span>
+                </>
               )}
-              {!order.cancelled && !isOrderCancelled(order.status) && order.autoUpdated && (
-                <p className="text-[10px] text-blue-600 font-semibold mt-1">Just synced from ST Courier</p>
-              )}
-            </div>
+            </span>
           </div>
 
-          {order.cancelled || isOrderCancelled(order.status) ? (
-            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-5 text-center space-y-1">
-              <p className="font-heading font-black text-red-800 text-sm">Order Cancelled</p>
-              <p className="text-xs text-red-700/80">This order will not be shipped. You can place a new order anytime.</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto pb-2">
-              <div className="flex items-start min-w-[520px] gap-0">
-                {order.steps?.map((step: any, i: number) => (
+          {!order.cancelled && order.steps?.length > 0 && (
+            <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm overflow-x-auto scroll-chips">
+              <div className="flex items-start min-w-[480px] gap-0">
+                {order.steps.map((step: any, i: number) => (
                   <div key={step.key} className="flex-1 flex flex-col items-center relative">
                     {i > 0 && (
                       <div
                         className={`absolute top-3 right-1/2 w-full h-0.5 -translate-y-1/2 ${
                           step.done ? 'bg-emerald-500' : 'bg-slate-200'
                         }`}
-                        style={{ zIndex: 0 }}
                       />
                     )}
                     <div
@@ -247,7 +239,11 @@ function TrackForm() {
                     >
                       {step.done ? '✓' : i + 1}
                     </div>
-                    <p className={`text-[11px] font-bold mt-2 text-center ${step.done ? 'text-slate-900' : 'text-slate-400'}`}>
+                    <p
+                      className={`text-[11px] font-bold mt-2 text-center ${
+                        step.done ? 'text-slate-900' : 'text-slate-400'
+                      }`}
+                    >
                       {step.label}
                     </p>
                   </div>
@@ -256,22 +252,33 @@ function TrackForm() {
             </div>
           )}
 
-          {/* ST Courier AWB Tracking Details */}
-          {order.trackingNumber && (
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase">ST Courier Docket Number</p>
-                <p className="font-mono font-bold text-sm text-slate-900">{order.trackingNumber}</p>
-              </div>
-              <a
-                href={order.trackingUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#001B3A] text-white text-xs font-bold rounded-lg hover:bg-blue-900 transition-colors"
-              >
-                <span>Track on ST Courier</span>
-                <ExternalLink className="w-3.5 h-3.5" />
-              </a>
+          <ShipmentTrackingCard
+            orderId={order.orderId}
+            status={order.status}
+            cancelled={!!order.cancelled}
+            awb={order.trackingNumber || order.awb}
+            trackingUrl={order.trackingUrl}
+            courierName={order.courierName}
+            destinationCity={order.customer?.city}
+            destinationPincode={order.customer?.pincode}
+            scans={order.scans}
+            liveSynced={!!order.liveSynced || !!order.autoUpdated}
+            estimatedArrival={order.estimatedArrival}
+            refreshing={loading}
+            onRefresh={() => void runTrack(order.orderId, phone || user?.phone || '')}
+          />
+
+          {Array.isArray(order.items) && order.items.length > 0 && (
+            <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+              <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Items in this order</p>
+              <ul className="space-y-1.5">
+                {order.items.map((it: any, idx: number) => (
+                  <li key={idx} className="text-xs font-semibold text-slate-700 flex justify-between gap-2">
+                    <span className="truncate">{it.title}</span>
+                    <span className="text-slate-400 shrink-0">×{it.qty}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
         </div>
@@ -282,10 +289,10 @@ function TrackForm() {
 
 export default function TrackPage() {
   return (
-    <div className="min-h-screen bg-[#F8FAFC] flex flex-col font-sans">
+    <div className="min-h-screen bg-[#F8FAFC] flex flex-col font-sans page-mobile-nav">
       <AnnouncementBar />
       <Header />
-      <main className="flex-1 px-4 py-8 md:py-12">
+      <main className="flex-1 px-4 py-6 md:py-12">
         <Suspense fallback={<div className="text-center py-12 text-slate-400 text-sm">Loading tracker…</div>}>
           <TrackForm />
         </Suspense>

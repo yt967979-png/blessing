@@ -9,9 +9,6 @@ export type CheckoutPricingResult =
       shippingFee: number;
       totalAmount: number;
       verifiedItems: any[];
-      appliedCouponId: string | null;
-      appliedCouponCode: string | null;
-      coupon: null;
     }
   | { ok: false; error: string; status: number };
 
@@ -25,21 +22,15 @@ async function execQuery(client: any, sql: string, params?: any[]): Promise<any>
   return queryDb(sql, params);
 }
 
-/** Server-side cart + minimum quantity check + shipping fee. Coupons disabled. */
+/** Server-side cart + minimum quantity check + shipping fee. No coupons. */
 export async function priceCheckoutOrder(
   client: any,
   opts: {
     items: any[];
     userId: string;
-    couponCode?: string | null;
-    freeBookId?: string | null;
-    lockCoupon?: boolean;
   }
 ): Promise<CheckoutPricingResult> {
   void opts.userId;
-  void opts.couponCode;
-  void opts.freeBookId;
-  void opts.lockCoupon;
   void execQuery;
 
   const priced = await priceCartItems(client, opts.items);
@@ -66,8 +57,5 @@ export async function priceCheckoutOrder(
     shippingFee,
     totalAmount: finalTotal,
     verifiedItems,
-    appliedCouponId: null,
-    appliedCouponCode: null,
-    coupon: null,
   };
 }

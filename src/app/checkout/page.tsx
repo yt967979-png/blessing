@@ -22,7 +22,6 @@ import { userNeedsProfile } from '@/lib/userProfile';
 import { imageNeedsUnoptimized } from '@/lib/productImage';
 import { getCartItemStockState, anyCartItemBlocking } from '@/lib/cartStock';
 import { Header } from '@/components/layout/Header';
-import { NavBar } from '@/components/layout/NavBar';
 import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
 import { Footer } from '@/components/layout/Footer';
 
@@ -390,7 +389,6 @@ export default function CheckoutPage() {
     <main className="min-h-screen bg-slate-50 flex flex-col page-mobile-nav">
       <AnnouncementBar />
       <Header />
-      <NavBar />
 
       <div className="max-w-4xl mx-auto px-4 py-8 w-full flex-1">
         {/* Step Indicator */}

@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { Heart, ArrowLeft } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { Header } from '@/components/layout/Header';
-import { NavBar } from '@/components/layout/NavBar';
 import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
 import { Footer } from '@/components/layout/Footer';
 import { ProductCard } from '@/components/ui/ProductCard';
@@ -20,7 +19,6 @@ export default function WishlistPage() {
       <main className="min-h-screen bg-slate-50 flex flex-col page-mobile-nav">
         <AnnouncementBar />
         <Header />
-        <NavBar />
         <div className="max-w-md mx-auto my-16 p-8 bg-white border border-slate-200 rounded-3xl shadow-sm text-center space-y-4">
           <Heart className="w-12 h-12 text-red-400 mx-auto" />
           <h1 className="font-heading font-black text-xl text-[#001B3A]">Sign In to View Saved Guides</h1>
@@ -42,7 +40,6 @@ export default function WishlistPage() {
     <main className="min-h-screen bg-slate-50 flex flex-col page-mobile-nav">
       <AnnouncementBar />
       <Header />
-      <NavBar />
 
       <div className="max-w-7xl mx-auto px-4 py-8 flex-1 w-full">
         <Link href="/" className="text-xs font-bold text-slate-500 hover:text-blue-600 inline-flex items-center gap-1 mb-6">

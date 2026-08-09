@@ -8,7 +8,7 @@ import {
   Plus, Trash2, Truck, Send, ShieldCheck,
   Download, X, Search, RefreshCw, TrendingUp, IndianRupee,
   Box, Clock, CheckCircle2, LogOut, BarChart2,
-  CreditCard, Smartphone, Star, AlertCircle, Tag, Gift, Upload,
+  CreditCard, Smartphone, Star, AlertCircle, Tag, Upload,
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { authHeaders } from '@/lib/clientAuth';

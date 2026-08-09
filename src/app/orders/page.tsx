@@ -32,6 +32,7 @@ import { customerRefundStage, isOrderCancelled } from '@/lib/orderStatus';
 import { getSTCourierDeliveryEstimate } from '@/lib/deliveryEstimator';
 import { imageNeedsUnoptimized } from '@/lib/productImage';
 import { shopWhatsAppChatUrl } from '@/lib/shopContact';
+import { ShipmentTrackingCard } from '@/components/orders/ShipmentTrackingCard';
 
 function OrdersContent() {
   const { user, showToast, setIsAuthOpen, addToCart, setIsCheckoutOpen, products } = useStore();
@@ -45,6 +46,12 @@ function OrdersContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [showTrackingModal, setShowTrackingModal] = useState(false);
   const [liveTrackingScans, setLiveTrackingScans] = useState<any[]>([]);
+  const [trackRefreshing, setTrackRefreshing] = useState(false);
+  const [trackMeta, setTrackMeta] = useState<{
+    estimatedArrival?: string;
+    liveSynced?: boolean;
+    status?: string;
+  }>({});
   const [reviewModalItem, setReviewModalItem] = useState<any>(null);
   const [rating, setRating] = useState(5);
   const [reviewComment, setReviewComment] = useState('');
@@ -163,35 +170,49 @@ function OrdersContent() {
     };
   }, [user, queryOrderId]);
 
-  // Auto-poll live ST Courier tracking feed every 5 seconds when modal is open
+  // Live ST Courier scans while order detail is open (and when tracking modal is open)
   useEffect(() => {
-    if (!showTrackingModal || !searchedOrderData || !user) return;
+    if (!searchedOrderData || !user) return;
+    if (isOrderCancelled(searchedOrderData.courierStatus || searchedOrderData.status)) {
+      setLiveTrackingScans([]);
+      setTrackMeta({});
+      return;
+    }
 
-    const targetDocket = searchedOrderData.trackingNumber || searchedOrderData.orderId || searchedOrderData.id;
+    const targetDocket =
+      searchedOrderData.trackingNumber || searchedOrderData.orderId || searchedOrderData.id;
     if (!targetDocket) return;
 
-    const fetchScans = async () => {
+    let cancelled = false;
+    const fetchScans = async (manual = false) => {
+      if (manual) setTrackRefreshing(true);
       try {
         const res = await fetch(`/api/track?orderId=${encodeURIComponent(targetDocket)}`, {
           headers: authHeaders(user),
         });
-        if (res.ok) {
-          const data = await res.json();
-          if (Array.isArray(data?.scans)) {
-            setLiveTrackingScans(data.scans);
-          } else if (Array.isArray(data?.order?.scans)) {
-            setLiveTrackingScans(data.order.scans);
-          }
-        }
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        const ord = data?.order || data;
+        const scans = Array.isArray(ord?.scans) ? ord.scans : Array.isArray(data?.scans) ? data.scans : [];
+        setLiveTrackingScans(scans);
+        setTrackMeta({
+          estimatedArrival: ord?.estimatedArrival,
+          liveSynced: !!(ord?.liveSynced || ord?.autoUpdated),
+          status: ord?.status,
+        });
       } catch {
         /* ignore */
+      } finally {
+        if (manual) setTrackRefreshing(false);
       }
     };
 
-    fetchScans();
-
-    const interval = setInterval(fetchScans, 5000);
-    return () => clearInterval(interval);
+    void fetchScans();
+    const interval = setInterval(() => void fetchScans(), showTrackingModal ? 5000 : 15000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, [showTrackingModal, searchedOrderData, user]);
 
   const handleSearchOrder = async (e: React.FormEvent) => {
@@ -593,31 +614,22 @@ function OrdersContent() {
                   ) : (
                     <>
                       <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                      <span>Order confirmed for <strong>+91 {searchedOrderData.customerPhone}</strong> — track status here anytime</span>
+                      <span>Order confirmed for <strong>+91 {searchedOrderData.customerPhone}</strong> — live ST updates below</span>
                     </>
                   )}
                 </div>
 
                 <div className="flex gap-2 w-full sm:w-auto">
-                  {!orderIsCancelled && (isOfficialAwb ? (
-                    <a
-                      href={searchedOrderData.trackingUrl || `https://stcourier.com/track/shipment?docket=${searchedOrderData.trackingNumber}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                  {!orderIsCancelled && (
+                    <button
+                      type="button"
+                      onClick={() => setShowTrackingModal(true)}
                       className="flex-1 sm:flex-initial bg-amber-400 hover:bg-amber-500 text-[#001B3A] font-extrabold text-xs px-5 py-3 rounded-xl transition-all shadow-md flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer"
                     >
-                      <ExternalLink className="w-4 h-4 text-[#001B3A]" />
-                      <span>TRACK ON ST COURIER</span>
-                    </a>
-                  ) : (
-                    <button
-                      onClick={() => setShowTrackingModal(true)}
-                      className="flex-1 sm:flex-initial bg-white/10 hover:bg-white/20 border border-white/30 text-white font-extrabold text-xs px-5 py-3 rounded-xl transition-all flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer backdrop-blur-xs"
-                    >
-                      <Send className="w-4 h-4 text-amber-400" />
-                      <span>VIEW TIMELINE</span>
+                      <Truck className="w-4 h-4" />
+                      <span>FULL TRACKING</span>
                     </button>
-                  ))}
+                  )}
 
                   <a
                     href={shopWhatsAppChatUrl(
@@ -632,6 +644,50 @@ function OrdersContent() {
                 </div>
               </div>
             </div>
+
+            {/* Flipkart-style ST: where now, ETA, hub scans */}
+            <ShipmentTrackingCard
+              orderId={searchedOrderData.orderId}
+              status={trackMeta.status || searchedOrderData.courierStatus || searchedOrderData.status}
+              cancelled={orderIsCancelled}
+              awb={isOfficialAwb ? searchedOrderData.trackingNumber : null}
+              trackingUrl={searchedOrderData.trackingUrl}
+              courierName={searchedOrderData.courierName || 'ST Courier Express'}
+              destinationCity={searchedOrderData.city || searchedOrderData.shippingAddress?.city}
+              destinationPincode={searchedOrderData.pincode || searchedOrderData.shippingAddress?.pincode}
+              scans={liveTrackingScans}
+              liveSynced={!!trackMeta.liveSynced}
+              estimatedArrival={
+                trackMeta.estimatedArrival ||
+                (orderIsCancelled
+                  ? undefined
+                  : getSTCourierDeliveryEstimate(
+                      searchedOrderData.city || searchedOrderData.state || 'Tamil Nadu'
+                    ).fullEstimateString)
+              }
+              refreshing={trackRefreshing}
+              onRefresh={() => {
+                const targetDocket =
+                  searchedOrderData.trackingNumber || searchedOrderData.orderId || searchedOrderData.id;
+                if (!user || !targetDocket) return;
+                setTrackRefreshing(true);
+                fetch(`/api/track?orderId=${encodeURIComponent(targetDocket)}`, {
+                  headers: authHeaders(user),
+                })
+                  .then((r) => (r.ok ? r.json() : null))
+                  .then((data) => {
+                    if (!data) return;
+                    const ord = data.order || data;
+                    setLiveTrackingScans(Array.isArray(ord?.scans) ? ord.scans : []);
+                    setTrackMeta({
+                      estimatedArrival: ord?.estimatedArrival,
+                      liveSynced: !!(ord?.liveSynced || ord?.autoUpdated),
+                      status: ord?.status,
+                    });
+                  })
+                  .finally(() => setTrackRefreshing(false));
+              }}
+            />
 
             {/* Detailed progress checklist */}
             {!orderIsCancelled && (
@@ -994,118 +1050,76 @@ function OrdersContent() {
         </div>
       )}
 
-      {/* In-Website ST Courier Tracking Timeline Modal */}
+      {/* Full-screen Flipkart-style tracking */}
       {showTrackingModal && searchedOrderData && (
         <div
           onClick={() => setShowTrackingModal(false)}
-          className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-100"
+            className="bg-slate-50 sm:rounded-3xl max-w-lg w-full max-h-[92vh] overflow-y-auto shadow-2xl border border-slate-200 rounded-t-3xl sm:rounded-3xl"
           >
-            <div className="bg-gradient-to-r from-[#001B3A] to-[#0044AA] text-white p-6 relative">
+            <div className="sticky top-0 z-10 bg-white/95 border-b border-slate-200 px-4 py-3 flex items-center justify-between">
+              <div>
+                <p className="text-[10px] font-extrabold text-amber-600 uppercase tracking-wider">Live tracking</p>
+                <p className="font-heading font-black text-sm text-[#001B3A]">Order #{searchedOrderData.orderId}</p>
+              </div>
               <button
+                type="button"
                 onClick={() => setShowTrackingModal(false)}
-                className="absolute top-4 right-4 text-white/80 hover:text-white cursor-pointer"
+                className="p-2 rounded-xl hover:bg-slate-100 text-slate-600 touch-manipulation min-h-10 min-w-10"
+                aria-label="Close"
               >
                 <X className="w-5 h-5" />
               </button>
-              <div className="text-[10px] font-extrabold text-amber-300 uppercase">ST COURIER LOGISTICS PORTAL</div>
-              <h3 className="font-heading font-black text-xl text-white mt-1">Live Shipment Status</h3>
-              <p className="text-xs text-slate-300 mt-1">
-                Order #{searchedOrderData.orderId} • Docket/ID: <span className="font-mono text-amber-400 font-bold">{searchedOrderData.trackingNumber || searchedOrderData.shipmentId}</span>
-              </p>
             </div>
-
-            <div className="p-6 space-y-5 text-xs max-h-[70vh] overflow-y-auto custom-scrollbar">
-              {/* ST Courier Hub Location Feed */}
-              {isOfficialAwb ? (
-                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
-                  <div className="flex justify-between items-center pb-2 border-b border-slate-200">
-                    <span className="font-heading font-black text-xs text-[#001B3A] uppercase tracking-wider flex items-center gap-1.5">
-                      <MapPin className="w-3.5 h-3.5 text-blue-600" />
-                      <span>ST Courier Live Hub Movement Log</span>
-                    </span>
-                    <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded uppercase flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
-                      LIVE 5s FEED
-                    </span>
-                  </div>
-
-                  {liveTrackingScans.length > 0 ? (
-                    <div className="space-y-3 pt-1">
-                      {liveTrackingScans.map((scan: any, idx: number) => (
-                        <div key={idx} className="flex items-start gap-3 relative">
-                          <div className={`w-2.5 h-2.5 rounded-full mt-1 flex-shrink-0 ${idx === 0 ? 'bg-emerald-500 ring-4 ring-emerald-100' : 'bg-blue-500'}`} />
-                          <div>
-                            <span className="font-extrabold text-slate-900 block">{scan.location || scan.activity || 'ST Courier Hub'}</span>
-                            <span className="text-[11px] text-slate-500">{scan.activity || scan.status || scan.remarks || 'In Transit'}</span>
-                            {scan.at && <span className="text-[10px] font-mono text-slate-400 block mt-0.5">{new Date(scan.at).toLocaleString()}</span>}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="py-3 text-center space-y-1">
-                      <p className="font-extrabold text-slate-800 text-xs">AWB Assigned: {searchedOrderData.trackingNumber}</p>
-                      <p className="text-[11px] text-slate-500">Waiting for initial scan update from ST Courier hub. Auto-refreshing live every 5 seconds...</p>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="bg-[#0044AA]/5 border border-[#0044AA]/20 rounded-2xl p-4 space-y-2">
-                  <div className="flex items-center gap-2 text-[#0044AA] font-bold text-xs">
-                    <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span>Order Confirmed & Payment Received</span>
-                  </div>
-                  <p className="text-slate-600 text-xs leading-relaxed">
-                    Your order is confirmed and being prepared. As soon as ST Courier assigns your AWB tracking docket number, real-time live hub movement scans will appear here automatically.
-                  </p>
-                </div>
-              )}
-
-              {/* Status checklist */}
-              <div className="space-y-2.5 pt-1">
-                <span className="font-black text-slate-800 text-[11px] uppercase tracking-wider block">Order status:</span>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {ALL_STATUS_STEPS.map((step, idx) => {
-                    const isDone = idx <= currentStepIdx;
-                    return (
-                      <div key={step.key} className={`p-2.5 rounded-xl border flex items-center gap-2.5 text-[11px] ${isDone ? 'bg-emerald-50/80 border-emerald-200 text-emerald-950 font-bold' : 'bg-slate-50 text-slate-400 border-slate-200'}`}>
-                        <div className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold ${isDone ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-400'}`}>
-                          {isDone ? '✓' : idx + 1}
-                        </div>
-                        <div className="truncate">{step.label}</div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="pt-4 border-t border-slate-100 flex justify-between items-center">
-                {isOfficialAwb && (
-                  <a
-                    href={searchedOrderData.trackingUrl || `https://stcourier.com/track/shipment?docket=${searchedOrderData.trackingNumber}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-600 hover:text-blue-800 font-bold underline text-xs flex items-center gap-1"
-                  >
-                    <span>Open ST Courier Portal</span>
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
-                )}
-                <button
-                  onClick={() => setShowTrackingModal(false)}
-                  className="bg-[#001B3A] hover:bg-blue-600 text-white font-extrabold text-xs px-5 py-2.5 rounded-xl shadow-xs transition-all cursor-pointer ml-auto"
-                >
-                  CLOSE
-                </button>
-              </div>
+            <div className="p-3 sm:p-4">
+              <ShipmentTrackingCard
+                orderId={searchedOrderData.orderId}
+                status={trackMeta.status || searchedOrderData.courierStatus || searchedOrderData.status}
+                cancelled={orderIsCancelled}
+                awb={isOfficialAwb ? searchedOrderData.trackingNumber : null}
+                trackingUrl={searchedOrderData.trackingUrl}
+                courierName={searchedOrderData.courierName || 'ST Courier Express'}
+                destinationCity={searchedOrderData.city || searchedOrderData.shippingAddress?.city}
+                destinationPincode={searchedOrderData.pincode || searchedOrderData.shippingAddress?.pincode}
+                scans={liveTrackingScans}
+                liveSynced={!!trackMeta.liveSynced}
+                estimatedArrival={
+                  trackMeta.estimatedArrival ||
+                  getSTCourierDeliveryEstimate(
+                    searchedOrderData.city || searchedOrderData.state || 'Tamil Nadu'
+                  ).fullEstimateString
+                }
+                refreshing={trackRefreshing}
+                onRefresh={() => {
+                  const targetDocket =
+                    searchedOrderData.trackingNumber || searchedOrderData.orderId || searchedOrderData.id;
+                  if (!user || !targetDocket) return;
+                  setTrackRefreshing(true);
+                  fetch(`/api/track?orderId=${encodeURIComponent(targetDocket)}`, {
+                    headers: authHeaders(user),
+                  })
+                    .then((r) => (r.ok ? r.json() : null))
+                    .then((data) => {
+                      if (!data) return;
+                      const ord = data.order || data;
+                      setLiveTrackingScans(Array.isArray(ord?.scans) ? ord.scans : []);
+                      setTrackMeta({
+                        estimatedArrival: ord?.estimatedArrival,
+                        liveSynced: !!(ord?.liveSynced || ord?.autoUpdated),
+                        status: ord?.status,
+                      });
+                    })
+                    .finally(() => setTrackRefreshing(false));
+                }}
+              />
             </div>
           </div>
         </div>
       )}
+
     </div>
   );
 }

@@ -24,7 +24,6 @@ import { getSTCourierDeliveryEstimate } from '@/lib/deliveryEstimator';
 import { imageNeedsUnoptimized } from '@/lib/productImage';
 import { getCartItemStockState, anyCartItemBlocking } from '@/lib/cartStock';
 import { Header } from '@/components/layout/Header';
-import { NavBar } from '@/components/layout/NavBar';
 import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
 import { Footer } from '@/components/layout/Footer';
 
@@ -78,7 +77,6 @@ export default function CartPage() {
     <main className="min-h-screen bg-slate-50 flex flex-col page-mobile-nav">
       <AnnouncementBar />
       <Header />
-      <NavBar />
 
       <div className="max-w-7xl mx-auto px-4 py-8 flex-1 w-full pb-28 lg:pb-8">
         <div className="flex items-center gap-2 mb-6">
