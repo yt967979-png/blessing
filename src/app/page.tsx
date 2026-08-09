@@ -16,7 +16,6 @@ import { ContactSection } from '@/components/home/ContactSection';
 import { PromoSection } from '@/components/home/PromoSection';
 
 import { SubjectFilterBar } from '@/components/home/SubjectFilterBar';
-import { ComboBanner } from '@/components/home/ComboBanner';
 
 export default function Home() {
   const router = useRouter();
@@ -53,7 +52,6 @@ export default function Home() {
       <HeroSection />
       <SubjectFilterBar />
       <ClassPicker />
-      <ComboBanner />
       <ProductGrid />
       <PromoSection />
       <WhyChoose />
