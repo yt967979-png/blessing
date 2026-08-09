@@ -68,10 +68,10 @@ function mapBookInStock(d: { status?: unknown; stock?: unknown }) {
   return isBookInStock(d);
 }
 
-async function ensureCategory(client: any, categoryId: string, cls: string, category: string) {
+async function ensureCategory(categoryId: string, cls: string, category: string) {
   const name = category === 'combo' ? 'Combo Packs' : `${cls || '10th'} Standard Guides`;
   const slug = categoryId.replace(/^cat-/, '') || 'guides';
-  await client.query(
+  await queryDb(
     `INSERT INTO categories (id, name, slug, status)
      VALUES ($1, $2, $3, 'active')
      ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, status = 'active'`,
@@ -302,8 +302,10 @@ export async function POST(request: Request) {
     const finalDesc = description || `Complete ${cls || '10th'} Standard ${title} guide.`;
     const finalBadge = String(badge || '').trim().slice(0, 100);
 
-    await ensureDefaultCategories(queryDb as any);
-    await ensureCategory(queryDb, categoryId, cls || '10th', category || 'guide');
+    // queryDb is a function — wrap so helpers that expect client.query work
+    const db = { query: (text: string, params?: any[]) => queryDb(text, params) };
+    await ensureDefaultCategories(db);
+    await ensureCategory(categoryId, cls || '10th', category || 'guide');
 
     const sql = `
       INSERT INTO books (id, title, slug, category_id, price, discount_price, cover_image, description, status, featured, badge, stock)
