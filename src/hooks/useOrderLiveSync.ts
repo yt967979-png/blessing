@@ -34,7 +34,7 @@ export function useOrderLiveSync(
       es.onmessage = (evt) => {
         try {
           const data = JSON.parse(evt.data) as OrderStreamEvent;
-          if (data?.type === 'ORDER_CREATED' || data?.type === 'ORDER_UPDATED') {
+          if (data?.type && data.type !== 'CONNECTED') {
             onEventRef.current(data);
           }
         } catch {
