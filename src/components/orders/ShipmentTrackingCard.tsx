@@ -108,7 +108,12 @@ export function ShipmentTrackingCard({
   const [copied, setCopied] = useState(false);
   const list = normalizeScans(scans);
   const latest = list[0];
-  const hasAwb = Boolean(awb && String(awb).trim());
+  const hasAwb = Boolean(
+    awb &&
+      String(awb).trim() &&
+      !String(awb).startsWith('SHP-') &&
+      (String(awb).startsWith('STC') || String(awb).length >= 8)
+  );
   const awbText = hasAwb ? String(awb).trim() : '';
   const stUrl =
     trackingUrl ||
@@ -316,13 +321,12 @@ export function ShipmentTrackingCard({
           </div>
 
           {!hasAwb ? (
-            <div className="rounded-xl border border-blue-100 bg-blue-50/80 px-3 py-3 text-xs text-slate-600 leading-relaxed">
-              Payment confirmed. After we book with ST Courier, hub scans appear here from their network.
+            <div className="rounded-xl border border-[#2874f0]/20 bg-[#2874f0]/5 px-3.5 py-3 text-xs text-slate-700 leading-relaxed font-medium">
+              Shipment tracking will appear once your order is handed to the courier.
             </div>
           ) : list.length === 0 ? (
-            <div className="rounded-xl border border-amber-100 bg-amber-50/80 px-3 py-3 text-xs text-slate-600 leading-relaxed">
-              Docket <span className="font-mono font-bold">{awb}</span> is booked. Waiting for the first hub scan from
-              ST Courier — refresh shortly, or open Track on ST Courier.
+            <div className="rounded-xl border border-amber-200 bg-amber-50/80 px-3.5 py-3 text-xs text-slate-700 leading-relaxed font-medium">
+              Shipment booked. Tracking updates will appear soon.
             </div>
           ) : (
             <ol className="relative space-y-0 border-l-2 border-slate-200 ml-2.5 pl-4">

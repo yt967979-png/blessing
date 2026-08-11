@@ -105,10 +105,12 @@ function mapOrderRow(o: any) {
     }
   }
 
-  const awb = o.awb_number || o.shipment_id || '';
-  const isOfficialAwb = awb.startsWith('STC') || (awb && !awb.startsWith('SHP-'));
-  const trackingUrl =
-    o.tracking_url || (isOfficialAwb ? `https://stcourier.com/track/shipment?docket=${awb}` : 'https://stcourier.com');
+  const rawAwb = String(o.awb_number || '').trim();
+  const isOfficialAwb = Boolean(rawAwb && !rawAwb.startsWith('SHP-') && (rawAwb.startsWith('STC') || rawAwb.length >= 8));
+  const trackingNumber = isOfficialAwb ? rawAwb : null;
+  const trackingUrl = isOfficialAwb
+    ? `https://stcourier.com/track/shipment?docket=${encodeURIComponent(rawAwb)}`
+    : null;
 
   return {
     id: o.id,
@@ -128,7 +130,7 @@ function mapOrderRow(o: any) {
     orderStatus: o.order_status || 'Order Placed',
     isCancelled: isOrderCancelled(o.order_status),
     shipmentId: o.shipment_id || `SHP-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-000101`,
-    trackingNumber: awb,
+    trackingNumber,
     isOfficialAwb,
     trackingUrl,
     courierName: o.courier_name || 'ST Courier Express',

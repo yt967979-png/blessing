@@ -603,8 +603,10 @@ function OrdersContent() {
                     </>
                   ) : (
                     <>
-                      <div className="font-mono font-bold text-amber-300 text-xs">{searchedOrderData.shipmentId || searchedOrderData.trackingNumber || 'Pending'}</div>
-                      <div className="text-[11px] text-slate-400 mt-0.5">AWB assigned after packing / booking</div>
+                      <div className="font-sans font-bold text-amber-300 text-xs">Pending Booking</div>
+                      <div className="text-[11px] text-slate-300 mt-0.5 leading-snug">
+                        Tracking information will be available after your shipment is booked.
+                      </div>
                     </>
                   )}
                 </div>
@@ -844,10 +846,10 @@ function OrdersContent() {
 
                 <div className="space-y-3 text-xs">
                   <div>
-                    <span className="text-slate-400 font-bold block text-[10px] uppercase mb-1">YOUR AWB NUMBER</span>
+                    <span className="text-slate-400 font-bold block text-[10px] uppercase mb-1">ST COURIER DOCKET NO.</span>
                     <div className="flex flex-wrap items-center gap-3">
                       <span className="font-mono font-black text-slate-900 text-base tracking-wide bg-white px-3 py-1 rounded-xl border border-slate-200 shadow-sm">
-                        {searchedOrderData.trackingNumber || searchedOrderData.shipmentId || 'Generating...'}
+                        {isOfficialAwb ? searchedOrderData.trackingNumber : 'Pending Booking'}
                       </span>
                       {isOfficialAwb && (
                         <a
