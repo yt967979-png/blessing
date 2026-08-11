@@ -86,6 +86,10 @@ export async function POST(request: Request) {
        VALUES ($1, $2, $3, $4, 'active') RETURNING *`,
       [id, question, answer, displayOrder]
     );
+    try {
+      const { notifyCatalogChanged } = await import('@/app/api/stock/stream/route');
+      void notifyCatalogChanged();
+    } catch (_) {}
     return NextResponse.json(res.rows[0], { status: 201 });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
@@ -133,6 +137,10 @@ export async function PATCH(request: Request) {
       `UPDATE faqs SET ${fields.join(', ')} WHERE id = $${idx} RETURNING *`,
       values
     );
+    try {
+      const { notifyCatalogChanged } = await import('@/app/api/stock/stream/route');
+      void notifyCatalogChanged();
+    } catch (_) {}
     return NextResponse.json(res.rows[0] || { success: true });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
@@ -155,6 +163,10 @@ export async function DELETE(request: Request) {
   }
   try {
     await client.query(`DELETE FROM faqs WHERE id = $1`, [id]);
+    try {
+      const { notifyCatalogChanged } = await import('@/app/api/stock/stream/route');
+      void notifyCatalogChanged();
+    } catch (_) {}
     return NextResponse.json({ success: true });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
