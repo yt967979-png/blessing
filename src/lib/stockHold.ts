@@ -264,7 +264,7 @@ export async function releaseStockHolds(
     client,
     `UPDATE stock_holds
      SET status = 'released', released_at = NOW(), release_reason = $${reasonIdx}, updated_at = NOW()
-     WHERE (${whereParts.join(' OR ')}) AND status IN ('held', 'confirmed')${userClause}
+     WHERE (${whereParts.join(' OR ')}) AND status = 'held'${userClause}
      RETURNING book_id, qty`,
     params
   );
