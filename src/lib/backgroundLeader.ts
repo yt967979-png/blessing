@@ -31,15 +31,21 @@ function forceLeader(): boolean {
   return process.env.FORCE_BACKGROUND_LEADER === 'true';
 }
 
-/** True when this process may run LISTEN broker, courier cron, and orphan-refund sweep. */
 export function isBackgroundLeader(): boolean {
   if (backgroundJobsDisabled()) return false;
   if (forceLeader()) return true;
   if (isLeader) return true;
 
-  // Single instance (Lightsail / 1 replica): always allow background jobs.
+  // In PM2 cluster mode (or multi-worker setups), PM2 sets NODE_APP_INSTANCE ('0', '1', etc.) or pm_id.
+  // If multiple cluster workers exist, non-zero instances must NOT claim leadership unless they acquire pg_advisory_lock.
+  const pm2Instance = process.env.NODE_APP_INSTANCE || process.env.pm_id;
+  if (pm2Instance !== undefined && pm2Instance !== '0' && !isLeader) {
+    return false;
+  }
+
+  // Single instance (Lightsail 1 process / 1 replica): allow background jobs.
   const replicas = Number(process.env.APP_REPLICA_COUNT || process.env.RAILWAY_NUM_REPLICAS || '1');
-  if (replicas <= 1) return true;
+  if (replicas <= 1 && (pm2Instance === undefined || pm2Instance === '0')) return true;
 
   return false;
 }

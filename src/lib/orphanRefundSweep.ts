@@ -46,6 +46,21 @@ export async function refundStaleOrphanCaptures(maxAgeMinutes = 10): Promise<num
         continue;
       }
 
+      // ATOMIC CLAIM: Only the single worker that successfully updates status from 'ORPHAN_CAPTURED'
+      // to 'REFUNDING' is authorized to invoke the external Razorpay refund API.
+      const claimed = await queryDb(
+        `UPDATE payments
+         SET status = 'REFUNDING', updated_at = NOW()
+         WHERE id = $1 AND status = 'ORPHAN_CAPTURED'
+         RETURNING id`,
+        [row.id]
+      );
+
+      if (claimed.rowCount === 0) {
+        // Another worker or process already claimed this orphan capture.
+        continue;
+      }
+
       const refund = await refundRazorpayPayment({ paymentId });
       if (refund.ok) {
         await queryDb(`UPDATE payments SET status = 'REFUNDED' WHERE id = $1`, [row.id]);
@@ -62,6 +77,8 @@ export async function refundStaleOrphanCaptures(maxAgeMinutes = 10): Promise<num
           `[orphan-refund] Auto-refunded stale orphan capture ${paymentId}. refundId=${refund.refundId}`
         );
       } else {
+        // Revert to ORPHAN_CAPTURED so it is not left permanently stuck in REFUNDING and can be retried.
+        await queryDb(`UPDATE payments SET status = 'ORPHAN_CAPTURED' WHERE id = $1 AND status = 'REFUNDING'`, [row.id]).catch(() => {});
         console.error(
           `[orphan-refund] CRITICAL: could not auto-refund stale orphan capture ${paymentId}: ${refund.error}`
         );
