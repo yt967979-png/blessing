@@ -397,7 +397,7 @@ export default function AdminPage() {
       es.onmessage = (e) => {
         try {
           const p = JSON.parse(e.data) as { type: string; orderId?: string };
-          if (p.type === 'ORDER_CREATED' || p.type === 'ORDER_UPDATED') {
+          if (p.type === 'ORDER_CREATED' || p.type === 'ORDER_UPDATED' || p.type === 'ORDER_CANCELLED' || p.type === 'ORDER_CHANGED' || p.type === 'CANCEL') {
             void loadLiveOrders({ fromStream: p.type === 'ORDER_CREATED' });
             void loadAnalytics();
           }
@@ -769,6 +769,19 @@ export default function AdminPage() {
             ? `✅ Order ${o.orderId} cancelled + Razorpay refund issued`
             : `✅ Order ${o.orderId} cancelled`
         );
+        setOrders((prev) =>
+          prev.map((item) =>
+            item.orderId === o.orderId || item.id === o.id
+              ? {
+                  ...item,
+                  orderStatus: 'Cancelled',
+                  courierStatus: 'Cancelled',
+                  isCancelled: true,
+                  paymentStatus: d.refunded ? 'Refunded' : item.paymentStatus,
+                }
+              : item
+          )
+        );
         loadLiveOrders();
         void loadAnalytics();
       } catch {
@@ -805,6 +818,17 @@ export default function AdminPage() {
         }),
       });
       showToast(`✅ Status updated to ${orderStatus}`);
+      setOrders((prev) =>
+        prev.map((item) =>
+          item.orderId === o.orderId || item.id === o.id
+            ? {
+                ...item,
+                orderStatus: orderStatus,
+                courierStatus: orderStatus,
+              }
+            : item
+        )
+      );
       loadLiveOrders();
     } catch {
       showToast('❌ Failed to update status');
