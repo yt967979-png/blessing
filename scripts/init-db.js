@@ -424,6 +424,8 @@ async function migrateDatabase(connStr, dbName) {
       CREATE INDEX IF NOT EXISTS idx_orders_created ON orders (ordered_at DESC);
       CREATE INDEX IF NOT EXISTS idx_orders_awb ON orders (awb_number);
       CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items (order_id);
+      CREATE INDEX IF NOT EXISTS idx_payments_payment_id ON payments (payment_id);
+      CREATE INDEX IF NOT EXISTS idx_payments_status ON payments (status);
 
       -- Super Admin is set from env only (no hardcoded emails in source)
     `);
