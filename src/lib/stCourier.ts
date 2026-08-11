@@ -1,4 +1,4 @@
-import { getDbClient } from '@/lib/db';
+import { getDbClient, releaseDbClient } from '@/lib/db';
 import { broadcastOrderChange, notifyOrderChanged } from '@/app/api/orders/stream/route';
 
 /** Official ST Courier docket formats */
@@ -393,9 +393,7 @@ export async function syncOrderByAwb(docketInput: string): Promise<{
       events: tracked.events,
     };
   } finally {
-    try {
-      if (client) await client.end();
-    } catch (_) {}
+    releaseDbClient(client);
   }
 }
 
@@ -417,9 +415,7 @@ export async function syncAllActiveAwbOrders(): Promise<{ checked: number; updat
     );
     rows = res.rows;
   } finally {
-    try {
-      if (client) await client.end();
-    } catch (_) {}
+    releaseDbClient(client);
   }
 
   let updated = 0;

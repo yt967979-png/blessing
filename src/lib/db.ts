@@ -29,8 +29,8 @@ function buildUrlFromPgEnv(): string | null {
   if (!process.env.PGHOST || !process.env.PGUSER || !process.env.PGPASSWORD) return null;
   const user = encodeURIComponent(process.env.PGUSER);
   const pass = encodeURIComponent(process.env.PGPASSWORD);
-  const host = process.env.PGHOST;
-  const port = process.env.PGPORT || 5432;
+    const host = process.env.PGHOST;
+    const port = process.env.PGPORT || 5432;
   const db = process.env.PGDATABASE || 'railway';
   return `postgresql://${user}:${pass}@${host}:${port}/${db}`;
 }
@@ -677,7 +677,7 @@ export async function resolveDbConnectionConfig() {
 
 function wrapPoolClient(client: any) {
   if (client._hasEndAlias) return client;
-  client._hasEndAlias = true;
+    client._hasEndAlias = true;
   client._released = false;
   const safeRelease = () => {
     if (client._released) return;

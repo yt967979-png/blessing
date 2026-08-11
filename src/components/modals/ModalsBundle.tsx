@@ -72,7 +72,7 @@ export const ModalsBundle = () => {
   /** Flipkart-style: checkout is a full page (Razorpay-only), not a modal */
   useEffect(() => {
     if (!isCheckoutOpen) return;
-    setIsCheckoutOpen(false);
+      setIsCheckoutOpen(false);
     router.push('/checkout');
   }, [isCheckoutOpen, router, setIsCheckoutOpen]);
 
@@ -112,12 +112,12 @@ export const ModalsBundle = () => {
                 </div>
                 <div>
                   {quickViewProduct.badge ? (
-                    <span
-                      className={`text-[10px] font-extrabold text-white px-2 py-0.5 rounded ${quickViewProduct.badgeColor || 'bg-blue-600'} inline-block mb-2`}
-                    >
-                      {quickViewProduct.badge}
-                    </span>
-                  ) : null}
+                      <span
+                        className={`text-[10px] font-extrabold text-white px-2 py-0.5 rounded ${quickViewProduct.badgeColor || 'bg-blue-600'} inline-block mb-2`}
+                      >
+                        {quickViewProduct.badge}
+                      </span>
+                    ) : null}
                   <h3 className="font-heading font-extrabold text-base text-[#001B3A] mb-1">
                     {quickViewProduct.title}
                   </h3>
@@ -130,13 +130,13 @@ export const ModalsBundle = () => {
                     </span>
                     {quickViewProduct.mrp > quickViewProduct.price && (
                       <>
-                        <span className="text-xs text-slate-400 line-through">
-                          ₹{quickViewProduct.mrp}
-                        </span>
+                    <span className="text-xs text-slate-400 line-through">
+                      ₹{quickViewProduct.mrp}
+                    </span>
                         {quickViewProduct.discount > 0 && (
-                          <span className="text-xs font-bold text-emerald-600">
-                            {quickViewProduct.discount}% OFF
-                          </span>
+                    <span className="text-xs font-bold text-emerald-600">
+                      {quickViewProduct.discount}% OFF
+                    </span>
                         )}
                       </>
                     )}
@@ -351,17 +351,17 @@ export const ModalsBundle = () => {
                   <div className="relative inline-block mt-1">
                     <div className="w-20 h-20 rounded-full bg-emerald-500 text-white flex items-center justify-center mx-auto lg:mx-0 shadow-xl ring-8 ring-emerald-100">
                       <CheckCircle2 className="w-11 h-11 stroke-[2.2]" />
-                    </div>
-                  </div>
+                </div>
+              </div>
 
-                  <div className="space-y-2">
+              <div className="space-y-2">
                     <div className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-800 text-[11px] font-black uppercase tracking-widest px-4 py-1.5 rounded-full border border-emerald-200">
                       <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
                       <span>Order Confirmed</span>
-                    </div>
+                </div>
                     <h2 className="font-heading font-black text-2xl sm:text-3xl text-[#001B3A] tracking-tight leading-snug">
                       Thank you! Your payment is complete
-                    </h2>
+                </h2>
                     <p className="text-xs text-slate-500 leading-relaxed font-medium">
                       Order is confirmed and active. Next we pack your guides, then ship via ST Courier Express.
                     </p>
@@ -378,7 +378,7 @@ export const ModalsBundle = () => {
                         ST Courier Dispatch — Est. {getSTCourierDeliveryEstimate(orderSuccessData.city).formattedDate}
                       </p>
                     </div>
-                  </div>
+              </div>
 
                   {/* Action Buttons */}
                   <div className="space-y-2.5 pt-2">
@@ -410,33 +410,33 @@ export const ModalsBundle = () => {
 
                 {/* Right Column: Detailed Order Summary Card */}
                 <div className="lg:col-span-7 bg-gradient-to-br from-slate-50 to-blue-50/40 border border-slate-200/90 rounded-3xl p-5 sm:p-6 text-left space-y-4 shadow-inner">
-                  <div className="flex justify-between items-center pb-3 border-b border-slate-200/70">
-                    <div>
+                <div className="flex justify-between items-center pb-3 border-b border-slate-200/70">
+                  <div>
                       <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Order number</span>
                       <span className="font-mono font-black text-[#001B3A] text-base sm:text-lg">#{orderSuccessData.orderId}</span>
-                    </div>
-                    <button
+                  </div>
+                  <button
                       type="button"
-                      onClick={() => {
-                        navigator.clipboard.writeText(orderSuccessData.orderId);
+                    onClick={() => {
+                      navigator.clipboard.writeText(orderSuccessData.orderId);
                         showToast('Order ID copied');
-                      }}
+                    }}
                       className="text-[10px] font-bold text-blue-600 bg-blue-100/80 hover:bg-blue-200/80 px-3 py-1 rounded-lg transition-colors cursor-pointer flex items-center gap-1"
-                    >
+                  >
                       <Copy className="w-3 h-3" />
                       <span>COPY</span>
-                    </button>
-                  </div>
+                  </button>
+                </div>
 
-                  <div className="flex justify-between items-center pb-3 border-b border-slate-200/70">
-                    <div>
+                <div className="flex justify-between items-center pb-3 border-b border-slate-200/70">
+                  <div>
                       <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Amount paid</span>
                       <span className="font-black text-emerald-600 text-xl">₹{orderSuccessData.totalAmount}</span>
-                    </div>
-                    <span className="text-[11px] font-extrabold bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full border border-emerald-200">
-                      {orderSuccessData.paymentStatus || 'Payment Confirmed'}
-                    </span>
                   </div>
+                  <span className="text-[11px] font-extrabold bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full border border-emerald-200">
+                      {orderSuccessData.paymentStatus || 'Payment Confirmed'}
+                  </span>
+                </div>
 
                   {Array.isArray(orderSuccessData.items) && orderSuccessData.items.length > 0 && (
                     <div className="pb-3 border-b border-slate-200/70 space-y-2">
@@ -446,30 +446,30 @@ export const ModalsBundle = () => {
                           <div key={idx} className="flex justify-between items-center gap-2 text-xs bg-white p-2 rounded-xl border border-slate-200/60">
                             <span className="font-semibold text-slate-800 truncate">
                               {item.title || 'Guide'} × {item.qty || 1}
-                            </span>
+                      </span>
                             {item.price != null && (
                               <span className="font-black text-slate-700 shrink-0">₹{Number(item.price) * Number(item.qty || 1)}</span>
                             )}
-                          </div>
-                        ))}
-                      </div>
                     </div>
+                        ))}
+                  </div>
+                </div>
                   )}
 
                   <div className="bg-[#001B3A] text-white rounded-2xl p-3.5 flex items-center justify-between text-xs shadow-md">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/40">
                         <Send className="w-4 h-4" />
-                      </div>
-                      <div>
+                  </div>
+                  <div>
                         <span className="font-bold text-slate-200 block text-[11px]">Track Updates in My Orders</span>
                         <span className="text-[10px] text-emerald-400 font-mono">+91 {orderSuccessData.phone}</span>
-                      </div>
-                    </div>
-                    <span className="text-[10px] font-extrabold bg-emerald-500 text-slate-950 px-2.5 py-1 rounded-lg">
-                      {orderSuccessData.status || 'Confirmed'}
-                    </span>
                   </div>
+                </div>
+                <span className="text-[10px] font-extrabold bg-emerald-500 text-slate-950 px-2.5 py-1 rounded-lg">
+                      {orderSuccessData.status || 'Confirmed'}
+                </span>
+              </div>
                 </div>
               </div>
             </motion.div>

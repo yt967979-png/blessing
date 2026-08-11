@@ -23,7 +23,7 @@
  * order confirm racing each other) can only ever claim a row once — this is
  * what keeps release/confirm idempotent without extra locking.
  */
-import { queryDb, getDbClient } from '@/lib/db';
+import { queryDb, getDbClient, releaseDbClient } from '@/lib/db';
 
 /** Lazy import — avoids a hard dependency cycle with the route module at load time. */
 async function pushStockChanged(bookIds: Array<string | number>): Promise<void> {
@@ -120,7 +120,7 @@ export async function createStockHolds(opts: {
     }
     return { ok: false, error: err?.message || 'Could not reserve stock.', status: 500 };
   } finally {
-    client.end();
+    releaseDbClient(client);
   }
 }
 
