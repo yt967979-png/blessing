@@ -13,7 +13,8 @@
     "db:seed-admin": "node scripts/init-db.js",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test:routes": "node scripts/test-all-routes.js"
+    "test:routes": "node scripts/test-all-routes.js",
+    "test:logic": "node scripts/test-concurrency-logic.js"
   },
   "dependencies": {
     "framer-motion": "^12.42.2",
