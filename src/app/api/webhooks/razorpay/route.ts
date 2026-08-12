@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createHmac, timingSafeEqual } from 'crypto';
-import { getDbClient } from '@/lib/db';
+import { getDbClient, releaseDbClient } from '@/lib/db';
 import { isOrderCancelled } from '@/lib/orderStatus';
 import { refundRazorpayPayment } from '@/lib/razorpayRefund';
 import { confirmStockHolds, releaseStockHolds } from '@/lib/stockHold';
@@ -365,10 +365,6 @@ export async function POST(request: Request) {
     console.error('[razorpay-webhook]', err?.message || err);
     return NextResponse.json({ error: 'Webhook handler failed' }, { status: 500 });
   } finally {
-    try {
-      await client.end();
-    } catch {
-      /* ignore */
-    }
+    releaseDbClient(client);
   }
 }

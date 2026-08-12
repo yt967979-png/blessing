@@ -1,5 +1,5 @@
 import { NextResponse, NextRequest } from 'next/server';
-import { getDbClient } from '@/lib/db';
+import { getDbClient, releaseDbClient } from '@/lib/db';
 import { broadcastOrderChange, notifyOrderChanged } from '@/app/api/orders/stream/route';
 import { notifyStockChanged } from '@/app/api/stock/stream/route';
 import {
@@ -532,7 +532,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ error: err.message || 'Order failed' }, { status: 500 });
   } finally {
-    if (client) await client.end();
+    releaseDbClient(client);
   }
 }
 
@@ -628,6 +628,6 @@ export async function PATCH(request: NextRequest) {
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   } finally {
-    if (client) await client.end();
+    releaseDbClient(client);
   }
 }
