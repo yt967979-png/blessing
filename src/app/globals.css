@@ -267,4 +267,32 @@ h1, h2, h3, h4, h5, h6, .font-heading {
   animation: pulse-ring 2.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
 }
 
+/* ─── "The Ledger" Admin Design System ─────────────────────────────── */
+:root {
+  --admin-ink: #1E2A4A;
+  --admin-parchment: #FAF7F0;
+  --admin-slate: #55607A;
+  --admin-saffron: #D98C2B;
+  --admin-signal-green: #2F9E60;
+  --admin-signal-amber: #D98C2B;
+  --admin-signal-red: #C43B3B;
+}
+
+@keyframes stampDown {
+  0% { transform: scale(1.35) rotate(-6deg); opacity: 0; }
+  60% { transform: scale(0.96) rotate(-2deg); opacity: 0.95; }
+  100% { transform: scale(1) rotate(-2.5deg); opacity: 1; }
+}
+
+.animate-stamp {
+  animation: stampDown 0.26s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-stamp {
+    animation: none !important;
+    transform: rotate(-2.5deg) !important;
+  }
+}
+
 
