@@ -34,8 +34,22 @@ export function startCourierSyncCron() {
       } else if (elapsed > intervalMs * 0.8) {
         console.warn(`[courier-cron] slow run ${elapsed}ms — consider increasing COURIER_SYNC_INTERVAL_MS`);
       }
+      const { recordJobHeartbeat } = await import('@/lib/jobHeartbeat');
+      await recordJobHeartbeat({
+        jobName: 'courierSyncCron',
+        durationMs: elapsed,
+        status: 'ok',
+        details: { checked: result.checked, updated: result.updated },
+      });
     } catch (err: any) {
       console.error('[courier-cron]', err?.message || err);
+      const { recordJobHeartbeat } = await import('@/lib/jobHeartbeat');
+      await recordJobHeartbeat({
+        jobName: 'courierSyncCron',
+        durationMs: Date.now() - startedAt,
+        status: 'error',
+        error: err?.message || String(err),
+      });
     } finally {
       running = false;
     }

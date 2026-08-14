@@ -66,6 +66,7 @@ export async function GET(
 
     const invoiceHtml = generateTaxInvoiceHtml({
       orderId: o.order_number || o.id,
+      invoiceNumber: o.invoice_number || null,
       customerName: addrObj.name || o.user_id || 'Customer',
       customerPhone: addrObj.phone || '—',
       customerAltPhone: addrObj.alternatePhone || addrObj.alternate_phone || '',

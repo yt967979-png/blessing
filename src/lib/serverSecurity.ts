@@ -176,3 +176,35 @@ export function unauthorizedResponse(message = 'Unauthorized') {
 export function forbiddenResponse(message = 'Forbidden') {
   return NextResponse.json({ error: message }, { status: 403 });
 }
+
+/**
+ * Validates Origin / Referer header against host to block cross-site request forgery (CSRF).
+ */
+export function verifyOriginOrReferer(request: Request): { valid: boolean; error?: string } {
+  const origin = request.headers.get('origin');
+  const referer = request.headers.get('referer');
+  const host = request.headers.get('host');
+
+  if (!origin && !referer) {
+    // Non-browser or direct server calls allowed if authorized via HMAC token / session
+    return { valid: true };
+  }
+
+  const target = origin || referer || '';
+  try {
+    const parsed = new URL(target);
+    if (host && (parsed.host === host || parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1')) {
+      return { valid: true };
+    }
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
+    if (siteUrl) {
+      const siteParsed = new URL(siteUrl);
+      if (parsed.host === siteParsed.host) {
+        return { valid: true };
+      }
+    }
+    return { valid: false, error: 'Cross-origin request blocked.' };
+  } catch {
+    return { valid: false, error: 'Invalid origin header.' };
+  }
+}

@@ -12,7 +12,7 @@ import {
 } from '@/lib/serverSecurity';
 import { verifyRazorpayPayment } from '@/lib/orderPricing';
 import { priceCheckoutOrder } from '@/lib/checkoutPricing';
-import { blocksShippingActions, isOrderCancelled } from '@/lib/orderStatus';
+import { blocksShippingActions, isOrderCancelled, logOrderStateTransition } from '@/lib/orderStatus';
 import { refundRazorpayPayment } from '@/lib/razorpayRefund';
 import { confirmStockHolds, recordConfirmedSale, shrinkConfirmedHold, releaseStockHolds } from '@/lib/stockHold';
 
@@ -72,7 +72,7 @@ async function refundOrphanedCapture(
     if (opts.razorpayOrderId) {
       try {
         await releaseStockHolds(
-          { razorpayOrderId: opts.razorpayOrderId },
+          { razorpayOrderId: opts.razorpayOrderId, includeConfirmed: true },
           `checkout_refund:${opts.reason}`.slice(0, 100),
           client
         );
@@ -304,8 +304,8 @@ export async function POST(request: Request) {
     }
 
     const dupPay = await client.query(
-      `SELECT order_number, id, total_amount FROM orders WHERE razorpay_payment_id = $1 LIMIT 1`,
-      [razorpayPaymentId]
+      `SELECT order_number, id, total_amount FROM orders WHERE razorpay_payment_id = $1 OR razorpay_order_id = $2 LIMIT 1`,
+      [razorpayPaymentId, razorpayOrderId]
     );
     if (dupPay.rows.length) {
       await client.query('ROLLBACK');
@@ -351,10 +351,13 @@ export async function POST(request: Request) {
       pincode: pincode || '600012',
     });
 
+    const { generateNextGstInvoiceNumber } = await import('@/lib/invoiceGenerator');
+    const invoiceNumber = await generateNextGstInvoiceNumber(client);
+
     await client.query(
       `INSERT INTO orders (id, order_number, user_id, subtotal, discount, total_amount, payment_method, payment_status, order_status,
-        courier_name, shipment_id, awb_number, shipping_address, razorpay_order_id, razorpay_payment_id, razorpay_signature, coupon_code, coupon_id, idempotency_key)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'ST Courier Express', $10, NULL, $11, $12, $13, $14, NULL, NULL, $15)`,
+        courier_name, shipment_id, awb_number, shipping_address, razorpay_order_id, razorpay_payment_id, razorpay_signature, coupon_code, coupon_id, idempotency_key, invoice_number)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'ST Courier Express', $10, NULL, $11, $12, $13, $14, NULL, NULL, $15, $16)`,
       [
         id,
         orderNumber,
@@ -371,6 +374,7 @@ export async function POST(request: Request) {
         razorpayPaymentId || null,
         razorpaySignature || null,
         idemKey,
+        invoiceNumber,
       ]
     );
 
@@ -488,6 +492,15 @@ export async function POST(request: Request) {
       broadcastOrderChange(event);
       await notifyOrderChanged(event);
     } catch (_) {}
+    
+    logOrderStateTransition({
+      orderNumber,
+      fromStatus: null,
+      toStatus: initialStatus,
+      actor: 'customer',
+      amount: totalAmount,
+      details: { itemsCount: verifiedItems.length, paymentMethod },
+    });
     // Order confirm may have adjusted stock beyond the hold (excess return /
     // fail-safe shortfall decrement above) — push a fresh snapshot for every
     // purchased book so shoppers browsing right now see it instantly.
@@ -623,6 +636,14 @@ export async function PATCH(request: NextRequest) {
       broadcastOrderChange(event);
       await notifyOrderChanged(event);
     } catch (_) {}
+
+    logOrderStateTransition({
+      orderNumber: existing.rows[0].order_number || orderId,
+      fromStatus: currentStatus,
+      toStatus: newStatus,
+      actor: 'admin',
+      details: { awbNumber: awbNumber || null },
+    });
 
     return NextResponse.json({ success: true, orderId, status: newStatus, awbNumber, trackingUrl });
   } catch (err: any) {

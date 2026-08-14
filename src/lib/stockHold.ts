@@ -218,6 +218,13 @@ export interface ReleaseIdentifier {
   holdGroupId?: string | null;
   /** Extra safety check for the customer-triggered release endpoint. */
   userId?: string | null;
+  /**
+   * When true, also release rows with status='confirmed' (not just 'held').
+   * Use this ONLY from refund paths (orphan sweep, cancel refund) where the
+   * payment has been confirmed refunded and the stock must be restored even
+   * though the webhook already flipped the hold to 'confirmed'.
+   */
+  includeConfirmed?: boolean;
 }
 
 export interface ReleaseResult {
@@ -260,11 +267,15 @@ export async function releaseStockHolds(
   params.push(String(reason || 'released').slice(0, 100));
   const reasonIdx = params.length;
 
+  const statusFilter = identifier.includeConfirmed
+    ? `status IN ('held', 'confirmed')`
+    : `status = 'held'`;
+
   const res = await execQuery(
     client,
     `UPDATE stock_holds
      SET status = 'released', released_at = NOW(), release_reason = $${reasonIdx}, updated_at = NOW()
-     WHERE (${whereParts.join(' OR ')}) AND status = 'held'${userClause}
+     WHERE (${whereParts.join(' OR ')}) AND ${statusFilter}${userClause}
      RETURNING book_id, qty`,
     params
   );

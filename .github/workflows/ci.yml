@@ -28,6 +28,12 @@ jobs:
       - name: TypeScript check
         run: npx tsc --noEmit
 
+      - name: Pricing, Concurrency & Backup Restore Regression Tests
+        run: |
+          node scripts/test-pricing-rules.js
+          node scripts/test-concurrency-stock-cas.js
+          node scripts/test-backup-restore-e2e.js
+
       - name: ESLint
         run: npm run lint
         continue-on-error: true

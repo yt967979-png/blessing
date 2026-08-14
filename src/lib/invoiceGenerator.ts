@@ -1,7 +1,48 @@
 import { formatGstinLine, getShopInvoiceAddress, getShopLegalName } from '@/lib/shopConfig';
 
+export function getFinancialYearString(date: Date = new Date()): string {
+  const month = date.getMonth(); // 0 = Jan, 3 = Apr
+  const year = date.getFullYear();
+  const startYear = month >= 3 ? year : year - 1;
+  const endYear = (startYear + 1) % 100;
+  return `${String(startYear).slice(-2)}-${String(endYear).padStart(2, '0')}`;
+}
+
+export function formatGstInvoiceNumber(orderId: string, createdAt?: string | Date, storedInvoiceNumber?: string | null): string {
+  if (storedInvoiceNumber && storedInvoiceNumber.startsWith('BPG/')) {
+    return storedInvoiceNumber;
+  }
+  const d = createdAt ? new Date(createdAt) : new Date();
+  const fy = getFinancialYearString(isNaN(d.getTime()) ? new Date() : d);
+  const cleanId = String(orderId || '').replace(/^BPG-?/i, '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+  return `BPG/${fy}/${cleanId || '00001'}`;
+}
+
+/**
+ * Atomically allocates the next sequential GST tax invoice number for the financial year.
+ * Executes inside PostgreSQL transaction: BPG/26-27/00001, BPG/26-27/00002, etc.
+ */
+export async function generateNextGstInvoiceNumber(client: any, date: Date = new Date()): Promise<string> {
+  const fy = getFinancialYearString(date);
+  try {
+    const res = await client.query(
+      `INSERT INTO invoice_sequences (financial_year, last_number, updated_at)
+       VALUES ($1, 1, NOW())
+       ON CONFLICT (financial_year) DO UPDATE
+       SET last_number = invoice_sequences.last_number + 1, updated_at = NOW()
+       RETURNING last_number`,
+      [fy]
+    );
+    const seqNum = Number(res.rows[0]?.last_number || 1);
+    return `BPG/${fy}/${String(seqNum).padStart(5, '0')}`;
+  } catch {
+    return `BPG/${fy}/00001`;
+  }
+}
+
 export function generateTaxInvoiceHtml(orderData: {
   orderId: string;
+  invoiceNumber?: string | null;
   customerName: string;
   customerPhone: string;
   customerAltPhone?: string;
@@ -19,6 +60,7 @@ export function generateTaxInvoiceHtml(orderData: {
   createdAt?: string;
 }) {
   const dateStr = orderData.createdAt || new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
+  const invoiceNumber = formatGstInvoiceNumber(orderData.orderId, orderData.createdAt, orderData.invoiceNumber);
   const itemsList = orderData.items && orderData.items.length > 0
     ? orderData.items
     : [{ title: 'Study Guide Book', qty: 1, price: orderData.totalAmount }];
@@ -39,7 +81,7 @@ export function generateTaxInvoiceHtml(orderData: {
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>TAX INVOICE — ${orderData.orderId}</title>
+  <title>TAX INVOICE — ${invoiceNumber}</title>
   <style>
     body { font-family: 'Helvetica Neue', Arial, sans-serif; color: #1e293b; margin: 0; padding: 40px; background: #fff; }
     .invoice-card { max-width: 800px; margin: 0 auto; border: 1px solid #e2e8f0; padding: 32px; border-radius: 16px; }
@@ -63,7 +105,7 @@ export function generateTaxInvoiceHtml(orderData: {
 </head>
 <body>
   <div class="toolbar">
-    <span style="font-size:12px;font-weight:700;">Invoice ${orderData.orderId}</span>
+    <span style="font-size:12px;font-weight:700;">Invoice ${invoiceNumber}</span>
     <button onclick="window.print()">Print / Save as PDF</button>
   </div>
   <div class="invoice-card">
@@ -80,7 +122,8 @@ export function generateTaxInvoiceHtml(orderData: {
       </div>
       <div>
         <div class="invoice-title">TAX INVOICE</div>
-        <div style="font-size: 12px; font-weight: 800; color: #0f172a; margin-top: 4px;">Invoice #${orderData.orderId}</div>
+        <div style="font-size: 13px; font-weight: 800; color: #0f172a; margin-top: 4px;">Invoice: ${invoiceNumber}</div>
+        <div style="font-size: 11px; color: #475569;">Order Ref: #${orderData.orderId}</div>
         <div style="font-size: 11px; color: #64748b;">Date: ${dateStr}</div>
       </div>
     </div>

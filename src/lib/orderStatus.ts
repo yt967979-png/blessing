@@ -78,3 +78,28 @@ export function customerRefundStage(opts: {
       'Razorpay has accepted the full refund to your original UPI/card/bank. Banks usually show the credit in 5–7 working days (sometimes sooner).',
   };
 }
+
+/**
+ * Structured JSON logging for all order state transitions (makes cloud log filtering trivial).
+ */
+export function logOrderStateTransition(opts: {
+  orderNumber: string;
+  fromStatus?: string | null;
+  toStatus: string;
+  actor: 'customer' | 'admin' | 'system' | 'courier_webhook';
+  amount?: number;
+  details?: Record<string, any>;
+}): void {
+  const payload = {
+    level: 'info',
+    event: 'ORDER_STATE_TRANSITION',
+    orderNumber: opts.orderNumber,
+    fromStatus: opts.fromStatus || 'none',
+    toStatus: opts.toStatus,
+    actor: opts.actor,
+    amount: opts.amount,
+    details: opts.details || {},
+    timestamp: new Date().toISOString(),
+  };
+  console.log(JSON.stringify(payload));
+}

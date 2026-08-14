@@ -158,9 +158,32 @@ export const HeroSection = () => {
               ))}
             </div>
 
-
-
-            {/* Primary Action Buttons with Animated Shimmer */}
+            {/* Quick Class Shortcut Pills */}
+            <div className="flex flex-wrap items-center justify-center lg:justify-start gap-2 mb-6">
+              <span className="text-xs text-slate-300 font-bold mr-1 flex items-center gap-1">
+                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                Quick Class:
+              </span>
+              {[
+                { label: '10th Standard', cls: '10th', cat: 'guide' },
+                { label: '11th Standard', cls: '11th', cat: 'guide' },
+                { label: '12th Standard', cls: '12th', cat: 'guide' },
+                { label: 'Combo Packs', cls: 'all', cat: 'combo' },
+              ].map((pill) => (
+                <button
+                  key={pill.label}
+                  type="button"
+                  onClick={() => {
+                    setSelectedClass(pill.cls);
+                    setSelectedCategory(pill.cat);
+                    scrollToProducts();
+                  }}
+                  className="px-3 py-1 rounded-lg bg-white/10 hover:bg-amber-400 hover:text-[#001B3A] border border-white/20 hover:border-amber-400 text-xs font-bold text-slate-100 transition-all duration-200 cursor-pointer active:scale-95"
+                >
+                  {pill.label}
+                </button>
+              ))}
+            </div>
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center lg:justify-start gap-3">
               <button
                 type="button"

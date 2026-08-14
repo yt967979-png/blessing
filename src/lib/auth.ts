@@ -65,9 +65,10 @@ export function hashPassword(password: string): string {
 export function verifyPassword(password: string, stored: string): boolean {
   if (!stored) return false;
   if (!stored.includes(':')) {
+    // Legacy SHA-256 hashes — timing-safe comparison, NO plain-text fallback.
     const legacy1 = crypto.createHash('sha256').update(`blessing_salt_${password}`).digest('hex');
     const legacy2 = crypto.createHash('sha256').update(`${password}bpg_salt_2026`).digest('hex');
-    return legacy1 === stored || legacy2 === stored || password === stored;
+    return timingSafeHexEqual(legacy1, stored) || timingSafeHexEqual(legacy2, stored);
   }
   const [salt, hash] = stored.split(':');
   const verify = crypto.scryptSync(password, salt, 64).toString('hex');

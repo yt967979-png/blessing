@@ -531,14 +531,16 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
                     {pincodeMsg}
                   </p>
                   {pincodeOk && (
-                    <div className="flex flex-wrap gap-3 text-[11px]">
-                      <span className="text-emerald-700 font-bold flex items-center gap-1">
-                        <Truck className="w-3 h-3" /> FREE Delivery
+                    <div className="flex flex-wrap gap-2 text-[11px]">
+                      <span className="text-emerald-700 font-extrabold flex items-center gap-1 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/60">
+                        <Truck className="w-3 h-3" /> FREE Delivery on 5+ Books
                       </span>
-                      <span className="text-slate-500 font-semibold">•</span>
-                      <span className="text-blue-700 font-bold">₹0 Shipping Charges</span>
-                      <span className="text-slate-500 font-semibold">•</span>
-                      <span className="text-amber-700 font-bold">100% Secure Razorpay Online Payment</span>
+                      <span className="text-blue-700 font-bold bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200/60">
+                        Min. Order: 4 Books
+                      </span>
+                      <span className="text-amber-800 font-bold bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200/60">
+                        100% Secure Online Payment
+                      </span>
                     </div>
                   )}
                 </div>

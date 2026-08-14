@@ -66,6 +66,24 @@ export async function POST(request: Request) {
   const rawBody = await request.text();
   const signature = request.headers.get('x-razorpay-signature') || '';
   if (!verifyWebhookSignature(rawBody, signature, webhookSecret)) {
+    console.warn('[razorpay-webhook] SECURITY ALERT: Invalid webhook signature received');
+    try {
+      const { queryDb } = await import('@/lib/db');
+      await queryDb(
+        `INSERT INTO audit_logs (id, actor_id, action, target_type, target_id, details)
+         VALUES ($1, 'system', 'WEBHOOK_SIGNATURE_MISMATCH', 'webhook', $2, $3)`,
+        [
+          `audit-sig-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          signature.slice(0, 16) || 'none',
+          JSON.stringify({
+            ip: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown',
+            signatureHeaderLength: signature.length,
+            bodyLength: rawBody.length,
+            timestamp: new Date().toISOString(),
+          }),
+        ]
+      ).catch(() => {});
+    } catch (_) {}
     return NextResponse.json({ error: 'Invalid webhook signature' }, { status: 400 });
   }
 
@@ -82,8 +100,13 @@ export async function POST(request: Request) {
     eventName === 'order.paid' ||
     eventName === 'payment.authorized';
   const isFailure = eventName === 'payment.failed';
+  const isRefund =
+    eventName === 'refund.processed' ||
+    eventName === 'refund.created' ||
+    eventName === 'refund.speed_changed' ||
+    eventName === 'payment.refunded';
 
-  if (!isCapture && !isFailure) {
+  if (!isCapture && !isFailure && !isRefund) {
     return NextResponse.json({ ok: true, ignored: eventName || 'unknown' });
   }
 
@@ -159,6 +182,62 @@ export async function POST(request: Request) {
       } catch (e: any) {
         console.warn('[razorpay-webhook] webhook_events log skipped:', e?.message);
       }
+    }
+
+    if (isRefund) {
+      const refundPayloadEntity = event?.payload?.refund?.entity || paymentEntity(event);
+      const refundPayId = String(refundPayloadEntity?.payment_id || entity?.id || effectivePaymentId || '').trim();
+      const refundOrdId = String(refundPayloadEntity?.order_id || effectiveOrderId || '').trim();
+      const refundId = String(refundPayloadEntity?.id || '').trim();
+
+      let targetOrderNumber: string | null = null;
+      if (refundPayId) {
+        const byPay = await client.query(
+          `SELECT order_number, order_status FROM orders WHERE razorpay_payment_id = $1 LIMIT 1`,
+          [refundPayId]
+        );
+        if (byPay.rows.length && !isOrderCancelled(byPay.rows[0].order_status)) {
+          targetOrderNumber = byPay.rows[0].order_number;
+        }
+      }
+      if (!targetOrderNumber && refundOrdId) {
+        const byOrd = await client.query(
+          `SELECT order_number, order_status FROM orders WHERE razorpay_order_id = $1 LIMIT 1`,
+          [refundOrdId]
+        );
+        if (byOrd.rows.length && !isOrderCancelled(byOrd.rows[0].order_status)) {
+          targetOrderNumber = byOrd.rows[0].order_number;
+        }
+      }
+
+      if (targetOrderNumber) {
+        releaseDbClient(client);
+        const { executeOrderCancel } = await import('@/lib/orderCancel');
+        const cancelResult = await executeOrderCancel({
+          orderId: targetOrderNumber,
+          reason: `Reconciled via Razorpay webhook: ${eventName}${refundId ? ` (ID: ${refundId})` : ''}`,
+          actor: 'system',
+        });
+        return NextResponse.json({
+          ok: true,
+          action: 'refund_reconciled_and_cancelled',
+          orderNumber: targetOrderNumber,
+          cancelResult,
+        });
+      }
+
+      // Mark payment row as REFUNDED if matching payment_id exists
+      if (refundPayId) {
+        await client.query(`UPDATE payments SET status = 'REFUNDED' WHERE payment_id = $1`, [refundPayId]);
+        if (refundOrdId) {
+          try {
+            await releaseStockHolds({ razorpayOrderId: refundOrdId, includeConfirmed: true }, 'refund_webhook_reconciled');
+          } catch (_) {}
+        }
+      }
+
+      releaseDbClient(client);
+      return NextResponse.json({ ok: true, action: 'refund_processed_recorded', paymentId: refundPayId });
     }
 
     // Payment is captured — keep the reserved stock no matter what happens
@@ -325,7 +404,7 @@ export async function POST(request: Request) {
           if (effectiveOrderId) {
             try {
               await releaseStockHolds(
-                { razorpayOrderId: effectiveOrderId },
+                { razorpayOrderId: effectiveOrderId, includeConfirmed: true },
                 'orphan_capture_refunded'
               );
             } catch (err: any) {
@@ -363,6 +442,24 @@ export async function POST(request: Request) {
     });
   } catch (err: any) {
     console.error('[razorpay-webhook]', err?.message || err);
+    try {
+      if (client) {
+        const failedId = `fwe-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+        await client.query(
+          `INSERT INTO failed_webhook_events (id, event_id, event_type, payload, error_message, status)
+           VALUES ($1, $2, $3, $4, $5, 'pending')`,
+          [
+            failedId,
+            String(event?.id || event?.event_id || 'unknown'),
+            String(event?.event || 'unknown'),
+            JSON.stringify(event || {}),
+            String(err?.message || err),
+          ]
+        );
+      }
+    } catch (dbErr: any) {
+      console.error('[razorpay-webhook] could not log to failed_webhook_events:', dbErr?.message);
+    }
     return NextResponse.json({ error: 'Webhook handler failed' }, { status: 500 });
   } finally {
     releaseDbClient(client);

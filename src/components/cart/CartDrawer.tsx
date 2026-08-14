@@ -25,13 +25,16 @@ export const CartDrawer = () => {
     validateCartStock,
   } = useStore();
 
-  const freeDeliveryThreshold = 499;
-  const amountForFreeDelivery = Math.max(0, freeDeliveryThreshold - cartTotal);
-  const deliveryProgress = Math.min(100, (cartTotal / freeDeliveryThreshold) * 100);
+  const totalBooks = cart.reduce((a, b) => a + Number(b.qty || 0), 0);
+  const minOrderQty = 4;
+  const freeShippingQty = 5;
+  const isMoqSatisfied = totalBooks >= minOrderQty;
+  const booksToMoq = Math.max(0, minOrderQty - totalBooks);
+  const booksToFreeShipping = Math.max(0, freeShippingQty - totalBooks);
+  const deliveryProgress = Math.min(100, (totalBooks / freeShippingQty) * 100);
   const hasBlockingItem = anyCartItemBlocking(cart, products);
 
-  // Instant re-check the moment the drawer opens — the 8s background poll
-  // otherwise still covers it, but this makes it feel immediate.
+  // Instant re-check the moment the drawer opens
   useEffect(() => {
     if (isCartOpen) void validateCartStock();
   }, [isCartOpen, validateCartStock]);
@@ -45,7 +48,7 @@ export const CartDrawer = () => {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => setIsCartOpen(false)}
-            className="fixed inset-0 bg-black/50 backdrop-blur-xs z-[60]"
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs z-[60]"
           />
 
           <motion.div
@@ -55,37 +58,59 @@ export const CartDrawer = () => {
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
-            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+            transition={{ type: 'spring', damping: 28, stiffness: 240 }}
             className="fixed top-0 right-0 h-full w-full max-w-md bg-white z-[70] shadow-2xl flex flex-col"
           >
-            <div className="bg-[#001B3A] text-white p-4 flex justify-between items-center">
+            <div className="bg-[#001B3A] text-white p-4 flex justify-between items-center shadow-md">
               <h3 className="font-heading font-extrabold text-base flex items-center gap-2">
                 <ShoppingBag className="w-5 h-5 text-amber-400" />
-                <span>Shopping Cart ({cart.reduce((a, b) => a + b.qty, 0)})</span>
+                <span>Shopping Cart ({totalBooks} {totalBooks === 1 ? 'book' : 'books'})</span>
               </h3>
               <button
                 type="button"
                 onClick={() => setIsCartOpen(false)}
-                className="text-slate-300 hover:text-white p-2 rounded-full hover:bg-white/10 transition-colors min-h-11 min-w-11 flex items-center justify-center"
+                className="text-slate-300 hover:text-white p-2 rounded-full hover:bg-white/10 transition-colors min-h-11 min-w-11 flex items-center justify-center cursor-pointer"
                 aria-label="Close cart"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-3 border-b border-blue-100 text-xs">
-              <div className="flex items-center gap-2 text-blue-900 font-bold mb-1.5">
-                <Truck className="w-4 h-4 text-blue-600 flex-shrink-0" />
-                {amountForFreeDelivery === 0 ? (
-                  <span className="text-emerald-700">Congratulations! You unlocked FREE Express Delivery!</span>
-                ) : (
-                  <span>Add ₹{amountForFreeDelivery} more for FREE Express Delivery!</span>
-                )}
+            {/* Smart MOQ (4 Books) & Free Shipping (5+ Books) Tier Bar */}
+            <div className="bg-gradient-to-r from-blue-50 via-indigo-50 to-amber-50 p-3.5 border-b border-blue-100 text-xs">
+              <div className="flex items-center justify-between font-bold mb-1.5">
+                <div className="flex items-center gap-2">
+                  <Truck className="w-4 h-4 text-[#0284c7] flex-shrink-0" />
+                  {!isMoqSatisfied ? (
+                    <span className="text-amber-800 font-extrabold">
+                      Add {booksToMoq} more {booksToMoq === 1 ? 'book' : 'books'} for Minimum Order (4 books)
+                    </span>
+                  ) : booksToFreeShipping > 0 ? (
+                    <span className="text-blue-900 font-bold">
+                      Add {booksToFreeShipping} more for <strong className="text-emerald-700">FREE Express Delivery!</strong>
+                    </span>
+                  ) : (
+                    <span className="text-emerald-700 font-extrabold flex items-center gap-1">
+                      🎉 FREE Express Delivery Unlocked!
+                    </span>
+                  )}
+                </div>
+                <span className="text-[11px] font-black text-slate-600 bg-white/80 px-2 py-0.5 rounded-full border border-slate-200">
+                  {totalBooks}/5 Books
+                </span>
               </div>
-              <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-amber-400 to-emerald-500 transition-all duration-300"
-                  style={{ width: `${deliveryProgress}%` }}
+              <div className="w-full h-2 bg-slate-200/80 rounded-full overflow-hidden p-0.5 shadow-inner">
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${deliveryProgress}%` }}
+                  transition={{ duration: 0.4, ease: 'easeOut' }}
+                  className={`h-full rounded-full transition-all ${
+                    totalBooks >= 5
+                      ? 'bg-gradient-to-r from-emerald-500 to-teal-400 shadow-sm'
+                      : totalBooks >= 4
+                      ? 'bg-gradient-to-r from-blue-500 to-indigo-500'
+                      : 'bg-gradient-to-r from-amber-400 to-orange-400'
+                  }`}
                 />
               </div>
             </div>
@@ -136,7 +161,7 @@ export const CartDrawer = () => {
                           <button
                             type="button"
                             onClick={() => updateQty(item.id, -1)}
-                            className="w-11 h-11 rounded-lg bg-slate-100 border border-slate-200 text-slate-700 font-bold flex items-center justify-center hover:bg-slate-200"
+                            className="w-11 h-11 rounded-lg bg-slate-100 border border-slate-200 text-slate-700 font-bold flex items-center justify-center hover:bg-slate-200 active:scale-95 transition-transform"
                             aria-label="Decrease quantity"
                           >
                             <Minus className="w-3.5 h-3.5" />
@@ -146,7 +171,7 @@ export const CartDrawer = () => {
                             type="button"
                             onClick={() => updateQty(item.id, 1)}
                             disabled={!stockState.inStock || stockState.atLimit}
-                            className="w-11 h-11 rounded-lg bg-slate-100 border border-slate-200 text-slate-700 font-bold flex items-center justify-center hover:bg-slate-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                            className="w-11 h-11 rounded-lg bg-slate-100 border border-slate-200 text-slate-700 font-bold flex items-center justify-center hover:bg-slate-200 active:scale-95 transition-transform disabled:opacity-40 disabled:cursor-not-allowed"
                             aria-label="Increase quantity"
                           >
                             <Plus className="w-3.5 h-3.5" />
@@ -161,7 +186,7 @@ export const CartDrawer = () => {
 
             {cart.length > 0 && (
               <div
-                className="bg-slate-50 border-t border-slate-200 p-4 space-y-3"
+                className="bg-slate-50 border-t border-slate-200 p-4 space-y-3 shadow-inner"
                 style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
               >
                 <div className="bg-emerald-50 border border-emerald-200/80 rounded-xl p-2.5 flex items-center gap-2 text-xs text-emerald-800 font-extrabold">
@@ -172,23 +197,33 @@ export const CartDrawer = () => {
                   </span>
                 </div>
 
-                  <div className="flex justify-between text-xs font-bold pt-1">
-                    <span>Subtotal</span>
-                    <span>₹{cartTotal}</span>
-                  </div>
-                  <div className="flex justify-between text-sm font-black text-[#001B3A]">
-                    <span>Total</span>
-                    <span>₹{cartGrandTotal}</span>
-                  </div>
+                <div className="flex justify-between text-xs font-bold pt-1 text-slate-600">
+                  <span>Subtotal ({totalBooks} books)</span>
+                  <span>₹{cartTotal}</span>
+                </div>
+                <div className="flex justify-between text-xs font-bold text-slate-600">
+                  <span>Shipping Fee</span>
+                  <span>{totalBooks >= 5 ? <strong className="text-emerald-600">FREE</strong> : totalBooks >= 4 ? '₹150' : 'Calculated at checkout'}</span>
+                </div>
+                <div className="flex justify-between text-sm font-black text-[#001B3A] border-t border-slate-200/70 pt-2">
+                  <span>Estimated Total</span>
+                  <span className="text-base text-blue-900">₹{cartGrandTotal}</span>
+                </div>
 
-                {hasBlockingItem && (
+                {hasBlockingItem ? (
                   <p className="text-[10px] font-bold text-red-600 text-center flex items-center justify-center gap-1">
                     <AlertTriangle className="w-3.5 h-3.5" /> Fix out-of-stock items before checkout
                   </p>
-                )}
-                <button
+                ) : !isMoqSatisfied ? (
+                  <p className="text-[11px] font-extrabold text-amber-700 text-center bg-amber-50 border border-amber-200 p-2 rounded-lg">
+                    ⚠️ Minimum order requirement: 4 books (Add {booksToMoq} more)
+                  </p>
+                ) : null}
+
+                <motion.button
+                  whileTap={{ scale: 0.97 }}
                   type="button"
-                  disabled={hasBlockingItem}
+                  disabled={hasBlockingItem || !isMoqSatisfied}
                   onClick={() => {
                     setIsCartOpen(false);
                     if (!user) {
@@ -198,10 +233,14 @@ export const CartDrawer = () => {
                     }
                     setIsCheckoutOpen(true);
                   }}
-                  className="w-full bg-gradient-to-r from-amber-400 to-amber-500 text-[#001B3A] font-extrabold text-xs py-3.5 rounded-xl shadow-md hover:shadow-lg transition-all uppercase tracking-wider text-center min-h-12 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full bg-gradient-to-r from-amber-400 via-amber-500 to-amber-400 text-[#001B3A] font-extrabold text-xs py-3.5 rounded-xl shadow-md hover:shadow-lg transition-all uppercase tracking-wider text-center min-h-12 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                 >
-                  {user ? 'PROCEED TO CHECKOUT' : 'LOGIN TO CHECKOUT'}
-                </button>
+                  {!isMoqSatisfied
+                    ? `ADD ${booksToMoq} MORE BOOK${booksToMoq > 1 ? 'S' : ''} TO CHECKOUT`
+                    : user
+                    ? 'PROCEED TO CHECKOUT'
+                    : 'LOGIN TO CHECKOUT'}
+                </motion.button>
 
                 <div className="text-center pt-1">
                   <Link

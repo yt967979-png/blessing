@@ -3,7 +3,7 @@
  * Customers cannot cancel. Paid Razorpay: refund first, then cancel.
  */
 import { queryDb } from '@/lib/db';
-import { paymentStatusAfterCancel, isOrderCancelled } from '@/lib/orderStatus';
+import { paymentStatusAfterCancel, isOrderCancelled, logOrderStateTransition } from '@/lib/orderStatus';
 import { broadcastOrderChange, notifyOrderChanged } from '@/app/api/orders/stream/route';
 import { notifyStockChanged } from '@/app/api/stock/stream/route';
 import { needsRazorpayRefund, refundRazorpayPayment } from '@/lib/razorpayRefund';
@@ -239,6 +239,15 @@ export async function executeOrderCancel(opts: {
     } catch {
       /* ignore */
     }
+
+    logOrderStateTransition({
+      orderNumber: row.order_number,
+      fromStatus: status,
+      toStatus: 'Cancelled',
+      actor: opts.actor || 'admin',
+      amount: Number(row.total_amount || 0),
+      details: { reason, refunded, refundId: refundId || null },
+    });
 
     return { ok: true, orderNumber: row.order_number, refunded, refundId };
   } catch (err: any) {

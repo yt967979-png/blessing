@@ -1242,6 +1242,41 @@ async function runSchemaInit(client: any) {
         );
         CREATE INDEX IF NOT EXISTS idx_audit_logs_actor ON audit_logs (actor_id);
         CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON audit_logs (created_at DESC);
+
+        CREATE TABLE IF NOT EXISTS job_heartbeats (
+          job_name VARCHAR(100) PRIMARY KEY,
+          last_run_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+          status VARCHAR(50) DEFAULT 'ok',
+          duration_ms INT DEFAULT 0,
+          last_error TEXT,
+          details JSONB,
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS failed_webhook_events (
+          id VARCHAR(255) PRIMARY KEY,
+          event_id VARCHAR(255),
+          event_type VARCHAR(100),
+          payload JSONB,
+          error_message TEXT,
+          retry_count INT DEFAULT 0,
+          status VARCHAR(50) DEFAULT 'pending',
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_failed_webhook_events_status ON failed_webhook_events (status);
+
+        CREATE TABLE IF NOT EXISTS invoice_sequences (
+          financial_year VARCHAR(10) PRIMARY KEY,
+          last_number INT DEFAULT 0,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_orders_idempotency_key
+          ON orders (idempotency_key) WHERE idempotency_key IS NOT NULL AND idempotency_key <> '';
+
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_orders_razorpay_payment_id
+          ON orders (razorpay_payment_id) WHERE razorpay_payment_id IS NOT NULL AND razorpay_payment_id <> '';
       `);
     } catch (e) {
       /* schema already exists or partial — safe to continue */
@@ -1249,6 +1284,7 @@ async function runSchemaInit(client: any) {
 
     // Critical column heals — run separately so one failure cannot skip the rest
     const heals = [
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS invoice_number VARCHAR(50)`,
       `ALTER TABLE orders ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`,
       `ALTER TABLE orders ADD COLUMN IF NOT EXISTS ordered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`,
       `ALTER TABLE orders ADD COLUMN IF NOT EXISTS packed_at TIMESTAMP`,
