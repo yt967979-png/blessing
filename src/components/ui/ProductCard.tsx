@@ -104,7 +104,7 @@ export const ProductCard = ({ product }: { product: Product }) => {
             imgSrc ||
             'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80'
           }
-          alt={product.title}
+          alt={`${product.title}${product.cls ? ` Class ${product.cls}` : ''} Guide Book — Blessing Power Guide`}
           width={200}
           height={200}
           className={`max-h-[90%] max-w-[90%] object-contain transition-transform duration-300 ${

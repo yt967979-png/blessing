@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import React from 'react';
 import Link from 'next/link';
 import { Header } from '@/components/layout/Header';
@@ -5,9 +6,23 @@ import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
 import { Footer } from '@/components/layout/Footer';
 import { ShieldCheck, FileText, Lock, RefreshCw, Mail, Phone, MapPin } from 'lucide-react';
 
-export const metadata = {
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://blessingpowerguide.duckdns.org';
+
+export const metadata: Metadata = {
   title: 'Privacy Policy | Blessing Power Guide',
-  description: 'Privacy policy and data security practices for Blessing Power Guide Publications.',
+  description:
+    'Privacy policy and student data security practices for Blessing Power Guide. Read how we protect customer information and process secure payments via Razorpay.',
+  alternates: {
+    canonical: `${siteUrl}/privacy-policy`,
+  },
+  openGraph: {
+    title: 'Privacy Policy | Blessing Power Guide',
+    description:
+      'Privacy policy and student data security practices for Blessing Power Guide.',
+    url: `${siteUrl}/privacy-policy`,
+    siteName: 'Blessing Power Guide',
+    type: 'website',
+  },
 };
 
 export default function PrivacyPolicyPage() {

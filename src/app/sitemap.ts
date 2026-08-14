@@ -1,56 +1,82 @@
 import { MetadataRoute } from 'next';
-import { getDbClient } from '@/lib/db';
+import { queryDb } from '@/lib/db';
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://blessing-production.up.railway.app';
+  const baseUrl = (
+    process.env.NEXT_PUBLIC_SITE_URL || 'https://blessingpowerguide.duckdns.org'
+  ).replace(/\/+$/, '');
 
-  let productUrls: any[] = [];
+  let productUrls: MetadataRoute.Sitemap = [];
 
   try {
-    const client = await getDbClient();
-    if (client) {
-      const res = await client.query('SELECT slug FROM books WHERE status = $1', ['published']);
-      await client.end();
-      productUrls = (res.rows || []).map((product: any) => ({
-        url: `${baseUrl}/products/${product.slug}`,
-        lastModified: new Date(),
-        changeFrequency: 'weekly' as const,
-        priority: 0.8,
-      }));
+    const res = await queryDb(
+      `SELECT id, slug, updated_at, created_at, status FROM books WHERE status != 'archived' ORDER BY id ASC LIMIT 500`
+    );
+    if (res && Array.isArray(res.rows)) {
+      productUrls = res.rows.map((book: any) => {
+        const itemSlug = book.slug || book.id;
+        const lastMod = book.updated_at
+          ? new Date(book.updated_at)
+          : book.created_at
+          ? new Date(book.created_at)
+          : new Date();
+        return {
+          url: `${baseUrl}/products/${encodeURIComponent(itemSlug)}`,
+          lastModified: lastMod,
+          changeFrequency: 'weekly' as const,
+          priority: 0.8,
+        };
+      });
     }
-  } catch (err) {}
+  } catch {}
+
+  const classCategoryUrls: MetadataRoute.Sitemap = [
+    '6th',
+    '7th',
+    '8th',
+    '9th',
+    '10th',
+    '11th',
+    '12th',
+  ].map((cls) => ({
+    url: `${baseUrl}/search?class=${encodeURIComponent(cls)}`,
+    lastModified: new Date(),
+    changeFrequency: 'weekly' as const,
+    priority: 0.7,
+  }));
 
   return [
     {
       url: baseUrl,
       lastModified: new Date(),
-      changeFrequency: 'daily',
+      changeFrequency: 'daily' as const,
       priority: 1.0,
-    },
-    {
-      url: `${baseUrl}/cart`,
-      lastModified: new Date(),
-      changeFrequency: 'weekly',
-      priority: 0.5,
-    },
-    {
-      url: `${baseUrl}/orders`,
-      lastModified: new Date(),
-      changeFrequency: 'daily',
-      priority: 0.8,
-    },
-    {
-      url: `${baseUrl}/track`,
-      lastModified: new Date(),
-      changeFrequency: 'daily',
-      priority: 0.9,
     },
     {
       url: `${baseUrl}/search`,
       lastModified: new Date(),
-      changeFrequency: 'weekly',
-      priority: 0.7,
+      changeFrequency: 'daily' as const,
+      priority: 0.8,
     },
+    {
+      url: `${baseUrl}/shipping-policy`,
+      lastModified: new Date(),
+      changeFrequency: 'monthly' as const,
+      priority: 0.5,
+    },
+    {
+      url: `${baseUrl}/privacy-policy`,
+      lastModified: new Date(),
+      changeFrequency: 'monthly' as const,
+      priority: 0.3,
+    },
+    {
+      url: `${baseUrl}/terms-of-service`,
+      lastModified: new Date(),
+      changeFrequency: 'monthly' as const,
+      priority: 0.3,
+    },
+    ...classCategoryUrls,
     ...productUrls,
   ];
 }

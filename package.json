@@ -14,7 +14,8 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test:routes": "node scripts/test-all-routes.js",
-    "test:logic": "node scripts/test-concurrency-logic.js"
+    "test:logic": "node scripts/test-concurrency-logic.js",
+    "audit:seo": "node scripts/seo-content-audit.js"
   },
   "dependencies": {
     "framer-motion": "^12.42.2",

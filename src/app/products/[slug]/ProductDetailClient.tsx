@@ -378,7 +378,7 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
                   product.image ||
                   'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=600&q=80'
                 }
-                alt={product.title}
+                alt={`${product.title}${product.cls ? ` Class ${product.cls}` : ''} Guide Book Cover — Blessing Power Guide`}
                 width={480}
                 height={480}
                 priority

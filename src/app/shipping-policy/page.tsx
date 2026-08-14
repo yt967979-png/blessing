@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import React from 'react';
 import { Header } from '@/components/layout/Header';
 import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
@@ -5,9 +6,23 @@ import { Footer } from '@/components/layout/Footer';
 import { Truck, CheckCircle, Clock } from 'lucide-react';
 import { getShopPhoneDisplay } from '@/lib/shopContact';
 
-export const metadata = {
-  title: 'Shipping Policy | Blessing Power Guide',
-  description: 'ST Courier shipping times and delivery policy for Blessing Power Guide books.',
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://blessingpowerguide.duckdns.org';
+
+export const metadata: Metadata = {
+  title: 'Shipping & Delivery Policy | Blessing Power Guide',
+  description:
+    'ST Courier Express shipping timelines and delivery policies for Blessing Power Guide books across Tamil Nadu, Puducherry, and South India.',
+  alternates: {
+    canonical: `${siteUrl}/shipping-policy`,
+  },
+  openGraph: {
+    title: 'Shipping & Delivery Policy | Blessing Power Guide',
+    description:
+      'ST Courier Express shipping timelines and delivery policies for Blessing Power Guide books across Tamil Nadu and South India.',
+    url: `${siteUrl}/shipping-policy`,
+    siteName: 'Blessing Power Guide',
+    type: 'website',
+  },
 };
 
 export default function ShippingPolicyPage() {

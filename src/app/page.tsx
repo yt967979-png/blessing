@@ -39,8 +39,57 @@ export default function Home() {
     return () => clearTimeout(t);
   }, []);
 
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://blessingpowerguide.duckdns.org';
+
+  const organizationSchema = {
+    '@context': 'https://schema.org',
+    '@type': 'EducationalOrganization',
+    name: 'Blessing Power Guide',
+    legalName: 'BLESSING PATHWAY EDUCATION (OPC) PRIVATE LIMITED',
+    url: siteUrl,
+    logo: `${siteUrl}/logo.png`,
+    description:
+      'Tamil Nadu State Board & CBSE 6th to 12th standard exam preparation guides and educational books.',
+    address: {
+      '@type': 'PostalAddress',
+      streetAddress: 'No.12, Ganesh Apartment, Trust Square St, Nammalwarpet, Ayanavaram',
+      addressLocality: 'Chennai',
+      addressRegion: 'Tamil Nadu',
+      postalCode: '600012',
+      addressCountry: 'IN',
+    },
+    contactPoint: {
+      '@type': 'ContactPoint',
+      telephone: '+91-8148814326',
+      contactType: 'customer service',
+      areaServed: 'IN',
+      availableLanguage: ['English', 'Tamil'],
+    },
+    sameAs: ['https://maps.google.com/?q=Blessing+Tuition+And+Tutorials+Chennai'],
+  };
+
+  const websiteSchema = {
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    name: 'Blessing Power Guide',
+    url: siteUrl,
+    potentialAction: {
+      '@type': 'SearchAction',
+      target: `${siteUrl}/search?q={search_term_string}`,
+      'query-input': 'required name=search_term_string',
+    },
+  };
+
   return (
     <main className="min-h-screen bg-slate-50 flex flex-col page-mobile-nav">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationSchema) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteSchema) }}
+      />
       <AnnouncementBar />
       <Header />
       <HeroSection />

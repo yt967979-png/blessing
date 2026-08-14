@@ -8,10 +8,28 @@ const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://blessingpowerguide.
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
-  title: 'Blessing Power Guide — Premium Educational Books & Study Guides',
+  title: {
+    default: 'Blessing Power Guide — Tamil Nadu State Board & CBSE Exam Guides (Class 6-12)',
+    template: '%s | Blessing Power Guide',
+  },
   description:
-    'Quality guides for better preparation and brighter results for 6th to 12th standard students. Tamil Nadu State Board, CBSE & Matriculation.',
-  manifest: '/manifest.json',
+    'Official Blessing Power Guide publications for Class 6th to 12th standard students. Tamil Nadu State Board Samacheer Kalvi & CBSE exam preparation guides with fast doorstep delivery via ST Courier.',
+  keywords: [
+    'Blessing Power Guide',
+    'Tamil Nadu State Board guides',
+    'Samacheer Kalvi guides',
+    'Class 10 Tamil guide',
+    'Class 10 Maths guide',
+    'Class 12 Physics guide Tamil Nadu',
+    'Class 12 Chemistry guide',
+    'CBSE study guides Tamil Nadu',
+    'Blessing Tuition and Tutorials Chennai',
+    'school guide books online buy',
+  ],
+  authors: [{ name: 'BLESSING PATHWAY EDUCATION (OPC) PRIVATE LIMITED' }],
+  creator: 'Blessing Power Guide',
+  publisher: 'BLESSING PATHWAY EDUCATION (OPC) PRIVATE LIMITED',
+  manifest: '/manifest.webmanifest',
   icons: {
     icon: [
       { url: '/favicon.ico' },
@@ -19,24 +37,27 @@ export const metadata: Metadata = {
       { url: '/icon.png', type: 'image/png' },
     ],
     shortcut: ['/favicon.ico', '/logo.png'],
-    apple: [{ url: '/apple-touch-icon.png' }],
+    apple: [{ url: '/apple-icon.png' }],
   },
   openGraph: {
-    title: 'Blessing Power Guide',
+    title: 'Blessing Power Guide — Tamil Nadu State Board & CBSE Exam Guides (Class 6-12)',
     description:
-      'Quality guides for better preparation and brighter results for 6th to 12th standard students.',
-    url: '/',
+      'High-scoring study guides and question banks for 6th to 12th standard students. Fast doorstep courier delivery across Tamil Nadu & South India.',
+    url: siteUrl,
     siteName: 'Blessing Power Guide',
-    images: [{ url: '/logo.png', width: 512, height: 512, alt: 'Blessing Power Guide' }],
+    images: [{ url: '/logo.png', width: 512, height: 512, alt: 'Blessing Power Guide Publications' }],
     locale: 'en_IN',
     type: 'website',
   },
   twitter: {
-    card: 'summary',
-    title: 'Blessing Power Guide',
+    card: 'summary_large_image',
+    title: 'Blessing Power Guide — Tamil Nadu State Board & CBSE Exam Guides',
     description:
       'Quality guides for better preparation and brighter results for 6th to 12th standard students.',
     images: ['/logo.png'],
+  },
+  alternates: {
+    canonical: siteUrl,
   },
 };
 

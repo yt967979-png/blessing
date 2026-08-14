@@ -1,12 +1,27 @@
+import type { Metadata } from 'next';
 import React from 'react';
 import { Header } from '@/components/layout/Header';
 import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
 import { Footer } from '@/components/layout/Footer';
 import { FileText, CheckCircle2, Shield, AlertTriangle } from 'lucide-react';
 
-export const metadata = {
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://blessingpowerguide.duckdns.org';
+
+export const metadata: Metadata = {
   title: 'Terms of Service | Blessing Power Guide',
-  description: 'Terms and conditions for purchasing educational guide books from Blessing Power Guide.',
+  description:
+    'Terms and conditions for purchasing educational guide books from Blessing Power Guide publications and online store.',
+  alternates: {
+    canonical: `${siteUrl}/terms-of-service`,
+  },
+  openGraph: {
+    title: 'Terms of Service | Blessing Power Guide',
+    description:
+      'Terms and conditions for purchasing educational guide books from Blessing Power Guide.',
+    url: `${siteUrl}/terms-of-service`,
+    siteName: 'Blessing Power Guide',
+    type: 'website',
+  },
 };
 
 export default function TermsOfServicePage() {
