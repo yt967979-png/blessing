@@ -118,7 +118,7 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
       } else if (statusFilter === 'packed') {
         matchStatus = s.includes('pack') && !s.includes('handed') && !s.includes('transit') && !s.includes('deliver');
       } else if (statusFilter === 'dispatched') {
-        matchStatus = s.includes('handed') || s.includes('transit') || s.includes('out');
+        matchStatus = s.includes('transit') || s.includes('handed') || s.includes('out');
       } else if (statusFilter === 'delivered') {
         matchStatus = s.includes('deliver') && !s.includes('attempt');
       } else if (statusFilter === 'cancelled') {
@@ -131,26 +131,27 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
 
   // ── Multi-select helpers ───────────────────────────────────────────────────
   const allFilteredSelected =
-    filteredOrders.length > 0 && filteredOrders.every((o) => selectedIds.has(o.id));
+    filteredOrders.length > 0 &&
+    filteredOrders.every((o) => selectedIds.has(o.id));
 
   const toggleSelectAll = () => {
     if (allFilteredSelected) {
       setSelectedIds(new Set());
     } else {
-      const next = new Set(selectedIds);
-      filteredOrders.forEach((o) => next.add(o.id));
-      setSelectedIds(next);
+      setSelectedIds(new Set(filteredOrders.map((o) => o.id)));
     }
   };
 
-  const toggleSelectOne = (id: string) => {
-    const next = new Set(selectedIds);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    setSelectedIds(next);
+  const toggleSelectRow = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   };
 
-  // ── Batch Actions ───────────────────────────────────────────────────────────
+  // ── Batch Actions ──────────────────────────────────────────────────────────
   const handleBatchMarkPacked = async () => {
     if (selectedIds.size === 0) return;
     setBatchActionLoading(true);
@@ -172,11 +173,7 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
   const handleBatchPrintSlips = () => {
     const selectedOrders = orders.filter((o) => selectedIds.has(o.id));
     if (selectedOrders.length === 0) return;
-    selectedOrders.forEach((o, idx) => {
-      setTimeout(() => {
-        openShippingLabelPrint(o, 'a4');
-      }, idx * 300);
-    });
+    openShippingLabelPrint(selectedOrders, 'thermal4x6');
   };
 
   const handleInlineSaveAwb = async (orderId: string) => {
@@ -270,7 +267,7 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
                 className="px-3.5 py-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
               >
                 <Printer className="w-3.5 h-3.5" />
-                <span>Print Slips</span>
+                <span>Print 4×6" Labels</span>
               </button>
             </div>
           )}
@@ -279,121 +276,114 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
 
       {/* ─── Orders Presentation (Desktop Table + Mobile Cards) ──────────────── */}
       {ordersLoading ? (
-        <div className="bg-white rounded-xl border border-[#55607A]/20 p-12 text-center text-[#55607A] font-mono text-xs">
-          Loading orders ledger...
+        <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-400 text-xs font-medium">
+          Loading orders...
         </div>
       ) : filteredOrders.length === 0 ? (
-        <div className="bg-white rounded-xl border border-[#55607A]/20 p-12 text-center text-[#55607A] font-mono text-xs">
+        <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-400 text-xs font-medium">
           No orders found matching the filter criteria.
         </div>
       ) : (
         <>
-          {/* Desktop Data-Dense Table (Hidden on small screens) */}
-          <div className="hidden lg:block bg-white rounded-xl border border-[#55607A]/20 shadow-xs overflow-hidden">
+          {/* Desktop Data-Dense Table */}
+          <div className="hidden lg:block bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr className="bg-[#FAF7F0] border-b border-[#55607A]/20 text-[11px] font-mono font-bold text-[#55607A] uppercase tracking-wider">
-                    <th className="p-3 w-10 text-center">
+                  <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                    <th className="p-3.5 w-10 text-center">
                       <button
                         type="button"
                         onClick={toggleSelectAll}
-                        className="text-[#1E2A4A] cursor-pointer"
+                        className="text-slate-400 hover:text-slate-700 cursor-pointer"
                       >
                         {allFilteredSelected ? (
-                          <CheckSquare className="w-4 h-4 text-[#D98C2B]" />
+                          <CheckSquare className="w-4 h-4 text-[#2874f0]" />
                         ) : (
-                          <Square className="w-4 h-4 text-[#55607A]" />
+                          <Square className="w-4 h-4" />
                         )}
                       </button>
                     </th>
-                    <th className="p-3">Order ID & Date</th>
-                    <th className="p-3">Customer & Location</th>
-                    <th className="p-3">Items & Total</th>
-                    <th className="p-3">Status</th>
-                    <th className="p-3">ST Courier AWB</th>
-                    <th className="p-3 text-right">Actions</th>
+                    <th className="p-3.5">Order #</th>
+                    <th className="p-3.5">Student & Destination</th>
+                    <th className="p-3.5">Order Items & Total</th>
+                    <th className="p-3.5">Fulfillment Status</th>
+                    <th className="p-3.5">ST Courier AWB</th>
+                    <th className="p-3.5 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-sans">
                   {filteredOrders.map((order) => {
                     const isSelected = selectedIds.has(order.id);
-                    const isCancelled = String(order.courierStatus).toLowerCase().includes('cancel');
-                    const hasAwb = Boolean(order.trackingNumber);
+                    const hasAwb = Boolean(order.trackingNumber && !order.trackingNumber.startsWith('SHP-') && !order.trackingNumber.includes('Pending'));
+                    const isCancelled = String(order.courierStatus || order.paymentStatus || '').toLowerCase().includes('cancel');
 
                     return (
                       <tr
                         key={order.id}
-                        className={`hover:bg-[#FAF7F0]/60 transition-colors ${
-                          isSelected ? 'bg-[#D98C2B]/5' : ''
+                        className={`hover:bg-slate-50/80 transition-colors ${
+                          isSelected ? 'bg-blue-50/40' : ''
                         }`}
                       >
                         {/* Checkbox */}
-                        <td className="p-3 text-center">
+                        <td className="p-3.5 text-center">
                           <button
                             type="button"
-                            onClick={() => toggleSelectOne(order.id)}
-                            className="text-[#1E2A4A] cursor-pointer"
+                            onClick={() => toggleSelectRow(order.id)}
+                            className="text-slate-400 hover:text-slate-700 cursor-pointer"
                           >
                             {isSelected ? (
-                              <CheckSquare className="w-4 h-4 text-[#D98C2B]" />
+                              <CheckSquare className="w-4 h-4 text-[#2874f0]" />
                             ) : (
-                              <Square className="w-4 h-4 text-slate-400" />
+                              <Square className="w-4 h-4" />
                             )}
                           </button>
                         </td>
 
                         {/* Order ID & Date */}
-                        <td className="p-3">
-                          <button
-                            type="button"
-                            onClick={() => setActiveDrawerOrder(order)}
-                            className="font-mono font-bold text-[#1E2A4A] hover:text-[#D98C2B] text-xs hover:underline block text-left cursor-pointer"
-                          >
-                            {order.orderId || order.id}
-                          </button>
-                          <span className="text-[10px] font-mono text-[#55607A] block mt-0.5">
-                            {order.createdAt
-                              ? new Date(order.createdAt).toLocaleDateString('en-IN', {
-                                  day: '2-digit',
-                                  month: 'short',
-                                  hour: '2-digit',
-                                  minute: '2-digit',
-                                })
-                              : 'Recent'}
+                        <td className="p-3.5 font-mono">
+                          <span className="font-bold text-slate-900 block">
+                            #{order.orderId}
+                          </span>
+                          <span className="text-[10px] text-slate-400 block">
+                            {new Date(order.createdAt).toLocaleDateString('en-IN', {
+                              day: '2-digit',
+                              month: 'short',
+                              year: 'numeric',
+                            })}
                           </span>
                         </td>
 
-                        {/* Customer & Location */}
-                        <td className="p-3">
-                          <span className="font-bold text-[#1E2A4A] block truncate max-w-[180px]">
-                            {order.customerName || 'Student'}
+                        {/* Customer & City */}
+                        <td className="p-3.5">
+                          <span className="font-bold text-slate-900 block truncate max-w-[180px]">
+                            {order.customerName}
                           </span>
-                          <span className="text-[11px] font-mono text-[#55607A] block truncate max-w-[180px]">
-                            {order.customerPhone} • {order.city || 'Tamil Nadu'}
+                          <span className="text-slate-500 text-[11px] block">
+                            {order.city} {order.pincode ? `(${order.pincode})` : ''} • {order.customerPhone}
                           </span>
                         </td>
 
-                        {/* Items & Total */}
-                        <td className="p-3">
-                          <span className="font-mono font-bold text-[#1E2A4A] block">
+                        {/* Order Items & Total */}
+                        <td className="p-3.5">
+                          <span className="font-bold text-slate-900 font-mono block">
                             {fmt(order.totalAmount)}
                           </span>
-                          <span className="text-[10px] text-[#55607A] block truncate max-w-[160px]">
+                          <span className="text-[10px] text-slate-500 block truncate max-w-[180px]">
                             {order.items?.map((i) => `${i.qty}x ${i.title}`).join(', ') || 'Guide Books'}
                           </span>
                         </td>
 
                         {/* Status Stamp */}
-                        <td className="p-3">
+                        <td className="p-3.5">
                           <OrderStatusStamp status={order.courierStatus || order.paymentStatus} size="sm" />
                         </td>
 
                         {/* ST Courier AWB */}
-                        <td className="p-3 font-mono">
+                        <td className="p-3.5 font-mono">
                           {hasAwb ? (
                             <a
-                              href={order.trackingUrl || `https://stcourier.com/track/shipment?docket=${order.trackingNumber}`}
+                              href={order.trackingUrl || `https://stcourier.com/track/view?docket=${order.trackingNumber}`}
                               target="_blank"
                               rel="noreferrer"
                               className="text-xs font-bold text-blue-600 hover:text-blue-800 hover:underline inline-flex items-center gap-1"
@@ -412,13 +402,13 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
                                 onChange={(e) =>
                                   setAwbInputs((prev) => ({ ...prev, [order.id]: e.target.value }))
                                 }
-                                className="w-24 px-1.5 py-1 text-[11px] font-mono bg-white border border-slate-300 rounded outline-none focus:border-[#D98C2B]"
+                                className="w-24 px-2 py-1 text-[11px] font-mono bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-[#2874f0]"
                               />
                               <button
                                 type="button"
                                 disabled={awbSaving[order.id]}
                                 onClick={() => handleInlineSaveAwb(order.id)}
-                                className="px-2 py-1 bg-[#1E2A4A] hover:bg-[#D98C2B] text-white text-[10px] font-bold rounded transition-colors cursor-pointer"
+                                className="px-2 py-1 bg-[#2874f0] hover:bg-blue-700 text-white text-[10px] font-bold rounded-lg transition-colors cursor-pointer"
                               >
                                 {awbSaving[order.id] ? '...' : 'Save'}
                               </button>
@@ -427,11 +417,11 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
                         </td>
 
                         {/* Actions */}
-                        <td className="p-3 text-right">
+                        <td className="p-3.5 text-right">
                           <button
                             type="button"
                             onClick={() => setActiveDrawerOrder(order)}
-                            className="p-1.5 rounded text-[#55607A] hover:text-[#1E2A4A] hover:bg-slate-100 transition-colors inline-block cursor-pointer"
+                            className="p-1.5 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors inline-block cursor-pointer"
                             title="View Order Details"
                           >
                             <ChevronRight className="w-4 h-4" />
@@ -445,95 +435,58 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
             </div>
           </div>
 
-          {/* Mobile Packing Cards (Designed for shelf packing on phones) */}
+          {/* Mobile Packing Cards */}
           <div className="lg:hidden space-y-3">
             {filteredOrders.map((order) => {
               const isSelected = selectedIds.has(order.id);
-              const hasAwb = Boolean(order.trackingNumber);
-              const isPacked = String(order.courierStatus).toLowerCase().includes('pack');
+              const hasAwb = Boolean(order.trackingNumber && !order.trackingNumber.startsWith('SHP-') && !order.trackingNumber.includes('Pending'));
 
               return (
                 <div
                   key={order.id}
-                  className={`bg-white rounded-xl border p-4 shadow-xs space-y-3 transition-colors ${
-                    isSelected ? 'border-[#D98C2B] bg-[#D98C2B]/5' : 'border-[#55607A]/20'
+                  className={`bg-white rounded-2xl border p-4 shadow-xs space-y-3 transition-colors ${
+                    isSelected ? 'border-[#2874f0] bg-blue-50/20' : 'border-slate-200'
                   }`}
                 >
-                  {/* Top Bar: Order ID + Status Stamp + Checkbox */}
-                  <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-2.5">
+                  <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => toggleSelectOne(order.id)}
-                        className="text-[#1E2A4A]"
+                        onClick={() => toggleSelectRow(order.id)}
+                        className="text-slate-400 hover:text-slate-700 cursor-pointer"
                       >
                         {isSelected ? (
-                          <CheckSquare className="w-4 h-4 text-[#D98C2B]" />
+                          <CheckSquare className="w-4 h-4 text-[#2874f0]" />
                         ) : (
-                          <Square className="w-4 h-4 text-slate-400" />
+                          <Square className="w-4 h-4" />
                         )}
                       </button>
-                      <div>
-                        <button
-                          type="button"
-                          onClick={() => setActiveDrawerOrder(order)}
-                          className="font-mono font-bold text-xs text-[#1E2A4A] hover:underline"
-                        >
-                          {order.orderId || order.id}
-                        </button>
-                        <span className="text-[10px] font-mono text-[#55607A] block">
-                          {order.createdAt ? new Date(order.createdAt).toLocaleDateString('en-IN') : 'Recent'}
-                        </span>
-                      </div>
+                      <span className="font-mono font-bold text-xs text-slate-900">
+                        #{order.orderId}
+                      </span>
                     </div>
                     <OrderStatusStamp status={order.courierStatus || order.paymentStatus} size="sm" />
                   </div>
 
-                  {/* Customer & Location */}
-                  <div className="text-xs space-y-0.5">
-                    <p className="font-bold text-[#1E2A4A]">{order.customerName}</p>
-                    <p className="text-[#55607A] font-mono text-[11px]">{order.customerPhone}</p>
-                    <p className="text-[#55607A] text-[11px] truncate">{order.address}, {order.city} - {order.pincode}</p>
-                  </div>
-
-                  {/* Items List (Packing Checklist) */}
-                  <div className="bg-[#FAF7F0] p-2.5 rounded-lg border border-slate-200/60 text-xs">
-                    <p className="text-[10px] font-mono font-bold text-[#55607A] uppercase mb-1">
-                      PACKING CHECKLIST ({order.items?.length || 0} ITEMS):
-                    </p>
-                    <div className="space-y-1">
-                      {order.items?.map((item, idx) => (
-                        <div key={idx} className="flex justify-between text-[#1E2A4A] font-semibold">
-                          <span className="truncate pr-2">✓ {item.title}</span>
-                          <span className="font-mono font-black shrink-0">x{item.qty}</span>
-                        </div>
-                      ))}
+                  <div className="border-t border-slate-100 pt-2 text-xs space-y-1">
+                    <div className="font-bold text-slate-900">{order.customerName}</div>
+                    <div className="text-slate-500 text-[11px]">
+                      {order.city} — {order.pincode} • ☎ {order.customerPhone}
+                    </div>
+                    <div className="text-[11px] text-slate-600">
+                      {order.items?.map((i) => `${i.qty}x ${i.title}`).join(', ')}
                     </div>
                   </div>
 
-                  {/* Mobile Actions: 1-Tap Pack + ST Courier AWB */}
-                  <div className="flex items-center justify-between gap-2 pt-1">
-                    <span className="font-mono font-black text-sm text-[#1E2A4A]">
-                      {fmt(order.totalAmount)}
-                    </span>
-                    <div className="flex items-center gap-1.5">
-                      {!isPacked && (
-                        <button
-                          type="button"
-                          onClick={() => onUpdateStatus(order.id, 'Packed')}
-                          className="px-3 py-1.5 bg-[#D98C2B] text-white font-mono font-bold text-xs rounded-lg shadow-xs active:scale-95 transition-transform"
-                        >
-                          Mark Packed
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => setActiveDrawerOrder(order)}
-                        className="px-2.5 py-1.5 bg-[#FAF7F0] border border-[#55607A]/20 text-[#1E2A4A] font-mono text-xs rounded-lg"
-                      >
-                        Details
-                      </button>
-                    </div>
+                  <div className="border-t border-slate-100 pt-2 flex items-center justify-between text-xs">
+                    <span className="font-mono font-bold text-slate-900">{fmt(order.totalAmount)}</span>
+                    <button
+                      type="button"
+                      onClick={() => setActiveDrawerOrder(order)}
+                      className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                    >
+                      View Details →
+                    </button>
                   </div>
                 </div>
               );
@@ -542,92 +495,98 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
         </>
       )}
 
-      {/* ─── Slide-Over Order Detail Drawer ──────────────────────────────────── */}
+      {/* ─── Slide-over Drawer for Selected Order Details ─────────────────────── */}
       {activeDrawerOrder && (
         <>
           <div
             onClick={() => setActiveDrawerOrder(null)}
-            className="fixed inset-0 bg-black/50 z-50 backdrop-blur-xs"
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 animate-fade-in"
           />
-          <div className="fixed top-0 right-0 bottom-0 z-50 w-full max-w-lg bg-[#FAF7F0] shadow-2xl flex flex-col border-l border-[#55607A]/20 animate-fade-slide-up">
+          <div className="fixed right-0 top-0 bottom-0 w-full max-w-md bg-slate-50 z-50 shadow-2xl flex flex-col animate-slide-left border-l border-slate-200">
             {/* Drawer Header */}
-            <div className="bg-[#1E2A4A] text-white p-4 flex items-center justify-between shadow-md">
+            <div className="p-4 bg-white border-b border-slate-200 flex items-center justify-between">
               <div>
-                <span className="text-[10px] font-mono text-amber-400 block uppercase tracking-wider">
-                  ORDER DETAILS
+                <span className="text-[10px] font-bold tracking-widest text-slate-400 uppercase">
+                  Order Details
                 </span>
-                <h3 className="font-mono font-black text-base">
-                  {activeDrawerOrder.orderId || activeDrawerOrder.id}
+                <h3 className="font-bold text-base text-slate-900 font-mono">
+                  #{activeDrawerOrder.orderId}
                 </h3>
               </div>
               <button
                 type="button"
                 onClick={() => setActiveDrawerOrder(null)}
-                className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {/* Drawer Body */}
-            <div className="flex-1 overflow-y-auto p-5 space-y-5 custom-scrollbar text-xs font-sans">
-              {/* Status Banner */}
-              <div className="bg-white p-3.5 rounded-xl border border-[#55607A]/20 flex items-center justify-between shadow-xs">
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 text-xs custom-scrollbar">
+              {/* Status Section */}
+              <div className="bg-white p-4 rounded-2xl border border-slate-200 flex items-center justify-between shadow-xs">
                 <div>
-                  <span className="text-[10px] text-[#55607A] font-mono block">CURRENT STATUS</span>
-                  <span className="font-bold text-[#1E2A4A] text-sm">
+                  <span className="text-[10px] text-slate-400 uppercase font-bold block">
+                    Current Status
+                  </span>
+                  <span className="font-bold text-slate-900">
                     {activeDrawerOrder.courierStatus || activeDrawerOrder.paymentStatus}
                   </span>
                 </div>
-                <OrderStatusStamp status={activeDrawerOrder.courierStatus || activeDrawerOrder.paymentStatus} size="md" />
+                <OrderStatusStamp status={activeDrawerOrder.courierStatus || activeDrawerOrder.paymentStatus} />
               </div>
 
-              {/* Customer & Shipping Info */}
-              <div className="bg-white p-4 rounded-xl border border-[#55607A]/20 space-y-2 shadow-xs">
-                <h4 className="font-serif font-bold text-xs text-[#1E2A4A] uppercase tracking-wider border-b border-slate-100 pb-1.5 flex items-center gap-1.5">
-                  <User className="w-3.5 h-3.5 text-[#D98C2B]" />
-                  <span>Customer & Shipping Address</span>
+              {/* Customer & Shipping Address */}
+              <div className="bg-white p-4 rounded-2xl border border-slate-200 space-y-2.5 shadow-xs">
+                <h4 className="font-bold text-xs text-slate-900 uppercase tracking-wider border-b border-slate-100 pb-1.5 flex items-center gap-1.5">
+                  <User className="w-3.5 h-3.5 text-[#2874f0]" />
+                  <span>Student & Shipping Address</span>
                 </h4>
-                <p className="font-bold text-sm text-[#1E2A4A]">{activeDrawerOrder.customerName}</p>
-                <p className="text-[#55607A] font-mono">{activeDrawerOrder.customerPhone}</p>
-                <p className="text-[#55607A] leading-relaxed pt-1">
-                  {activeDrawerOrder.address}
-                  <br />
-                  {activeDrawerOrder.city} - {activeDrawerOrder.pincode}, {activeDrawerOrder.state || 'Tamil Nadu'}
-                </p>
+                <div className="space-y-1">
+                  <p className="font-bold text-slate-900">{activeDrawerOrder.customerName}</p>
+                  <p className="text-slate-600 leading-relaxed">{activeDrawerOrder.address}</p>
+                  <p className="text-slate-600">
+                    {activeDrawerOrder.city} — <strong className="text-slate-900">{activeDrawerOrder.pincode}</strong>
+                  </p>
+                  <p className="text-blue-700 font-bold pt-1">
+                    ☎ +91 {activeDrawerOrder.customerPhone}
+                    {activeDrawerOrder.customerAltPhone ? ` • Alt: +91 ${activeDrawerOrder.customerAltPhone}` : ''}
+                  </p>
+                </div>
               </div>
 
               {/* Items List */}
-              <div className="bg-white p-4 rounded-xl border border-[#55607A]/20 space-y-3 shadow-xs">
-                <h4 className="font-serif font-bold text-xs text-[#1E2A4A] uppercase tracking-wider border-b border-slate-100 pb-1.5 flex items-center gap-1.5">
-                  <Package className="w-3.5 h-3.5 text-[#D98C2B]" />
+              <div className="bg-white p-4 rounded-2xl border border-slate-200 space-y-3 shadow-xs">
+                <h4 className="font-bold text-xs text-slate-900 uppercase tracking-wider border-b border-slate-100 pb-1.5 flex items-center gap-1.5">
+                  <Package className="w-3.5 h-3.5 text-[#2874f0]" />
                   <span>Order Items ({activeDrawerOrder.items?.length || 0})</span>
                 </h4>
                 <div className="divide-y divide-slate-100">
                   {activeDrawerOrder.items?.map((item, idx) => (
                     <div key={idx} className="py-2 flex justify-between items-center">
                       <div>
-                        <span className="font-bold text-[#1E2A4A] block">{item.title}</span>
-                        <span className="text-[10px] text-[#55607A] font-mono">
+                        <span className="font-bold text-slate-900 block">{item.title}</span>
+                        <span className="text-[10px] text-slate-500 font-mono">
                           Qty: {item.qty} {item.price ? `• ₹${item.price} each` : ''}
                         </span>
                       </div>
-                      <span className="font-mono font-bold text-[#1E2A4A]">
+                      <span className="font-mono font-bold text-slate-900">
                         {item.subtotal ? fmt(item.subtotal) : ''}
                       </span>
                     </div>
                   ))}
                 </div>
-                <div className="pt-2 border-t border-slate-200 flex justify-between items-center font-mono font-black text-sm text-[#1E2A4A]">
+                <div className="pt-2 border-t border-slate-200 flex justify-between items-center font-mono font-black text-sm text-slate-900">
                   <span>Total Amount Paid</span>
                   <span>{fmt(activeDrawerOrder.totalAmount)}</span>
                 </div>
               </div>
 
               {/* Courier & AWB Assignment */}
-              <div className="bg-white p-4 rounded-xl border border-[#55607A]/20 space-y-3 shadow-xs">
-                <h4 className="font-serif font-bold text-xs text-[#1E2A4A] uppercase tracking-wider border-b border-slate-100 pb-1.5 flex items-center gap-1.5">
-                  <Truck className="w-3.5 h-3.5 text-[#D98C2B]" />
+              <div className="bg-white p-4 rounded-2xl border border-slate-200 space-y-3 shadow-xs">
+                <h4 className="font-bold text-xs text-slate-900 uppercase tracking-wider border-b border-slate-100 pb-1.5 flex items-center gap-1.5">
+                  <Truck className="w-3.5 h-3.5 text-[#2874f0]" />
                   <span>ST Courier Logistics</span>
                 </h4>
                 {activeDrawerOrder.trackingNumber ? (
@@ -636,7 +595,7 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
                       Docket: <strong className="text-blue-700">{activeDrawerOrder.trackingNumber}</strong>
                     </p>
                     <a
-                      href={activeDrawerOrder.trackingUrl || `https://stcourier.com/track/shipment?docket=${activeDrawerOrder.trackingNumber}`}
+                      href={activeDrawerOrder.trackingUrl || `https://stcourier.com/track/view?docket=${activeDrawerOrder.trackingNumber}`}
                       target="_blank"
                       rel="noreferrer"
                       className="inline-flex items-center gap-1 text-xs font-mono font-bold text-blue-600 hover:underline"
@@ -647,7 +606,7 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    <label className="block text-[11px] text-[#55607A] font-mono">
+                    <label className="block text-[11px] text-slate-500 font-mono">
                       Assign ST Courier Docket:
                     </label>
                     <div className="flex gap-2">
@@ -658,13 +617,13 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
                         onChange={(e) =>
                           setAwbInputs((prev) => ({ ...prev, [activeDrawerOrder.id]: e.target.value }))
                         }
-                        className="flex-1 px-3 py-2 bg-[#FAF7F0] border border-[#55607A]/20 rounded-lg text-xs font-mono uppercase outline-none focus:border-[#D98C2B]"
+                        className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono uppercase outline-none focus:border-[#2874f0]"
                       />
                       <button
                         type="button"
                         disabled={awbSaving[activeDrawerOrder.id]}
                         onClick={() => handleInlineSaveAwb(activeDrawerOrder.id)}
-                        className="px-4 py-2 bg-[#1E2A4A] hover:bg-[#D98C2B] text-white font-mono font-bold text-xs rounded-lg transition-colors cursor-pointer"
+                        className="px-4 py-2 bg-[#2874f0] hover:bg-blue-700 text-white font-mono font-bold text-xs rounded-lg transition-colors cursor-pointer"
                       >
                         {awbSaving[activeDrawerOrder.id] ? 'Saving...' : 'Assign'}
                       </button>
@@ -675,24 +634,24 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
             </div>
 
             {/* Drawer Footer Actions */}
-            <div className="p-4 bg-white border-t border-[#55607A]/20 flex items-center justify-between gap-3">
+            <div className="p-4 bg-white border-t border-slate-200 flex items-center justify-between gap-3">
               <button
                 type="button"
-                onClick={() => openShippingLabelPrint(activeDrawerOrder, 'a4')}
-                className="flex-1 py-2.5 bg-[#FAF7F0] hover:bg-slate-100 border border-[#55607A]/20 text-[#1E2A4A] font-mono font-bold text-xs rounded-lg flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                onClick={() => openShippingLabelPrint(activeDrawerOrder, 'thermal4x6')}
+                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
               >
-                <Printer className="w-3.5 h-3.5" />
-                <span>Print Packing Slip</span>
+                <Printer className="w-4 h-4 text-[#2874f0]" />
+                <span>4×6" Thermal Label</span>
               </button>
               <button
                 type="button"
                 onClick={() => {
                   window.open(`/api/orders/${activeDrawerOrder.id}/invoice`, '_blank');
                 }}
-                className="flex-1 py-2.5 bg-[#1E2A4A] hover:bg-[#D98C2B] text-white font-mono font-bold text-xs rounded-lg flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                className="flex-1 py-2.5 bg-[#2874f0] hover:bg-blue-700 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs"
               >
-                <FileText className="w-3.5 h-3.5" />
-                <span>GST Tax Invoice</span>
+                <FileText className="w-4 h-4" />
+                <span>Bill of Supply</span>
               </button>
             </div>
           </div>
