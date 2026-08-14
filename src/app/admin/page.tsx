@@ -13,6 +13,7 @@ import {
 import { useStore } from '@/context/StoreContext';
 import { authHeaders } from '@/lib/clientAuth';
 
+import { BrandLogo } from '@/components/ui/BrandLogo';
 import AdminUsersTab from '@/components/admin/AdminUsersTab';
 import AdminReviewsTab from '@/components/admin/AdminReviewsTab';
 import AdminSidebar, { AdminTab } from '@/components/admin/AdminSidebar';
@@ -371,9 +372,7 @@ export default function AdminPage() {
     return (
       <div className="min-h-screen bg-[#f8fafc] flex flex-col items-center justify-center p-4">
         <div className="bg-white p-8 rounded-3xl border border-slate-200 max-w-md w-full text-center space-y-4 shadow-xl">
-          <div className="w-14 h-14 bg-gradient-to-br from-[#2874f0] to-[#0044aa] text-white rounded-2xl flex items-center justify-center mx-auto shadow-md">
-            <span className="font-serif font-black text-xl tracking-wider">BPG</span>
-          </div>
+          <BrandLogo size={56} className="mx-auto shadow-md" />
           <h1 className="font-bold text-xl text-slate-900">Blessing Power Guide — Staff Portal</h1>
           <p className="text-xs text-slate-500 leading-relaxed">
             Administrator authentication required to manage bookstore orders, book inventory, and courier dispatches.

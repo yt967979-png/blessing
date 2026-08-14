@@ -117,9 +117,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
         {/* Official Brand Header */}
         <div className="p-4 border-b border-slate-800/80 bg-[#061121] flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2.5 group">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#2874f0] to-[#0044aa] flex items-center justify-center text-white font-black shadow-md border border-blue-400/30 group-hover:scale-105 transition-transform">
-              <span className="font-serif font-black text-sm tracking-wider">BPG</span>
-            </div>
+            <BrandLogo size={36} className="shadow-md group-hover:scale-105 transition-transform" />
             <div>
               <span className="font-bold text-sm text-white tracking-tight block leading-tight">
                 Blessing Power Guide
@@ -192,13 +190,10 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
 
         {/* Sidebar Footer */}
         <div className="p-3 border-t border-slate-800 bg-[#061121] flex items-center justify-between">
-          <Link
-            href="/"
-            className="flex items-center gap-2 text-xs text-slate-300 hover:text-white font-medium transition-colors"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            <span>Storefront</span>
-          </Link>
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="text-[11px] font-medium text-slate-400">Admin Active</span>
+          </div>
 
           {onLogout && (
             <button
