@@ -57,3 +57,12 @@ find "$BACKUP_DIR" -type f -name "blessing_db_*.sql.gz" -mtime "+${KEEP_DAYS}" -
 COUNT="$(find "$BACKUP_DIR" -type f -name 'blessing_db_*.sql.gz' | wc -l | tr -d ' ')"
 log "Retention: ${KEEP_DAYS} days — ${COUNT} backup file(s) on disk"
 echo "$BACKUP_FILE" > "${BACKUP_DIR}/LATEST"
+
+# Optional: Push offsite via rclone if configured (e.g. Backblaze B2, S3, Google Drive)
+if command -v rclone >/dev/null 2>&1 && rclone listremotes | grep -q 'bpg-offsite:'; then
+  if rclone copy "$BACKUP_FILE" bpg-offsite:blessing-power-guide-backups/ 2>/dev/null; then
+    log "OK Offsite snapshot uploaded to bpg-offsite:blessing-power-guide-backups/"
+  else
+    log "WARNING: Offsite rclone upload failed — check rclone credentials"
+  fi
+fi
