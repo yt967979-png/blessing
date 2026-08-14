@@ -86,18 +86,14 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
 
   const handleSaveEdit = async (id: string | number) => {
     try {
-      const ok = await onUpdateProduct(id, {
+      await onUpdateProduct(id, {
         price: editPrice,
         mrp: editMrp,
         stock: editStock,
         inStock: editStock > 0,
       });
-      if (ok) {
-        onShowToast('✅ Publication details updated');
-        setEditingId(null);
-      } else {
-        onShowToast('❌ Failed to update');
-      }
+      onShowToast('✅ Publication details updated');
+      setEditingId(null);
     } catch {
       onShowToast('❌ Update error');
     }
@@ -106,12 +102,14 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
   const handleToggleStockStatus = async (p: Product) => {
     const nextInStock = !p.inStock;
     const nextStock = nextInStock ? Math.max(p.stock || 0, 10) : 0;
-    const ok = await onUpdateProduct(p.id, {
-      inStock: nextInStock,
-      stock: nextStock,
-    });
-    if (ok) {
+    try {
+      await onUpdateProduct(p.id, {
+        inStock: nextInStock,
+        stock: nextStock,
+      });
       onShowToast(nextInStock ? `📦 ${p.title} marked IN STOCK` : `⚠️ ${p.title} marked OUT OF STOCK`);
+    } catch {
+      onShowToast('❌ Toggle failed');
     }
   };
 
@@ -128,7 +126,7 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/(^-|-$)+/g, '');
 
-      const ok = await onAddNewProduct({
+      await onAddNewProduct({
         title: newTitle.trim(),
         subtitle: `${newCls} Standard ${newSubject} Examination Guide`,
         slug: slug || `book-${Date.now()}`,
@@ -151,15 +149,11 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
         features: ['Full Syllabus Coverage', 'Solved Question Papers', 'Model Test Series'],
       });
 
-      if (ok) {
-        onShowToast('✅ New guide published to catalog');
-        setShowAddModal(false);
-        setNewTitle('');
-        setNewDescription('');
-        setNewImage('');
-      } else {
-        onShowToast('❌ Failed to publish book');
-      }
+      onShowToast('✅ New guide published to catalog');
+      setShowAddModal(false);
+      setNewTitle('');
+      setNewDescription('');
+      setNewImage('');
     } catch {
       onShowToast('❌ Publication failed');
     } finally {
@@ -194,21 +188,21 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
   return (
     <div className="space-y-6">
       {/* ─── Top Control Toolbar ────────────────────────────────────────────── */}
-      <div className="bg-white rounded-xl border border-[#55607A]/20 p-4 sm:p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="font-serif font-black text-lg text-[#1E2A4A] flex items-center gap-2">
-            <BookOpen className="w-5 h-5 text-[#D98C2B]" />
-            <span>Blessing Power Guide — Book Catalog & Pricing</span>
+          <h2 className="font-bold text-lg text-slate-900 flex items-center gap-2">
+            <BookOpen className="w-5 h-5 text-[#2874f0]" />
+            <span>Book Catalog & Stock Inventory</span>
           </h2>
-          <p className="text-xs text-[#55607A] mt-0.5 font-sans">
+          <p className="text-xs text-slate-500 mt-0.5">
             Manage school study materials, standard allocations, MRP/offer prices, and stock levels.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
           {/* CSV Bulk Import Button */}
-          <label className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-mono font-bold text-[#1E2A4A] bg-[#FAF7F0] hover:bg-slate-100 border border-[#55607A]/20 rounded-lg transition-colors cursor-pointer shadow-xs">
-            <Upload className="w-3.5 h-3.5 text-[#D98C2B]" />
+          <label className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer shadow-xs">
+            <Upload className="w-4 h-4 text-[#2874f0]" />
             <span>Bulk CSV Import</span>
             <input
               type="file"
@@ -222,7 +216,7 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
           <button
             type="button"
             onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-1.5 px-4 py-2 text-xs font-mono font-bold text-white bg-[#1E2A4A] hover:bg-[#D98C2B] rounded-lg transition-colors cursor-pointer shadow-xs"
+            className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-[#2874f0] hover:bg-blue-700 rounded-xl transition-colors cursor-pointer shadow-xs"
           >
             <Plus className="w-4 h-4" />
             <span>Add Guide Book</span>
@@ -231,38 +225,38 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
       </div>
 
       {/* ─── Search & Class Standard Filter Pills ────────────────────────────── */}
-      <div className="bg-white rounded-xl border border-[#55607A]/20 p-4 shadow-xs space-y-3">
+      <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-3.5">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
           {/* Search Box */}
           <div className="relative w-full sm:max-w-md">
-            <Search className="w-4 h-4 absolute left-3 top-2.5 text-[#55607A]" />
+            <Search className="w-4 h-4 absolute left-3.5 top-3 text-slate-400" />
             <input
               type="text"
               placeholder="Search by title, standard (10th, 12th), or subject..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-8 py-2 bg-[#FAF7F0] border border-[#55607A]/20 rounded-lg text-xs font-sans text-[#1E2A4A] outline-none focus:border-[#D98C2B] transition-colors"
+              className="w-full pl-10 pr-8 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 outline-none focus:border-[#2874f0] focus:bg-white transition-all shadow-inner"
             />
             {searchTerm && (
               <button
                 type="button"
                 onClick={() => setSearchTerm('')}
-                className="absolute right-2.5 top-2.5 text-xs text-[#55607A] hover:text-[#1E2A4A]"
+                className="absolute right-3 top-3 text-xs text-slate-400 hover:text-slate-700"
               >
                 ✕
               </button>
             )}
           </div>
 
-          <div className="text-xs font-mono font-bold text-[#55607A]">
-            Showing <span className="text-[#1E2A4A]">{filteredProducts.length}</span> of{' '}
-            <span className="text-[#1E2A4A]">{products.length}</span> publications
+          <div className="text-xs font-medium text-slate-500">
+            Showing <strong className="text-slate-900">{filteredProducts.length}</strong> of{' '}
+            <strong className="text-slate-900">{products.length}</strong> publications
           </div>
         </div>
 
         {/* Class Filter Pills */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 custom-scrollbar">
-          <span className="text-[11px] font-mono font-bold text-[#55607A] uppercase mr-1 shrink-0">
+          <span className="text-[11px] font-bold text-slate-400 uppercase mr-1 shrink-0">
             Standard:
           </span>
           {classesList.map((cls) => (
@@ -270,10 +264,10 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
               key={cls}
               type="button"
               onClick={() => setSelectedClass(cls)}
-              className={`px-3 py-1 text-xs font-mono font-bold rounded-lg border transition-colors cursor-pointer shrink-0 ${
+              className={`px-3 py-1.5 text-xs font-semibold rounded-xl border transition-colors cursor-pointer shrink-0 ${
                 selectedClass === cls
-                  ? 'bg-[#1E2A4A] text-white border-[#1E2A4A] shadow-xs'
-                  : 'bg-[#FAF7F0] text-[#55607A] border-[#55607A]/20 hover:bg-slate-100'
+                  ? 'bg-[#2874f0] text-white border-[#2874f0] shadow-xs'
+                  : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
               }`}
             >
               {cls === 'all' ? 'All Classes' : `${cls} Standard`}
@@ -283,27 +277,27 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
       </div>
 
       {/* ─── Catalog Table ─────────────────────────────────────────────────── */}
-      <div className="bg-white rounded-xl border border-[#55607A]/20 shadow-xs overflow-hidden">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
-              <tr className="bg-[#FAF7F0] border-b border-[#55607A]/20 text-[11px] font-mono font-bold text-[#55607A] uppercase tracking-wider">
-                <th className="p-3.5">Guide Book</th>
-                <th className="p-3.5">Standard & Subject</th>
-                <th className="p-3.5">Offer Price / MRP</th>
-                <th className="p-3.5">Inventory Status</th>
-                <th className="p-3.5 text-right">Actions</th>
+              <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                <th className="p-4">Guide Book</th>
+                <th className="p-4">Standard & Subject</th>
+                <th className="p-4">Offer Price / MRP</th>
+                <th className="p-4">Inventory Status</th>
+                <th className="p-4 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 font-sans">
+            <tbody className="divide-y divide-slate-100">
               {filteredProducts.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="p-8 text-center text-[#55607A]">
+                  <td colSpan={5} className="p-12 text-center text-slate-400">
                     <div className="max-w-xs mx-auto space-y-2">
                       <BookOpen className="w-8 h-8 mx-auto text-slate-300" />
-                      <p className="font-bold text-sm text-[#1E2A4A]">No Publications Found</p>
-                      <p className="text-[11px] text-[#55607A]">
-                        Try adjusting your search terms or selecting a different class standard filter.
+                      <p className="font-bold text-sm text-slate-800">No Publications Found</p>
+                      <p className="text-xs text-slate-500">
+                        Try adjusting your search keywords or choosing a different standard filter.
                       </p>
                     </div>
                   </td>
@@ -317,21 +311,21 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                   const isLow = (p.stock ?? 99) <= 5 && !isOOS;
 
                   return (
-                    <tr key={p.id} className="hover:bg-[#FAF7F0]/60 transition-colors">
+                    <tr key={p.id} className="hover:bg-slate-50/80 transition-colors">
                       {/* Book Cover & Title */}
-                      <td className="p-3.5">
+                      <td className="p-4">
                         <div className="flex items-center gap-3">
                           <img
                             src={p.image}
                             alt={p.title}
-                            className="w-10 h-10 object-contain bg-[#FAF7F0] border border-[#55607A]/20 rounded-lg p-0.5 shrink-0"
+                            className="w-11 h-11 object-contain bg-slate-50 border border-slate-200 rounded-lg p-0.5 shrink-0"
                           />
                           <div className="min-w-0 max-w-sm">
-                            <span className="font-bold text-xs text-[#1E2A4A] block truncate">
+                            <span className="font-bold text-xs text-slate-900 block truncate">
                               {p.title}
                             </span>
                             {p.badge && (
-                              <span className="inline-block text-[9px] font-mono font-bold text-blue-700 bg-blue-50 px-1.5 py-0.2 rounded mt-0.5">
+                              <span className="inline-block text-[9px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md mt-0.5">
                                 {p.badge}
                               </span>
                             )}
@@ -340,52 +334,52 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                       </td>
 
                       {/* Class & Subject */}
-                      <td className="p-3.5">
-                        <span className="font-mono font-bold text-[#1E2A4A] bg-[#FAF7F0] px-2 py-0.5 rounded border border-[#55607A]/20 text-[11px]">
+                      <td className="p-4">
+                        <span className="font-bold text-slate-800 bg-slate-100 px-2.5 py-1 rounded-md text-[11px] border border-slate-200">
                           {p.cls || 'General'}
                         </span>
                         {p.subject && (
-                          <span className="text-[11px] text-[#55607A] block mt-0.5">
+                          <span className="text-xs text-slate-500 block mt-1">
                             {p.subject}
                           </span>
                         )}
                       </td>
 
                       {/* Price & MRP */}
-                      <td className="p-3.5 font-mono">
+                      <td className="p-4">
                         {isEditing ? (
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-2">
                             <div>
-                              <span className="text-[9px] text-[#55607A] block">Offer ₹</span>
+                              <span className="text-[10px] text-slate-400 block">Offer ₹</span>
                               <input
                                 type="number"
                                 value={editPrice}
                                 onChange={(e) => setEditPrice(Number(e.target.value))}
-                                className="w-16 px-1.5 py-1 bg-[#FAF7F0] border border-[#55607A]/30 rounded text-xs font-mono font-bold outline-none focus:border-[#D98C2B]"
+                                className="w-18 px-2 py-1 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold outline-none focus:border-[#2874f0]"
                               />
                             </div>
                             <div>
-                              <span className="text-[9px] text-[#55607A] block">MRP ₹</span>
+                              <span className="text-[10px] text-slate-400 block">MRP ₹</span>
                               <input
                                 type="number"
                                 value={editMrp}
                                 onChange={(e) => setEditMrp(Number(e.target.value))}
-                                className="w-16 px-1.5 py-1 bg-[#FAF7F0] border border-[#55607A]/30 rounded text-xs font-mono font-bold outline-none focus:border-[#D98C2B]"
+                                className="w-18 px-2 py-1 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold outline-none focus:border-[#2874f0]"
                               />
                             </div>
                           </div>
                         ) : (
                           <div>
                             <div className="flex items-center gap-1.5">
-                              <span className="font-bold text-sm text-[#1E2A4A]">₹{p.price}</span>
+                              <span className="font-bold text-sm text-slate-900">₹{p.price}</span>
                               {p.mrp > p.price && (
-                                <span className="line-through text-[11px] text-[#55607A]">
+                                <span className="line-through text-xs text-slate-400">
                                   ₹{p.mrp}
                                 </span>
                               )}
                             </div>
                             {disc > 0 && (
-                              <span className="text-[10px] text-[#2F9E60] font-bold block">
+                              <span className="text-[10px] text-emerald-600 font-bold block">
                                 {disc}% SAVINGS
                               </span>
                             )}
@@ -394,16 +388,16 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                       </td>
 
                       {/* Stock Inventory */}
-                      <td className="p-3.5 font-mono">
+                      <td className="p-4">
                         {isEditing ? (
                           <div>
-                            <span className="text-[9px] text-[#55607A] block">Units in Rack</span>
+                            <span className="text-[10px] text-slate-400 block">Copies in Rack</span>
                             <input
                               type="number"
                               min={0}
                               value={editStock}
                               onChange={(e) => setEditStock(Math.max(0, Number(e.target.value) || 0))}
-                              className="w-16 px-1.5 py-1 bg-[#FAF7F0] border border-[#D98C2B] rounded text-xs font-mono font-bold outline-none"
+                              className="w-20 px-2 py-1 bg-slate-50 border border-blue-400 rounded-lg text-xs font-bold outline-none"
                             />
                           </div>
                         ) : (
@@ -411,12 +405,12 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                             <button
                               type="button"
                               onClick={() => handleToggleStockStatus(p)}
-                              className={`text-[10px] font-mono font-bold px-2 py-1 rounded-md border transition-colors cursor-pointer ${
+                              className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border transition-colors cursor-pointer ${
                                 isOOS
-                                  ? 'bg-[#C43B3B]/10 text-[#C43B3B] border-[#C43B3B]/30'
+                                  ? 'bg-red-50 text-red-600 border-red-200'
                                   : isLow
-                                  ? 'bg-[#D98C2B]/10 text-[#D98C2B] border-[#D98C2B]/30 animate-pulse'
-                                  : 'bg-[#2F9E60]/10 text-[#2F9E60] border-[#2F9E60]/30'
+                                  ? 'bg-amber-50 text-amber-700 border-amber-200 animate-pulse'
+                                  : 'bg-emerald-50 text-emerald-700 border-emerald-200'
                               }`}
                               title="Click to toggle in-stock / out-of-stock"
                             >
@@ -427,21 +421,21 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                       </td>
 
                       {/* Actions */}
-                      <td className="p-3.5 text-right font-mono">
-                        <div className="flex items-center justify-end gap-1.5">
+                      <td className="p-4 text-right">
+                        <div className="flex items-center justify-end gap-2">
                           {isEditing ? (
                             <>
                               <button
                                 type="button"
                                 onClick={() => handleSaveEdit(p.id)}
-                                className="px-2.5 py-1 bg-[#2F9E60] hover:bg-emerald-700 text-white rounded text-[11px] font-bold cursor-pointer transition-colors shadow-xs"
+                                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold cursor-pointer transition-colors shadow-xs"
                               >
                                 Save
                               </button>
                               <button
                                 type="button"
                                 onClick={() => setEditingId(null)}
-                                className="px-2.5 py-1 bg-[#FAF7F0] hover:bg-slate-200 text-[#55607A] border border-slate-300 rounded text-[11px] font-bold cursor-pointer"
+                                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold cursor-pointer"
                               >
                                 Cancel
                               </button>
@@ -451,7 +445,7 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                               <button
                                 type="button"
                                 onClick={() => handleStartEdit(p)}
-                                className="px-2.5 py-1 bg-[#FAF7F0] hover:bg-slate-200 text-[#1E2A4A] border border-[#55607A]/20 rounded text-[11px] font-bold cursor-pointer transition-colors"
+                                className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-xs font-bold cursor-pointer transition-colors"
                               >
                                 Edit
                               </button>
@@ -463,10 +457,10 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                                     onShowToast('🗑️ Book removed from catalog');
                                   }
                                 }}
-                                className="p-1.5 text-slate-400 hover:text-[#C43B3B] rounded hover:bg-red-50 transition-colors cursor-pointer"
+                                className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
                                 title="Delete publication"
                               >
-                                <Trash2 className="w-3.5 h-3.5" />
+                                <Trash2 className="w-4 h-4" />
                               </button>
                             </>
                           )}
@@ -484,24 +478,24 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
       {/* ─── Add New Publication Modal ─────────────────────────────────────── */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl border border-[#55607A]/20 max-w-xl w-full p-6 shadow-2xl space-y-4 my-8">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="font-serif font-black text-base text-[#1E2A4A] flex items-center gap-2">
-                <Plus className="w-5 h-5 text-[#D98C2B]" />
+          <div className="bg-white rounded-3xl border border-slate-200 max-w-xl w-full p-6 sm:p-8 shadow-2xl space-y-5 my-8">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+              <h3 className="font-bold text-lg text-slate-900 flex items-center gap-2">
+                <Plus className="w-5 h-5 text-[#2874f0]" />
                 <span>Publish New Guide to Catalog</span>
               </h3>
               <button
                 type="button"
                 onClick={() => setShowAddModal(false)}
-                className="p-1 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer"
+                className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleCreateBook} className="space-y-4 text-xs font-sans">
+            <form onSubmit={handleCreateBook} className="space-y-4 text-xs">
               <div>
-                <label className="block font-mono font-bold text-[#55607A] mb-1">
+                <label className="block font-bold text-slate-700 mb-1.5">
                   Book Title *
                 </label>
                 <input
@@ -510,19 +504,19 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                   placeholder="e.g. 10th Standard Mathematics Guide (Tamil & English Medium)"
                   value={newTitle}
                   onChange={(e) => setNewTitle(e.target.value)}
-                  className="w-full px-3 py-2 bg-[#FAF7F0] border border-[#55607A]/20 rounded-lg outline-none focus:border-[#D98C2B]"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-[#2874f0] focus:bg-white text-slate-900"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-mono font-bold text-[#55607A] mb-1">
+                  <label className="block font-bold text-slate-700 mb-1.5">
                     Class Standard *
                   </label>
                   <select
                     value={newCls}
                     onChange={(e) => setNewCls(e.target.value)}
-                    className="w-full px-3 py-2 bg-[#FAF7F0] border border-[#55607A]/20 rounded-lg outline-none focus:border-[#D98C2B] font-mono cursor-pointer"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-[#2874f0] focus:bg-white text-slate-900 cursor-pointer font-semibold"
                   >
                     {['6th', '7th', '8th', '9th', '10th', '11th', '12th'].map((c) => (
                       <option key={c} value={c}>
@@ -533,7 +527,7 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                 </div>
 
                 <div>
-                  <label className="block font-mono font-bold text-[#55607A] mb-1">
+                  <label className="block font-bold text-slate-700 mb-1.5">
                     Subject *
                   </label>
                   <input
@@ -542,14 +536,14 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                     placeholder="e.g. Science / Maths / Tamil"
                     value={newSubject}
                     onChange={(e) => setNewSubject(e.target.value)}
-                    className="w-full px-3 py-2 bg-[#FAF7F0] border border-[#55607A]/20 rounded-lg outline-none focus:border-[#D98C2B]"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-[#2874f0] focus:bg-white text-slate-900"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block font-mono font-bold text-[#55607A] mb-1">
+                  <label className="block font-bold text-slate-700 mb-1.5">
                     Offer Price (₹) *
                   </label>
                   <input
@@ -558,11 +552,11 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                     min={1}
                     value={newPrice}
                     onChange={(e) => setNewPrice(Number(e.target.value))}
-                    className="w-full px-3 py-2 bg-[#FAF7F0] border border-[#55607A]/20 rounded-lg outline-none focus:border-[#D98C2B] font-mono"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-[#2874f0] focus:bg-white text-slate-900 font-bold"
                   />
                 </div>
                 <div>
-                  <label className="block font-mono font-bold text-[#55607A] mb-1">
+                  <label className="block font-bold text-slate-700 mb-1.5">
                     Printed MRP (₹) *
                   </label>
                   <input
@@ -571,11 +565,11 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                     min={1}
                     value={newMrp}
                     onChange={(e) => setNewMrp(Number(e.target.value))}
-                    className="w-full px-3 py-2 bg-[#FAF7F0] border border-[#55607A]/20 rounded-lg outline-none focus:border-[#D98C2B] font-mono"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-[#2874f0] focus:bg-white text-slate-900 font-bold"
                   />
                 </div>
                 <div>
-                  <label className="block font-mono font-bold text-[#55607A] mb-1">
+                  <label className="block font-bold text-slate-700 mb-1.5">
                     Initial Copies *
                   </label>
                   <input
@@ -584,13 +578,13 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                     min={0}
                     value={newStock}
                     onChange={(e) => setNewStock(Math.max(0, Number(e.target.value) || 0))}
-                    className="w-full px-3 py-2 bg-[#FAF7F0] border border-[#55607A]/20 rounded-lg outline-none focus:border-[#D98C2B] font-mono"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-[#2874f0] focus:bg-white text-slate-900 font-bold"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block font-mono font-bold text-[#55607A] mb-1">
+                <label className="block font-bold text-slate-700 mb-1.5">
                   Book Description / Syllabus Highlights (SEO & Parents)
                 </label>
                 <textarea
@@ -598,35 +592,35 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                   placeholder="Detailed exam guide covering Samacheer Kalvi syllabus, unit-wise questions, and previous year model papers..."
                   value={newDescription}
                   onChange={(e) => setNewDescription(e.target.value)}
-                  className="w-full px-3 py-2 bg-[#FAF7F0] border border-[#55607A]/20 rounded-lg outline-none focus:border-[#D98C2B]"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-[#2874f0] focus:bg-white text-slate-900"
                 />
               </div>
 
               <div>
-                <label className="block font-mono font-bold text-[#55607A] mb-1">
-                  Cover Image URL (or upload below)
+                <label className="block font-bold text-slate-700 mb-1.5">
+                  Cover Image URL
                 </label>
                 <input
                   type="url"
                   placeholder="https://..."
                   value={newImage}
                   onChange={(e) => setNewImage(e.target.value)}
-                  className="w-full px-3 py-2 bg-[#FAF7F0] border border-[#55607A]/20 rounded-lg outline-none focus:border-[#D98C2B] font-mono"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-[#2874f0] focus:bg-white text-slate-900"
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="px-4 py-2 rounded-lg font-mono font-bold text-[#55607A] hover:bg-slate-100 cursor-pointer"
+                  className="px-4 py-2.5 rounded-xl font-semibold text-slate-600 hover:bg-slate-100 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="px-5 py-2 rounded-lg font-mono font-bold text-white bg-[#1E2A4A] hover:bg-[#D98C2B] transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+                  className="px-6 py-2.5 rounded-xl font-bold text-white bg-[#2874f0] hover:bg-blue-700 transition-colors cursor-pointer shadow-md disabled:opacity-50"
                 >
                   {isSubmitting ? 'Publishing…' : 'Publish Publication'}
                 </button>

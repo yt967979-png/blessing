@@ -12,8 +12,6 @@ import {
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { authHeaders } from '@/lib/clientAuth';
-import { isOrderCancelled } from '@/lib/orderStatus';
-import { BrandLogo } from '@/components/ui/BrandLogo';
 
 import AdminUsersTab from '@/components/admin/AdminUsersTab';
 import AdminReviewsTab from '@/components/admin/AdminReviewsTab';
@@ -23,7 +21,6 @@ import OverviewSection from '@/components/admin/OverviewSection';
 import OrdersSection from '@/components/admin/OrdersSection';
 import CourierSection from '@/components/admin/CourierSection';
 import CatalogSection from '@/components/admin/CatalogSection';
-import SystemHealthSection from '@/components/admin/SystemHealthSection';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface OrderItem { title: string; qty: number; price?: number; subtotal?: number; }
@@ -56,27 +53,34 @@ interface Analytics {
 const fmt = (n: number) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
 
 // Simple SVG bar chart for revenue analytics
-function SimpleBarChart({ data, height = 120 }: { data: DailyPoint[]; height?: number }) {
-  if (!data || !data.length) return <div className="flex items-center justify-center h-28 text-xs text-[#55607A]">No sales records yet</div>;
+function SimpleBarChart({ data, height = 140 }: { data: DailyPoint[]; height?: number }) {
+  if (!data || !data.length) return <div className="flex items-center justify-center h-32 text-xs text-slate-400">No sales recorded in this period</div>;
   const maxRev = Math.max(...data.map((d) => d.revenue), 1);
-  const barW = Math.max(4, Math.min(28, Math.floor(560 / data.length) - 3));
-  const gap = Math.max(2, Math.floor(560 / data.length) - barW);
+  const barW = Math.max(6, Math.min(32, Math.floor(580 / data.length) - 4));
+  const gap = Math.max(3, Math.floor(580 / data.length) - barW);
   return (
     <div className="w-full overflow-x-auto pb-1">
-      <svg width={Math.max(data.length * (barW + gap), 300)} height={height + 28} className="block">
+      <svg width={Math.max(data.length * (barW + gap), 320)} height={height + 28} className="block">
         {data.map((d, i) => {
-          const barH = Math.max(2, Math.round((d.revenue / maxRev) * height));
+          const barH = Math.max(3, Math.round((d.revenue / maxRev) * height));
           const x = i * (barW + gap);
           const y = height - barH;
           const isToday = i === data.length - 1;
           return (
             <g key={d.day}>
-              <rect x={x} y={y} width={barW} height={barH}
-                rx={3} fill={isToday ? '#D98C2B' : '#1E2A4A'} className="transition-all opacity-80 hover:opacity-100" />
+              <rect
+                x={x}
+                y={y}
+                width={barW}
+                height={barH}
+                rx={4}
+                fill={isToday ? '#2874f0' : '#93c5fd'}
+                className="transition-all hover:fill-[#0044aa]"
+              />
               <title>{d.day}: {fmt(d.revenue)} ({d.orders} orders)</title>
               {i % Math.max(1, Math.floor(data.length / 7)) === 0 && (
-                <text x={x + barW / 2} y={height + 16} textAnchor="middle"
-                  fontSize={9} fill="#55607A">
+                <text x={x + barW / 2} y={height + 18} textAnchor="middle"
+                  fontSize={10} fill="#64748b" fontWeight="500">
                   {new Date(d.day).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
                 </text>
               )}
@@ -88,7 +92,7 @@ function SimpleBarChart({ data, height = 120 }: { data: DailyPoint[]; height?: n
   );
 }
 
-/** Short two-tone chime for new paid orders (AudioContext). */
+/** Short chime for new paid orders. */
 function playAdminNewOrderBeep() {
   try {
     const AC = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
@@ -124,15 +128,6 @@ export default function AdminPage() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
 
-  const [systemHealth, setSystemHealth] = useState({
-    healthy: true,
-    deadLetterCount: 0,
-    stalePendingRefunds: 0,
-    dailyRefundPercent: 0,
-    dailyOrdersCount: 0,
-    dailyRefundsCount: 0,
-  });
-
   // ── Orders state
   const [orders, setOrders] = useState<Order[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
@@ -155,23 +150,6 @@ export default function AdminPage() {
   const [newFaqA, setNewFaqA] = useState('');
 
   const isAdmin = !!user && (user.role === 'admin' || user.role === 'super_admin');
-
-  const loadHealthData = useCallback(async () => {
-    try {
-      const res = await fetch('/api/health?details=1');
-      if (res.ok) {
-        const data = await res.json();
-        setSystemHealth({
-          healthy: data.status === 'ok' && data.workersHealthy !== false,
-          deadLetterCount: data.pendingDeadLetterWebhooks || 0,
-          stalePendingRefunds: data.stalePendingRefunds || 0,
-          dailyRefundPercent: data.dailyRefundPercent || 0,
-          dailyOrdersCount: data.dailyOrdersCount || 0,
-          dailyRefundsCount: data.dailyRefundsCount || 0,
-        });
-      }
-    } catch {}
-  }, []);
 
   const loadContent = useCallback(async () => {
     if (!user) return;
@@ -266,10 +244,9 @@ export default function AdminPage() {
       loadLiveOrders();
       loadAnalytics();
       loadLowStock();
-      loadHealthData();
       loadContent();
     }
-  }, [user, isAdmin, loadLiveOrders, loadAnalytics, loadLowStock, loadHealthData, loadContent]);
+  }, [user, isAdmin, loadLiveOrders, loadAnalytics, loadLowStock, loadContent]);
 
   // Order status update handler
   const handleUpdateOrderStatus = async (order: Order, newStatus: string, displayLabel?: string) => {
@@ -317,7 +294,7 @@ export default function AdminPage() {
       });
       const data = await res.json();
       if (res.ok) {
-        showToast(`🚚 AWB ${cleanAwb} assigned via ST Courier`);
+        showToast(`🚚 ST Courier AWB ${cleanAwb} assigned`);
         loadLiveOrders();
       } else {
         showToast(`❌ ${data.error || 'Failed to assign AWB'}`);
@@ -375,7 +352,7 @@ export default function AdminPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', `Blessing_Power_Guide_Ledger_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute('download', `Blessing_Power_Guide_GST_Ledger_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -392,26 +369,26 @@ export default function AdminPage() {
 
   if (!user || !isAdmin) {
     return (
-      <div className="min-h-screen bg-[#1E2A4A] flex flex-col items-center justify-center p-4 text-white">
-        <div className="bg-[#FAF7F0] text-[#1E2A4A] p-8 rounded-2xl border border-[#D98C2B] max-w-md w-full text-center space-y-4 shadow-2xl">
-          <div className="w-12 h-12 bg-[#1E2A4A] text-[#D98C2B] rounded-xl flex items-center justify-center mx-auto shadow-md">
-            <ShieldCheck className="w-7 h-7" />
+      <div className="min-h-screen bg-[#f8fafc] flex flex-col items-center justify-center p-4">
+        <div className="bg-white p-8 rounded-3xl border border-slate-200 max-w-md w-full text-center space-y-4 shadow-xl">
+          <div className="w-14 h-14 bg-gradient-to-br from-[#2874f0] to-[#0044aa] text-white rounded-2xl flex items-center justify-center mx-auto shadow-md">
+            <span className="font-serif font-black text-xl tracking-wider">BPG</span>
           </div>
-          <h1 className="font-serif font-black text-xl">The Ledger — Admin Portal</h1>
-          <p className="text-xs text-[#55607A]">
-            Staff access required. Please sign in with an authorized Blessing Power Guide administrator account.
+          <h1 className="font-bold text-xl text-slate-900">Blessing Power Guide — Staff Portal</h1>
+          <p className="text-xs text-slate-500 leading-relaxed">
+            Administrator authentication required to manage bookstore orders, book inventory, and courier dispatches.
           </p>
           <button
             type="button"
             onClick={() => setIsAuthOpen(true)}
-            className="w-full py-3 bg-[#1E2A4A] hover:bg-[#D98C2B] text-white rounded-xl text-xs font-mono font-bold transition-colors cursor-pointer shadow-md"
+            className="w-full py-3 bg-[#2874f0] hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer shadow-md"
           >
-            Staff Authentication
+            Sign In with Staff Account
           </button>
           <button
             type="button"
             onClick={() => router.push('/')}
-            className="text-xs text-[#55607A] hover:text-[#1E2A4A] font-semibold block mx-auto cursor-pointer"
+            className="text-xs text-slate-500 hover:text-slate-900 font-medium block mx-auto cursor-pointer"
           >
             ← Return to Bookstore
           </button>
@@ -421,14 +398,13 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#FAF7F0] text-slate-800 flex">
+    <div className="min-h-screen bg-[#f8fafc] text-slate-800 flex">
       {/* ─── Sidebar ─────────────────────────────────────────────────────────── */}
       <AdminSidebar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         pendingOrdersCount={pendingCount}
         lowStockCount={lowStockAlerts.length}
-        systemDegraded={!systemHealth.healthy || systemHealth.deadLetterCount > 0}
         isOpenMobile={isMobileMenuOpen}
         onCloseMobile={() => setIsMobileMenuOpen(false)}
         onLogout={() => {
@@ -439,25 +415,23 @@ export default function AdminPage() {
 
       {/* ─── Main Content Canvas ─────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col min-w-0 lg:pl-64">
-        {/* Sticky Admin Header */}
+        {/* Sticky Header */}
         <AdminHeader
           activeTab={activeTab}
-          systemHealthy={systemHealth.healthy}
-          deadLetterCount={systemHealth.deadLetterCount}
           soundEnabled={soundEnabled}
           onToggleSound={() => {
             const next = !soundEnabled;
             setSoundEnabled(next);
             soundUnlockedRef.current = next;
             if (next) playAdminNewOrderBeep();
-            showToast(next ? '🔔 Order chime enabled' : '🔕 Chime muted');
+            showToast(next ? '🔔 Order sound notifications ON' : '🔕 Sound muted');
           }}
           onRefresh={() => {
             void loadLiveOrders();
             void loadAnalytics();
             void loadLowStock();
-            void loadHealthData();
-            showToast('🔄 Ledger refreshed');
+            void loadContent();
+            showToast('🔄 Store records refreshed');
           }}
           isRefreshing={ordersLoading || analyticsLoading}
           onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
@@ -473,7 +447,6 @@ export default function AdminPage() {
               orders={orders}
               lowStockItems={lowStockAlerts}
               activeStockHolds={activeStockHolds}
-              systemHealth={systemHealth}
               onNavigate={(tab) => setActiveTab(tab)}
             />
           )}
@@ -499,7 +472,7 @@ export default function AdminPage() {
             />
           )}
 
-          {/* SECTION C & H: COURIER & LOGISTICS */}
+          {/* SECTION C: COURIER & LOGISTICS */}
           {activeTab === 'courier' && (
             <CourierSection
               orders={orders}
@@ -509,8 +482,8 @@ export default function AdminPage() {
             />
           )}
 
-          {/* SECTION C & INVENTORY: CATALOG & STOCK */}
-          {(activeTab === 'catalog' || activeTab === 'inventory') && (
+          {/* SECTION D: CATALOG & STOCK */}
+          {activeTab === 'catalog' && (
             <CatalogSection
               products={products}
               onUpdateProduct={updateProductInDb}
@@ -521,111 +494,119 @@ export default function AdminPage() {
             />
           )}
 
-          {/* SECTION D: CUSTOMERS */}
+          {/* SECTION E: CUSTOMERS */}
           {activeTab === 'users' && user && (
             <AdminUsersTab user={user} showToast={showToast} />
           )}
 
-          {/* SECTION E: REVIEWS */}
-          {activeTab === 'reviews' && user && (
-            <AdminReviewsTab user={user} showToast={showToast} />
-          )}
+          {/* SECTION F: REVIEWS & FAQS */}
+          {activeTab === 'reviews' && (
+            <div className="space-y-6">
+              {user && <AdminReviewsTab user={user} showToast={showToast} />}
 
-          {/* SECTION F: CONTENT & FAQS */}
-          {activeTab === 'content' && (
-            <div className="max-w-xl mx-auto bg-white rounded-xl border border-[#55607A]/20 p-5 space-y-4 shadow-xs">
-              <h3 className="font-serif font-bold text-sm text-[#1E2A4A]">Customer FAQs & Store Notices</h3>
-              <form
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  const r = await fetch('/api/content', {
-                    method: 'POST',
-                    headers: authHeaders(user),
-                    body: JSON.stringify({ question: newFaqQ, answer: newFaqA, display_order: faqs.length + 1 }),
-                  });
-                  if (r.ok) {
-                    showToast('✅ FAQ added');
-                    setNewFaqQ('');
-                    setNewFaqA('');
-                    loadContent();
-                  } else {
-                    const d = await r.json();
-                    showToast(`❌ ${d.error || 'Failed'}`);
-                  }
-                }}
-                className="space-y-2.5 text-xs"
-              >
-                <input
-                  value={newFaqQ}
-                  onChange={(e) => setNewFaqQ(e.target.value)}
-                  placeholder="Question / Notice Title"
-                  required
-                  className="w-full px-3 py-2 bg-[#FAF7F0] border border-[#55607A]/20 rounded-lg outline-none focus:border-[#D98C2B]"
-                />
-                <textarea
-                  value={newFaqA}
-                  onChange={(e) => setNewFaqA(e.target.value)}
-                  placeholder="Detailed answer or policy explanation"
-                  required
-                  rows={3}
-                  className="w-full px-3 py-2 bg-[#FAF7F0] border border-[#55607A]/20 rounded-lg outline-none focus:border-[#D98C2B]"
-                />
-                <button
-                  type="submit"
-                  className="px-4 py-2 text-xs font-mono font-bold text-white bg-[#1E2A4A] hover:bg-[#D98C2B] rounded-lg transition-colors cursor-pointer"
-                >
-                  Publish FAQ
-                </button>
-              </form>
-              <div className="space-y-2 max-h-72 overflow-y-auto custom-scrollbar">
-                {faqs.map((f) => (
-                  <div key={f.id} className="border border-slate-100 rounded-lg p-3 bg-[#FAF7F0]/60">
-                    <div className="flex justify-between gap-2">
-                      <p className="text-xs font-bold text-[#1E2A4A]">{f.question}</p>
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          if (!confirm('Delete FAQ?')) return;
-                          await fetch(`/api/content?id=${encodeURIComponent(f.id)}`, { method: 'DELETE', headers: authHeaders(user) });
-                          loadContent();
-                        }}
-                        className="text-[10px] font-mono font-bold text-red-600 cursor-pointer"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                    <p className="text-[11px] text-[#55607A] mt-1">{f.answer}</p>
+              {/* FAQs & Store Notices */}
+              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
+                <div className="border-b border-slate-100 pb-3 flex items-center justify-between">
+                  <div>
+                    <h3 className="font-bold text-base text-slate-900">Student FAQs & Store Notices</h3>
+                    <p className="text-xs text-slate-500 mt-0.5">Edit help center questions and student guide announcements</p>
                   </div>
-                ))}
+                </div>
+
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    const r = await fetch('/api/content', {
+                      method: 'POST',
+                      headers: authHeaders(user),
+                      body: JSON.stringify({ question: newFaqQ, answer: newFaqA, display_order: faqs.length + 1 }),
+                    });
+                    if (r.ok) {
+                      showToast('✅ FAQ published to storefront');
+                      setNewFaqQ('');
+                      setNewFaqA('');
+                      loadContent();
+                    } else {
+                      const d = await r.json();
+                      showToast(`❌ ${d.error || 'Failed'}`);
+                    }
+                  }}
+                  className="space-y-3 text-xs"
+                >
+                  <input
+                    value={newFaqQ}
+                    onChange={(e) => setNewFaqQ(e.target.value)}
+                    placeholder="Question or Notice Title (e.g. When will Class 10 Tamil guide dispatch?)"
+                    required
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-[#2874f0] focus:bg-white transition-all text-slate-900"
+                  />
+                  <textarea
+                    value={newFaqA}
+                    onChange={(e) => setNewFaqA(e.target.value)}
+                    placeholder="Clear answer or delivery explanation..."
+                    required
+                    rows={3}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-[#2874f0] focus:bg-white transition-all text-slate-900"
+                  />
+                  <button
+                    type="submit"
+                    className="px-5 py-2.5 text-xs font-bold text-white bg-[#2874f0] hover:bg-blue-700 rounded-xl transition-colors cursor-pointer shadow-xs"
+                  >
+                    Publish FAQ
+                  </button>
+                </form>
+
+                <div className="space-y-2 max-h-80 overflow-y-auto custom-scrollbar pt-2">
+                  {faqs.map((f) => (
+                    <div key={f.id} className="border border-slate-200 rounded-xl p-4 bg-slate-50/70 hover:bg-slate-50 transition-colors">
+                      <div className="flex justify-between gap-3">
+                        <p className="text-xs font-bold text-slate-900">{f.question}</p>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (!confirm('Delete this FAQ from website?')) return;
+                            await fetch(`/api/content?id=${encodeURIComponent(f.id)}`, { method: 'DELETE', headers: authHeaders(user) });
+                            loadContent();
+                            showToast('🗑️ FAQ deleted');
+                          }}
+                          className="text-xs font-bold text-red-600 hover:underline cursor-pointer shrink-0"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                      <p className="text-xs text-slate-600 mt-1 leading-relaxed">{f.answer}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           )}
 
-          {/* SECTION G: REVENUE & GST LEDGER */}
+          {/* SECTION G: REVENUE & GST REPORTS */}
           {activeTab === 'analytics' && (
-            <div className="space-y-4">
-              <div className="bg-white rounded-xl border border-[#55607A]/20 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+            <div className="space-y-6">
+              <div className="bg-white rounded-2xl border border-slate-200 p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
                 <div>
-                  <h2 className="font-serif font-bold text-base text-[#1E2A4A]">Revenue Analytics & GST Ledger</h2>
-                  <p className="text-xs text-[#55607A] mt-0.5">Financial trends, sales breakdown, and tax compliance export</p>
+                  <h2 className="font-bold text-base text-slate-900">Revenue Analytics & GST Tax Ledger</h2>
+                  <p className="text-xs text-slate-500 mt-0.5">Sales breakdown, payment trends, and 1-click accountant tax export</p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2.5">
                   <button
                     type="button"
                     onClick={handleExportCsv}
-                    className="px-3.5 py-2 bg-[#2F9E60] hover:bg-emerald-700 text-white rounded-lg text-xs font-mono font-bold flex items-center gap-1.5 shadow-xs cursor-pointer"
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-colors"
                   >
-                    <Download className="w-3.5 h-3.5" />
-                    <span>Export GST Ledger CSV</span>
+                    <Download className="w-4 h-4" />
+                    <span>Download GST Ledger CSV</span>
                   </button>
-                  <div className="flex items-center gap-1 bg-[#FAF7F0] p-1 rounded-lg border border-[#55607A]/20">
+                  <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
                     {[7, 14, 30, 90].map((d) => (
                       <button
                         key={d}
                         type="button"
                         onClick={() => setAnalyticsRange(d)}
-                        className={`px-2.5 py-1 text-xs font-mono font-bold rounded transition-colors cursor-pointer ${
-                          analyticsRange === d ? 'bg-[#1E2A4A] text-white' : 'text-[#55607A] hover:bg-slate-200'
+                        className={`px-3 py-1 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
+                          analyticsRange === d ? 'bg-[#2874f0] text-white shadow-xs' : 'text-slate-600 hover:bg-slate-200'
                         }`}
                       >
                         {d}d
@@ -637,37 +618,37 @@ export default function AdminPage() {
 
               {analytics && (
                 <>
-                  <div className="bg-white rounded-xl border border-[#55607A]/20 p-4 shadow-xs">
-                    <h3 className="font-serif font-bold text-xs text-[#1E2A4A] uppercase mb-3">
-                      Daily Revenue ({analytics.range} Days)
+                  <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs">
+                    <h3 className="font-bold text-xs text-slate-500 uppercase tracking-wider mb-4">
+                      Daily Sales Volume ({analytics.range} Days)
                     </h3>
-                    <SimpleBarChart data={analytics.daily} height={120} />
+                    <SimpleBarChart data={analytics.daily} height={140} />
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="bg-white rounded-xl border border-[#55607A]/20 p-4 shadow-xs">
-                      <h3 className="font-serif font-bold text-xs text-[#1E2A4A] uppercase mb-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs">
+                      <h3 className="font-bold text-xs text-slate-500 uppercase tracking-wider mb-4">
                         Top Selling Guide Books
                       </h3>
-                      <div className="space-y-2">
+                      <div className="space-y-3">
                         {analytics.topProducts.slice(0, 5).map((tp, idx) => (
-                          <div key={idx} className="flex justify-between items-center text-xs">
-                            <span className="font-bold text-[#1E2A4A] truncate max-w-[200px]">{tp.title}</span>
-                            <span className="font-mono text-[#55607A]">{tp.totalQty} sold ({fmt(tp.totalRevenue)})</span>
+                          <div key={idx} className="flex justify-between items-center text-xs pb-2 border-b border-slate-100 last:border-0 last:pb-0">
+                            <span className="font-bold text-slate-900 truncate max-w-[220px]">{tp.title}</span>
+                            <span className="font-medium text-slate-500">{tp.totalQty} sold ({fmt(tp.totalRevenue)})</span>
                           </div>
                         ))}
                       </div>
                     </div>
 
-                    <div className="bg-white rounded-xl border border-[#55607A]/20 p-4 shadow-xs">
-                      <h3 className="font-serif font-bold text-xs text-[#1E2A4A] uppercase mb-3">
-                        Payment Method Breakdown
+                    <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs">
+                      <h3 className="font-bold text-xs text-slate-500 uppercase tracking-wider mb-4">
+                        Payment Methods
                       </h3>
-                      <div className="space-y-2">
+                      <div className="space-y-3">
                         {analytics.paymentMethods.map((pm, idx) => (
-                          <div key={idx} className="flex justify-between items-center text-xs">
-                            <span className="font-bold text-[#1E2A4A]">{pm.method}</span>
-                            <span className="font-mono text-[#55607A]">{pm.count} orders ({fmt(pm.revenue)})</span>
+                          <div key={idx} className="flex justify-between items-center text-xs pb-2 border-b border-slate-100 last:border-0 last:pb-0">
+                            <span className="font-bold text-slate-900">{pm.method}</span>
+                            <span className="font-medium text-slate-500">{pm.count} orders ({fmt(pm.revenue)})</span>
                           </div>
                         ))}
                       </div>
@@ -676,16 +657,6 @@ export default function AdminPage() {
                 </>
               )}
             </div>
-          )}
-
-          {/* SECTION I: SYSTEM HEALTH & LOGS */}
-          {activeTab === 'system' && (
-            <SystemHealthSection
-              systemHealth={systemHealth}
-              onRefresh={loadHealthData}
-              onShowToast={showToast}
-              authHeaders={authHeaders(user)}
-            />
           )}
         </main>
       </div>
