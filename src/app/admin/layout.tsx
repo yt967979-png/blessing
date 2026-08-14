@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'The Ledger | Blessing Power Guide Admin',
-  description: 'Operations control and dispatch management.',
+  title: 'Admin Portal | Blessing Power Guide',
+  description: 'Store management, book inventory, orders fulfillment, and courier tracking.',
   robots: {
     index: false,
     follow: false,
