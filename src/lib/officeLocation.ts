@@ -9,11 +9,12 @@ export const OFFICE_ADDRESS_LINES = [
 
 export const OFFICE_ADDRESS_TEXT = OFFICE_ADDRESS_LINES.join('\n');
 
-/** Google Plus Code — exact pin for Maps */
+/** Google Maps place query — pins the official 'Blessing Tuition And Tutorials' landmark */
+export const OFFICE_PLACE_NAME = 'Blessing Tuition And Tutorials, Trust Square St, Ayanavaram, Chennai';
 export const OFFICE_PLUS_CODE = '36WR+8P Chennai, Tamil Nadu';
 
-const plusCodeQuery = encodeURIComponent(OFFICE_PLUS_CODE);
+const placeQuery = encodeURIComponent('Blessing Tuition And Tutorials, Trust Square, Ayanavaram, Chennai, Tamil Nadu 600012');
 
-export const OFFICE_MAPS_SEARCH_URL = `https://www.google.com/maps/search/?api=1&query=${plusCodeQuery}`;
+export const OFFICE_MAPS_SEARCH_URL = `https://www.google.com/maps/search/?api=1&query=${placeQuery}`;
 
-export const OFFICE_MAPS_EMBED_URL = `https://maps.google.com/maps?q=${plusCodeQuery}&z=17&ie=UTF8&iwloc=&output=embed`;
+export const OFFICE_MAPS_EMBED_URL = `https://maps.google.com/maps?q=${placeQuery}&z=18&ie=UTF8&iwloc=&output=embed`;
