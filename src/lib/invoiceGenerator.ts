@@ -115,7 +115,8 @@ export function generateTaxInvoiceHtml(orderData: InvoiceData): string {
   const addressLine = getShopInvoiceAddress();
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://blessingpowerguide.com';
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&margin=0&data=${encodeURIComponent(`${siteUrl}/track?orderId=${encodeURIComponent(orderData.orderId)}`)}`;
+  const cleanPhone = (orderData.customerPhone || '').replace(/\D/g, '').slice(-10);
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&margin=0&data=${encodeURIComponent(`${siteUrl}/track?orderId=${encodeURIComponent(orderData.orderId)}${cleanPhone ? `&phone=${encodeURIComponent(cleanPhone)}` : ''}`)}`;
 
   const itemsSubtotal = itemsList.reduce((sum, it) => sum + (Number(it.price || it.subtotal || 0) * (it.qty || 1)), 0);
   const shippingCharge = orderData.shippingCharge !== undefined ? orderData.shippingCharge : Math.max(0, totalAmount - itemsSubtotal);

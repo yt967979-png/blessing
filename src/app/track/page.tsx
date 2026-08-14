@@ -81,9 +81,9 @@ function TrackForm() {
   useEffect(() => {
     const oid = searchParams.get('orderId');
     const ph = searchParams.get('phone') || user?.phone;
+    if (oid) setOrderId(oid);
+    if (ph) setPhone(ph);
     if (oid && ph) {
-      setOrderId(oid);
-      setPhone(ph);
       void runTrack(oid, ph);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

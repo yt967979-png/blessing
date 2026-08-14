@@ -49,7 +49,8 @@ export function generateSingleThermalLabelHtml(o: ShippingLabelOrder): string {
     : new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://blessingpowerguide.com';
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&margin=0&data=${encodeURIComponent(`${siteUrl}/track?orderId=${encodeURIComponent(o.orderId)}`)}`;
+  const cleanPhone = (o.customerPhone || '').replace(/\D/g, '').slice(-10);
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&margin=0&data=${encodeURIComponent(`${siteUrl}/track?orderId=${encodeURIComponent(o.orderId)}${cleanPhone ? `&phone=${encodeURIComponent(cleanPhone)}` : ''}`)}`;
 
   const itemsLine = (o.items || [])
     .map((it) => `${esc(it.title || 'Guide Book')} × ${it.qty || 1}`)
