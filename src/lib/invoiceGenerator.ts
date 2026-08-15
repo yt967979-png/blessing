@@ -1,6 +1,6 @@
 import { formatGstinLine, getShopInvoiceAddress, getShopLegalName } from '@/lib/shopConfig';
 import { OFFICE_ADDRESS_LINES, OFFICE_COMPANY_NAME } from '@/lib/officeLocation';
-import { generateQrDataUrl } from '@/lib/qrCode';
+import { generateQrSvg } from '@/lib/qrCode';
 
 export function getFinancialYearString(date: Date = new Date()): string {
   const month = date.getMonth(); // 0 = Jan, 3 = Apr
@@ -97,7 +97,7 @@ export interface InvoiceData {
 /**
  * Generates an official, GST-compliant BILL OF SUPPLY for printed books (HSN 4901, 0% GST Exempt).
  * Sized for standard A4 document printing or browser print-to-PDF.
- * Uses 100% offline Base64 QR code for instant, reliable rendering in all print environments.
+ * Uses 100% offline pure vector SVG QR code for zero-failure instant rendering.
  */
 export async function generateTaxInvoiceHtml(orderData: InvoiceData): Promise<string> {
   const dateStr = orderData.createdAt
@@ -119,7 +119,7 @@ export async function generateTaxInvoiceHtml(orderData: InvoiceData): Promise<st
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://blessingpowerguide.com';
   const cleanPhone = (orderData.customerPhone || '').replace(/\D/g, '').slice(-10);
   const trackTargetUrl = `${siteUrl}/track?orderId=${encodeURIComponent(orderData.orderId)}${cleanPhone ? `&phone=${encodeURIComponent(cleanPhone)}` : ''}`;
-  const qrDataUrl = await generateQrDataUrl(trackTargetUrl, { size: 140, margin: 1 });
+  const qrSvg = await generateQrSvg(trackTargetUrl, { size: 140, margin: 1 });
 
   const itemsSubtotal = itemsList.reduce((sum, it) => sum + (Number(it.price || it.subtotal || 0) * (it.qty || 1)), 0);
   const shippingCharge = orderData.shippingCharge !== undefined ? orderData.shippingCharge : Math.max(0, totalAmount - itemsSubtotal);
@@ -353,15 +353,20 @@ export async function generateTaxInvoiceHtml(orderData: InvoiceData): Promise<st
     .qr-box {
       text-align: center;
     }
-    .qr-img {
+    .qr-svg-wrapper {
       width: 90px;
       height: 90px;
       display: block;
       margin: 0 auto;
       border-radius: 6px;
       border: 1px solid #e2e8f0;
-      padding: 2px;
+      padding: 4px;
       background: #ffffff;
+    }
+    .qr-svg-wrapper svg {
+      width: 100%;
+      height: 100%;
+      display: block;
     }
     .terms-box {
       font-size: 10px;
@@ -404,7 +409,6 @@ export async function generateTaxInvoiceHtml(orderData: InvoiceData): Promise<st
   <div class="invoice-card">
     ${cancelled ? '<div class="cancel-banner">⚠️ ORDER CANCELLED — BILL OF SUPPLY VOIDED / GOODS RELEASED</div>' : ''}
 
-    {/* Header */}
     <div class="header">
       <div>
         <div class="brand-title">BLESSING POWER GUIDE</div>
@@ -427,7 +431,6 @@ export async function generateTaxInvoiceHtml(orderData: InvoiceData): Promise<st
       </div>
     </div>
 
-    {/* Party Info */}
     <div class="party-grid">
       <div class="party-box">
         <div class="party-box-title">Billed &amp; Shipped To (Student / Parent)</div>
@@ -454,7 +457,6 @@ export async function generateTaxInvoiceHtml(orderData: InvoiceData): Promise<st
       </div>
     </div>
 
-    {/* Itemized Goods Table */}
     <table class="goods-table">
       <thead>
         <tr>
@@ -489,7 +491,6 @@ export async function generateTaxInvoiceHtml(orderData: InvoiceData): Promise<st
       </tbody>
     </table>
 
-    {/* Totals & Words */}
     <div class="amount-box">
       <div class="words-box">
         <div class="words-lbl">Invoice Amount in Words</div>
@@ -523,10 +524,9 @@ export async function generateTaxInvoiceHtml(orderData: InvoiceData): Promise<st
       </table>
     </div>
 
-    {/* Footer & Signature */}
     <div class="footer-grid">
       <div class="qr-box">
-        ${qrDataUrl ? `<img src="${qrDataUrl}" class="qr-img" alt="Track Order QR" />` : ''}
+        ${qrSvg ? `<div class="qr-svg-wrapper">${qrSvg}</div>` : ''}
         <div style="font-size:8px;font-weight:800;color:#001b3a;margin-top:4px;">SCAN TO TRACK</div>
       </div>
 

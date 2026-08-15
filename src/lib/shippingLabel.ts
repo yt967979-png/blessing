@@ -1,6 +1,6 @@
 import { OFFICE_ADDRESS_LINES, OFFICE_COMPANY_NAME } from '@/lib/officeLocation';
 import { generateCode128Svg } from '@/lib/barcode128';
-import { generateQrDataUrl } from '@/lib/qrCode';
+import { generateQrSvg } from '@/lib/qrCode';
 
 export type ShippingLabelSize = 'thermal4x6' | 'a4' | 'a5';
 
@@ -21,7 +21,6 @@ export interface ShippingLabelOrder {
   courierName?: string;
   createdAt?: string;
   items?: Array<{ title?: string; qty?: number; price?: number; subtotal?: number }>;
-  qrDataUrl?: string;
 }
 
 function esc(s: string): string {
@@ -35,12 +34,13 @@ function esc(s: string): string {
 /**
  * Generates the pure monochrome 4×6 inch (101.6mm × 152.4mm) thermal shipping label HTML.
  * Engineered specifically for 203/300 DPI direct thermal printers (TVS, TSC, Zebra, Rollo).
+ * Uses pure vector SVG for barcode and QR code (0 network dependencies, zero broken image icons).
  */
-export function generateSingleThermalLabelHtml(o: ShippingLabelOrder, qrDataUrl: string = ''): string {
+export function generateSingleThermalLabelHtml(o: ShippingLabelOrder, qrSvg: string = ''): string {
   const isCancelled = String(o.courierStatus || o.paymentStatus || '').toLowerCase().includes('cancel');
   const hasAwb = Boolean(o.trackingNumber && !String(o.trackingNumber).startsWith('SHP-') && !String(o.trackingNumber).includes('Pending'));
   const barcodeText = hasAwb ? String(o.trackingNumber) : String(o.orderId || 'BPG-00000');
-  const barcodeSvg = generateCode128Svg(barcodeText, { height: 42, barWidth: 2, showText: true });
+  const barcodeSvg = generateCode128Svg(barcodeText, { height: 44, barWidth: 2, showText: true });
 
   const totalAmount = Number(o.totalAmount || 0);
   const totalItems = (o.items || []).reduce((s, i) => s + (i.qty || 1), 0);
@@ -57,10 +57,8 @@ export function generateSingleThermalLabelHtml(o: ShippingLabelOrder, qrDataUrl:
   return `
 <div class="thermal-label-page">
   <div class="label-border">
-    {/* CANCELLED OVERLAY */}
     ${isCancelled ? `<div class="cancel-banner">⚠️ ORDER CANCELLED — DO NOT DISPATCH / DO NOT COLLECT</div>` : ''}
 
-    {/* TOP BAR: Brand & Order Number */}
     <div class="top-row">
       <div>
         <div class="brand-name">BLESSING POWER GUIDE</div>
@@ -72,13 +70,11 @@ export function generateSingleThermalLabelHtml(o: ShippingLabelOrder, qrDataUrl:
       </div>
     </div>
 
-    {/* PAYMENT & ROUTING STATUS */}
     <div class="pay-strip ${isCancelled ? 'pay-cancel' : 'pay-prepaid'}">
       <div class="pay-tag">${isCancelled ? '🚫 VOID / CANCELLED' : '✓ PREPAID — DO NOT COLLECT CASH'}</div>
       <div class="pay-val">₹${totalAmount.toLocaleString('en-IN')}</div>
     </div>
 
-    {/* SHIP TO (RECEIVER) */}
     <div class="ship-to-section">
       <div class="section-lbl">DELIVER TO (STUDENT / PARENT)</div>
       <div class="customer-name">${esc(o.customerName || 'Customer')}</div>
@@ -93,7 +89,6 @@ export function generateSingleThermalLabelHtml(o: ShippingLabelOrder, qrDataUrl:
       </div>
     </div>
 
-    {/* AWB BARCODE SECTION */}
     <div class="awb-barcode-section">
       <div class="awb-header">
         <div class="awb-lbl">ST COURIER DOCKET / AWB NUMBER</div>
@@ -104,19 +99,17 @@ export function generateSingleThermalLabelHtml(o: ShippingLabelOrder, qrDataUrl:
       </div>
     </div>
 
-    {/* PACKAGE CONTENTS & METRICS */}
     <div class="contents-grid">
       <div class="contents-box">
         <div class="section-lbl">CONTENTS (${totalItems} BOOK${totalItems === 1 ? '' : 'S'} · ~${estWeightGrams}g)</div>
         <div class="contents-line">${itemsLine}</div>
       </div>
       <div class="qr-box">
-        ${qrDataUrl ? `<img src="${qrDataUrl}" class="qr-img" alt="Track QR" />` : ''}
+        ${qrSvg ? `<div class="qr-svg-wrapper">${qrSvg}</div>` : ''}
         <div class="qr-lbl">SCAN TRACK</div>
       </div>
     </div>
 
-    {/* SENDER & HANDLING FOOTER */}
     <div class="footer-row">
       <div class="sender-info">
         <div class="section-lbl">RETURN IF UNDELIVERED TO (SENDER):</div>
@@ -329,7 +322,7 @@ const THERMAL_CSS = `
 
   .contents-grid {
     display: grid;
-    grid-template-columns: 1fr 56px;
+    grid-template-columns: 1fr 58px;
     gap: 6px;
     padding: 6px 8px;
     border-bottom: 2px solid #000000;
@@ -348,11 +341,16 @@ const THERMAL_CSS = `
   .qr-box {
     text-align: center;
   }
-  .qr-img {
+  .qr-svg-wrapper {
     width: 52px;
     height: 52px;
     display: block;
     margin: 0 auto;
+  }
+  .qr-svg-wrapper svg {
+    width: 100%;
+    height: 100%;
+    display: block;
   }
   .qr-lbl {
     font-size: 6.5px;
@@ -403,15 +401,6 @@ const THERMAL_CSS = `
     height: 152.4mm;
     margin: 0 auto;
   }
-  .view-a4 .a4-cut-guide {
-    display: block;
-    text-align: center;
-    font-size: 11px;
-    font-weight: 700;
-    color: #64748b;
-    margin-top: 10px;
-  }
-  .a4-cut-guide { display: none; }
 
   @media print {
     body { background: #ffffff; padding: 0; }
@@ -438,8 +427,8 @@ export async function generateShippingLabelsHtml(
   const labelsHtmlPromises = orderList.map(async (o) => {
     const cleanPhone = (o.customerPhone || '').replace(/\D/g, '').slice(-10);
     const trackTargetUrl = `${siteUrl}/track?orderId=${encodeURIComponent(o.orderId)}${cleanPhone ? `&phone=${encodeURIComponent(cleanPhone)}` : ''}`;
-    const qrDataUrl = await generateQrDataUrl(trackTargetUrl, { size: 120, margin: 0 });
-    return generateSingleThermalLabelHtml(o, qrDataUrl);
+    const qrSvg = await generateQrSvg(trackTargetUrl, { size: 120, margin: 0 });
+    return generateSingleThermalLabelHtml(o, qrSvg);
   });
 
   const labelsHtmlArray = await Promise.all(labelsHtmlPromises);
