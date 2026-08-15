@@ -40,11 +40,11 @@ export function generateSingleThermalLabelHtml(o: ShippingLabelOrder, qrSvg: str
   const isCancelled = String(o.courierStatus || o.paymentStatus || '').toLowerCase().includes('cancel');
   const hasAwb = Boolean(o.trackingNumber && !String(o.trackingNumber).startsWith('SHP-') && !String(o.trackingNumber).includes('Pending'));
   const barcodeText = hasAwb ? String(o.trackingNumber) : String(o.orderId || 'BPG-00000');
-  const barcodeSvg = generateCode128Svg(barcodeText, { height: 44, barWidth: 2, showText: true });
+  const barcodeSvg = generateCode128Svg(barcodeText, { height: 46, barWidth: 2, showText: true });
 
   const totalAmount = Number(o.totalAmount || 0);
   const totalItems = (o.items || []).reduce((s, i) => s + (i.qty || 1), 0);
-  const estWeightGrams = totalItems * 400; // ~400g per guide book
+  const estWeightGrams = totalItems * 400; // ~400g per school guide book
 
   const orderDate = o.createdAt
     ? new Date(o.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -85,7 +85,7 @@ export function generateSingleThermalLabelHtml(o: ShippingLabelOrder, qrSvg: str
       </div>
       <div class="customer-phone">
         <span>☎ MOBILE:</span> <strong>+91 ${esc(o.customerPhone || '—')}</strong>
-        ${o.customerAltPhone ? `<span>· ALT:</span> <strong>+91 ${esc(o.customerAltPhone)}</strong>` : ''}
+        ${o.customerAltPhone ? `<span> · ALT:</span> <strong>+91 ${esc(o.customerAltPhone)}</strong>` : ''}
       </div>
     </div>
 
@@ -130,7 +130,7 @@ export function generateSingleThermalLabelHtml(o: ShippingLabelOrder, qrSvg: str
 const THERMAL_CSS = `
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     color: #000000;
     background: #e2e8f0;
     -webkit-print-color-adjust: exact;
@@ -319,10 +319,14 @@ const THERMAL_CSS = `
     align-items: center;
     padding: 2px 0;
   }
+  .barcode-container svg {
+    max-width: 100%;
+    height: auto;
+  }
 
   .contents-grid {
     display: grid;
-    grid-template-columns: 1fr 58px;
+    grid-template-columns: 1fr 60px;
     gap: 6px;
     padding: 6px 8px;
     border-bottom: 2px solid #000000;
