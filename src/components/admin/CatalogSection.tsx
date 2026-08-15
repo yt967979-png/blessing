@@ -1,44 +1,48 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import {
-  BookOpen,
+  Search,
   Plus,
-  Trash2,
   Edit2,
+  Trash2,
   Check,
   X,
   Upload,
-  Search,
-  SlidersHorizontal,
-  Tag,
-  AlertTriangle,
-  FileText,
-  IndianRupee,
-  Layers,
-  Sparkles,
+  BookOpen,
+  Filter,
+  CheckCircle2,
+  AlertCircle,
+  ImageIcon,
+  RefreshCw,
 } from 'lucide-react';
-import { Product } from '@/lib/products';
+import type { Product } from '@/context/StoreContext';
+import { useStore } from '@/context/StoreContext';
+import { authHeaders } from '@/lib/clientAuth';
 
 interface CatalogSectionProps {
   products: Product[];
-  onUpdateProduct: (id: string | number, updates: Partial<Product>) => Promise<any> | void;
-  onAddNewProduct: (product: any) => Promise<any> | void;
+  onUpdateProduct: (id: string | number, updates: any) => Promise<any> | void;
+  onAddNewProduct?: (product: any) => Promise<any> | void;
+  onCreateProduct?: (product: any) => Promise<any> | void;
   onDeleteProduct: (id: string | number) => Promise<any> | void;
   onShowToast: (msg: string) => void;
-  authHeaders: Record<string, string>;
+  authHeaders?: Record<string, string>;
 }
 
 export const CatalogSection: React.FC<CatalogSectionProps> = ({
   products,
   onUpdateProduct,
   onAddNewProduct,
+  onCreateProduct,
   onDeleteProduct,
   onShowToast,
-  authHeaders,
 }) => {
-  const [searchTerm, setSearchTerm] = useState('');
+  const { user } = useStore();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [selectedClass, setSelectedClass] = useState<string>('all');
+  const [searchTerm, setSearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingId, setEditingId] = useState<string | number | null>(null);
 
@@ -54,9 +58,9 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
   const [newPrice, setNewPrice] = useState<number>(280);
   const [newMrp, setNewMrp] = useState<number>(350);
   const [newStock, setNewStock] = useState<number>(50);
-  const [newDescription, setNewDescription] = useState('');
   const [newBadge, setNewBadge] = useState('Popular');
   const [newImage, setNewImage] = useState('');
+  const [imageUploading, setImageUploading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const classesList = ['all', '6th', '7th', '8th', '9th', '10th', '11th', '12th'];
@@ -113,177 +117,139 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
     }
   };
 
+  const handleDeviceImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      onShowToast('❌ File too large. Max allowed is 10MB.');
+      return;
+    }
+
+    setImageUploading(true);
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('folder', 'blessing_power_guides');
+
+    try {
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        headers: authHeaders(user),
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Image upload failed');
+      }
+
+      setNewImage(data.url);
+      onShowToast('✅ Cover image uploaded successfully');
+    } catch (err: any) {
+      onShowToast(`❌ Upload failed: ${err.message}`);
+    } finally {
+      setImageUploading(false);
+    }
+  };
+
   const handleCreateBook = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim()) {
       onShowToast('Please enter a book title');
       return;
     }
+
     setIsSubmitting(true);
     try {
-      const slug = newTitle
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/(^-|-$)+/g, '');
-
-      await onAddNewProduct({
+      const payload = {
         title: newTitle.trim(),
-        subtitle: `${newCls} Standard ${newSubject} Examination Guide`,
-        slug: slug || `book-${Date.now()}`,
         cls: newCls,
-        category: 'guide',
-        subject: newSubject,
-        price: newPrice,
-        mrp: newMrp,
-        discount: newMrp > newPrice ? Math.round(((newMrp - newPrice) / newMrp) * 100) : 0,
-        stock: newStock,
-        inStock: newStock > 0,
-        rating: 5.0,
-        reviews: 0,
-        badge: newBadge,
-        badgeColor: 'bg-blue-600',
-        image:
-          newImage ||
-          'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80',
-        description: newDescription.trim(),
-        features: ['Full Syllabus Coverage', 'Solved Question Papers', 'Model Test Series'],
-      });
+        subject: newSubject.trim() || 'General',
+        price: Number(newPrice),
+        mrp: Number(newMrp),
+        stock: Number(newStock),
+        badge: newBadge.trim(),
+        description: `Complete ${newCls} Standard ${newSubject} guide covering Tamil Nadu Samacheer Kalvi syllabus with question banks and answers.`,
+        image: newImage.trim() || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80',
+      };
 
-      onShowToast('✅ New guide published to catalog');
+      const creator = onAddNewProduct || onCreateProduct;
+      if (creator) {
+        await creator(payload);
+      }
+      onShowToast(`🎉 "${newTitle}" added to bookstore catalog!`);
       setShowAddModal(false);
+
+      // Reset form
       setNewTitle('');
-      setNewDescription('');
+      setNewSubject('Mathematics');
+      setNewPrice(280);
+      setNewMrp(350);
+      setNewStock(50);
       setNewImage('');
     } catch {
-      onShowToast('❌ Publication failed');
+      onShowToast('❌ Failed to add publication');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleCsvUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
-    onShowToast('⏳ Processing CSV file…');
-    try {
-      const csv = await file.text();
-      const r = await fetch('/api/products/bulk', {
-        method: 'POST',
-        headers: authHeaders,
-        body: JSON.stringify({ csv }),
-      });
-      const d = await r.json();
-      if (!r.ok) {
-        onShowToast(`❌ ${d.error || 'Import failed'}`);
-        return;
-      }
-      onShowToast(`✅ Successfully imported ${d.imported || 0} book(s)`);
-      window.location.reload();
-    } catch {
-      onShowToast('❌ CSV import network failure');
-    }
-  };
-
   return (
-    <div className="space-y-6">
-      {/* ─── Top Control Toolbar ────────────────────────────────────────────── */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h2 className="font-bold text-lg text-slate-900 flex items-center gap-2">
-            <BookOpen className="w-5 h-5 text-[#2874f0]" />
-            <span>Book Catalog & Stock Inventory</span>
-          </h2>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Manage school study materials, standard allocations, MRP/offer prices, and stock levels.
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2.5">
-          {/* CSV Bulk Import Button */}
-          <label className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer shadow-xs">
-            <Upload className="w-4 h-4 text-[#2874f0]" />
-            <span>Bulk CSV Import</span>
-            <input
-              type="file"
-              accept=".csv,text/csv"
-              className="hidden"
-              onChange={handleCsvUpload}
-            />
-          </label>
-
-          {/* Add New Publication Button */}
-          <button
-            type="button"
-            onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-[#2874f0] hover:bg-blue-700 rounded-xl transition-colors cursor-pointer shadow-xs"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Add Guide Book</span>
-          </button>
-        </div>
-      </div>
-
-      {/* ─── Search & Class Standard Filter Pills ────────────────────────────── */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-3.5">
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-          {/* Search Box */}
-          <div className="relative w-full sm:max-w-md">
-            <Search className="w-4 h-4 absolute left-3.5 top-3 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search by title, standard (10th, 12th), or subject..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-8 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 outline-none focus:border-[#2874f0] focus:bg-white transition-all shadow-inner"
-            />
-            {searchTerm && (
-              <button
-                type="button"
-                onClick={() => setSearchTerm('')}
-                className="absolute right-3 top-3 text-xs text-slate-400 hover:text-slate-700"
-              >
-                ✕
-              </button>
-            )}
-          </div>
-
-          <div className="text-xs font-medium text-slate-500">
-            Showing <strong className="text-slate-900">{filteredProducts.length}</strong> of{' '}
-            <strong className="text-slate-900">{products.length}</strong> publications
-          </div>
-        </div>
-
-        {/* Class Filter Pills */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 custom-scrollbar">
-          <span className="text-[11px] font-bold text-slate-400 uppercase mr-1 shrink-0">
-            Standard:
-          </span>
-          {classesList.map((cls) => (
+    <div className="space-y-4">
+      {/* Top Filter Bar & Search */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-4">
+        {/* Class Standard Filter Pills */}
+        <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-100 pb-3 text-xs font-semibold">
+          {classesList.map((c) => (
             <button
-              key={cls}
+              key={c}
               type="button"
-              onClick={() => setSelectedClass(cls)}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-xl border transition-colors cursor-pointer shrink-0 ${
-                selectedClass === cls
-                  ? 'bg-[#2874f0] text-white border-[#2874f0] shadow-xs'
-                  : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+              onClick={() => setSelectedClass(c)}
+              className={`px-3.5 py-1.5 rounded-xl font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                selectedClass === c
+                  ? 'bg-[#2874f0] text-white shadow-xs'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
-              {cls === 'all' ? 'All Classes' : `${cls} Standard`}
+              <span>{c === 'all' ? 'ALL STANDARDS' : `${c} Standard`}</span>
             </button>
           ))}
         </div>
+
+        {/* Search & Add Book Button */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          <div className="relative flex-1 max-w-md">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Search by Guide Title, Standard, or Subject..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-[#2874f0] focus:bg-white text-slate-900"
+            />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowAddModal(true)}
+              className="px-4 py-2.5 bg-[#2874f0] hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer shadow-xs"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add New Publication</span>
+            </button>
+          </div>
+        </div>
       </div>
 
-      {/* ─── Catalog Table ─────────────────────────────────────────────────── */}
+      {/* Publications Table */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
                 <th className="p-4">Guide Book</th>
-                <th className="p-4">Standard & Subject</th>
+                <th className="p-4">Standard &amp; Subject</th>
                 <th className="p-4">Offer Price / MRP</th>
                 <th className="p-4">Inventory Status</th>
                 <th className="p-4 text-right">Actions</th>
@@ -451,14 +417,9 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                               </button>
                               <button
                                 type="button"
-                                onClick={async () => {
-                                  if (confirm(`Remove publication "${p.title}" from catalog?`)) {
-                                    await onDeleteProduct(p.id);
-                                    onShowToast('🗑️ Book removed from catalog');
-                                  }
-                                }}
+                                onClick={() => onDeleteProduct(p.id)}
                                 className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
-                                title="Delete publication"
+                                title="Delete Publication"
                               >
                                 <Trash2 className="w-4 h-4" />
                               </button>
@@ -475,19 +436,19 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
         </div>
       </div>
 
-      {/* ─── Add New Publication Modal ─────────────────────────────────────── */}
+      {/* Add New Publication Modal (Clean, No Description, 1-Tap Device File Upload) */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl border border-slate-200 max-w-xl w-full p-6 sm:p-8 shadow-2xl space-y-5 my-8">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-              <h3 className="font-bold text-lg text-slate-900 flex items-center gap-2">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5 animate-scale-up max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="font-bold text-base text-slate-900 flex items-center gap-2">
                 <Plus className="w-5 h-5 text-[#2874f0]" />
                 <span>Publish New Guide to Catalog</span>
               </h3>
               <button
                 type="button"
                 onClick={() => setShowAddModal(false)}
-                className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer"
+                className="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -583,30 +544,77 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                 </div>
               </div>
 
+              {/* 1-Tap Device File Upload for Book Cover */}
               <div>
                 <label className="block font-bold text-slate-700 mb-1.5">
-                  Book Description / Syllabus Highlights (SEO & Parents)
+                  Cover Photo (Upload from Device / Gallery)
                 </label>
-                <textarea
-                  rows={3}
-                  placeholder="Detailed exam guide covering Samacheer Kalvi syllabus, unit-wise questions, and previous year model papers..."
-                  value={newDescription}
-                  onChange={(e) => setNewDescription(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-[#2874f0] focus:bg-white text-slate-900"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1.5">
-                  Cover Image URL
-                </label>
+                
                 <input
-                  type="url"
-                  placeholder="https://..."
-                  value={newImage}
-                  onChange={(e) => setNewImage(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-[#2874f0] focus:bg-white text-slate-900"
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  onChange={handleDeviceImageUpload}
+                  className="hidden"
                 />
+
+                {newImage ? (
+                  <div className="flex items-center gap-4 p-3 bg-blue-50/50 border border-blue-200 rounded-2xl">
+                    <img
+                      src={newImage}
+                      alt="Cover Preview"
+                      className="w-16 h-20 object-contain bg-white rounded-xl border border-slate-200 p-1 shadow-xs"
+                    />
+                    <div className="flex-1 space-y-1">
+                      <div className="flex items-center gap-1.5 text-emerald-700 font-bold text-xs">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                        <span>Cover Photo Ready</span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 truncate max-w-[200px]">{newImage}</p>
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="text-xs text-[#2874f0] font-bold hover:underline cursor-pointer block"
+                      >
+                        Change Photo
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setNewImage('')}
+                      className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg cursor-pointer"
+                      title="Remove image"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <div
+                    onClick={() => fileInputRef.current?.click()}
+                    className="border-2 border-dashed border-slate-300 hover:border-[#2874f0] bg-slate-50 hover:bg-blue-50/30 rounded-2xl p-6 text-center cursor-pointer transition-all space-y-2 group"
+                  >
+                    {imageUploading ? (
+                      <div className="flex flex-col items-center gap-2">
+                        <RefreshCw className="w-6 h-6 text-[#2874f0] animate-spin" />
+                        <span className="font-bold text-slate-700">Uploading cover image...</span>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="w-10 h-10 rounded-full bg-blue-100 text-[#2874f0] flex items-center justify-center mx-auto group-hover:scale-110 transition-transform">
+                          <Upload className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <span className="font-bold text-slate-800 text-xs block">
+                            Tap to upload book cover from device
+                          </span>
+                          <span className="text-[11px] text-slate-400">
+                            PNG, JPG, WebP up to 10MB (Free 25GB CDN Storage)
+                          </span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
@@ -619,7 +627,7 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                 </button>
                 <button
                   type="submit"
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || imageUploading}
                   className="px-6 py-2.5 rounded-xl font-bold text-white bg-[#2874f0] hover:bg-blue-700 transition-colors cursor-pointer shadow-md disabled:opacity-50"
                 >
                   {isSubmitting ? 'Publishing…' : 'Publish Publication'}

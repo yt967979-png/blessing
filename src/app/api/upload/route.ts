@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import fs from 'fs';
+import path from 'path';
 import {
   applyRateLimitAsync,
   clientIp,
@@ -8,7 +10,7 @@ import {
 } from '@/lib/serverSecurity';
 
 export async function POST(request: Request) {
-  const rl = await applyRateLimitAsync(`upload:${clientIp(request)}`, 20, 60000);
+  const rl = await applyRateLimitAsync(`upload:${clientIp(request)}`, 30, 60000);
   if (!rl.allowed) {
     return NextResponse.json({ error: 'Too many uploads. Please wait a minute.' }, { status: 429 });
   }
@@ -32,12 +34,12 @@ export async function POST(request: Request) {
       return unauthorizedResponse('Admin login required to upload catalog images.');
     }
 
-    const maxBytes = isReviewUpload ? 3 * 1024 * 1024 : 5 * 1024 * 1024;
+    const maxBytes = isReviewUpload ? 5 * 1024 * 1024 : 10 * 1024 * 1024;
     if (file.size > maxBytes) {
-      return NextResponse.json({ error: 'Image too large.' }, { status: 400 });
+      return NextResponse.json({ error: 'Image too large (max 10MB).' }, { status: 400 });
     }
 
-    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml'];
     if (!allowed.includes(file.type)) {
       return NextResponse.json({ error: 'Only JPEG, PNG, WebP or GIF images allowed.' }, { status: 400 });
     }
@@ -46,58 +48,55 @@ export async function POST(request: Request) {
     const uploadPreset = process.env.CLOUDINARY_UPLOAD_PRESET;
     const uploadFolder = isReviewUpload ? 'blessing_reviews' : folder;
 
+    // 1. Cloudinary Free CDN (25 GB free storage & fast delivery)
     if (cloudName && uploadPreset) {
-      // Unsigned upload with raw file blob — returns a CDN URL (not base64 in DB)
       const cldFormData = new FormData();
       cldFormData.append('file', file);
       cldFormData.append('upload_preset', uploadPreset);
       cldFormData.append('folder', uploadFolder);
 
-      const cldRes = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
-        method: 'POST',
-        body: cldFormData,
-      });
-
-      if (cldRes.ok) {
-        const cldData = await cldRes.json();
-        return NextResponse.json({
-          url: cldData.secure_url,
-          public_id: cldData.public_id,
-          provider: 'cloudinary',
+      try {
+        const cldRes = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+          method: 'POST',
+          body: cldFormData,
         });
-      }
 
-      const errText = await cldRes.text().catch(() => '');
-      console.error('[upload] Cloudinary failed:', cldRes.status, errText.slice(0, 300));
-      if (!isReviewUpload) {
-        return NextResponse.json(
-          {
-            error:
-              'Cloudinary upload failed. Check CLOUDINARY_CLOUD_NAME and an unsigned CLOUDINARY_UPLOAD_PRESET (free tier). Catalog covers must be URLs, not base64.',
-          },
-          { status: 502 }
-        );
+        if (cldRes.ok) {
+          const cldData = await cldRes.json();
+          return NextResponse.json({
+            url: cldData.secure_url,
+            public_id: cldData.public_id,
+            provider: 'cloudinary',
+          });
+        }
+      } catch (cldErr) {
+        console.warn('[upload] Cloudinary direct upload failed, falling back to local storage:', cldErr);
       }
-    } else if (!isReviewUpload) {
-      return NextResponse.json(
-        {
-          error:
-            'Set CLOUDINARY_CLOUD_NAME and CLOUDINARY_UPLOAD_PRESET (unsigned preset on free Cloudinary). Catalog images cannot be stored as base64 on Free.',
-        },
-        { status: 503 }
-      );
     }
 
-    // Reviews only: small inline fallback when Cloudinary is unset
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    const dataUrl = `data:${file.type};base64,${buffer.toString('base64')}`;
+    // 2. Local Public Storage fallback (Always works 100% out-of-the-box on VPS/local)
+    try {
+      const uploadSubDir = isReviewUpload ? 'reviews' : 'catalog';
+      const uploadDir = path.join(process.cwd(), 'public', 'uploads', uploadSubDir);
+      await fs.promises.mkdir(uploadDir, { recursive: true });
 
-    return NextResponse.json({
-      url: dataUrl,
-      provider: 'inline-base64',
-      warning: 'Cloudinary not configured — inline image for reviews only.',
-    });
+      const rawExt = file.name.split('.').pop() || file.type.split('/')[1] || 'jpg';
+      const cleanExt = rawExt.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || 'jpg';
+      const filename = `img-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${cleanExt}`;
+      const filepath = path.join(uploadDir, filename);
+
+      const arrayBuffer = await file.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      await fs.promises.writeFile(filepath, buffer);
+
+      return NextResponse.json({
+        url: `/uploads/${uploadSubDir}/${filename}`,
+        provider: 'local-disk',
+      });
+    } catch (diskErr: any) {
+      console.error('[upload] Disk write failed:', diskErr);
+      return NextResponse.json({ error: 'Failed to save image to server storage' }, { status: 500 });
+    }
   } catch (err: any) {
     return NextResponse.json({ error: err.message || 'Upload failed' }, { status: 500 });
   }
