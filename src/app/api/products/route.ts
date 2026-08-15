@@ -268,7 +268,7 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json().catch(() => ({}));
-    const { title, cls, category, price, mrp, badge, image, description, stock } = body;
+    const { title, cls, category, price, mrp, badge, image, description, stock, subject, status } = body;
 
     if (!title || price === undefined || price === null || price === '') {
       return NextResponse.json({ error: 'Title and price are required' }, { status: 400 });
@@ -282,7 +282,7 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    const bookStatus = stockQty > 0 ? 'published' : 'out_of_stock';
+    const bookStatus = status === 'draft' ? 'draft' : (stockQty > 0 ? 'published' : 'out_of_stock');
 
     const id = `bpg-${Date.now()}`;
     const slug = slugFromTitle(String(title), id);
@@ -301,6 +301,7 @@ export async function POST(request: Request) {
     const finalImg = finalImgRaw || PLACEHOLDER_COVER;
     const finalDesc = description || `Complete ${cls || '10th'} Standard ${title} guide.`;
     const finalBadge = String(badge || '').trim().slice(0, 100);
+    const finalSubject = String(subject || 'General').trim();
 
     // queryDb is a function — wrap so helpers that expect client.query work
     const db = { query: (text: string, params?: any[]) => queryDb(text, params) };
@@ -308,8 +309,8 @@ export async function POST(request: Request) {
     await ensureCategory(categoryId, cls || '10th', category || 'guide');
 
     const sql = `
-      INSERT INTO books (id, title, slug, category_id, price, discount_price, cover_image, description, status, featured, badge, stock)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, TRUE, $10, $11)
+      INSERT INTO books (id, title, slug, category_id, subject, price, discount_price, cover_image, description, status, featured, badge, stock)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, TRUE, $11, $12)
       RETURNING *
     `;
     const res = await queryDb(sql, [
@@ -317,6 +318,7 @@ export async function POST(request: Request) {
       title,
       slug,
       categoryId,
+      finalSubject,
       finalMrp,
       finalDiscountPrice,
       finalImg,

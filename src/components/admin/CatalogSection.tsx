@@ -15,6 +15,12 @@ import {
   AlertCircle,
   ImageIcon,
   RefreshCw,
+  Eye,
+  AlertTriangle,
+  ChevronDown,
+  ChevronUp,
+  Tag,
+  ShieldCheck,
 } from 'lucide-react';
 import type { Product } from '@/context/StoreContext';
 import { useStore } from '@/context/StoreContext';
@@ -30,7 +36,7 @@ interface CatalogSectionProps {
   authHeaders?: Record<string, string>;
 }
 
-const STANDARD_SUBJECTS = [
+const DEFAULT_SUBJECTS = [
   'Mathematics',
   'Science',
   'Social Science',
@@ -47,7 +53,6 @@ const STANDARD_SUBJECTS = [
   'History',
   'Geography',
   'All-in-One Full Set (Combo)',
-  'Other / Custom Subject',
 ];
 
 export const CatalogSection: React.FC<CatalogSectionProps> = ({
@@ -71,34 +76,62 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
   const [editMrp, setEditMrp] = useState<number>(0);
   const [editStock, setEditStock] = useState<number>(0);
 
-  // New book form states
+  // New publication modal states
   const [newTitle, setNewTitle] = useState('');
   const [newCls, setNewCls] = useState('10th');
   const [selectedSubjectOption, setSelectedSubjectOption] = useState('Mathematics');
   const [customSubjectText, setCustomSubjectText] = useState('');
-  const [newMrp, setNewMrp] = useState<number>(350);
-  const [newPrice, setNewPrice] = useState<number>(0); // 0 = No discount (sells at MRP)
-  const [newStock, setNewStock] = useState<number>(50);
+  const [newMrp, setNewMrp] = useState<string>('350');
+  const [newPrice, setNewPrice] = useState<string>('280'); // Kept empty or explicit string
+  const [newStock, setNewStock] = useState<string>('50');
+  const [lowStockThreshold, setLowStockThreshold] = useState<number>(5);
   const [newBadge, setNewBadge] = useState('Popular');
   const [newImage, setNewImage] = useState('');
+  const [hsnCode, setHsnCode] = useState('4901');
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showLivePreview, setShowLivePreview] = useState(true);
+
   const [imageUploading, setImageUploading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [publishStatus, setPublishStatus] = useState<'published' | 'draft'>('published');
 
   const classesList = ['all', '6th', '7th', '8th', '9th', '10th', '11th', '12th'];
 
+  // Dynamically merge subjects from existing catalog with default subjects
+  const availableSubjects = useMemo(() => {
+    const set = new Set(DEFAULT_SUBJECTS);
+    products.forEach((p) => {
+      if (p.subject && p.subject.trim()) set.add(p.subject.trim());
+    });
+    return Array.from(set);
+  }, [products]);
+
   const resolvedSubject = useMemo(() => {
-    if (selectedSubjectOption === 'Other / Custom Subject') {
+    if (selectedSubjectOption === '__custom__') {
       return customSubjectText.trim() || 'General';
     }
     return selectedSubjectOption;
   }, [selectedSubjectOption, customSubjectText]);
 
+  // Numerical pricing calculations
+  const numMrp = Number(newMrp) || 0;
+  const numPrice = Number(newPrice) || 0;
+
+  const priceError = useMemo(() => {
+    if (!newMrp || numMrp <= 0) return 'Printed MRP is required (must be > ₹0).';
+    if (!newPrice || numPrice <= 0) return 'Offer price is required. Click "Sell at MRP" if no discount.';
+    if (numPrice > numMrp) return `Offer price (₹${numPrice}) cannot exceed Printed MRP (₹${numMrp}).`;
+    return null;
+  }, [newMrp, newPrice, numMrp, numPrice]);
+
   const discountPercent = useMemo(() => {
-    if (newPrice > 0 && newPrice < newMrp && newMrp > 0) {
-      return Math.round(((newMrp - newPrice) / newMrp) * 100);
+    if (numPrice > 0 && numPrice < numMrp && numMrp > 0) {
+      return Math.round(((numMrp - numPrice) / numMrp) * 100);
     }
     return 0;
-  }, [newPrice, newMrp]);
+  }, [numPrice, numMrp]);
+
+  const isSuspiciousDiscount = discountPercent >= 80;
 
   const filteredProducts = useMemo(() => {
     return products.filter((p) => {
@@ -187,17 +220,15 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
     }
   };
 
-  const handleCreateBook = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (targetStatus: 'published' | 'draft') => {
     if (!newTitle.trim()) {
       onShowToast('Please enter a book title');
       return;
     }
-
-    const mrpVal = Number(newMrp) || 0;
-    const offerVal = Number(newPrice) || 0;
-    // If offer price is 0 or >= MRP, selling price is MRP (no discount)
-    const finalSellingPrice = offerVal > 0 && offerVal < mrpVal ? offerVal : mrpVal;
+    if (priceError) {
+      onShowToast(`⚠️ ${priceError}`);
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -205,9 +236,10 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
         title: newTitle.trim(),
         cls: newCls,
         subject: resolvedSubject,
-        price: finalSellingPrice,
-        mrp: mrpVal,
-        stock: Number(newStock),
+        price: numPrice,
+        mrp: numMrp,
+        stock: Math.max(0, Number(newStock) || 0),
+        status: targetStatus,
         badge: newBadge.trim(),
         description: `Complete ${newCls} Standard ${resolvedSubject} guide covering Tamil Nadu Samacheer Kalvi syllabus with question banks and answers.`,
         image: newImage.trim() || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80',
@@ -217,19 +249,23 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
       if (creator) {
         await creator(payload);
       }
-      onShowToast(`🎉 "${newTitle}" added to bookstore catalog!`);
+      onShowToast(
+        targetStatus === 'published'
+          ? `🎉 "${newTitle}" published live to bookstore!`
+          : `📝 "${newTitle}" saved as Draft`
+      );
       setShowAddModal(false);
 
       // Reset form
       setNewTitle('');
       setSelectedSubjectOption('Mathematics');
       setCustomSubjectText('');
-      setNewMrp(350);
-      setNewPrice(0);
-      setNewStock(50);
+      setNewMrp('350');
+      setNewPrice('280');
+      setNewStock('50');
       setNewImage('');
     } catch {
-      onShowToast('❌ Failed to add publication');
+      onShowToast('❌ Failed to save publication');
     } finally {
       setIsSubmitting(false);
     }
@@ -477,15 +513,22 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
         </div>
       </div>
 
-      {/* Add New Publication Modal */}
+      {/* ─── ADD NEW PUBLICATION MODAL (Redesigned with Price Safety & Live Preview) ─── */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5 animate-scale-up max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl space-y-5 animate-scale-up max-h-[92vh] overflow-y-auto custom-scrollbar">
+            
+            {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="font-bold text-base text-slate-900 flex items-center gap-2">
-                <Plus className="w-5 h-5 text-[#2874f0]" />
-                <span>Publish New Guide to Catalog</span>
-              </h3>
+              <div>
+                <span className="text-[10px] font-bold tracking-widest text-blue-600 uppercase">
+                  Bookstore Inventory
+                </span>
+                <h3 className="font-bold text-base text-slate-900 flex items-center gap-2">
+                  <Plus className="w-5 h-5 text-[#2874f0]" />
+                  <span>Publish New Guide to Catalog</span>
+                </h3>
+              </div>
               <button
                 type="button"
                 onClick={() => setShowAddModal(false)}
@@ -495,139 +538,196 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
               </button>
             </div>
 
-            <form onSubmit={handleCreateBook} className="space-y-4 text-xs">
-              {/* Book Title */}
-              <div>
-                <label className="block font-bold text-slate-700 mb-1.5">
-                  Book Title *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. 10th Standard Mathematics Guide (Tamil & English Medium)"
-                  value={newTitle}
-                  onChange={(e) => setNewTitle(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-[#2874f0] focus:bg-white text-slate-900"
-                />
-              </div>
-
-              {/* Standard & Subject Selectors */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1.5">
-                    Class Standard *
-                  </label>
-                  <select
-                    value={newCls}
-                    onChange={(e) => setNewCls(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-[#2874f0] focus:bg-white text-slate-900 cursor-pointer font-semibold"
-                  >
-                    {['6th', '7th', '8th', '9th', '10th', '11th', '12th'].map((c) => (
-                      <option key={c} value={c}>
-                        {c} Standard
-                      </option>
-                    ))}
-                  </select>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSubmit(publishStatus);
+              }}
+              className="space-y-5 text-xs"
+            >
+              {/* SECTION 1: BOOK ESSENTIALS */}
+              <div className="space-y-3 bg-slate-50/50 p-4 rounded-2xl border border-slate-200">
+                <div className="font-bold text-[11px] text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                  <BookOpen className="w-3.5 h-3.5 text-[#2874f0]" />
+                  <span>1. Book Essentials</span>
                 </div>
 
+                {/* Title Input */}
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1.5">
-                    Subject (Select from Menu) *
-                  </label>
-                  <select
-                    value={selectedSubjectOption}
-                    onChange={(e) => setSelectedSubjectOption(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-[#2874f0] focus:bg-white text-slate-900 cursor-pointer font-semibold"
-                  >
-                    {STANDARD_SUBJECTS.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Custom Subject Input (Only if 'Other' selected) */}
-              {selectedSubjectOption === 'Other / Custom Subject' && (
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1.5">
-                    Enter Custom Subject Name *
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Book Title *
                   </label>
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Environmental Studies / Hindi"
-                    value={customSubjectText}
-                    onChange={(e) => setCustomSubjectText(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-[#2874f0] focus:bg-white text-slate-900"
+                    placeholder="e.g. 10th Standard Mathematics Guide (Tamil & English Medium)"
+                    value={newTitle}
+                    onChange={(e) => setNewTitle(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl outline-none focus:border-[#2874f0] text-slate-900 text-xs font-medium shadow-2xs"
                   />
                 </div>
-              )}
 
-              {/* Pricing & Stock Fields */}
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1.5">
-                    Printed MRP (₹) *
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    min={1}
-                    value={newMrp}
-                    onChange={(e) => setNewMrp(Number(e.target.value))}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-[#2874f0] focus:bg-white text-slate-900 font-bold"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1.5">
-                    Offer Price (₹) <span className="font-normal text-slate-400">(Optional)</span>
-                  </label>
-                  <input
-                    type="number"
-                    min={0}
-                    placeholder="0 = No discount"
-                    value={newPrice === 0 ? '' : newPrice}
-                    onChange={(e) => setNewPrice(Number(e.target.value) || 0)}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-[#2874f0] focus:bg-white text-slate-900 font-bold"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1.5">
-                    Initial Copies *
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    min={0}
-                    value={newStock}
-                    onChange={(e) => setNewStock(Math.max(0, Number(e.target.value) || 0))}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-[#2874f0] focus:bg-white text-slate-900 font-bold"
-                  />
-                </div>
-              </div>
+                {/* Standard & Subject Selectors */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">
+                      Class Standard *
+                    </label>
+                    <select
+                      value={newCls}
+                      onChange={(e) => setNewCls(e.target.value)}
+                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl outline-none focus:border-[#2874f0] text-slate-900 cursor-pointer font-semibold shadow-2xs"
+                    >
+                      {['6th', '7th', '8th', '9th', '10th', '11th', '12th'].map((c) => (
+                        <option key={c} value={c}>
+                          {c} Standard
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-              {/* Live Price Feedback Pill */}
-              <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-[11px] font-medium text-slate-600 flex items-center justify-between">
-                <span>Selling Price for Students:</span>
-                {discountPercent > 0 ? (
-                  <span className="font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-md border border-emerald-200">
-                    ₹{newPrice} ({discountPercent}% OFF on MRP ₹{newMrp})
-                  </span>
-                ) : (
-                  <span className="font-bold text-slate-800 bg-slate-200 px-2.5 py-0.5 rounded-md">
-                    ₹{newMrp} (Full MRP — No Discount)
-                  </span>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">
+                      Subject (Dropdown Menu) *
+                    </label>
+                    <select
+                      value={selectedSubjectOption}
+                      onChange={(e) => setSelectedSubjectOption(e.target.value)}
+                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl outline-none focus:border-[#2874f0] text-slate-900 cursor-pointer font-semibold shadow-2xs"
+                    >
+                      {availableSubjects.map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
+                      <option value="__custom__">+ Add Custom Subject...</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Custom Subject Input */}
+                {selectedSubjectOption === '__custom__' && (
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">
+                      Custom Subject Name *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Environmental Science / Hindi"
+                      value={customSubjectText}
+                      onChange={(e) => setCustomSubjectText(e.target.value)}
+                      className="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl outline-none focus:border-[#2874f0] text-slate-900 shadow-2xs"
+                    />
+                  </div>
                 )}
               </div>
 
-              {/* 1-Tap Device File Upload for Book Cover */}
-              <div>
-                <label className="block font-bold text-slate-700 mb-1.5">
-                  Cover Photo (Upload from Device / Gallery)
-                </label>
-                
+              {/* SECTION 2: PRICING & INVENTORY (Price Safety First) */}
+              <div className="space-y-3 bg-slate-50/50 p-4 rounded-2xl border border-slate-200">
+                <div className="font-bold text-[11px] text-slate-800 uppercase tracking-wider flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Tag className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>2. Pricing &amp; Stock Inventory</span>
+                  </div>
+                  {numMrp > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setNewPrice(String(numMrp))}
+                      className="text-[10px] text-blue-600 hover:text-blue-800 font-bold underline cursor-pointer"
+                    >
+                      Sell at Full MRP (₹{numMrp})
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {/* Printed MRP */}
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">
+                      Printed MRP (₹) *
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min={1}
+                      placeholder="e.g. 350"
+                      value={newMrp}
+                      onChange={(e) => setNewMrp(e.target.value)}
+                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl outline-none focus:border-[#2874f0] text-slate-900 font-bold shadow-2xs"
+                    />
+                  </div>
+
+                  {/* Offer / Selling Price (Protected against silent 0) */}
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">
+                      Selling / Offer Price (₹) *
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min={1}
+                      placeholder="e.g. 280"
+                      value={newPrice}
+                      onChange={(e) => setNewPrice(e.target.value)}
+                      className={`w-full px-3.5 py-2.5 bg-white border rounded-xl outline-none font-bold shadow-2xs ${
+                        priceError
+                          ? 'border-red-400 focus:border-red-600 text-red-700'
+                          : 'border-slate-200 focus:border-[#2874f0] text-slate-900'
+                      }`}
+                    />
+                  </div>
+
+                  {/* Initial Copies */}
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">
+                      Initial Copies in Rack *
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min={0}
+                      value={newStock}
+                      onChange={(e) => setNewStock(e.target.value)}
+                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl outline-none focus:border-[#2874f0] text-slate-900 font-bold shadow-2xs"
+                    />
+                  </div>
+                </div>
+
+                {/* Inline Price Validation & Live Discount Banner */}
+                {priceError ? (
+                  <div className="p-2.5 bg-red-50 border border-red-200 rounded-xl text-[11px] text-red-700 font-bold flex items-center gap-1.5">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-red-600" />
+                    <span>{priceError}</span>
+                  </div>
+                ) : isSuspiciousDiscount ? (
+                  <div className="p-2.5 bg-amber-50 border border-amber-300 rounded-xl text-[11px] text-amber-900 font-bold flex items-center gap-1.5">
+                    <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600" />
+                    <span>⚠️ Unusually deep discount: {discountPercent}% OFF (Selling for ₹{numPrice} on ₹{numMrp} MRP). Please verify.</span>
+                  </div>
+                ) : (
+                  <div className="p-2.5 bg-white rounded-xl border border-slate-200 text-[11px] flex items-center justify-between">
+                    <span className="text-slate-600 font-medium">Customer Storefront Price:</span>
+                    {discountPercent > 0 ? (
+                      <span className="font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-md border border-emerald-200">
+                        ₹{numPrice} • {discountPercent}% OFF (Save ₹{numMrp - numPrice})
+                      </span>
+                    ) : (
+                      <span className="font-bold text-slate-800 bg-slate-100 px-2.5 py-0.5 rounded-md border border-slate-200">
+                        ₹{numMrp} (Full MRP — No Discount)
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* SECTION 3: BOOK COVER IMAGE UPLOAD */}
+              <div className="space-y-3 bg-slate-50/50 p-4 rounded-2xl border border-slate-200">
+                <div className="font-bold text-[11px] text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                  <ImageIcon className="w-3.5 h-3.5 text-[#2874f0]" />
+                  <span>3. Book Cover Photo (Device Gallery Upload)</span>
+                </div>
+
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -637,18 +737,18 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                 />
 
                 {newImage ? (
-                  <div className="flex items-center gap-4 p-3 bg-blue-50/50 border border-blue-200 rounded-2xl">
+                  <div className="flex items-center gap-4 p-3 bg-white border border-blue-200 rounded-2xl shadow-2xs">
                     <img
                       src={newImage}
                       alt="Cover Preview"
-                      className="w-16 h-20 object-contain bg-white rounded-xl border border-slate-200 p-1 shadow-xs"
+                      className="w-16 h-20 object-contain bg-slate-50 rounded-xl border border-slate-200 p-1 shadow-xs"
                     />
                     <div className="flex-1 space-y-1">
                       <div className="flex items-center gap-1.5 text-emerald-700 font-bold text-xs">
                         <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                         <span>Cover Photo Ready</span>
                       </div>
-                      <p className="text-[11px] text-slate-500 truncate max-w-[200px]">{newImage}</p>
+                      <p className="text-[11px] text-slate-400 truncate max-w-[240px]">{newImage}</p>
                       <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
@@ -669,7 +769,7 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                 ) : (
                   <div
                     onClick={() => fileInputRef.current?.click()}
-                    className="border-2 border-dashed border-slate-300 hover:border-[#2874f0] bg-slate-50 hover:bg-blue-50/30 rounded-2xl p-6 text-center cursor-pointer transition-all space-y-2 group"
+                    className="border-2 border-dashed border-slate-300 hover:border-[#2874f0] bg-white hover:bg-blue-50/20 rounded-2xl p-6 text-center cursor-pointer transition-all space-y-2 group"
                   >
                     {imageUploading ? (
                       <div className="flex flex-col items-center gap-2">
@@ -678,15 +778,15 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                       </div>
                     ) : (
                       <>
-                        <div className="w-10 h-10 rounded-full bg-blue-100 text-[#2874f0] flex items-center justify-center mx-auto group-hover:scale-110 transition-transform">
+                        <div className="w-10 h-10 rounded-full bg-blue-50 text-[#2874f0] flex items-center justify-center mx-auto group-hover:scale-110 transition-transform border border-blue-100">
                           <Upload className="w-5 h-5" />
                         </div>
                         <div>
                           <span className="font-bold text-slate-800 text-xs block">
-                            Tap to upload book cover from device
+                            Tap to upload book cover photo
                           </span>
                           <span className="text-[11px] text-slate-400">
-                            PNG, JPG, WebP up to 10MB (Free 25GB CDN Storage)
+                            PNG, JPG, WebP up to 10MB (Free 25GB Storage)
                           </span>
                         </div>
                       </>
@@ -695,7 +795,99 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                 )}
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+              {/* LIVE STOREFRONT PREVIEW CARD (Visual sanity check before publish) */}
+              <div className="border border-slate-200 rounded-2xl p-4 bg-white space-y-2.5 shadow-xs">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-[11px] text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                    <Eye className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Live Storefront Card Preview</span>
+                  </span>
+                  <span className="text-[10px] text-slate-400">How students see this book</span>
+                </div>
+
+                <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
+                  <div className="w-14 h-18 bg-white border border-slate-200 rounded-lg overflow-hidden shrink-0 flex items-center justify-center">
+                    {newImage ? (
+                      <img src={newImage} alt="Preview" className="w-full h-full object-contain p-1" />
+                    ) : (
+                      <BookOpen className="w-6 h-6 text-slate-300" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0 space-y-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="bg-blue-100 text-[#2874f0] text-[9px] font-bold px-2 py-0.5 rounded">
+                        {newCls} Standard
+                      </span>
+                      <span className="text-slate-400 text-[10px]">★ 5.0 (New)</span>
+                    </div>
+                    <p className="font-bold text-xs text-slate-900 truncate">
+                      {newTitle || 'Guide Book Title'}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-sm text-slate-900 font-mono">
+                        ₹{numPrice > 0 ? numPrice : (numMrp || 0)}
+                      </span>
+                      {discountPercent > 0 && (
+                        <>
+                          <span className="line-through text-slate-400 text-xs">₹{numMrp}</span>
+                          <span className="text-[10px] font-bold text-emerald-600">{discountPercent}% OFF</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* SECTION 4: ADVANCED COMPLIANCE & SEO (Collapsible) */}
+              <div className="border border-slate-200 rounded-2xl overflow-hidden bg-slate-50/50">
+                <button
+                  type="button"
+                  onClick={() => setShowAdvanced(!showAdvanced)}
+                  className="w-full px-4 py-3 flex items-center justify-between text-slate-700 hover:bg-slate-100 text-xs font-bold cursor-pointer"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-slate-500" />
+                    <span>Advanced &amp; Compliance Details (HSN, Low Stock Alert, SEO)</span>
+                  </div>
+                  {showAdvanced ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                </button>
+
+                {showAdvanced && (
+                  <div className="p-4 pt-1 space-y-3 bg-white border-t border-slate-200">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block font-bold text-slate-700 mb-1">
+                          GST HSN Code
+                        </label>
+                        <input
+                          type="text"
+                          value={hsnCode}
+                          onChange={(e) => setHsnCode(e.target.value)}
+                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none font-mono font-bold text-slate-700"
+                        />
+                        <span className="text-[10px] text-slate-400 block mt-0.5">HSN 4901 (0% GST Exempt Books)</span>
+                      </div>
+
+                      <div>
+                        <label className="block font-bold text-slate-700 mb-1">
+                          Low Stock Alert Threshold
+                        </label>
+                        <input
+                          type="number"
+                          min={1}
+                          value={lowStockThreshold}
+                          onChange={(e) => setLowStockThreshold(Number(e.target.value) || 5)}
+                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none font-bold text-slate-700"
+                        />
+                        <span className="text-[10px] text-slate-400 block mt-0.5">Triggers dashboard alert below {lowStockThreshold} copies</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* MODAL FOOTER: Draft vs Publish Buttons */}
+              <div className="flex items-center justify-between pt-4 border-t border-slate-100 gap-3">
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
@@ -703,13 +895,26 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                 >
                   Cancel
                 </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting || imageUploading}
-                  className="px-6 py-2.5 rounded-xl font-bold text-white bg-[#2874f0] hover:bg-blue-700 transition-colors cursor-pointer shadow-md disabled:opacity-50"
-                >
-                  {isSubmitting ? 'Publishing…' : 'Publish Publication'}
-                </button>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={isSubmitting || imageUploading || !!priceError}
+                    onClick={() => handleSubmit('draft')}
+                    className="px-4 py-2.5 rounded-xl font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-300 transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    Save as Draft
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={isSubmitting || imageUploading || !!priceError}
+                    onClick={() => handleSubmit('published')}
+                    className="px-6 py-2.5 rounded-xl font-bold text-white bg-[#2874f0] hover:bg-blue-700 transition-colors cursor-pointer shadow-md disabled:opacity-50"
+                  >
+                    {isSubmitting ? 'Publishing…' : 'Publish Publication'}
+                  </button>
+                </div>
               </div>
             </form>
           </div>
