@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import type { Product } from '@/context/StoreContext';
 import { useStore } from '@/context/StoreContext';
-import { authHeaders } from '@/lib/clientAuth';
+import { authHeaders, authFormHeaders } from '@/lib/clientAuth';
 
 interface CatalogSectionProps {
   products: Product[];
@@ -202,7 +202,7 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
     try {
       const res = await fetch('/api/upload', {
         method: 'POST',
-        headers: authHeaders(user),
+        headers: authFormHeaders(user),
         body: formData,
       });
 
