@@ -1,5 +1,6 @@
 import { formatGstinLine, getShopInvoiceAddress, getShopLegalName } from '@/lib/shopConfig';
 import { OFFICE_ADDRESS_LINES, OFFICE_COMPANY_NAME } from '@/lib/officeLocation';
+import { generateQrDataUrl } from '@/lib/qrCode';
 
 export function getFinancialYearString(date: Date = new Date()): string {
   const month = date.getMonth(); // 0 = Jan, 3 = Apr
@@ -96,8 +97,9 @@ export interface InvoiceData {
 /**
  * Generates an official, GST-compliant BILL OF SUPPLY for printed books (HSN 4901, 0% GST Exempt).
  * Sized for standard A4 document printing or browser print-to-PDF.
+ * Uses 100% offline Base64 QR code for instant, reliable rendering in all print environments.
  */
-export function generateTaxInvoiceHtml(orderData: InvoiceData): string {
+export async function generateTaxInvoiceHtml(orderData: InvoiceData): Promise<string> {
   const dateStr = orderData.createdAt
     ? new Date(orderData.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })
     : new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -116,7 +118,8 @@ export function generateTaxInvoiceHtml(orderData: InvoiceData): string {
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://blessingpowerguide.com';
   const cleanPhone = (orderData.customerPhone || '').replace(/\D/g, '').slice(-10);
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&margin=0&data=${encodeURIComponent(`${siteUrl}/track?orderId=${encodeURIComponent(orderData.orderId)}${cleanPhone ? `&phone=${encodeURIComponent(cleanPhone)}` : ''}`)}`;
+  const trackTargetUrl = `${siteUrl}/track?orderId=${encodeURIComponent(orderData.orderId)}${cleanPhone ? `&phone=${encodeURIComponent(cleanPhone)}` : ''}`;
+  const qrDataUrl = await generateQrDataUrl(trackTargetUrl, { size: 140, margin: 1 });
 
   const itemsSubtotal = itemsList.reduce((sum, it) => sum + (Number(it.price || it.subtotal || 0) * (it.qty || 1)), 0);
   const shippingCharge = orderData.shippingCharge !== undefined ? orderData.shippingCharge : Math.max(0, totalAmount - itemsSubtotal);
@@ -131,7 +134,7 @@ export function generateTaxInvoiceHtml(orderData: InvoiceData): string {
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
       color: #0f172a;
-      background: #f8fafc;
+      background: #f1f5f9;
       padding: 24px;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
@@ -172,7 +175,7 @@ export function generateTaxInvoiceHtml(orderData: InvoiceData): string {
       border: 1px solid #cbd5e1;
       border-radius: 16px;
       padding: 36px 40px;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+      box-shadow: 0 4px 20px rgba(0,0,0,0.06);
     }
     .cancel-banner {
       background: #fef2f2;
@@ -190,13 +193,13 @@ export function generateTaxInvoiceHtml(orderData: InvoiceData): string {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      border-bottom: 2px solid #001b3a;
+      border-bottom: 2.5px solid #001b3a;
       padding-bottom: 20px;
       margin-bottom: 24px;
       gap: 20px;
     }
     .brand-title {
-      font-size: 22px;
+      font-size: 24px;
       font-weight: 900;
       color: #001b3a;
       letter-spacing: -0.5px;
@@ -211,14 +214,14 @@ export function generateTaxInvoiceHtml(orderData: InvoiceData): string {
       text-align: right;
     }
     .doc-type-title {
-      font-size: 22px;
+      font-size: 24px;
       font-weight: 900;
       color: #2874f0;
       letter-spacing: 0.5px;
       text-transform: uppercase;
     }
     .doc-type-sub {
-      font-size: 9px;
+      font-size: 9.5px;
       font-weight: 700;
       color: #64748b;
       margin-top: 2px;
@@ -226,7 +229,7 @@ export function generateTaxInvoiceHtml(orderData: InvoiceData): string {
       letter-spacing: 0.5px;
     }
     .inv-meta-line {
-      font-size: 12px;
+      font-size: 12.5px;
       color: #0f172a;
       margin-top: 4px;
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
@@ -265,6 +268,7 @@ export function generateTaxInvoiceHtml(orderData: InvoiceData): string {
       color: #334155;
       margin-top: 4px;
       line-height: 1.45;
+      font-weight: 500;
     }
     .party-phone {
       font-size: 12px;
@@ -296,7 +300,7 @@ export function generateTaxInvoiceHtml(orderData: InvoiceData): string {
     .text-right { text-align: right; }
     .amount-box {
       display: grid;
-      grid-template-columns: 1.4fr 1fr;
+      grid-template-columns: 1.35fr 1fr;
       gap: 20px;
       margin-bottom: 24px;
       align-items: start;
@@ -316,7 +320,7 @@ export function generateTaxInvoiceHtml(orderData: InvoiceData): string {
       margin-bottom: 4px;
     }
     .words-val {
-      font-size: 12px;
+      font-size: 12.5px;
       font-weight: 800;
       color: #0f172a;
       font-style: italic;
@@ -327,7 +331,7 @@ export function generateTaxInvoiceHtml(orderData: InvoiceData): string {
       font-size: 12px;
     }
     .totals-table td {
-      padding: 6px 10px;
+      padding: 7px 10px;
       border-bottom: 1px solid #f1f5f9;
     }
     .grand-total-row {
@@ -339,21 +343,25 @@ export function generateTaxInvoiceHtml(orderData: InvoiceData): string {
     }
     .footer-grid {
       display: grid;
-      grid-template-columns: 100px 1fr 180px;
+      grid-template-columns: 110px 1fr 190px;
       gap: 16px;
       align-items: center;
-      border-top: 1px solid #e2e8f0;
+      border-top: 1.5px solid #e2e8f0;
       padding-top: 20px;
       margin-top: 20px;
     }
     .qr-box {
       text-align: center;
     }
-    .qr-box img {
-      width: 80px;
-      height: 80px;
+    .qr-img {
+      width: 90px;
+      height: 90px;
       display: block;
       margin: 0 auto;
+      border-radius: 6px;
+      border: 1px solid #e2e8f0;
+      padding: 2px;
+      background: #ffffff;
     }
     .terms-box {
       font-size: 10px;
@@ -369,7 +377,7 @@ export function generateTaxInvoiceHtml(orderData: InvoiceData): string {
       font-size: 10px;
       font-weight: 800;
       color: #001b3a;
-      margin-bottom: 36px;
+      margin-bottom: 40px;
     }
     .sig-title {
       font-size: 10px;
@@ -383,7 +391,7 @@ export function generateTaxInvoiceHtml(orderData: InvoiceData): string {
       body { background: #ffffff; padding: 0; }
       .toolbar { display: none !important; }
       .invoice-card { border: none; box-shadow: none; padding: 0; }
-      @page { size: A4 portrait; margin: 12mm 15mm; }
+      @page { size: A4 portrait; margin: 10mm 14mm; }
     }
   </style>
 </head>
@@ -518,7 +526,7 @@ export function generateTaxInvoiceHtml(orderData: InvoiceData): string {
     {/* Footer & Signature */}
     <div class="footer-grid">
       <div class="qr-box">
-        <img src="${qrUrl}" alt="Track Order QR" />
+        ${qrDataUrl ? `<img src="${qrDataUrl}" class="qr-img" alt="Track Order QR" />` : ''}
         <div style="font-size:8px;font-weight:800;color:#001b3a;margin-top:4px;">SCAN TO TRACK</div>
       </div>
 
@@ -539,8 +547,8 @@ export function generateTaxInvoiceHtml(orderData: InvoiceData): string {
 </html>`;
 }
 
-export function downloadTaxInvoice(orderData: InvoiceData): void {
-  const htmlContent = generateTaxInvoiceHtml(orderData);
+export async function downloadTaxInvoice(orderData: InvoiceData): Promise<void> {
+  const htmlContent = await generateTaxInvoiceHtml(orderData);
   const printWindow = window.open('', '_blank', 'width=900,height=1100');
   if (printWindow) {
     printWindow.document.write(htmlContent);

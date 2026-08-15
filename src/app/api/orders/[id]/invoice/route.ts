@@ -64,7 +64,7 @@ export async function GET(
         ? o.items
         : [{ title: 'Guide Book', qty: 1, price: Number(o.total_amount || 0) }];
 
-    const invoiceHtml = generateTaxInvoiceHtml({
+    const invoiceHtml = await generateTaxInvoiceHtml({
       orderId: o.order_number || o.id,
       invoiceNumber: o.invoice_number || null,
       customerName: addrObj.name || o.user_id || 'Customer',

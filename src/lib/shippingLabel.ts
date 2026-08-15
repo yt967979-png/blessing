@@ -1,5 +1,6 @@
 import { OFFICE_ADDRESS_LINES, OFFICE_COMPANY_NAME } from '@/lib/officeLocation';
 import { generateCode128Svg } from '@/lib/barcode128';
+import { generateQrDataUrl } from '@/lib/qrCode';
 
 export type ShippingLabelSize = 'thermal4x6' | 'a4' | 'a5';
 
@@ -20,6 +21,7 @@ export interface ShippingLabelOrder {
   courierName?: string;
   createdAt?: string;
   items?: Array<{ title?: string; qty?: number; price?: number; subtotal?: number }>;
+  qrDataUrl?: string;
 }
 
 function esc(s: string): string {
@@ -34,7 +36,7 @@ function esc(s: string): string {
  * Generates the pure monochrome 4×6 inch (101.6mm × 152.4mm) thermal shipping label HTML.
  * Engineered specifically for 203/300 DPI direct thermal printers (TVS, TSC, Zebra, Rollo).
  */
-export function generateSingleThermalLabelHtml(o: ShippingLabelOrder): string {
+export function generateSingleThermalLabelHtml(o: ShippingLabelOrder, qrDataUrl: string = ''): string {
   const isCancelled = String(o.courierStatus || o.paymentStatus || '').toLowerCase().includes('cancel');
   const hasAwb = Boolean(o.trackingNumber && !String(o.trackingNumber).startsWith('SHP-') && !String(o.trackingNumber).includes('Pending'));
   const barcodeText = hasAwb ? String(o.trackingNumber) : String(o.orderId || 'BPG-00000');
@@ -47,10 +49,6 @@ export function generateSingleThermalLabelHtml(o: ShippingLabelOrder): string {
   const orderDate = o.createdAt
     ? new Date(o.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
     : new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
-
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://blessingpowerguide.com';
-  const cleanPhone = (o.customerPhone || '').replace(/\D/g, '').slice(-10);
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&margin=0&data=${encodeURIComponent(`${siteUrl}/track?orderId=${encodeURIComponent(o.orderId)}${cleanPhone ? `&phone=${encodeURIComponent(cleanPhone)}` : ''}`)}`;
 
   const itemsLine = (o.items || [])
     .map((it) => `${esc(it.title || 'Guide Book')} × ${it.qty || 1}`)
@@ -113,7 +111,7 @@ export function generateSingleThermalLabelHtml(o: ShippingLabelOrder): string {
         <div class="contents-line">${itemsLine}</div>
       </div>
       <div class="qr-box">
-        <img src="${qrUrl}" alt="Track QR" />
+        ${qrDataUrl ? `<img src="${qrDataUrl}" class="qr-img" alt="Track QR" />` : ''}
         <div class="qr-lbl">SCAN TRACK</div>
       </div>
     </div>
@@ -350,9 +348,9 @@ const THERMAL_CSS = `
   .qr-box {
     text-align: center;
   }
-  .qr-box img {
-    width: 50px;
-    height: 50px;
+  .qr-img {
+    width: 52px;
+    height: 52px;
     display: block;
     margin: 0 auto;
   }
@@ -430,12 +428,22 @@ const THERMAL_CSS = `
 /**
  * Generates an HTML document containing 4×6" thermal shipping labels for one or multiple orders.
  */
-export function generateShippingLabelsHtml(
+export async function generateShippingLabelsHtml(
   orders: ShippingLabelOrder[],
   initialSize: ShippingLabelSize = 'thermal4x6'
-): string {
+): Promise<string> {
   const orderList = orders && orders.length > 0 ? orders : [];
-  const labelsHtml = orderList.map((o) => generateSingleThermalLabelHtml(o)).join('\n');
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://blessingpowerguide.com';
+
+  const labelsHtmlPromises = orderList.map(async (o) => {
+    const cleanPhone = (o.customerPhone || '').replace(/\D/g, '').slice(-10);
+    const trackTargetUrl = `${siteUrl}/track?orderId=${encodeURIComponent(o.orderId)}${cleanPhone ? `&phone=${encodeURIComponent(cleanPhone)}` : ''}`;
+    const qrDataUrl = await generateQrDataUrl(trackTargetUrl, { size: 120, margin: 0 });
+    return generateSingleThermalLabelHtml(o, qrDataUrl);
+  });
+
+  const labelsHtmlArray = await Promise.all(labelsHtmlPromises);
+  const labelsHtml = labelsHtmlArray.join('\n');
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -479,13 +487,14 @@ export function generateShippingLabelsHtml(
 /**
  * Opens a print window with the 4×6" thermal shipping label for an order.
  */
-export function openShippingLabelPrint(
+export async function openShippingLabelPrint(
   o: ShippingLabelOrder | ShippingLabelOrder[],
   size: ShippingLabelSize = 'thermal4x6'
-): void {
+): Promise<void> {
   const list = Array.isArray(o) ? o : [o];
   const pw = window.open('', '_blank', 'width=900,height=1100');
   if (!pw) return;
-  pw.document.write(generateShippingLabelsHtml(list, size));
+  const html = await generateShippingLabelsHtml(list, size);
+  pw.document.write(html);
   pw.document.close();
 }
