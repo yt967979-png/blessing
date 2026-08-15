@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { queryDb } from '@/lib/db';
 import { forbiddenResponse, verifyAdminRequest, verifySuperAdminRequest } from '@/lib/serverSecurity';
-import { getActiveHoldsSummary } from '@/lib/stockHold';
+import { getActiveHoldsSummary, releaseStockHolds } from '@/lib/stockHold';
 
-/** Admin: list customers + low-stock books */
+/** Admin: list customers + low-stock books + active stock holds */
 export async function GET(request: NextRequest) {
   const admin = await verifyAdminRequest(request);
   if (!admin.isAdmin) return forbiddenResponse(admin.error);
@@ -12,14 +12,17 @@ export async function GET(request: NextRequest) {
   const view = searchParams.get('view') || 'users';
 
   try {
-    if (view === 'low_stock') {
+    if (view === 'low_stock' || view === 'stock_holds') {
       const res = await queryDb(
-        `SELECT id, title, stock, status, price
+        `SELECT id, title, stock, status, price, cls, subject
          FROM books
          WHERE COALESCE(stock, 0) <= 5
          ORDER BY COALESCE(stock, 0) ASC, title ASC
          LIMIT 100`
       );
+      const holds = await getActiveHoldsSummary(100);
+      const totalHoldQty = holds.reduce((s, h) => s + h.qty, 0);
+
       return NextResponse.json({
         alerts: res.rows.map((b: any) => ({
           id: b.id,
@@ -27,17 +30,15 @@ export async function GET(request: NextRequest) {
           stock: Number(b.stock ?? 0),
           status: b.status,
           price: Number(b.price || 0),
+          cls: b.cls,
+          subject: b.subject,
         })),
+        holds: {
+          count: holds.length,
+          totalQty: totalHoldQty,
+          list: holds,
+        },
       });
-    }
-
-    // Units currently reserved for in-progress Razorpay checkouts (paid orders
-    // already moved these to 'confirmed' and are excluded — this is only the
-    // "someone is on the payment sheet right now" bucket).
-    if (view === 'stock_holds') {
-      const holds = await getActiveHoldsSummary(100);
-      const totalQty = holds.reduce((s, h) => s + h.qty, 0);
-      return NextResponse.json({ holds, totalQty, count: holds.length });
     }
 
     const res = await queryDb(
@@ -81,15 +82,40 @@ export async function GET(request: NextRequest) {
   }
 }
 
-/** Super Admin only: promote customer → admin, or revoke admin → customer */
+/** Admin: manual hold release OR Super Admin role modification */
 export async function POST(request: NextRequest) {
-  const admin = await verifySuperAdminRequest(request);
-  if (!admin.isSuperAdmin) {
-    return forbiddenResponse(admin.error || 'Only Super Admin can change admin roles.');
-  }
+  const admin = await verifyAdminRequest(request);
+  if (!admin.isAdmin) return forbiddenResponse(admin.error);
 
   try {
     const body = await request.json().catch(() => ({}));
+
+    // Action 1: Manual Stock Hold Release by Admin
+    if (body.action === 'release_hold') {
+      const holdGroupId = String(body.holdGroupId || body.id || '').trim();
+      const razorpayOrderId = String(body.razorpayOrderId || '').trim();
+      if (!holdGroupId && !razorpayOrderId) {
+        return NextResponse.json({ error: 'holdGroupId or razorpayOrderId required.' }, { status: 400 });
+      }
+
+      const result = await releaseStockHolds(
+        { holdGroupId: holdGroupId || undefined, razorpayOrderId: razorpayOrderId || undefined },
+        'admin_manual_release'
+      );
+
+      return NextResponse.json({
+        success: true,
+        releasedCount: result.releasedCount,
+        releasedQtyByBook: result.releasedQtyByBook,
+      });
+    }
+
+    // Action 2: Super Admin only: promote customer → admin, or revoke admin → customer
+    const superAdmin = await verifySuperAdminRequest(request);
+    if (!superAdmin.isSuperAdmin) {
+      return forbiddenResponse(superAdmin.error || 'Only Super Admin can change admin roles.');
+    }
+
     const userId = String(body.userId || '').trim();
     const newRole = String(body.role || '').trim().toLowerCase();
 
@@ -132,38 +158,33 @@ export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
     const userId = String(body.userId || '').trim();
-    const status = String(body.status || '').trim();
-    if (!userId || !['active', 'banned'].includes(status)) {
-      return NextResponse.json({ error: 'userId and status (active|banned) required.' }, { status: 400 });
+    const status = String(body.status || '').trim().toLowerCase();
+
+    if (!userId || !['active', 'banned', 'inactive'].includes(status)) {
+      return NextResponse.json(
+        { error: 'userId and valid status (active | banned | inactive) required.' },
+        { status: 400 }
+      );
     }
 
-    await queryDb(`UPDATE users SET status = $1 WHERE id::text = $2::text AND COALESCE(role, 'customer') != 'super_admin'`, [
-      status,
-      userId,
-    ]);
+    const userCheck = await queryDb(
+      `SELECT id, role FROM users WHERE id::text = $1::text LIMIT 1`,
+      [userId]
+    );
+    if (!userCheck.rows[0]) {
+      return NextResponse.json({ error: 'User not found.' }, { status: 404 });
+    }
+    if (String(userCheck.rows[0].role || '').toLowerCase() === 'super_admin') {
+      return NextResponse.json({ error: 'Super Admin status cannot be modified.' }, { status: 400 });
+    }
+
+    await queryDb(
+      `UPDATE users SET status = $1, updated_at = NOW() WHERE id::text = $2::text`,
+      [status, userId]
+    );
+
     return NextResponse.json({ success: true, userId, status });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
-  }
-}
-
-/** Admin: Permanently delete user from database */
-export async function DELETE(request: NextRequest) {
-  const admin = await verifyAdminRequest(request);
-  if (!admin.isAdmin) return forbiddenResponse(admin.error);
-
-  const { searchParams } = new URL(request.url);
-  const userId = searchParams.get('userId');
-
-  if (!userId) {
-    return NextResponse.json({ error: 'userId is required for deletion.' }, { status: 400 });
-  }
-
-  try {
-    await queryDb(`DELETE FROM users WHERE id::text = $1::text AND COALESCE(role, 'customer') != 'super_admin'`, [userId]);
-    return NextResponse.json({ success: true, userId });
-  } catch (err: any) {
-    console.error('[admin/users DELETE]', err?.message || err);
-    return NextResponse.json({ error: err?.message || 'Delete user failed.' }, { status: 500 });
   }
 }

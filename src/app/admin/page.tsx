@@ -122,7 +122,17 @@ function playAdminNewOrderBeep() {
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function AdminPage() {
   const router = useRouter();
-  const { user, setIsAuthOpen, products: storeProducts, updateProductInDb, addNewProductToDb, deleteProductFromDb, showToast, logoutUser } = useStore();
+  const {
+    user,
+    setIsAuthOpen,
+    products: storeProducts,
+    updateProductInDb,
+    addNewProductToDb,
+    deleteProductFromDb,
+    showToast,
+    logoutUser,
+    refreshProducts,
+  } = useStore();
   const products = storeProducts || [];
 
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
@@ -141,9 +151,9 @@ export default function AdminPage() {
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [analyticsRange, setAnalyticsRange] = useState(30);
 
-  // ── Low stock & holds state
-  const [lowStockAlerts, setLowStockAlerts] = useState<{ id: string; title: string; stock: number }[]>([]);
-  const [activeStockHolds, setActiveStockHolds] = useState<{ count: number; totalQty: number }>({ count: 0, totalQty: 0 });
+  // ── Low stock & holds state (Real-time live sync)
+  const [lowStockAlerts, setLowStockAlerts] = useState<{ id: string; title: string; stock: number; cls?: string; subject?: string }[]>([]);
+  const [activeStockHolds, setActiveStockHolds] = useState<{ count: number; totalQty: number; list?: any[] }>({ count: 0, totalQty: 0, list: [] });
 
   // ── Content (FAQs)
   const [faqs, setFaqs] = useState<any[]>([]);
@@ -248,6 +258,74 @@ export default function AdminPage() {
       loadContent();
     }
   }, [user, isAdmin, loadLiveOrders, loadAnalytics, loadLowStock, loadContent]);
+
+  // Real-time synchronization for stock, orders, and checkout holds
+  useEffect(() => {
+    if (!user || !isAdmin) return;
+
+    let esStock: EventSource | null = null;
+    let esOrders: EventSource | null = null;
+
+    try {
+      esStock = new EventSource('/api/stock/stream');
+      esStock.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'STOCK_CHANGED' || data.type === 'CATALOG_CHANGED') {
+            loadLowStock();
+          }
+        } catch (_) {}
+      };
+    } catch (_) {}
+
+    try {
+      esOrders = new EventSource('/api/orders/stream');
+      esOrders.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'ORDER_CREATED' || data.type === 'ORDER_UPDATED' || data.type === 'REFRESH') {
+            loadLiveOrders({ fromStream: true });
+            loadLowStock();
+            loadAnalytics();
+            if (refreshProducts) refreshProducts(true);
+          }
+        } catch (_) {}
+      };
+    } catch (_) {}
+
+    // Polling fallback every 10s for low-stock rack count and active holds
+    const pollInterval = setInterval(() => {
+      loadLowStock();
+    }, 10000);
+
+    return () => {
+      clearInterval(pollInterval);
+      if (esStock) esStock.close();
+      if (esOrders) esOrders.close();
+    };
+  }, [user, isAdmin, loadLowStock, loadLiveOrders, loadAnalytics, refreshProducts]);
+
+  // Manual stock hold release handler (Restores reserved stock immediately)
+  const handleReleaseHold = async (holdGroupId: string, bookTitle: string) => {
+    if (!user) return;
+    try {
+      const res = await fetch('/api/admin/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders(user) },
+        body: JSON.stringify({ action: 'release_hold', holdGroupId }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast(`🔓 Hold released for "${bookTitle}". Copies restored to rack!`);
+        loadLowStock();
+        if (refreshProducts) refreshProducts(true);
+      } else {
+        showToast(`❌ ${data.error || 'Failed to release hold'}`);
+      }
+    } catch {
+      showToast('❌ Network error releasing hold');
+    }
+  };
 
   // Order status update handler
   const handleUpdateOrderStatus = async (order: Order, newStatus: string, displayLabel?: string) => {
@@ -447,6 +525,7 @@ export default function AdminPage() {
               lowStockItems={lowStockAlerts}
               activeStockHolds={activeStockHolds}
               onNavigate={(tab) => setActiveTab(tab)}
+              onReleaseHold={handleReleaseHold}
             />
           )}
 
@@ -485,6 +564,8 @@ export default function AdminPage() {
           {activeTab === 'catalog' && (
             <CatalogSection
               products={products}
+              activeStockHolds={activeStockHolds}
+              onReleaseHold={handleReleaseHold}
               onUpdateProduct={updateProductInDb}
               onAddNewProduct={addNewProductToDb}
               onDeleteProduct={deleteProductFromDb}

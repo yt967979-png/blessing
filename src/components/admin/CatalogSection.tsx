@@ -21,13 +21,36 @@ import {
   ChevronUp,
   Tag,
   ShieldCheck,
+  Clock,
+  Unlock,
 } from 'lucide-react';
 import type { Product } from '@/context/StoreContext';
 import { useStore } from '@/context/StoreContext';
 import { authHeaders, authFormHeaders } from '@/lib/clientAuth';
 
+export interface StockHoldItem {
+  id: string;
+  holdGroupId?: string;
+  bookId: string;
+  title: string;
+  cls?: string;
+  price?: number;
+  qty: number;
+  razorpayOrderId?: string;
+  expiresAt?: string;
+  createdAt?: string;
+}
+
+export interface ActiveStockHoldsData {
+  count: number;
+  totalQty: number;
+  list?: StockHoldItem[];
+}
+
 interface CatalogSectionProps {
   products: Product[];
+  activeStockHolds?: ActiveStockHoldsData;
+  onReleaseHold?: (holdGroupId: string, bookTitle: string) => Promise<void>;
   onUpdateProduct: (id: string | number, updates: any) => Promise<any> | void;
   onAddNewProduct?: (product: any) => Promise<any> | void;
   onCreateProduct?: (product: any) => Promise<any> | void;
@@ -57,6 +80,8 @@ const DEFAULT_SUBJECTS = [
 
 export const CatalogSection: React.FC<CatalogSectionProps> = ({
   products,
+  activeStockHolds,
+  onReleaseHold,
   onUpdateProduct,
   onAddNewProduct,
   onCreateProduct,
@@ -69,6 +94,7 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
   const [selectedClass, setSelectedClass] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showHoldsBanner, setShowHoldsBanner] = useState(false);
   const [editingId, setEditingId] = useState<string | number | null>(null);
 
   // Quick edit states
@@ -82,14 +108,13 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
   const [selectedSubjectOption, setSelectedSubjectOption] = useState('Mathematics');
   const [customSubjectText, setCustomSubjectText] = useState('');
   const [newMrp, setNewMrp] = useState<string>('350');
-  const [newPrice, setNewPrice] = useState<string>('280'); // Kept empty or explicit string
+  const [newPrice, setNewPrice] = useState<string>('280');
   const [newStock, setNewStock] = useState<string>('50');
   const [lowStockThreshold, setLowStockThreshold] = useState<number>(5);
   const [newBadge, setNewBadge] = useState('Popular');
   const [newImage, setNewImage] = useState('');
   const [hsnCode, setHsnCode] = useState('4901');
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [showLivePreview, setShowLivePreview] = useState(true);
 
   const [imageUploading, setImageUploading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -132,6 +157,16 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
   }, [numPrice, numMrp]);
 
   const isSuspiciousDiscount = discountPercent >= 80;
+
+  // Holds map by book ID
+  const holdsByBookId = useMemo(() => {
+    const map = new Map<string, number>();
+    (activeStockHolds?.list || []).forEach((h) => {
+      const bId = String(h.bookId);
+      map.set(bId, (map.get(bId) || 0) + (h.qty || 0));
+    });
+    return map;
+  }, [activeStockHolds]);
 
   const filteredProducts = useMemo(() => {
     return products.filter((p) => {
@@ -273,6 +308,58 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
 
   return (
     <div className="space-y-4">
+      {/* Active Student Holds Banner (If any) */}
+      {(activeStockHolds?.count ?? 0) > 0 && (
+        <div className="bg-blue-50/80 border border-blue-200 rounded-2xl p-4 text-xs">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <Clock className="w-4 h-4 text-[#2874f0] animate-spin" />
+              <span className="font-bold text-slate-900">
+                <strong className="text-[#2874f0]">{activeStockHolds?.count} student(s)</strong> currently in checkout ({activeStockHolds?.totalQty} copies temporarily reserved)
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowHoldsBanner(!showHoldsBanner)}
+              className="text-xs font-bold text-[#2874f0] hover:underline flex items-center gap-1 cursor-pointer"
+            >
+              <span>{showHoldsBanner ? 'Hide Held Details' : 'View Held Books'}</span>
+              {showHoldsBanner ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            </button>
+          </div>
+
+          {showHoldsBanner && (activeStockHolds?.list || []).length > 0 && (
+            <div className="mt-3 pt-3 border-t border-blue-200/60 space-y-2">
+              {(activeStockHolds?.list || []).map((h) => (
+                <div
+                  key={h.id}
+                  className="flex items-center justify-between p-2.5 bg-white rounded-xl border border-slate-200 text-xs"
+                >
+                  <div>
+                    <span className="font-bold text-slate-900">{h.title}</span>
+                    <span className="text-slate-500 ml-2 font-medium">({h.qty} copy held)</span>
+                    {h.expiresAt && (
+                      <span className="text-[11px] text-amber-700 ml-3">
+                        Expires: {new Date(h.expiresAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    )}
+                  </div>
+                  {onReleaseHold && (
+                    <button
+                      type="button"
+                      onClick={() => onReleaseHold(h.holdGroupId || h.id, h.title)}
+                      className="px-2.5 py-1 bg-slate-100 hover:bg-red-50 text-slate-700 hover:text-red-700 border border-slate-200 rounded-lg text-[11px] font-bold cursor-pointer"
+                    >
+                      Release to Rack
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Top Filter Bar & Search */}
       <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-4">
         {/* Class Standard Filter Pills */}
@@ -328,7 +415,7 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                 <th className="p-4">Guide Book</th>
                 <th className="p-4">Standard &amp; Subject</th>
                 <th className="p-4">Offer Price / MRP</th>
-                <th className="p-4">Inventory Status</th>
+                <th className="p-4">Rack Inventory Status</th>
                 <th className="p-4 text-right">Actions</th>
               </tr>
             </thead>
@@ -352,6 +439,7 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                     p.mrp > p.price ? Math.round(((p.mrp - p.price) / p.mrp) * 100) : 0;
                   const isOOS = !p.inStock || (p.stock ?? 0) <= 0;
                   const isLow = (p.stock ?? 99) <= 5 && !isOOS;
+                  const heldCount = holdsByBookId.get(String(p.id)) || 0;
 
                   return (
                     <tr key={p.id} className="hover:bg-slate-50/80 transition-colors">
@@ -444,7 +532,7 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                             />
                           </div>
                         ) : (
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-col gap-1 items-start">
                             <button
                               type="button"
                               onClick={() => handleToggleStockStatus(p)}
@@ -457,8 +545,14 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                               }`}
                               title="Click to toggle in-stock / out-of-stock"
                             >
-                              {isOOS ? 'OUT OF STOCK' : `${p.stock ?? '—'} IN STOCK`}
+                              {isOOS ? 'OUT OF STOCK' : `${p.stock ?? '—'} IN RACK`}
                             </button>
+                            {heldCount > 0 && (
+                              <span className="text-[10px] text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md font-bold flex items-center gap-1">
+                                <Clock className="w-2.5 h-2.5 text-blue-600 animate-spin" />
+                                <span>{heldCount} on checkout hold</span>
+                              </span>
+                            )}
                           </div>
                         )}
                       </td>
@@ -513,7 +607,7 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
         </div>
       </div>
 
-      {/* ─── ADD NEW PUBLICATION MODAL (Redesigned with Price Safety & Live Preview) ─── */}
+      {/* Add New Publication Modal */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
           <div className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl space-y-5 animate-scale-up max-h-[92vh] overflow-y-auto custom-scrollbar">
@@ -795,7 +889,7 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                 )}
               </div>
 
-              {/* LIVE STOREFRONT PREVIEW CARD (Visual sanity check before publish) */}
+              {/* LIVE STOREFRONT PREVIEW CARD */}
               <div className="border border-slate-200 rounded-2xl p-4 bg-white space-y-2.5 shadow-xs">
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-[11px] text-slate-700 uppercase tracking-wider flex items-center gap-1.5">

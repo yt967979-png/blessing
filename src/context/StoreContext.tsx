@@ -98,6 +98,7 @@ interface StoreContextType {
   updateProductInDb: (id: string | number, updatedData: Partial<Product> & { hasDiscount?: boolean }) => void;
   addNewProductToDb: (newProdData: Partial<Product>) => void;
   deleteProductFromDb: (id: string | number) => void;
+  refreshProducts: (bypassCache?: boolean) => void;
   cartTotal: number;
   cartCount: number;
   checkoutTotal: number;
@@ -1034,6 +1035,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         updateProductInDb,
         addNewProductToDb,
         deleteProductFromDb,
+        refreshProducts,
         cartTotal,
         cartCount,
         checkoutTotal,

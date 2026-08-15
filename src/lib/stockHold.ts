@@ -333,18 +333,21 @@ export async function sweepExpiredStockHolds(): Promise<number> {
 /** Admin visibility — active reservations right now (units held, not yet sold or released). */
 export async function getActiveHoldsSummary(limit = 100) {
   const res = await queryDb(
-    `SELECT sh.id, sh.book_id, b.title, sh.qty, sh.razorpay_order_id, sh.expires_at, sh.created_at
+    `SELECT sh.id, sh.hold_group_id, sh.book_id, b.title, b.cls, b.price, sh.qty, sh.razorpay_order_id, sh.expires_at, sh.created_at
      FROM stock_holds sh
      LEFT JOIN books b ON b.id = sh.book_id
-     WHERE sh.status = 'held'
+     WHERE sh.status = 'held' AND (sh.expires_at IS NULL OR sh.expires_at > NOW() - INTERVAL '5 minutes')
      ORDER BY sh.created_at DESC
      LIMIT $1`,
     [limit]
   );
   return res.rows.map((r: any) => ({
     id: r.id,
+    holdGroupId: r.hold_group_id,
     bookId: r.book_id,
     title: r.title || r.book_id,
+    cls: r.cls || '',
+    price: Number(r.price || 0),
     qty: Number(r.qty) || 0,
     razorpayOrderId: r.razorpay_order_id,
     expiresAt: r.expires_at,

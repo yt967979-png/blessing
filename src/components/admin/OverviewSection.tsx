@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
   IndianRupee,
   ShoppingCart,
@@ -13,16 +13,40 @@ import {
   BookOpen,
   CheckCircle2,
   Clock,
+  Unlock,
+  AlertCircle,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { AdminTab } from './AdminSidebar';
+
+export interface StockHoldItem {
+  id: string;
+  holdGroupId?: string;
+  bookId: string;
+  title: string;
+  cls?: string;
+  price?: number;
+  qty: number;
+  razorpayOrderId?: string;
+  expiresAt?: string;
+  createdAt?: string;
+}
+
+export interface ActiveStockHoldsData {
+  count: number;
+  totalQty: number;
+  list?: StockHoldItem[];
+}
 
 interface OverviewSectionProps {
   analytics: any;
   orders: any[];
-  lowStockItems: Array<{ id: string; title: string; stock: number }>;
-  activeStockHolds: { count: number; totalQty: number };
+  lowStockItems: Array<{ id: string; title: string; stock: number; cls?: string; subject?: string }>;
+  activeStockHolds: ActiveStockHoldsData;
   systemHealth?: any;
   onNavigate: (tab: AdminTab) => void;
+  onReleaseHold?: (holdGroupId: string, bookTitle: string) => Promise<void>;
 }
 
 const fmt = (n: number) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
@@ -33,7 +57,11 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
   lowStockItems,
   activeStockHolds,
   onNavigate,
+  onReleaseHold,
 }) => {
+  const [showHoldsDetail, setShowHoldsDetail] = useState(false);
+  const [releasingHoldId, setReleasingHoldId] = useState<string | null>(null);
+
   const summary = analytics?.summary || {};
   const todayRevenue = summary.todayRevenue || 0;
   const todayOrders = summary.todayOrders || 0;
@@ -57,6 +85,25 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
     const s = String(o.courierStatus || o.order_status || '').toLowerCase();
     return s.includes('transit') || s.includes('handed') || s.includes('out');
   });
+
+  const handleRelease = async (hold: StockHoldItem) => {
+    if (!onReleaseHold) return;
+    const targetId = hold.holdGroupId || hold.id;
+    if (!targetId) return;
+
+    if (!confirm(`Release hold on ${hold.qty}x "${hold.title}"?\n\nThis will immediately restore the copies to the rack catalog.`)) {
+      return;
+    }
+
+    setReleasingHoldId(targetId);
+    try {
+      await onReleaseHold(targetId, hold.title);
+    } finally {
+      setReleasingHoldId(null);
+    }
+  };
+
+  const holdsList = activeStockHolds.list || [];
 
   return (
     <div className="space-y-6">
@@ -137,16 +184,20 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
         </div>
       </div>
 
-      {/* ─── Middle Section: Low Stock Warnings & Quick Operations ───────────── */}
+      {/* ─── Middle Section: Low Stock Warnings & Active Checkout Holds ──────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Low Stock Alerts (2 cols) */}
-        <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 p-5 shadow-xs flex flex-col">
-          <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
+        <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 p-5 shadow-xs flex flex-col space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
             <div className="flex items-center gap-2">
               <Boxes className="w-5 h-5 text-amber-500" />
-              <h3 className="font-bold text-sm text-slate-900">
-                Low Inventory Alerts & Student Carts
-              </h3>
+              <div>
+                <h3 className="font-bold text-sm text-slate-900 flex items-center gap-2">
+                  <span>Live Inventory Alerts</span>
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" title="Live Synced via SSE Stream" />
+                </h3>
+                <p className="text-[11px] text-slate-500">Real-time stock rack monitors &amp; checkout holds</p>
+              </div>
             </div>
             <button
               type="button"
@@ -158,6 +209,7 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
             </button>
           </div>
 
+          {/* Low Stock List */}
           {lowStockItems.length === 0 ? (
             <div className="flex-1 flex flex-col items-center justify-center py-6 text-center text-slate-400">
               <CheckCircle2 className="w-8 h-8 text-emerald-500 mb-2" />
@@ -179,6 +231,7 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
                     </span>
                     <span className="text-[11px] text-amber-800 font-medium">
                       Only <strong className="font-bold">{item.stock}</strong> copies remaining in rack
+                      {item.cls ? ` (${item.cls} Standard)` : ''}
                     </span>
                   </div>
                   <button
@@ -193,18 +246,80 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
             </div>
           )}
 
-          {/* Active Student Carts / Stock Holds Bar */}
-          {activeStockHolds.count > 0 && (
-            <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-600">
+          {/* Active Checkout Holds (Held Books Widget) */}
+          <div className="border border-blue-100 bg-blue-50/40 rounded-2xl p-3.5 space-y-3">
+            <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Clock className="w-4 h-4 text-blue-500 animate-spin" />
-                <span>
-                  <strong className="text-slate-900 font-bold">{activeStockHolds.count}</strong> student(s) currently checking out ({activeStockHolds.totalQty} copies reserved)
+                <Clock className="w-4 h-4 text-blue-600 animate-spin" />
+                <span className="font-bold text-xs text-slate-900">
+                  {activeStockHolds.count > 0 ? (
+                    <span>
+                      <strong className="text-blue-700">{activeStockHolds.count} student(s)</strong> currently in checkout ({activeStockHolds.totalQty} copies held)
+                    </span>
+                  ) : (
+                    <span className="text-slate-600">0 Active Student Holds in Checkout</span>
+                  )}
                 </span>
               </div>
-              <span className="text-[11px] text-slate-400">Auto-expires in 10 mins if abandoned</span>
+              {holdsList.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowHoldsDetail(!showHoldsDetail)}
+                  className="text-xs font-bold text-[#2874f0] hover:underline flex items-center gap-1 cursor-pointer"
+                >
+                  <span>{showHoldsDetail ? 'Hide Held Books' : `View ${holdsList.length} Held Book(s)`}</span>
+                  {showHoldsDetail ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                </button>
+              )}
             </div>
-          )}
+
+            {/* Expanded Detailed Holds Table */}
+            {showHoldsDetail && holdsList.length > 0 && (
+              <div className="space-y-2 pt-2 border-t border-blue-200/60 animate-fade-in">
+                {holdsList.map((h) => (
+                  <div
+                    key={h.id}
+                    className="flex items-center justify-between p-2.5 bg-white rounded-xl border border-slate-200 text-xs shadow-2xs"
+                  >
+                    <div className="min-w-0 flex-1 mr-3">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-slate-900 truncate">{h.title}</span>
+                        {h.cls && (
+                          <span className="bg-slate-100 text-slate-600 text-[10px] font-semibold px-1.5 py-0.5 rounded">
+                            {h.cls}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 text-[10px] text-slate-500 mt-0.5">
+                        <span className="font-bold text-blue-700">{h.qty} copy(s) held</span>
+                        {h.razorpayOrderId && (
+                          <span className="font-mono text-slate-400">Order: {h.razorpayOrderId.slice(-8)}</span>
+                        )}
+                        {h.expiresAt && (
+                          <span className="text-amber-700">
+                            Expires: {new Date(h.expiresAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {onReleaseHold && (
+                      <button
+                        type="button"
+                        disabled={releasingHoldId === (h.holdGroupId || h.id)}
+                        onClick={() => handleRelease(h)}
+                        className="px-2.5 py-1 bg-slate-100 hover:bg-red-50 text-slate-600 hover:text-red-700 border border-slate-200 rounded-lg text-[11px] font-bold transition-colors cursor-pointer flex items-center gap-1 disabled:opacity-50"
+                        title="Release hold and return copies immediately to rack catalog"
+                      >
+                        <Unlock className="w-3 h-3" />
+                        <span>{releasingHoldId === (h.holdGroupId || h.id) ? 'Releasing…' : 'Release'}</span>
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Quick Operations Shortcuts (1 col) */}
