@@ -30,6 +30,26 @@ interface CatalogSectionProps {
   authHeaders?: Record<string, string>;
 }
 
+const STANDARD_SUBJECTS = [
+  'Mathematics',
+  'Science',
+  'Social Science',
+  'Tamil',
+  'English',
+  'Physics',
+  'Chemistry',
+  'Biology',
+  'Computer Science',
+  'Commerce',
+  'Accountancy',
+  'Economics',
+  'Business Mathematics',
+  'History',
+  'Geography',
+  'All-in-One Full Set (Combo)',
+  'Other / Custom Subject',
+];
+
 export const CatalogSection: React.FC<CatalogSectionProps> = ({
   products,
   onUpdateProduct,
@@ -54,9 +74,10 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
   // New book form states
   const [newTitle, setNewTitle] = useState('');
   const [newCls, setNewCls] = useState('10th');
-  const [newSubject, setNewSubject] = useState('Mathematics');
-  const [newPrice, setNewPrice] = useState<number>(280);
+  const [selectedSubjectOption, setSelectedSubjectOption] = useState('Mathematics');
+  const [customSubjectText, setCustomSubjectText] = useState('');
   const [newMrp, setNewMrp] = useState<number>(350);
+  const [newPrice, setNewPrice] = useState<number>(0); // 0 = No discount (sells at MRP)
   const [newStock, setNewStock] = useState<number>(50);
   const [newBadge, setNewBadge] = useState('Popular');
   const [newImage, setNewImage] = useState('');
@@ -64,6 +85,20 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const classesList = ['all', '6th', '7th', '8th', '9th', '10th', '11th', '12th'];
+
+  const resolvedSubject = useMemo(() => {
+    if (selectedSubjectOption === 'Other / Custom Subject') {
+      return customSubjectText.trim() || 'General';
+    }
+    return selectedSubjectOption;
+  }, [selectedSubjectOption, customSubjectText]);
+
+  const discountPercent = useMemo(() => {
+    if (newPrice > 0 && newPrice < newMrp && newMrp > 0) {
+      return Math.round(((newMrp - newPrice) / newMrp) * 100);
+    }
+    return 0;
+  }, [newPrice, newMrp]);
 
   const filteredProducts = useMemo(() => {
     return products.filter((p) => {
@@ -159,17 +194,22 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
       return;
     }
 
+    const mrpVal = Number(newMrp) || 0;
+    const offerVal = Number(newPrice) || 0;
+    // If offer price is 0 or >= MRP, selling price is MRP (no discount)
+    const finalSellingPrice = offerVal > 0 && offerVal < mrpVal ? offerVal : mrpVal;
+
     setIsSubmitting(true);
     try {
       const payload = {
         title: newTitle.trim(),
         cls: newCls,
-        subject: newSubject.trim() || 'General',
-        price: Number(newPrice),
-        mrp: Number(newMrp),
+        subject: resolvedSubject,
+        price: finalSellingPrice,
+        mrp: mrpVal,
         stock: Number(newStock),
         badge: newBadge.trim(),
-        description: `Complete ${newCls} Standard ${newSubject} guide covering Tamil Nadu Samacheer Kalvi syllabus with question banks and answers.`,
+        description: `Complete ${newCls} Standard ${resolvedSubject} guide covering Tamil Nadu Samacheer Kalvi syllabus with question banks and answers.`,
         image: newImage.trim() || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80',
       };
 
@@ -182,9 +222,10 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
 
       // Reset form
       setNewTitle('');
-      setNewSubject('Mathematics');
-      setNewPrice(280);
+      setSelectedSubjectOption('Mathematics');
+      setCustomSubjectText('');
       setNewMrp(350);
+      setNewPrice(0);
       setNewStock(50);
       setNewImage('');
     } catch {
@@ -436,7 +477,7 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
         </div>
       </div>
 
-      {/* Add New Publication Modal (Clean, No Description, 1-Tap Device File Upload) */}
+      {/* Add New Publication Modal */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
           <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5 animate-scale-up max-h-[90vh] overflow-y-auto">
@@ -455,6 +496,7 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
             </div>
 
             <form onSubmit={handleCreateBook} className="space-y-4 text-xs">
+              {/* Book Title */}
               <div>
                 <label className="block font-bold text-slate-700 mb-1.5">
                   Book Title *
@@ -469,6 +511,7 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                 />
               </div>
 
+              {/* Standard & Subject Selectors */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-bold text-slate-700 mb-1.5">
@@ -489,33 +532,41 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
 
                 <div>
                   <label className="block font-bold text-slate-700 mb-1.5">
-                    Subject *
+                    Subject (Select from Menu) *
+                  </label>
+                  <select
+                    value={selectedSubjectOption}
+                    onChange={(e) => setSelectedSubjectOption(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-[#2874f0] focus:bg-white text-slate-900 cursor-pointer font-semibold"
+                  >
+                    {STANDARD_SUBJECTS.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Custom Subject Input (Only if 'Other' selected) */}
+              {selectedSubjectOption === 'Other / Custom Subject' && (
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1.5">
+                    Enter Custom Subject Name *
                   </label>
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Science / Maths / Tamil"
-                    value={newSubject}
-                    onChange={(e) => setNewSubject(e.target.value)}
+                    placeholder="e.g. Environmental Studies / Hindi"
+                    value={customSubjectText}
+                    onChange={(e) => setCustomSubjectText(e.target.value)}
                     className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-[#2874f0] focus:bg-white text-slate-900"
                   />
                 </div>
-              </div>
+              )}
 
+              {/* Pricing & Stock Fields */}
               <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1.5">
-                    Offer Price (₹) *
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    min={1}
-                    value={newPrice}
-                    onChange={(e) => setNewPrice(Number(e.target.value))}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-[#2874f0] focus:bg-white text-slate-900 font-bold"
-                  />
-                </div>
                 <div>
                   <label className="block font-bold text-slate-700 mb-1.5">
                     Printed MRP (₹) *
@@ -526,6 +577,19 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                     min={1}
                     value={newMrp}
                     onChange={(e) => setNewMrp(Number(e.target.value))}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-[#2874f0] focus:bg-white text-slate-900 font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1.5">
+                    Offer Price (₹) <span className="font-normal text-slate-400">(Optional)</span>
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    placeholder="0 = No discount"
+                    value={newPrice === 0 ? '' : newPrice}
+                    onChange={(e) => setNewPrice(Number(e.target.value) || 0)}
                     className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-[#2874f0] focus:bg-white text-slate-900 font-bold"
                   />
                 </div>
@@ -542,6 +606,20 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                     className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-[#2874f0] focus:bg-white text-slate-900 font-bold"
                   />
                 </div>
+              </div>
+
+              {/* Live Price Feedback Pill */}
+              <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-[11px] font-medium text-slate-600 flex items-center justify-between">
+                <span>Selling Price for Students:</span>
+                {discountPercent > 0 ? (
+                  <span className="font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-md border border-emerald-200">
+                    ₹{newPrice} ({discountPercent}% OFF on MRP ₹{newMrp})
+                  </span>
+                ) : (
+                  <span className="font-bold text-slate-800 bg-slate-200 px-2.5 py-0.5 rounded-md">
+                    ₹{newMrp} (Full MRP — No Discount)
+                  </span>
+                )}
               </div>
 
               {/* 1-Tap Device File Upload for Book Cover */}
