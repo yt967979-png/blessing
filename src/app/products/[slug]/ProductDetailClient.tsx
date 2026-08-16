@@ -147,7 +147,7 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
       cancelled = true;
     };
     // products omitted on purpose — snapshot only at slug/auth change
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [slug, user?.token]);
 
   useEffect(() => {

@@ -73,7 +73,7 @@ export default function CheckoutPage() {
   // happened between adding to cart and reaching checkout.
   useEffect(() => {
     void validateCartStock();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, []);
 
   useEffect(() => {

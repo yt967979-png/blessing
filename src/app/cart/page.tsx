@@ -55,7 +55,7 @@ export default function CartPage() {
   // Instant stock re-check the moment a customer opens the cart page.
   useEffect(() => {
     void validateCartStock();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, []);
 
   const totalMrp = cart.reduce((sum, item) => sum + (item.mrp || item.price + 40) * item.qty, 0);

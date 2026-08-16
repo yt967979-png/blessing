@@ -430,7 +430,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (retryTimer) clearTimeout(retryTimer);
       if (es) es.close();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, []);
 
   // Slow catalog poll always — catches missed SSE (new books / price edits).
@@ -451,7 +451,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       clearInterval(catalogInterval);
       clearInterval(stockFallback);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, []);
 
   // Debounced cart/wishlist sync — only after hydrate
