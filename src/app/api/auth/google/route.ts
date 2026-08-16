@@ -88,7 +88,6 @@ function buildUserResponse(
 }
 
 export async function POST(request: Request) {
-  let client: any = null;
   try {
     const rl = await applyRateLimitAsync(`google-auth:${clientIp(request)}`, 30, 60000);
     if (!rl.allowed) {

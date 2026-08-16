@@ -267,7 +267,7 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
                 className="px-3.5 py-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
               >
                 <Printer className="w-3.5 h-3.5" />
-                <span>Print 4×6" Labels</span>
+                <span>Print 4×6&quot; Labels</span>
               </button>
             </div>
           )}
@@ -641,7 +641,7 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
                 className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
               >
                 <Printer className="w-4 h-4 text-[#2874f0]" />
-                <span>4×6" Thermal Label</span>
+                <span>4×6&quot; Thermal Label</span>
               </button>
               <button
                 type="button"

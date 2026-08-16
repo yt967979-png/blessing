@@ -1,6 +1,5 @@
-'use client';
-
 import React from 'react';
+import Link from 'next/link';
 import { BrandLogo } from '@/components/ui/BrandLogo';
 import {
   OFFICE_ADDRESS_LINES,
@@ -97,24 +96,24 @@ export const Footer = () => {
           </h4>
           <ul className="space-y-2.5 font-semibold text-slate-300 text-xs">
             <li>
-              <a href="/" className="hover:text-amber-400 transition-colors flex items-center gap-1.5">
+              <Link href="/" className="hover:text-amber-400 transition-colors flex items-center gap-1.5">
                 <span>•</span> Home Store
-              </a>
+              </Link>
             </li>
             <li>
-              <a href="/search" className="hover:text-amber-400 transition-colors flex items-center gap-1.5">
+              <Link href="/search" className="hover:text-amber-400 transition-colors flex items-center gap-1.5">
                 <span>•</span> Book Catalog
-              </a>
+              </Link>
             </li>
             <li>
-              <a href="/orders" className="hover:text-amber-400 transition-colors flex items-center gap-1.5">
+              <Link href="/orders" className="hover:text-amber-400 transition-colors flex items-center gap-1.5">
                 <span>•</span> My Orders &amp; Track
-              </a>
+              </Link>
             </li>
             <li>
-              <a href="/cart" className="hover:text-amber-400 transition-colors flex items-center gap-1.5">
+              <Link href="/cart" className="hover:text-amber-400 transition-colors flex items-center gap-1.5">
                 <span>•</span> Shopping Cart
-              </a>
+              </Link>
             </li>
           </ul>
         </div>
@@ -126,19 +125,19 @@ export const Footer = () => {
           </h4>
           <ul className="space-y-2.5 font-semibold text-slate-300 text-xs">
             <li>
-              <a href="/shipping-policy" className="hover:text-amber-400 transition-colors flex items-center gap-1.5">
+              <Link href="/shipping-policy" className="hover:text-amber-400 transition-colors flex items-center gap-1.5">
                 <span>•</span> Shipping &amp; ST Courier Policy
-              </a>
+              </Link>
             </li>
             <li>
-              <a href="/privacy-policy" className="hover:text-amber-400 transition-colors flex items-center gap-1.5">
+              <Link href="/privacy-policy" className="hover:text-amber-400 transition-colors flex items-center gap-1.5">
                 <span>•</span> Privacy Policy
-              </a>
+              </Link>
             </li>
             <li>
-              <a href="/terms-of-service" className="hover:text-amber-400 transition-colors flex items-center gap-1.5">
+              <Link href="/terms-of-service" className="hover:text-amber-400 transition-colors flex items-center gap-1.5">
                 <span>•</span> Terms &amp; Conditions
-              </a>
+              </Link>
             </li>
           </ul>
         </div>

@@ -33,7 +33,7 @@ function SearchContent() {
   }, [queryParam, classParam, categoryParam]);
 
   const filteredProducts = useMemo(() => {
-    let result = products.filter((p) => {
+    const result = products.filter((p) => {
       // Keep OOS visible (grey card) — same as home Featured grid
 
       // Class Filter
