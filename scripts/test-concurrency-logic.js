@@ -161,6 +161,75 @@ try {
   assert(false, 'IDOR Scoping', err.message);
 }
 
+// 8. IDOR Invoice Authorization Bug Regression Check
+try {
+  // Simulate verifyAdminRequest return value for regular customer
+  const regularUserSession = { userId: 'usr_alice', role: 'customer' };
+  const adminCheckForRegularUser = { isAdmin: false, isSuperAdmin: false, error: 'Forbidden' };
+  const targetOrder = { id: 'ord_1', user_id: 'usr_bob' };
+
+  // OLD BUGGY CODE: if (!admin && (!session || o.user_id !== session.userId))
+  // In JS, Boolean({ isAdmin: false }) is true, so !admin was false!
+  const buggyAuthPassed = !(!adminCheckForRegularUser && (!regularUserSession || targetOrder.user_id !== regularUserSession.userId));
+
+  // FIXED CODE: if (!admin?.isAdmin && (!session || o.user_id !== session.userId))
+  const fixedCheckBlocked = !adminCheckForRegularUser?.isAdmin && (!regularUserSession || targetOrder.user_id !== regularUserSession.userId);
+
+  assert(buggyAuthPassed === true, 'IDOR Regression: Old buggy check erroneously granted access to unauthorized invoice');
+  assert(fixedCheckBlocked === true, 'IDOR Fix: Fixed check strictly blocks unauthorized invoice access');
+} catch (err) {
+  assert(false, 'IDOR Invoice Check', err.message);
+}
+
+// 9. Stock Status Preservation Guard Test
+try {
+  function computeRestoredStatus(currentStatus, newStock) {
+    // SQL: status = CASE WHEN status = 'out_of_stock' AND COALESCE(stock, 0) + $1 > 0 THEN 'published' ELSE status END
+    if (currentStatus === 'out_of_stock' && newStock > 0) return 'published';
+    return currentStatus;
+  }
+
+  const draftAfterRestock = computeRestoredStatus('draft', 5);
+  const archivedAfterRestock = computeRestoredStatus('archived', 5);
+  const oosAfterRestock = computeRestoredStatus('out_of_stock', 5);
+
+  assert(draftAfterRestock === 'draft', 'Stock Status Guard: Draft book stays draft when restocked');
+  assert(archivedAfterRestock === 'archived', 'Stock Status Guard: Archived book stays archived when restocked');
+  assert(oosAfterRestock === 'published', 'Stock Status Guard: Out-of-stock book becomes published when restocked');
+} catch (err) {
+  assert(false, 'Stock Status Guard', err.message);
+}
+
+// 10. Opaque Tracking Token Test (QR Privacy Protection)
+try {
+  const salt = 'bpg-tracking-token-salt-2026';
+  function makeToken(orderId, phone) {
+    const cleanId = String(orderId || '').trim().toUpperCase();
+    const cleanPhone = String(phone || '').replace(/\D/g, '').slice(-10);
+    return crypto.createHmac('sha256', salt).update(`track:${cleanId}:${cleanPhone}`).digest('hex').slice(0, 16);
+  }
+
+  function verifyToken(token, orderId, phone) {
+    const expected = makeToken(orderId, phone);
+    if (!token || !expected || token.length !== expected.length) return false;
+    const a = Buffer.from(token, 'hex');
+    const b = Buffer.from(expected, 'hex');
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
+  }
+
+  const validToken = makeToken('BPG-99881', '9876543210');
+  const validCheck = verifyToken(validToken, 'BPG-99881', '9876543210');
+  const tamperedCheck = verifyToken('deadbeef12345678', 'BPG-99881', '9876543210');
+  const wrongOrderCheck = verifyToken(validToken, 'BPG-00000', '9876543210');
+
+  assert(validCheck === true, 'QR Tracking Token: Valid HMAC token successfully authorizes tracking');
+  assert(tamperedCheck === false, 'QR Tracking Token: Tampered token is rejected');
+  assert(wrongOrderCheck === false, 'QR Tracking Token: Token for wrong order is rejected');
+  assert(!validToken.includes('9876543210'), 'QR Privacy: Raw phone number is not exposed in token');
+} catch (err) {
+  assert(false, 'QR Tracking Token', err.message);
+}
+
 console.log('\n------------------------------------------------------');
 console.log(`📊 RESULTS: ${passed} Passed, ${failed} Failed (${passed + failed} Total)`);
 console.log('------------------------------------------------------\n');

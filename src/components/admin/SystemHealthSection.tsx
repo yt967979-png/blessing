@@ -60,43 +60,43 @@ export const SystemHealthSection: React.FC<SystemHealthSectionProps> = ({
     <div className="space-y-6">
       {/* ─── Top Telemetry Summary ───────────────────────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white rounded-xl border border-[#55607A]/20 p-4 shadow-xs">
-          <span className="text-xs font-mono text-[#55607A] block mb-1">WORKER LIVENESS</span>
+        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs">
+          <span className="text-xs font-bold text-slate-500 block mb-1">WORKER LIVENESS</span>
           <div className="flex items-center gap-2">
             <span
               className={`w-3 h-3 rounded-full ${
-                systemHealth.healthy ? 'bg-[#2F9E60]' : 'bg-[#C43B3B] animate-pulse'
+                systemHealth.healthy ? 'bg-emerald-500' : 'bg-red-500 animate-pulse'
               }`}
             />
-            <p className="font-serif font-black text-xl text-[#1E2A4A]">
+            <p className="font-bold text-xl text-slate-900">
               {systemHealth.healthy ? 'ALL WORKERS ACTIVE' : 'WORKER DEGRADED'}
             </p>
           </div>
-          <p className="text-[11px] text-[#55607A] mt-1 font-sans">
+          <p className="text-xs text-slate-500 mt-1">
             Postgres cron sweepers & SSE listeners reporting
           </p>
         </div>
 
-        <div className="bg-white rounded-xl border border-[#55607A]/20 p-4 shadow-xs">
-          <span className="text-xs font-mono text-[#55607A] block mb-1">DEAD-LETTER WEBHOOKS</span>
+        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs">
+          <span className="text-xs font-bold text-slate-500 block mb-1">DEAD-LETTER WEBHOOKS</span>
           <p
-            className={`font-serif font-black text-2xl ${
-              systemHealth.deadLetterCount === 0 ? 'text-[#2F9E60]' : 'text-[#C43B3B]'
+            className={`font-bold text-2xl ${
+              systemHealth.deadLetterCount === 0 ? 'text-emerald-600' : 'text-red-600'
             }`}
           >
             {systemHealth.deadLetterCount}
           </p>
-          <p className="text-[11px] text-[#55607A] mt-1 font-sans">
-            Razorpay webhooks saved in database queue
+          <p className="text-xs text-slate-500 mt-1">
+            Razorpay webhooks pending in retry queue
           </p>
         </div>
 
-        <div className="bg-white rounded-xl border border-[#55607A]/20 p-4 shadow-xs">
-          <span className="text-xs font-mono text-[#55607A] block mb-1">24H REFUND RATIO</span>
-          <p className="font-serif font-black text-2xl text-[#1E2A4A]">
+        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs">
+          <span className="text-xs font-bold text-slate-500 block mb-1">24H REFUND RATIO</span>
+          <p className="font-bold text-2xl text-slate-900">
             {systemHealth.dailyRefundPercent.toFixed(1)}%
           </p>
-          <p className="text-[11px] text-[#55607A] mt-1 font-sans">
+          <p className="text-xs text-slate-500 mt-1">
             {systemHealth.dailyRefundsCount} refund(s) out of {systemHealth.dailyOrdersCount} orders today
           </p>
         </div>
@@ -105,39 +105,39 @@ export const SystemHealthSection: React.FC<SystemHealthSectionProps> = ({
       {/* ─── Observability Controls & Actions ────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Background Jobs Telemetry */}
-        <div className="bg-white rounded-xl border border-[#55607A]/20 p-5 shadow-xs space-y-4">
-          <h3 className="font-serif font-bold text-sm text-[#1E2A4A] flex items-center gap-2 border-b border-slate-100 pb-2">
-            <Server className="w-4 h-4 text-[#D98C2B]" />
+        <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
+          <h3 className="font-bold text-sm text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
+            <Server className="w-4 h-4 text-[#2874f0]" />
             <span>Telemetry & Cron Heartbeats</span>
           </h3>
 
-          <div className="space-y-3 text-xs font-mono">
-            <div className="flex items-center justify-between p-2.5 bg-[#FAF7F0] rounded-lg border border-slate-200/60">
+          <div className="space-y-3 text-xs">
+            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200">
               <div>
-                <span className="font-bold text-[#1E2A4A] block">Stock Hold Auto-Releaser</span>
-                <span className="text-[10px] text-[#55607A]">Runs every 60 seconds (sweeps expired 10m holds)</span>
+                <span className="font-bold text-slate-900 block">Stock Hold Auto-Releaser</span>
+                <span className="text-xs text-slate-500">Runs every 60s (sweeps abandoned checkout holds)</span>
               </div>
-              <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 text-[10px]">
+              <span className="text-emerald-700 font-bold bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 text-xs">
                 ACTIVE
               </span>
             </div>
 
-            <div className="flex items-center justify-between p-2.5 bg-[#FAF7F0] rounded-lg border border-slate-200/60">
+            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200">
               <div>
-                <span className="font-bold text-[#1E2A4A] block">ST Courier Docket Auto-Sync</span>
-                <span className="text-[10px] text-[#55607A]">Runs every 15 minutes (max 40 dockets, 300ms pacing)</span>
+                <span className="font-bold text-slate-900 block">ST Courier Docket Auto-Sync</span>
+                <span className="text-xs text-slate-500">Runs every 15m (max 40 dockets, 300ms pacing)</span>
               </div>
-              <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 text-[10px]">
+              <span className="text-emerald-700 font-bold bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 text-xs">
                 ACTIVE
               </span>
             </div>
 
-            <div className="flex items-center justify-between p-2.5 bg-[#FAF7F0] rounded-lg border border-slate-200/60">
+            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200">
               <div>
-                <span className="font-bold text-[#1E2A4A] block">Dead-Letter Webhook Auto-Replayer</span>
-                <span className="text-[10px] text-[#55607A]">Exponential backoff retry for network drops</span>
+                <span className="font-bold text-slate-900 block">Dead-Letter Webhook Auto-Replayer</span>
+                <span className="text-xs text-slate-500">Exponential backoff retry for network drops</span>
               </div>
-              <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 text-[10px]">
+              <span className="text-emerald-700 font-bold bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 text-xs">
                 ACTIVE
               </span>
             </div>
@@ -145,15 +145,15 @@ export const SystemHealthSection: React.FC<SystemHealthSectionProps> = ({
         </div>
 
         {/* Diagnostic Actions */}
-        <div className="bg-white rounded-xl border border-[#55607A]/20 p-5 shadow-xs flex flex-col justify-between">
+        <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs flex flex-col justify-between">
           <div className="space-y-3">
-            <h3 className="font-serif font-bold text-sm text-[#1E2A4A] flex items-center gap-2 border-b border-slate-100 pb-2">
-              <ShieldCheck className="w-4 h-4 text-[#D98C2B]" />
+            <h3 className="font-bold text-sm text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
+              <ShieldCheck className="w-4 h-4 text-[#2874f0]" />
               <span>Production Diagnostics</span>
             </h3>
 
-            <p className="text-xs text-[#55607A] leading-relaxed">
-              If an external alert webhook (<code className="bg-[#FAF7F0] px-1 py-0.5 rounded font-mono text-[11px]">ALERT_WEBHOOK_URL</code>) is configured in your environment, trigger a test probe to verify instant notifications for server degradations.
+            <p className="text-xs text-slate-600 leading-relaxed">
+              If an external alert webhook (<code className="bg-slate-100 px-1.5 py-0.5 rounded font-mono text-[11px] text-slate-800">ALERT_WEBHOOK_URL</code>) is configured in your environment, trigger a test probe to verify instant notifications for server degradations.
             </p>
           </div>
 
@@ -162,7 +162,7 @@ export const SystemHealthSection: React.FC<SystemHealthSectionProps> = ({
               type="button"
               disabled={testingWebhook}
               onClick={handleTestAlert}
-              className="w-full bg-[#1E2A4A] hover:bg-[#D98C2B] text-white py-2.5 rounded-lg text-xs font-mono font-bold flex items-center justify-center gap-2 transition-colors cursor-pointer disabled:opacity-50 shadow-xs"
+              className="w-full bg-[#2874f0] hover:bg-blue-700 text-white py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors cursor-pointer disabled:opacity-50 shadow-xs"
             >
               <Send className="w-3.5 h-3.5" />
               <span>{testingWebhook ? 'Testing...' : 'Test Alert Webhook Push'}</span>

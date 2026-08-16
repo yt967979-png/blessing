@@ -4,6 +4,7 @@ import { applyRateLimitAsync, clientIp, getAuthenticatedUser } from '@/lib/serve
 import { isOfficialAwb, syncOrderByAwb } from '@/lib/stCourier';
 import { isOrderCancelled, isAwaitingConfirmation } from '@/lib/orderStatus';
 import { getSTCourierDeliveryEstimate } from '@/lib/deliveryEstimator';
+import { verifyTrackingToken } from '@/lib/trackToken';
 
 const CUSTOMER_STEPS = [
   { key: 'Confirmed', label: 'Confirmed', short: 'Confirmed' },
@@ -51,9 +52,10 @@ function maskName(name: string): string {
   return n[0] + '*'.repeat(Math.min(n.length - 1, 6));
 }
 
-async function handleTrack(orderIdRaw: string, phoneRaw: string, request?: Request) {
+async function handleTrack(orderIdRaw: string, phoneRaw: string, tokenRaw?: string, request?: Request) {
   const orderId = String(orderIdRaw || '').trim().toUpperCase();
   const phone = String(phoneRaw || '').trim();
+  const token = String(tokenRaw || '').trim();
   const phoneDigits = normalizePhone(phone);
 
   if (!orderId || orderId.length < 4) {
@@ -115,15 +117,27 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string, request?: Reque
       }
     }
 
-    if (!isAuthorized && (phoneDigits.length >= 10 || phoneDigits.length === 0)) {
-      if (phoneDigits.length === 0 && isAuthorized) {
-        // Authorized session
-      } else if (
-        phonesMatch(phone, addr.phone || '') ||
-        phonesMatch(phone, addr.alternatePhone || addr.alternate_phone || '') ||
-        phonesMatch(phone, o.user_phone || '')
+    if (!isAuthorized) {
+      if (
+        (phoneDigits.length >= 10 || (phoneDigits.length > 0 && phoneDigits.length === normalizePhone(addr.phone || '').length)) &&
+        (phonesMatch(phone, addr.phone || '') ||
+          phonesMatch(phone, addr.alternatePhone || addr.alternate_phone || '') ||
+          phonesMatch(phone, o.user_phone || ''))
       ) {
         isAuthorized = true;
+      } else if (
+        token &&
+        (verifyTrackingToken(token, o.order_number || o.id, addr.phone || '') ||
+          verifyTrackingToken(token, o.order_number || o.id, addr.alternatePhone || addr.alternate_phone || '') ||
+          verifyTrackingToken(token, o.order_number || o.id, o.user_phone || '') ||
+          verifyTrackingToken(token, o.id, addr.phone || ''))
+      ) {
+        // Token lifecycle: active while in transit + 60 days post delivery/order
+        const baseDate = o.delivered_at ? new Date(o.delivered_at) : o.ordered_at ? new Date(o.ordered_at) : null;
+        const isTokenExpired = baseDate && !isNaN(baseDate.getTime()) && (Date.now() - baseDate.getTime() > 60 * 24 * 60 * 60 * 1000);
+        if (!isTokenExpired) {
+          isAuthorized = true;
+        }
       }
     }
 
@@ -270,7 +284,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Too many track attempts. Wait a minute.' }, { status: 429 });
   }
   const body = await request.json().catch(() => ({}));
-  return handleTrack(body.orderId, body.phone, request);
+  return handleTrack(body.orderId, body.phone, body.token || body.t, request);
 }
 
 export async function GET(request: Request) {
@@ -279,5 +293,10 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Too many track attempts. Wait a minute.' }, { status: 429 });
   }
   const { searchParams } = new URL(request.url);
-  return handleTrack(searchParams.get('orderId') || '', searchParams.get('phone') || '', request);
+  return handleTrack(
+    searchParams.get('orderId') || '',
+    searchParams.get('phone') || '',
+    searchParams.get('t') || searchParams.get('token') || '',
+    request
+  );
 }

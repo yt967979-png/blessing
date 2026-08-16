@@ -1,6 +1,7 @@
 import { OFFICE_ADDRESS_LINES, OFFICE_COMPANY_NAME } from '@/lib/officeLocation';
 import { generateCode128Svg } from '@/lib/barcode128';
 import { generateQrSvg } from '@/lib/qrCode';
+import { generateTrackingToken } from '@/lib/trackToken';
 
 export type ShippingLabelSize = 'thermal4x6' | 'a4' | 'a5';
 
@@ -429,8 +430,8 @@ export async function generateShippingLabelsHtml(
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://blessingpowerguide.com';
 
   const labelsHtmlPromises = orderList.map(async (o) => {
-    const cleanPhone = (o.customerPhone || '').replace(/\D/g, '').slice(-10);
-    const trackTargetUrl = `${siteUrl}/track?orderId=${encodeURIComponent(o.orderId)}${cleanPhone ? `&phone=${encodeURIComponent(cleanPhone)}` : ''}`;
+    const trackToken = generateTrackingToken(o.orderId, o.customerPhone || '');
+    const trackTargetUrl = `${siteUrl}/track?orderId=${encodeURIComponent(o.orderId)}${trackToken ? `&t=${encodeURIComponent(trackToken)}` : ''}`;
     const qrSvg = await generateQrSvg(trackTargetUrl, { size: 120, margin: 0 });
     return generateSingleThermalLabelHtml(o, qrSvg);
   });

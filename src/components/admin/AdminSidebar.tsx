@@ -13,6 +13,7 @@ import {
   ArrowLeft,
   LogOut,
   ExternalLink,
+  Activity,
 } from 'lucide-react';
 import { BrandLogo } from '@/components/ui/BrandLogo';
 
@@ -23,7 +24,8 @@ export type AdminTab =
   | 'catalog'
   | 'users'
   | 'reviews'
-  | 'analytics';
+  | 'analytics'
+  | 'health';
 
 interface AdminSidebarProps {
   activeTab: AdminTab;
@@ -90,6 +92,12 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
       label: 'GST & Sales Reports',
       subtitle: 'Monthly trends & 1-click tax CSV',
       icon: BarChart3,
+    },
+    {
+      key: 'health' as AdminTab,
+      label: 'System Health & Telemetry',
+      subtitle: 'Worker heartbeats & dead-letter queue',
+      icon: Activity,
     },
   ];
 

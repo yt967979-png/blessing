@@ -42,7 +42,7 @@ export async function GET(
     }
 
     const o = res.rows[0];
-    if (!admin && (!session || o.user_id !== session.userId)) {
+    if (!admin?.isAdmin && (!session || o.user_id !== session.userId)) {
       return NextResponse.json({ error: 'Login required to download this invoice.' }, { status: 401 });
     }
 

@@ -22,6 +22,7 @@ import OverviewSection from '@/components/admin/OverviewSection';
 import OrdersSection from '@/components/admin/OrdersSection';
 import CourierSection from '@/components/admin/CourierSection';
 import CatalogSection from '@/components/admin/CatalogSection';
+import SystemHealthSection from '@/components/admin/SystemHealthSection';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface OrderItem { title: string; qty: number; price?: number; subtotal?: number; }
@@ -249,6 +250,39 @@ export default function AdminPage() {
     }
   }, [user, analyticsRange]);
 
+  // ── System Health / Observability
+  const [systemHealth, setSystemHealth] = useState({
+    healthy: true,
+    deadLetterCount: 0,
+    stalePendingRefunds: 0,
+    dailyRefundPercent: 0,
+    dailyOrdersCount: 0,
+    dailyRefundsCount: 0,
+    workers: [] as any[],
+  });
+
+  const loadSystemHealth = useCallback(async () => {
+    if (!user) return;
+    try {
+      const res = await fetch('/api/health?telemetry=1', {
+        headers: authHeaders(user),
+        signal: AbortSignal.timeout(10000),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSystemHealth({
+          healthy: data.status === 'ok' || data.workersHealthy === true,
+          deadLetterCount: data.pendingDeadLetterWebhooks || 0,
+          stalePendingRefunds: data.stalePendingRefunds || 0,
+          dailyRefundPercent: data.dailyRefundPercent || 0,
+          dailyOrdersCount: data.dailyOrdersCount || 0,
+          dailyRefundsCount: data.dailyRefundsCount || 0,
+          workers: data.workers || [],
+        });
+      }
+    } catch (_) {}
+  }, [user]);
+
   // Initial load
   useEffect(() => {
     if (user && isAdmin) {
@@ -256,8 +290,9 @@ export default function AdminPage() {
       loadAnalytics();
       loadLowStock();
       loadContent();
+      loadSystemHealth();
     }
-  }, [user, isAdmin, loadLiveOrders, loadAnalytics, loadLowStock, loadContent]);
+  }, [user, isAdmin, loadLiveOrders, loadAnalytics, loadLowStock, loadContent, loadSystemHealth]);
 
   // Real-time synchronization for stock, orders, and checkout holds
   useEffect(() => {
@@ -737,6 +772,16 @@ export default function AdminPage() {
                 </>
               )}
             </div>
+          )}
+
+          {/* SECTION H: SYSTEM HEALTH & TELEMETRY */}
+          {activeTab === 'health' && (
+            <SystemHealthSection
+              systemHealth={systemHealth}
+              onRefresh={loadSystemHealth}
+              onShowToast={showToast}
+              authHeaders={authHeaders(user)}
+            />
           )}
         </main>
       </div>

@@ -32,6 +32,8 @@ jobs:
         run: |
           node scripts/test-pricing-rules.js
           node scripts/test-concurrency-stock-cas.js
+          node scripts/test-concurrency-logic.js
+          node scripts/test-idor-invoice-e2e.js
           node scripts/test-backup-restore-e2e.js
           node scripts/test-tracking-and-courier-sync.js
 

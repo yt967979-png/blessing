@@ -404,7 +404,7 @@ export async function POST(request: Request) {
         await client.query(
           `UPDATE books
            SET stock = COALESCE(stock, 0) + $1,
-               status = CASE WHEN COALESCE(stock, 0) + $1 > 0 THEN 'published' ELSE status END,
+               status = CASE WHEN status = 'out_of_stock' AND COALESCE(stock, 0) + $1 > 0 THEN 'published' ELSE status END,
                updated_at = NOW()
            WHERE id = $2`,
           [excess, item.id]

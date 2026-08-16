@@ -30,6 +30,8 @@ function TrackForm() {
   const [error, setError] = useState<string | null>(null);
   const [order, setOrder] = useState<any>(null);
 
+  const [trackToken, setTrackToken] = useState(searchParams.get('t') || searchParams.get('token') || '');
+
   // User Orders list for logged in state
   const [userOrders, setUserOrders] = useState<any[]>([]);
   const [loadingUserOrders, setLoadingUserOrders] = useState(false);
@@ -49,9 +51,10 @@ function TrackForm() {
     }
   }, [user]);
 
-  const runTrack = async (oid?: string, ph?: string, opts?: { soft?: boolean }) => {
+  const runTrack = async (oid?: string, ph?: string, opts?: { soft?: boolean; token?: string }) => {
     const id = (oid ?? orderId).trim();
     const mobile = (ph ?? phone ?? user?.phone ?? '').trim();
+    const token = (opts?.token ?? trackToken).trim();
     setError(null);
     if (!opts?.soft) {
       setLoading(true);
@@ -61,7 +64,7 @@ function TrackForm() {
       const res = await fetch('/api/track', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orderId: id, phone: mobile }),
+        body: JSON.stringify({ orderId: id, phone: mobile, token }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -81,10 +84,12 @@ function TrackForm() {
   useEffect(() => {
     const oid = searchParams.get('orderId');
     const ph = searchParams.get('phone') || user?.phone;
+    const t = searchParams.get('t') || searchParams.get('token') || '';
     if (oid) setOrderId(oid);
     if (ph) setPhone(ph);
-    if (oid && ph) {
-      void runTrack(oid, ph);
+    if (t) setTrackToken(t);
+    if (oid && (ph || t)) {
+      void runTrack(oid, ph, { token: t });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, user]);

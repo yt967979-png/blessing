@@ -50,6 +50,10 @@ const TAB_TITLES: Record<AdminTab, { title: string; subtitle: string }> = {
     title: 'GST & Sales Reports',
     subtitle: 'Sales analytics, payment breakdowns, and 1-click GST CSV ledger export',
   },
+  health: {
+    title: 'System Health & Observability',
+    subtitle: 'Background worker heartbeats, dead-letter queue, and service liveness',
+  },
 };
 
 export const AdminHeader: React.FC<AdminHeaderProps> = ({
