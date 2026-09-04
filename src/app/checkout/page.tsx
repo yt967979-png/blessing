@@ -61,6 +61,7 @@ export default function CheckoutPage() {
     phone: '',
     alternatePhone: '',
     address: '',
+    landmark: '',
     city: '',
     pincode: '',
   });
@@ -147,6 +148,7 @@ export default function CheckoutPage() {
         phone: newAddr.phone,
         alternatePhone: newAddr.alternatePhone,
         address: newAddr.address,
+        landmark: newAddr.landmark,
         city: newAddr.city || 'Chennai',
         pincode: String(newAddr.pincode),
         isDefault: true,
@@ -506,7 +508,16 @@ export default function CheckoutPage() {
                       value={newAddr.address}
                       onChange={(e) => setNewAddr({ ...newAddr, address: e.target.value })}
                       className="w-full px-3 py-3 min-h-12 border border-slate-300 rounded-xl bg-white outline-none focus:border-blue-600 text-sm"
-                      placeholder="Door no., Street name, Landmark"
+                      placeholder="Door no., Street name, Area"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Near Landmark <span className="font-normal text-slate-400">(optional)</span></label>
+                    <input
+                      value={newAddr.landmark}
+                      onChange={(e) => setNewAddr({ ...newAddr, landmark: e.target.value })}
+                      className="w-full px-3 py-3 min-h-12 border border-slate-300 rounded-xl bg-white outline-none focus:border-blue-600 text-sm"
+                      placeholder="e.g. Near SBI Bank, Opposite Bus Stop"
                     />
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

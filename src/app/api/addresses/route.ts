@@ -11,6 +11,7 @@ function mapAddress(row: any) {
     phone: row.phone,
     alternatePhone: row.alternate_phone || '',
     address: row.address_line1,
+    landmark: row.near_landmark || '',
     city: row.city,
     pincode: row.pincode,
     state: row.state || 'Tamil Nadu',
@@ -20,6 +21,7 @@ function mapAddress(row: any) {
 
 async function ensureAddressColumns(db: typeof queryDb) {
   await db(`ALTER TABLE addresses ADD COLUMN IF NOT EXISTS alternate_phone VARCHAR(20)`);
+  await db(`ALTER TABLE addresses ADD COLUMN IF NOT EXISTS near_landmark VARCHAR(255)`);
 }
 
 async function resolveUserId(request: Request): Promise<string | null> {
@@ -66,6 +68,7 @@ export async function POST(request: Request) {
   const name = String(body.name || '').trim();
   const phoneRaw = String(body.phone || '').trim();
   const address = String(body.address || '').trim();
+  const nearLandmark = String(body.landmark || '').trim().slice(0, 200);
   const city = String(body.city || 'Chennai').trim();
   const pincode = String(body.pincode || '').replace(/\D/g, '').slice(0, 6);
   const type = String(body.type || 'HOME').trim();
@@ -103,10 +106,10 @@ export async function POST(request: Request) {
 
     const id = `addr-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const res = await queryDb(
-      `INSERT INTO addresses (id, user_id, full_name, phone, alternate_phone, address_line1, city, pincode, landmark, state, is_default)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'Tamil Nadu', $10)
+      `INSERT INTO addresses (id, user_id, full_name, phone, alternate_phone, address_line1, near_landmark, city, pincode, landmark, state, is_default)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'Tamil Nadu', $11)
        RETURNING *`,
-      [id, userId, name, phone, alt.value || null, address, city, pincode, type, isDefault]
+      [id, userId, name, phone, alt.value || null, address, nearLandmark || null, city, pincode, type, isDefault]
     );
 
     return NextResponse.json(mapAddress(res.rows[0]), { status: 201 });
@@ -169,6 +172,10 @@ export async function PATCH(request: Request) {
     if (body.type !== undefined) {
       fields.push(`landmark = $${idx++}`);
       values.push(String(body.type).trim());
+    }
+    if (body.landmark !== undefined) {
+      fields.push(`near_landmark = $${idx++}`);
+      values.push(String(body.landmark).trim().slice(0, 200) || null);
     }
     if (body.isDefault !== undefined) {
       fields.push(`is_default = $${idx++}`);

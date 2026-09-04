@@ -146,6 +146,7 @@ export default function ProfilePage() {
   const [newAddrPhone, setNewAddrPhone] = useState('');
   const [newAddrAltPhone, setNewAddrAltPhone] = useState('');
   const [newAddrText, setNewAddrText] = useState('');
+  const [newAddrLandmark, setNewAddrLandmark] = useState('');
   const [newAddrCity, setNewAddrCity] = useState('');
   const [newAddrPincode, setNewAddrPincode] = useState('');
 
@@ -162,6 +163,7 @@ export default function ProfilePage() {
       phone: newAddrPhone || user.phone || '',
       alternatePhone: newAddrAltPhone || '',
       address: newAddrText,
+      landmark: newAddrLandmark || '',
       city: newAddrCity || 'Chennai',
       pincode: newAddrPincode,
       isDefault: addresses.length === 0,
@@ -173,6 +175,7 @@ export default function ProfilePage() {
     setAddresses((prev) => [created, ...prev]);
     setShowAddAddrForm(false);
     setNewAddrText('');
+    setNewAddrLandmark('');
     setNewAddrPincode('');
     setNewAddrCity('');
     setNewAddrAltPhone('');
@@ -706,7 +709,7 @@ export default function ProfilePage() {
                 {showAddAddrForm && (
                   <form
                     onSubmit={handleAddAddress}
-                    className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-3 text-xs"
+                    className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-4 text-xs"
                   >
                     <div className="flex gap-3">
                       {['HOME', 'WORK', 'OTHER'].map((type) => (
@@ -725,59 +728,92 @@ export default function ProfilePage() {
                       ))}
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
-                      <input
-                        type="text"
-                        placeholder="Receiver Name"
-                        value={newAddrName}
-                        onChange={(e) => setNewAddrName(e.target.value)}
-                        className="px-3 py-2 bg-white border border-slate-300 rounded-xl outline-none"
-                      />
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block font-bold text-slate-700 mb-1">Receiver Name *</label>
+                        <input
+                          type="text"
+                          placeholder="Full name"
+                          value={newAddrName}
+                          onChange={(e) => setNewAddrName(e.target.value)}
+                          className="w-full px-3 py-3 min-h-12 bg-white border border-slate-300 rounded-xl outline-none focus:border-blue-600 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-bold text-slate-700 mb-1">Primary Phone *</label>
+                        <input
+                          type="tel"
+                          placeholder="10-digit mobile"
+                          maxLength={10}
+                          value={newAddrPhone}
+                          onChange={(e) => setNewAddrPhone(e.target.value.replace(/\D/g, ''))}
+                          className="w-full px-3 py-3 min-h-12 bg-white border border-slate-300 rounded-xl outline-none focus:border-blue-600 text-sm"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Alternate Phone <span className="font-normal text-slate-400">(optional — for delivery)</span></label>
                       <input
                         type="tel"
-                        placeholder="Primary phone *"
-                        value={newAddrPhone}
-                        onChange={(e) => setNewAddrPhone(e.target.value)}
-                        className="px-3 py-2 bg-white border border-slate-300 rounded-xl outline-none"
+                        placeholder="Alternate 10-digit mobile"
+                        maxLength={10}
+                        value={newAddrAltPhone}
+                        onChange={(e) => setNewAddrAltPhone(e.target.value.replace(/\D/g, ''))}
+                        className="w-full px-3 py-3 min-h-12 bg-white border border-slate-300 rounded-xl outline-none focus:border-blue-600 text-sm"
                       />
                     </div>
-                    <input
-                      type="tel"
-                      placeholder="Alternate phone (optional — for delivery)"
-                      value={newAddrAltPhone}
-                      onChange={(e) => setNewAddrAltPhone(e.target.value)}
-                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl outline-none"
-                    />
 
-                    <input
-                      type="text"
-                      required
-                      placeholder="Door No, Street Address & Landmark"
-                      value={newAddrText}
-                      onChange={(e) => setNewAddrText(e.target.value)}
-                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl outline-none"
-                    />
-
-                    <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Door No, Street &amp; Area *</label>
                       <input
                         type="text"
-                        placeholder="City (e.g. Chennai)"
-                        value={newAddrCity}
-                        onChange={(e) => setNewAddrCity(e.target.value)}
-                        className="px-3 py-2 bg-white border border-slate-300 rounded-xl outline-none"
+                        required
+                        placeholder="e.g. 12/4, Gandhi Nagar, 2nd Street"
+                        value={newAddrText}
+                        onChange={(e) => setNewAddrText(e.target.value)}
+                        className="w-full px-3 py-3 min-h-12 bg-white border border-slate-300 rounded-xl outline-none focus:border-blue-600 text-sm"
                       />
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Near Landmark <span className="font-normal text-slate-400">(optional)</span></label>
                       <input
                         type="text"
-                        placeholder="Pincode (e.g. 600012)"
-                        value={newAddrPincode}
-                        onChange={(e) => setNewAddrPincode(e.target.value)}
-                        className="px-3 py-2 bg-white border border-slate-300 rounded-xl outline-none"
+                        placeholder="e.g. Near SBI Bank, Opposite Bus Stop"
+                        value={newAddrLandmark}
+                        onChange={(e) => setNewAddrLandmark(e.target.value)}
+                        className="w-full px-3 py-3 min-h-12 bg-white border border-slate-300 rounded-xl outline-none focus:border-blue-600 text-sm"
                       />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block font-bold text-slate-700 mb-1">City / District *</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Chennai"
+                          value={newAddrCity}
+                          onChange={(e) => setNewAddrCity(e.target.value)}
+                          className="w-full px-3 py-3 min-h-12 bg-white border border-slate-300 rounded-xl outline-none focus:border-blue-600 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-bold text-slate-700 mb-1">Pincode *</label>
+                        <input
+                          type="text"
+                          placeholder="6-digit pincode"
+                          maxLength={6}
+                          value={newAddrPincode}
+                          onChange={(e) => setNewAddrPincode(e.target.value.replace(/\D/g, ''))}
+                          className="w-full px-3 py-3 min-h-12 bg-white border border-slate-300 rounded-xl outline-none focus:border-blue-600 text-sm"
+                        />
+                      </div>
                     </div>
 
                     <button
                       type="submit"
-                      className="bg-emerald-600 text-white font-extrabold text-xs px-5 py-2.5 rounded-xl uppercase tracking-wider"
+                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs px-5 py-3 min-h-12 rounded-xl uppercase tracking-wider transition-colors touch-manipulation"
                     >
                       SAVE ADDRESS
                     </button>
@@ -839,7 +875,7 @@ export default function ProfilePage() {
                           </div>
                         </div>
                         <p className="text-slate-700 leading-relaxed font-medium">
-                          {addr.address}, {addr.city} — {addr.pincode}
+                          {addr.address}{addr.landmark ? `, ${addr.landmark}` : ''}, {addr.city} — {addr.pincode}
                         </p>
                       </div>
                     ))}

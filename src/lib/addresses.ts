@@ -8,6 +8,7 @@ export interface SavedAddress {
   phone: string;
   alternatePhone?: string;
   address: string;
+  landmark?: string;
   city: string;
   pincode: string;
   state?: string;
