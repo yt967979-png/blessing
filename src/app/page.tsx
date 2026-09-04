@@ -15,8 +15,6 @@ import { Footer } from '@/components/layout/Footer';
 import { ContactSection } from '@/components/home/ContactSection';
 import { PromoSection } from '@/components/home/PromoSection';
 
-import { SubjectFilterBar } from '@/components/home/SubjectFilterBar';
-
 export default function Home() {
   const router = useRouter();
   const { user } = useStore();
@@ -93,7 +91,6 @@ export default function Home() {
       <AnnouncementBar />
       <Header />
       <HeroSection />
-      <SubjectFilterBar />
       <ClassPicker />
       <ProductGrid />
       <PromoSection />

@@ -665,7 +665,11 @@ export default function ProfilePage() {
                                 </Link>
                               ) : (
                               <Link
-                                href={`/track?orderId=${encodeURIComponent(o.orderId)}`}
+                                href={`/track?orderId=${encodeURIComponent(o.orderId)}${
+                                  o.customerPhone || user?.phone
+                                    ? `&phone=${encodeURIComponent(o.customerPhone || user?.phone || '')}`
+                                    : ''
+                                }`}
                                 className="bg-[#001B3A] hover:bg-blue-600 text-white font-black text-xs px-4 py-2.5 rounded-xl shadow-xs transition-colors flex items-center justify-center gap-1.5 flex-1 sm:flex-none"
                               >
                                 <Truck className="w-3.5 h-3.5 text-amber-400" />
