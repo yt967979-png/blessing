@@ -72,7 +72,6 @@ async function loadUserSessionData(queryFn: any, userId: string) {
 
 function buildUserResponse(
   user: { id: string; name: string; email: string; phone: string; role: string; profile_image?: string | null },
-  token: string,
   needsProfile: boolean
 ) {
   return {
@@ -81,7 +80,6 @@ function buildUserResponse(
     email: user.email,
     phone: user.phone,
     role: user.role || 'customer',
-    token,
     profileImage: user.profile_image || undefined,
     needsProfile,
   };
@@ -203,7 +201,7 @@ export async function POST(request: Request) {
       : await loadUserSessionData(queryDb, dbUser.id);
 
     const response = NextResponse.json({
-      user: buildUserResponse(dbUser, token, needsProfile),
+      user: buildUserResponse(dbUser, needsProfile),
       ...sessionData,
     });
     return setSessionCookie(response, token);

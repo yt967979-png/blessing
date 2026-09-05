@@ -92,7 +92,6 @@ export async function POST(request: Request) {
         email: user.email,
         phone: user.phone,
         role: user.role || 'customer',
-        token,
         profileImage: user.profile_image || undefined,
         needsProfile: false,
       },

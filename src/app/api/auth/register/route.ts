@@ -26,8 +26,8 @@ export async function POST(request: Request) {
     }
     const phoneWithCc = `91${cleanPhone}`;
 
-    if (!password || password.length < 4) {
-      return NextResponse.json({ error: 'Password must be at least 4 characters long.' }, { status: 400 });
+    if (!password || password.length < 8) {
+      return NextResponse.json({ error: 'Password must be at least 8 characters long.' }, { status: 400 });
     }
 
     if (confirmPassword && password !== confirmPassword) {
@@ -64,7 +64,6 @@ export async function POST(request: Request) {
       phone: cleanPhone,
       role: 'customer',
       needsProfile: false,
-      token,
     };
 
     const response = NextResponse.json({ success: true, user: userObj });

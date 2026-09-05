@@ -26,10 +26,13 @@ export async function POST(request: NextRequest) {
   let client: any = null;
   try {
     const session = await getAuthenticatedUser(request);
+    if (!session) {
+      return NextResponse.json({ ok: true, skipped: true });
+    }
     const body = await request.json().catch(() => ({}));
     const phone = normalizeMobileDigits(String(body.phone || ''));
-    const name = String(body.name || 'Student').trim();
-    const cart = Array.isArray(body.cart) ? body.cart : [];
+    const name = String(body.name || 'Student').trim().slice(0, 80);
+    const cart = Array.isArray(body.cart) ? body.cart.slice(0, 20) : [];
     if (phone.length !== 10 || cart.length === 0) {
       return NextResponse.json({ ok: true, skipped: true });
     }
@@ -46,7 +49,7 @@ export async function POST(request: NextRequest) {
          user_id = COALESCE(EXCLUDED.user_id, abandoned_carts.user_id),
          reminded = FALSE,
          updated_at = NOW()`,
-      [id, session?.userId || null, phone, name, JSON.stringify(cart.slice(0, 20))]
+      [id, session.userId, phone, name, JSON.stringify(cart)]
     );
     return NextResponse.json({ ok: true });
   } catch {

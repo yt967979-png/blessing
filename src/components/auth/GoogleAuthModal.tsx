@@ -230,8 +230,8 @@ export function GoogleAuthModal({
       setAuthError('Please enter a valid 10-digit mobile number.');
       return;
     }
-    if (!password || password.length < 4) {
-      setAuthError('Password must be at least 4 characters long.');
+    if (!password || password.length < 8) {
+      setAuthError('Password must be at least 8 characters long.');
       return;
     }
     if (password !== confirmPassword) {
@@ -525,13 +525,13 @@ export function GoogleAuthModal({
                           <div className="flex items-center gap-1.5">
                             <div
                               className={`w-3.5 h-3.5 rounded-full flex items-center justify-center transition-colors ${
-                                password.length >= 6 ? 'bg-emerald-500 text-white' : 'bg-slate-300 text-slate-600'
+                                password.length >= 8 ? 'bg-emerald-500 text-white' : 'bg-slate-300 text-slate-600'
                               }`}
                             >
                               <Check className="w-2.5 h-2.5 stroke-[3]" />
                             </div>
-                            <span className={password.length >= 6 ? 'text-emerald-700 font-semibold' : 'text-slate-500'}>
-                              At least 6 characters
+                            <span className={password.length >= 8 ? 'text-emerald-700 font-semibold' : 'text-slate-500'}>
+                              At least 8 characters
                             </span>
                           </div>
                           <div className="flex items-center gap-1.5">

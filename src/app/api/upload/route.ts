@@ -9,6 +9,21 @@ import {
   verifyAdminRequest,
 } from '@/lib/serverSecurity';
 
+function sniffFileKind(buf: Buffer): 'jpeg' | 'png' | 'webp' | 'gif' | 'pdf' | null {
+  if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'jpeg';
+  if (buf.length >= 8 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return 'png';
+  if (
+    buf.length >= 12 &&
+    buf.slice(0, 4).toString('ascii') === 'RIFF' &&
+    buf.slice(8, 12).toString('ascii') === 'WEBP'
+  ) {
+    return 'webp';
+  }
+  if (buf.length >= 6 && buf.slice(0, 3).toString('ascii') === 'GIF') return 'gif';
+  if (buf.length >= 5 && buf.slice(0, 5).toString('ascii') === '%PDF-') return 'pdf';
+  return null;
+}
+
 export async function POST(request: Request) {
   const rl = await applyRateLimitAsync(`upload:${clientIp(request)}`, 30, 60000);
   if (!rl.allowed) {
@@ -34,31 +49,45 @@ export async function POST(request: Request) {
       return unauthorizedResponse('Admin login required to upload catalog images.');
     }
 
-    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
-    const maxBytes = isPdf ? 25 * 1024 * 1024 : (isReviewUpload ? 5 * 1024 * 1024 : 10 * 1024 * 1024);
+    const lowerName = file.name.toLowerCase();
+    if (file.type === 'image/svg+xml' || lowerName.endsWith('.svg') || lowerName.endsWith('.svgz')) {
+      return NextResponse.json({ error: 'SVG files are not allowed.' }, { status: 400 });
+    }
+
+    const claimedPdf = file.type === 'application/pdf' || lowerName.endsWith('.pdf');
+    const maxBytes = claimedPdf ? 25 * 1024 * 1024 : isReviewUpload ? 5 * 1024 * 1024 : 10 * 1024 * 1024;
     if (file.size > maxBytes) {
-      return NextResponse.json({ error: isPdf ? 'PDF too large (max 25MB).' : 'Image too large (max 10MB).' }, { status: 400 });
+      return NextResponse.json(
+        { error: claimedPdf ? 'PDF too large (max 25MB).' : 'Image too large (max 10MB).' },
+        { status: 400 }
+      );
     }
 
-    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml', 'application/pdf'];
-    if (!allowed.includes(file.type) && !isPdf) {
-      return NextResponse.json({ error: 'Only JPEG, PNG, WebP, GIF or PDF documents allowed.' }, { status: 400 });
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    const kind = sniffFileKind(buffer);
+    if (!kind) {
+      return NextResponse.json({ error: 'File type not allowed. Use JPEG, PNG, WebP, or PDF.' }, { status: 400 });
+    }
+    if (isReviewUpload && (kind === 'pdf' || kind === 'gif')) {
+      return NextResponse.json({ error: 'Review photos must be JPEG, PNG, or WebP.' }, { status: 400 });
+    }
+    if (kind === 'pdf' && isReviewUpload) {
+      return NextResponse.json({ error: 'PDF is not allowed for reviews.' }, { status: 400 });
+    }
+    if (kind === 'pdf' && !admin?.isAdmin) {
+      return NextResponse.json({ error: 'Admin login required to upload PDFs.' }, { status: 401 });
     }
 
-    // Save directly to VPS disk storage (/public/uploads)
     try {
-      const uploadSubDir = isReviewUpload ? 'reviews' : (isPdf ? 'samples' : 'catalog');
+      const uploadSubDir = isReviewUpload ? 'reviews' : kind === 'pdf' ? 'samples' : 'catalog';
       const uploadDir = path.join(process.cwd(), 'public', 'uploads', uploadSubDir);
       await fs.promises.mkdir(uploadDir, { recursive: true });
 
-      const rawExt = isPdf ? 'pdf' : (file.name.split('.').pop() || file.type.split('/')[1] || 'jpg');
-      const cleanExt = rawExt.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || (isPdf ? 'pdf' : 'jpg');
-      const prefix = isPdf ? 'sample-' : 'img-';
-      const filename = `${prefix}${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${cleanExt}`;
+      const ext = kind === 'jpeg' ? 'jpg' : kind;
+      const prefix = kind === 'pdf' ? 'sample-' : 'img-';
+      const filename = `${prefix}${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
       const filepath = path.join(uploadDir, filename);
-
-      const arrayBuffer = await file.arrayBuffer();
-      const buffer = Buffer.from(arrayBuffer);
       await fs.promises.writeFile(filepath, buffer);
 
       return NextResponse.json({

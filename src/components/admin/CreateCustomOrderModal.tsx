@@ -496,7 +496,6 @@ export const CreateCustomOrderModal: React.FC<CreateCustomOrderModalProps> = ({
                   >
                     <option value="WhatsApp UPI (GPay / PhonePe / Paytm)">WhatsApp UPI (GPay / PhonePe / Paytm)</option>
                     <option value="Direct Bank Transfer (IMPS / NEFT)">Direct Bank Transfer (IMPS / NEFT)</option>
-                    <option value="Cash on Delivery (Verified)">Cash on Delivery (Verified)</option>
                     <option value="Store Direct Counter Pickup">Store Direct Counter Pickup</option>
                   </select>
                 </div>

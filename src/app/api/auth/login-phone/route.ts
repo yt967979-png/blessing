@@ -57,7 +57,6 @@ export async function POST(request: Request) {
         phone: user.phone,
         role: userRole,
         needsProfile,
-        token,
       },
     });
 

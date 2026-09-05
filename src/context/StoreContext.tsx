@@ -53,6 +53,11 @@ export interface UserData {
   isGuest?: boolean;
 }
 
+function persistSessionUser(user: UserData) {
+  const { token: _drop, ...safe } = user;
+  localStorage.setItem('bpg_user_next', JSON.stringify(safe));
+}
+
 interface StoreContextType {
   products: Product[];
   cart: CartItem[];
@@ -276,26 +281,23 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       try {
         const u = JSON.parse(savedUser);
         if (u?.id) {
-          setUser(u);
-          const headers: Record<string, string> = {};
-          if (u.token) headers.Authorization = `Bearer ${u.token}`;
+          const { token: _legacy, ...safeUser } = u;
+          setUser(safeUser);
           fetch(`/api/auth?userId=${encodeURIComponent(u.id)}`, {
             credentials: 'include',
-            headers,
           })
             .then((res) => (res.ok ? res.json() : null))
             .then((dbUser) => {
               if (dbUser?.user) {
                 const nextUser = {
                   ...dbUser.user,
-                  token: u.token,
                   needsProfile:
                     dbUser.user.needsProfile ??
                     (userNeedsProfile(dbUser.user.phone) ||
                       String(dbUser.user.name || '').trim().length < 2),
                 };
                 setUser(nextUser);
-                localStorage.setItem('bpg_user_next', JSON.stringify(nextUser));
+                persistSessionUser(nextUser);
                 if (nextUser.needsProfile) {
                   setIsAuthOpen(true);
                 }
@@ -767,7 +769,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         (userNeedsProfile(userData.phone) || String(userData.name || '').trim().length < 2),
     };
     setUser(nextUser);
-    localStorage.setItem('bpg_user_next', JSON.stringify(nextUser));
+    persistSessionUser(nextUser);
     if (nextUser.needsProfile) {
       setIsAuthOpen(true);
     }

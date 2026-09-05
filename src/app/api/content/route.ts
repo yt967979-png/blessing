@@ -29,8 +29,16 @@ export async function GET(request: Request) {
 
   try {
     if (type === 'settings') {
-      const res = await client.query(`SELECT * FROM settings WHERE id = 'main' LIMIT 1`);
-      return NextResponse.json(res.rows[0] || {});
+      const res = await client.query(
+        `SELECT site_name, support_email, support_phone
+         FROM settings WHERE id = 'main' LIMIT 1`
+      );
+      const row = res.rows[0] || {};
+      return NextResponse.json({
+        site_name: row.site_name || 'BLESSING POWER GUIDE',
+        support_email: row.support_email || '',
+        support_phone: row.support_phone || '',
+      });
     }
 
     await ensureFaqsTable(client);
