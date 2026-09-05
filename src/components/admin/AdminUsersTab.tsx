@@ -113,6 +113,10 @@ export default function AdminUsersTab({
   };
 
   const setStatus = async (userId: string, status: 'active' | 'banned') => {
+    if (!isSuperAdmin) {
+      showToast('Only Super Admin can ban or unban users.');
+      return;
+    }
     setUpdatingId(userId);
     try {
       const r = await fetch('/api/admin/users', {
@@ -136,6 +140,10 @@ export default function AdminUsersTab({
   };
 
   const deleteUser = async (userId: string, userName: string) => {
+    if (!isSuperAdmin) {
+      showToast('Only Super Admin can delete users.');
+      return;
+    }
     if (!confirm(`Are you sure you want to permanently delete user "${userName}"? This will clear their record from the database.`)) return;
     setUpdatingId(userId);
     try {
@@ -223,8 +231,8 @@ export default function AdminUsersTab({
           </h2>
           <p className="text-xs text-gray-400 mt-0.5">
             {isSuperAdmin
-              ? `${customers.length} users — only you can Make Admin or remove admin`
-              : `${customers.length} users — you can manage customers. Only Super Admin can make another admin`}
+              ? `${customers.length} users — Ban, Delete, and Make Admin are Super Admin only`
+              : `${customers.length} users — view only. Only Super Admin can ban, delete, or make admin`}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -329,7 +337,8 @@ export default function AdminUsersTab({
                         </button>
                       )}
 
-                      {(isSuperAdmin || c.role !== 'admin') &&
+                      {isSuperAdmin &&
+                        c.role !== 'super_admin' &&
                         (c.status === 'banned' ? (
                         <button
                           type="button"
@@ -355,7 +364,7 @@ export default function AdminUsersTab({
                         </button>
                       ))}
 
-                      {c.role !== 'super_admin' && (isSuperAdmin || c.role !== 'admin') && (
+                      {isSuperAdmin && c.role !== 'super_admin' && (
                         <button
                           type="button"
                           disabled={updatingId === c.id}

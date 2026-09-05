@@ -152,8 +152,10 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-  const admin = await verifyAdminRequest(request);
-  if (!admin.isAdmin) return forbiddenResponse(admin.error);
+  const superAdmin = await verifySuperAdminRequest(request);
+  if (!superAdmin.isSuperAdmin) {
+    return forbiddenResponse('Only Super Admin can ban or unban users.');
+  }
 
   try {
     const body = await request.json().catch(() => ({}));
@@ -177,12 +179,8 @@ export async function PATCH(request: NextRequest) {
     if (String(userCheck.rows[0].role || '').toLowerCase() === 'super_admin') {
       return NextResponse.json({ error: 'Super Admin status cannot be modified.' }, { status: 400 });
     }
-    const targetRole = String(userCheck.rows[0].role || '').toLowerCase();
-    if (targetRole === 'admin') {
-      const superAdmin = await verifySuperAdminRequest(request);
-      if (!superAdmin.isSuperAdmin) {
-        return forbiddenResponse('Only Super Admin can ban or unban another admin.');
-      }
+    if (String(userCheck.rows[0].id) === String(superAdmin.user?.userId)) {
+      return NextResponse.json({ error: 'You cannot ban your own account.' }, { status: 400 });
     }
 
     await queryDb(
@@ -197,8 +195,10 @@ export async function PATCH(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const admin = await verifyAdminRequest(request);
-  if (!admin.isAdmin) return forbiddenResponse(admin.error);
+  const superAdmin = await verifySuperAdminRequest(request);
+  if (!superAdmin.isSuperAdmin) {
+    return forbiddenResponse('Only Super Admin can delete users.');
+  }
 
   try {
     const userId = String(new URL(request.url).searchParams.get('userId') || '').trim();
@@ -217,13 +217,7 @@ export async function DELETE(request: NextRequest) {
     if (targetRole === 'super_admin') {
       return NextResponse.json({ error: 'Super Admin cannot be deleted.' }, { status: 400 });
     }
-    if (targetRole === 'admin') {
-      const superAdmin = await verifySuperAdminRequest(request);
-      if (!superAdmin.isSuperAdmin) {
-        return forbiddenResponse('Only Super Admin can delete another admin.');
-      }
-    }
-    if (String(userCheck.rows[0].id) === String(admin.user?.userId)) {
+    if (String(userCheck.rows[0].id) === String(superAdmin.user?.userId)) {
       return NextResponse.json({ error: 'You cannot delete your own account here.' }, { status: 400 });
     }
 

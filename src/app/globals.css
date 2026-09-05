@@ -325,4 +325,47 @@ h1, h2, h3, h4, h5, h6, .font-heading {
   animation: hero-offer-shine 4.2s ease-in-out infinite;
 }
 
+.hero-showcase {
+  perspective: 1100px;
+}
+
+.hero-showcase-inner {
+  position: relative;
+  transform-style: preserve-3d;
+  transition: transform 0.9s cubic-bezier(0.4, 0.12, 0.2, 1);
+}
+
+.hero-showcase-inner.is-book {
+  transform: rotateY(180deg);
+}
+
+.hero-showcase-face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.hero-showcase-book {
+  transform: rotateY(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-showcase-inner {
+    transition: none;
+    transform: none !important;
+  }
+  .hero-showcase-book {
+    transform: none;
+  }
+  .hero-showcase-inner:not(.is-book) .hero-showcase-book {
+    opacity: 0;
+    pointer-events: none;
+  }
+  .hero-showcase-inner.is-book .hero-showcase-logo {
+    opacity: 0;
+    pointer-events: none;
+  }
+}
+
 

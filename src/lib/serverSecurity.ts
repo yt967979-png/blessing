@@ -194,7 +194,7 @@ export async function verifyAdminRequest(
   }
 }
 
-/** Super Admin ONLY — role promotions, and other owner-only controls */
+/** Super Admin ONLY — role promotions, ban/delete users, and other owner-only controls */
 export async function verifySuperAdminRequest(
   request: Request
 ): Promise<{ isSuperAdmin: boolean; error?: string; user?: { userId: string; role: string } }> {

@@ -1,6 +1,8 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import Image from 'next/image';
+import Link from 'next/link';
 import {
   FileCheck,
   BookOpen,
@@ -11,12 +13,88 @@ import {
   Gift,
   Sparkles,
 } from 'lucide-react';
-import { useStore } from '@/context/StoreContext';
+import { useStore, Product } from '@/context/StoreContext';
 import { BrandLogo } from '@/components/ui/BrandLogo';
+import { imageNeedsUnoptimized } from '@/lib/productImage';
+
+function pickHeroBook(products: Product[]): Product | null {
+  const withCover = products.filter((p) => String(p.image || '').trim());
+  return (
+    withCover.find((p) => p.isBestSeller) ||
+    withCover.find((p) => p.isTrending) ||
+    withCover.find((p) => p.inStock !== false) ||
+    withCover[0] ||
+    null
+  );
+}
+
+function HeroShowcase({
+  size,
+  book,
+  showBook,
+}: {
+  size: 'sm' | 'lg';
+  book: Product | null;
+  showBook: boolean;
+}) {
+  const canFlip = Boolean(book?.image);
+
+  const box =
+    size === 'lg'
+      ? 'h-[13.5rem] w-[13.5rem] md:h-72 md:w-72'
+      : 'h-[7.5rem] w-[7.5rem]';
+  const logoSize = size === 'lg' ? 280 : 120;
+  const logoClass =
+    size === 'lg'
+      ? 'w-52 h-52 md:w-64 md:h-64 rounded-[22%]'
+      : 'w-[6.5rem] h-[6.5rem] rounded-3xl';
+
+  return (
+    <div className={`hero-showcase ${box}`}>
+      <div className={`hero-showcase-inner ${box} ${showBook && canFlip ? 'is-book' : ''}`}>
+        <div className="hero-showcase-face hero-showcase-logo flex items-center justify-center rounded-[28%] bg-white p-3 md:p-5 shadow-xl border border-white/30">
+          <BrandLogo size={logoSize} priority className={logoClass} />
+        </div>
+        {book?.image ? (
+          <Link
+            href={`/products/${book.slug}`}
+            className="hero-showcase-face hero-showcase-book flex items-center justify-center rounded-[28%] bg-white p-3 md:p-4 shadow-xl border border-white/30 overflow-hidden"
+            aria-label={book.title}
+          >
+            <Image
+              src={book.image}
+              alt={`${book.title} guide book`}
+              width={size === 'lg' ? 280 : 120}
+              height={size === 'lg' ? 280 : 120}
+              priority={size === 'lg'}
+              className="h-full w-full object-contain"
+              unoptimized={imageNeedsUnoptimized(book.image)}
+            />
+          </Link>
+        ) : null}
+      </div>
+    </div>
+  );
+}
 
 export const HeroSection = () => {
-  const { setSelectedClass, setSelectedCategory } = useStore();
+  const { setSelectedClass, setSelectedCategory, products } = useStore();
   const [heroTitle, setHeroTitle] = useState('');
+  const heroBook = useMemo(() => pickHeroBook(products), [products]);
+  const [showBook, setShowBook] = useState(false);
+
+  useEffect(() => {
+    if (!heroBook?.image) {
+      setShowBook(false);
+      return;
+    }
+    const start = window.setTimeout(() => setShowBook(true), 2400);
+    const id = window.setInterval(() => setShowBook((v) => !v), 5200);
+    return () => {
+      window.clearTimeout(start);
+      window.clearInterval(id);
+    };
+  }, [heroBook?.id, heroBook?.image]);
 
   useEffect(() => {
     let cancelled = false;
@@ -106,7 +184,7 @@ export const HeroSection = () => {
             ) : null}
 
             <div className="sm:hidden flex justify-center mb-5">
-              <BrandLogo size={120} priority className="w-[120px] h-[120px] rounded-3xl bg-white p-2" />
+              <HeroShowcase size="sm" book={heroBook} showBook={showBook} />
             </div>
 
             <div className="grid grid-cols-3 gap-2.5 mb-6 max-w-md mx-auto lg:mx-0">
@@ -171,9 +249,7 @@ export const HeroSection = () => {
 
           <div className="hidden sm:flex lg:col-span-5 relative justify-center items-center">
             <div className="absolute w-72 h-72 bg-amber-400/20 rounded-full blur-2xl pointer-events-none" />
-            <div className="relative rounded-[28%] bg-white p-5 shadow-xl border border-white/30">
-              <BrandLogo size={280} priority className="w-52 h-52 md:w-64 md:h-64 rounded-[22%]" />
-            </div>
+            <HeroShowcase size="lg" book={heroBook} showBook={showBook} />
           </div>
         </div>
       </div>
