@@ -85,7 +85,10 @@ export async function POST(request: Request) {
     const id = `cpn-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const parsedExpiresAt = expiresAt ? new Date(expiresAt).toISOString() : null;
 
-    const offerTitle = String(title || '').trim().slice(0, 200);
+    const offerTitle = String(title || '')
+      .replace(/<[^>]*>/g, '')
+      .trim()
+      .slice(0, 200);
     const pinHero = Boolean(showOnHero);
 
     if (pinHero) {

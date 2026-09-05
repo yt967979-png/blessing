@@ -20,7 +20,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { items, couponCode, currency = 'INR', receipt } = await request.json().catch(() => ({}));
+    const { items, couponCode, receipt } = await request.json().catch(() => ({}));
     if (!Array.isArray(items) || items.length === 0) {
       return NextResponse.json({ error: 'Cart is empty' }, { status: 400 });
     }
@@ -77,7 +77,7 @@ export async function POST(request: Request) {
         },
         body: JSON.stringify({
           amount: amountInPaisa,
-          currency,
+          currency: 'INR',
           receipt: receipt || `rcpt_${Date.now()}`,
           notes: {
             userId: session.userId,
@@ -137,22 +137,27 @@ export async function PUT(request: Request) {
       razorpay_order_id,
       razorpay_payment_id,
       razorpay_signature,
-      expectedRupees,
       items,
+      couponCode,
     } = body;
 
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
       return NextResponse.json({ verified: false, error: 'Missing payment fields.' }, { status: 400 });
     }
 
-    let amount = Number(expectedRupees || 0);
-    if ((!amount || amount <= 0) && Array.isArray(items)) {
-      const checkout = await priceCheckoutOrder(queryDb, {
-        items,
-        userId: session.userId,
-      });
-      if (checkout.ok) amount = checkout.totalAmount;
+    if (!Array.isArray(items) || items.length === 0) {
+      return NextResponse.json({ verified: false, error: 'Cart is required to verify payment.' }, { status: 400 });
     }
+
+    const checkout = await priceCheckoutOrder(queryDb, {
+      items,
+      userId: session.userId,
+      couponCode,
+    });
+    if (!checkout.ok) {
+      return NextResponse.json({ verified: false, error: checkout.error }, { status: checkout.status });
+    }
+    const amount = checkout.totalAmount;
 
     if (!amount || amount <= 0) {
       return NextResponse.json({ verified: false, error: 'Missing expected amount.' }, { status: 400 });
@@ -163,6 +168,7 @@ export async function PUT(request: Request) {
       razorpayPaymentId: razorpay_payment_id,
       razorpaySignature: razorpay_signature,
       expectedRupees: amount,
+      userId: session.userId,
     });
 
     if (!verified.ok) {

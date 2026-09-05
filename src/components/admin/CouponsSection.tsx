@@ -85,6 +85,15 @@ export default function CouponsSection() {
     fetchCoupons();
   }, [fetchCoupons]);
 
+  useEffect(() => {
+    if (!isModalOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [isModalOpen]);
+
   const handleCopy = (code: string) => {
     navigator.clipboard.writeText(code);
     setCopiedCode(code);
@@ -248,10 +257,10 @@ export default function CouponsSection() {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
           <button
             onClick={fetchCoupons}
-            className="p-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 transition-colors shadow-sm"
+            className="p-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 transition-colors shadow-sm min-h-11 min-w-11"
             title="Refresh coupons"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-emerald-600' : ''}`} />
@@ -261,7 +270,7 @@ export default function CouponsSection() {
               resetForm();
               setIsModalOpen(true);
             }}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-700 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md hover:shadow-lg hover:from-emerald-700 hover:to-teal-800 transition-all"
+            className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2.5 min-h-11 bg-gradient-to-r from-emerald-600 to-teal-700 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md hover:shadow-lg hover:from-emerald-700 hover:to-teal-800 transition-all"
           >
             <Plus className="w-4 h-4" />
             Create Coupon
@@ -319,8 +328,8 @@ export default function CouponsSection() {
       </div>
 
       {/* Search and Filter Bar */}
-      <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between gap-3">
-        <div className="relative flex-1 max-w-md">
+      <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3">
+        <div className="relative flex-1 w-full sm:max-w-md">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
@@ -330,7 +339,7 @@ export default function CouponsSection() {
             className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
           />
         </div>
-        <div className="text-xs text-slate-500 font-semibold">
+        <div className="text-xs text-slate-500 font-semibold shrink-0">
           Showing {filteredCoupons.length} coupon{filteredCoupons.length === 1 ? '' : 's'}
         </div>
       </div>
@@ -363,7 +372,83 @@ export default function CouponsSection() {
           )}
         </div>
       ) : (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <>
+        <div className="md:hidden space-y-3">
+          {filteredCoupons.map((coupon) => {
+            const isExpired = coupon.expiresAt && new Date(coupon.expiresAt).getTime() < Date.now();
+            return (
+              <div key={coupon.id} className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm space-y-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="font-mono font-black text-sm text-slate-900 bg-slate-100 px-2 py-1 rounded-lg border border-slate-200">
+                        {coupon.code}
+                      </span>
+                      {coupon.showOnHero ? (
+                        <span className="text-[10px] font-black uppercase text-amber-800 bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded">
+                          Hero
+                        </span>
+                      ) : null}
+                    </div>
+                    {coupon.title ? (
+                      <p className="text-[11px] font-bold text-slate-500 mt-1 break-words">{coupon.title}</p>
+                    ) : null}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleCopy(coupon.code)}
+                    className="p-2 min-h-11 min-w-11 rounded-lg border border-slate-200 text-slate-500 shrink-0"
+                  >
+                    {copiedCode === coupon.code ? (
+                      <Check className="w-4 h-4 text-emerald-600 mx-auto" />
+                    ) : (
+                      <Copy className="w-4 h-4 mx-auto" />
+                    )}
+                  </button>
+                </div>
+                <div className="text-xs font-semibold text-slate-600 space-y-1">
+                  <div>
+                    {coupon.discountType === 'percentage'
+                      ? `${coupon.discountValue}% off`
+                      : `₹${coupon.discountValue} flat`}
+                    {coupon.maxDiscountAmount ? ` · max ₹${coupon.maxDiscountAmount}` : ''}
+                  </div>
+                  <div>Min {coupon.minCartQty} books{coupon.minOrderAmount > 0 ? ` · min ₹${coupon.minOrderAmount}` : ''}</div>
+                  <div>
+                    {coupon.usedCount}/{coupon.maxUses} uses ·{' '}
+                    {coupon.expiresAt
+                      ? new Date(coupon.expiresAt).toLocaleDateString('en-IN', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric',
+                        })
+                      : 'No expiry'}
+                  </div>
+                  <div>
+                    {isExpired ? 'Expired' : coupon.isActive ? 'Active' : 'Inactive'}
+                  </div>
+                </div>
+                <div className="flex items-center justify-end gap-1 pt-1 border-t border-slate-100">
+                  <button type="button" onClick={() => handleToggleHero(coupon)} className="p-2 min-h-11 min-w-11" title="Hero">
+                    <Sparkles className={`w-4 h-4 mx-auto ${coupon.showOnHero ? 'text-amber-500' : 'text-slate-400'}`} />
+                  </button>
+                  <button type="button" onClick={() => handleToggleActive(coupon)} className="p-2 min-h-11" title="Active">
+                    {coupon.isActive ? (
+                      <ToggleRight className="w-6 h-6 text-emerald-600" />
+                    ) : (
+                      <ToggleLeft className="w-6 h-6 text-slate-400" />
+                    )}
+                  </button>
+                  <button type="button" onClick={() => handleDelete(coupon.id, coupon.code)} className="p-2 min-h-11 min-w-11 text-red-600" title="Delete">
+                    <Trash2 className="w-4 h-4 mx-auto" />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="hidden md:block bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs sm:text-sm">
               <thead className="bg-slate-50 border-b border-slate-100 text-slate-500 font-bold uppercase text-[10px] tracking-wider">
@@ -534,35 +619,46 @@ export default function CouponsSection() {
             </table>
           </div>
         </div>
+        </>
       )}
 
       {/* CREATE COUPON MODAL */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl border border-slate-100 overflow-hidden">
-            <div className="px-6 py-4 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center">
+        <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center bg-slate-900/60 backdrop-blur-sm p-0 sm:p-4 overflow-y-auto overscroll-contain">
+          <button
+            type="button"
+            aria-label="Close"
+            className="absolute inset-0 cursor-default"
+            onClick={() => setIsModalOpen(false)}
+          />
+          <div className="relative z-10 bg-white w-full sm:max-w-lg sm:rounded-3xl rounded-t-3xl shadow-2xl border border-slate-100 flex flex-col max-h-[100dvh] sm:max-h-[min(92dvh,44rem)] mt-10 sm:mt-0">
+            <div className="px-4 sm:px-6 py-3.5 bg-slate-50 border-b border-slate-100 flex items-start sm:items-center justify-between gap-3 shrink-0">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
                   <Tag className="w-4 h-4" />
                 </div>
-                <div>
-                  <h3 className="font-heading font-black text-slate-900 text-base">Create Discount Coupon</h3>
+                <div className="min-w-0">
+                  <h3 className="font-heading font-black text-slate-900 text-sm sm:text-base truncate">
+                    Create Discount Coupon
+                  </h3>
                   <p className="text-[11px] text-slate-400 font-medium">Add a promo code for students</p>
                 </div>
               </div>
               <button
+                type="button"
                 onClick={() => setIsModalOpen(false)}
-                className="p-1.5 rounded-xl hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors"
+                className="p-2 min-h-11 min-w-11 rounded-xl hover:bg-slate-200 text-slate-500 shrink-0"
               >
-                <X className="w-5 h-5" />
+                <X className="w-5 h-5 mx-auto" />
               </button>
             </div>
 
-            <form onSubmit={handleCreateCoupon} className="p-6 space-y-4">
+            <form onSubmit={handleCreateCoupon} className="flex flex-col min-h-0 flex-1">
+              <div className="p-4 sm:p-6 space-y-4 overflow-y-auto overscroll-contain flex-1 min-h-0">
               {error && (
-                <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs font-semibold flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                  {error}
+                <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs font-semibold flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                  <span className="break-words">{error}</span>
                 </div>
               )}
 
@@ -572,31 +668,30 @@ export default function CouponsSection() {
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. Christmas Offer — use XMAS20 get 20% off, only for 100 users"
+                  placeholder="e.g. Exam Offer — use EXAM20 for 20% off"
                   value={formTitle}
                   onChange={(e) => setFormTitle(e.target.value.slice(0, 200))}
-                  className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
+                  className="w-full min-w-0 px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
                 />
               </div>
 
-              {/* Coupon Code Input */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                   Coupon Code *
                 </label>
-                <div className="flex gap-2">
+                <div className="flex gap-2 min-w-0">
                   <input
                     type="text"
                     required
                     placeholder="e.g. EXAMPASS20"
                     value={formCode}
                     onChange={(e) => setFormCode(e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, ''))}
-                    className="flex-1 px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm font-mono font-bold uppercase focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
+                    className="min-w-0 flex-1 px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm font-mono font-bold uppercase focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
                   />
                   <button
                     type="button"
                     onClick={handleGenerateCode}
-                    className="px-3 py-2 border border-slate-200 hover:bg-slate-50 text-slate-600 text-xs font-bold rounded-xl transition-colors flex items-center gap-1"
+                    className="px-3 py-2 min-h-11 shrink-0 border border-slate-200 hover:bg-slate-50 text-slate-600 text-xs font-bold rounded-xl transition-colors inline-flex items-center gap-1"
                   >
                     <Sparkles className="w-3.5 h-3.5 text-amber-500" />
                     Auto
@@ -604,23 +699,22 @@ export default function CouponsSection() {
                 </div>
               </div>
 
-              {/* Discount Type & Value */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="min-w-0">
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                     Discount Type *
                   </label>
                   <select
                     value={formType}
                     onChange={(e) => setFormType(e.target.value as 'percentage' | 'flat')}
-                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none bg-white"
+                    className="w-full min-w-0 px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none bg-white"
                   >
                     <option value="percentage">Percentage (%)</option>
                     <option value="flat">Flat Amount (₹)</option>
                   </select>
                 </div>
 
-                <div>
+                <div className="min-w-0">
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                     Discount Value *
                   </label>
@@ -633,7 +727,7 @@ export default function CouponsSection() {
                       value={formValue}
                       onChange={(e) => setFormValue(e.target.value === '' ? '' : Number(e.target.value))}
                       placeholder={formType === 'percentage' ? '10' : '50'}
-                      className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
+                      className="w-full min-w-0 px-3.5 py-2.5 pr-8 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
                     />
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
                       {formType === 'percentage' ? '%' : '₹'}
@@ -642,7 +736,6 @@ export default function CouponsSection() {
                 </div>
               </div>
 
-              {/* Max Discount Cap for Percentage */}
               {formType === 'percentage' && (
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
@@ -654,17 +747,16 @@ export default function CouponsSection() {
                     placeholder="e.g. 150 (Leave empty for no limit)"
                     value={formMaxDiscount}
                     onChange={(e) => setFormMaxDiscount(e.target.value === '' ? '' : Number(e.target.value))}
-                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
+                    className="w-full min-w-0 px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
                   />
-                  <p className="text-[10px] text-slate-400 mt-1">
+                  <p className="text-[10px] text-slate-400 mt-1 leading-relaxed">
                     E.g., 10% off with ₹150 cap means students never get more than ₹150 discount.
                   </p>
                 </div>
               )}
 
-              {/* Min Cart Qty & Min Order Amount */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="min-w-0">
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                     Min Books in Cart *
                   </label>
@@ -674,12 +766,12 @@ export default function CouponsSection() {
                     min={1}
                     value={formMinQty}
                     onChange={(e) => setFormMinQty(Number(e.target.value))}
-                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
+                    className="w-full min-w-0 px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
                   />
                   <p className="text-[10px] text-slate-400 mt-1">Default is 4 books</p>
                 </div>
 
-                <div>
+                <div className="min-w-0">
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                     Min Order Value (₹)
                   </label>
@@ -689,14 +781,13 @@ export default function CouponsSection() {
                     value={formMinAmount}
                     onChange={(e) => setFormMinAmount(Number(e.target.value))}
                     placeholder="0"
-                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
+                    className="w-full min-w-0 px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
                   />
                 </div>
               </div>
 
-              {/* Max Uses & Expiry Date */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="min-w-0">
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                     Total Redemptions Limit
                   </label>
@@ -705,14 +796,14 @@ export default function CouponsSection() {
                     min={1}
                     value={formMaxUses}
                     onChange={(e) => setFormMaxUses(Number(e.target.value))}
-                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
+                    className="w-full min-w-0 px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
                   />
-                  <p className="text-[10px] text-slate-400 mt-1">
+                  <p className="text-[10px] text-slate-400 mt-1 leading-relaxed">
                     Shop-wide cap (e.g. 100). Each logged-in customer can still use it only once.
                   </p>
                 </div>
 
-                <div>
+                <div className="min-w-0">
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                     Expiry Date (Optional)
                   </label>
@@ -720,17 +811,17 @@ export default function CouponsSection() {
                     type="date"
                     value={formExpiresAt}
                     onChange={(e) => setFormExpiresAt(e.target.value)}
-                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none bg-white"
+                    className="w-full min-w-0 px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none bg-white"
                   />
                 </div>
               </div>
 
-              <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-                <span className="text-xs font-bold text-slate-700">Show on home hero</span>
+              <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-100">
+                <span className="text-xs font-bold text-slate-700 pr-2">Show on home hero</span>
                 <button
                   type="button"
                   onClick={() => setFormShowOnHero(!formShowOnHero)}
-                  className="p-1 transition-colors"
+                  className="p-1 min-h-11 shrink-0"
                 >
                   {formShowOnHero ? (
                     <ToggleRight className="w-7 h-7 text-amber-500" />
@@ -740,13 +831,12 @@ export default function CouponsSection() {
                 </button>
               </div>
 
-              {/* Active Toggle */}
-              <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-                <span className="text-xs font-bold text-slate-700">Coupon Active Immediately</span>
+              <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-100">
+                <span className="text-xs font-bold text-slate-700 pr-2">Coupon Active Immediately</span>
                 <button
                   type="button"
                   onClick={() => setFormIsActive(!formIsActive)}
-                  className="p-1 transition-colors"
+                  className="p-1 min-h-11 shrink-0"
                 >
                   {formIsActive ? (
                     <ToggleRight className="w-7 h-7 text-emerald-600" />
@@ -755,20 +845,20 @@ export default function CouponsSection() {
                   )}
                 </button>
               </div>
+              </div>
 
-              {/* Submit / Cancel */}
-              <div className="flex gap-3 pt-3">
+              <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 p-4 sm:p-5 border-t border-slate-100 shrink-0 pb-[max(1rem,env(safe-area-inset-bottom))]">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="flex-1 py-2.5 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors"
+                  className="flex-1 py-3 min-h-11 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="flex-1 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 transition-colors shadow-md disabled:opacity-50 flex items-center justify-center gap-1.5"
+                  className="flex-1 py-3 min-h-11 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 transition-colors shadow-md disabled:opacity-50 flex items-center justify-center gap-1.5"
                 >
                   {submitting ? (
                     <>

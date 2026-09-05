@@ -327,6 +327,7 @@ export async function POST(request: Request) {
       razorpayPaymentId,
       razorpaySignature,
       expectedRupees: totalAmount,
+      userId,
     });
     if (!verified.ok) {
       await client.query('ROLLBACK');

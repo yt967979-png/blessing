@@ -257,7 +257,7 @@ export async function recordCouponRedemption(
       client,
       `INSERT INTO coupon_redemptions (id, coupon_id, user_id, order_id)
        VALUES ($1, $2, $3, $4)
-       ON CONFLICT DO NOTHING
+       ON CONFLICT (coupon_id, user_id) DO NOTHING
        RETURNING id`,
       [`crd-${opts.orderId}`, opts.couponId, opts.userId, opts.orderId]
     );

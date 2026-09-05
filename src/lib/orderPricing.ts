@@ -71,6 +71,7 @@ export async function verifyRazorpayPayment(opts: {
   razorpayPaymentId: string;
   razorpaySignature: string;
   expectedRupees: number;
+  userId?: string;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   const crypto = await import('crypto');
   const keyId = process.env.RAZORPAY_KEY_ID;
@@ -105,6 +106,9 @@ export async function verifyRazorpayPayment(opts: {
   if (payment.order_id !== opts.razorpayOrderId) {
     return { ok: false, error: 'Payment order mismatch.' };
   }
+  if (String(payment.currency || '').toUpperCase() !== 'INR') {
+    return { ok: false, error: 'Payment currency must be INR.' };
+  }
   if (payment.status !== 'captured' && payment.status !== 'authorized') {
     return { ok: false, error: `Payment not completed (status: ${payment.status}).` };
   }
@@ -113,5 +117,23 @@ export async function verifyRazorpayPayment(opts: {
   if (paidPaise !== expectedPaise) {
     return { ok: false, error: 'Paid amount does not match order total.' };
   }
+
+  if (opts.userId) {
+    const ordRes = await fetch(`https://api.razorpay.com/v1/orders/${opts.razorpayOrderId}`, {
+      headers: { Authorization: authHeader },
+    });
+    const rzpOrder = await ordRes.json().catch(() => ({}));
+    if (ordRes.ok) {
+      const noteUser = String(rzpOrder?.notes?.userId || '');
+      if (noteUser && noteUser !== String(opts.userId)) {
+        return { ok: false, error: 'Payment does not belong to this account.' };
+      }
+      const orderPaise = Number(rzpOrder.amount || 0);
+      if (orderPaise && orderPaise !== expectedPaise) {
+        return { ok: false, error: 'Paid amount does not match Razorpay order.' };
+      }
+    }
+  }
+
   return { ok: true };
 }
