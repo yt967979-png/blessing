@@ -75,13 +75,20 @@ if command -v caddy >/dev/null 2>&1; then
   systemctl reload caddy 2>/dev/null || systemctl restart caddy 2>/dev/null || true
 fi
 
-echo "==> Rsync $CLONE_PATH → $APP_DIR"
+echo "==> Rsync $CLONE_PATH → $APP_DIR (preserving VPS local uploads)"
 mkdir -p "$APP_DIR"
+mkdir -p "$APP_DIR/public/uploads"
 rsync -a --delete \
   --exclude node_modules \
   --exclude .next \
   --exclude .git \
+  --exclude /public/uploads \
   "$CLONE_PATH"/ "$APP_DIR"/
+
+# Ensure clone seeds (if any) are safely copied without deleting existing VPS uploads
+if [[ -d "$CLONE_PATH/public/uploads" ]]; then
+  cp -an "$CLONE_PATH/public/uploads"/. "$APP_DIR/public/uploads"/ 2>/dev/null || true
+fi
 
 # Bad rsync source (e.g. parent of clone) nests a second tree — remove junk
 if [[ -d "$APP_DIR/blessing" ]]; then
@@ -89,7 +96,9 @@ if [[ -d "$APP_DIR/blessing" ]]; then
   rm -rf "$APP_DIR/blessing"
 fi
 
+mkdir -p "$APP_DIR/public/uploads/catalog" "$APP_DIR/public/uploads/samples" "$APP_DIR/public/uploads/reviews"
 chown -R "$APP_USER:$APP_USER" "$APP_DIR"
+chmod -R 775 "$APP_DIR/public/uploads"
 
 # CRITICAL: npm ci WITHOUT sourcing env (keeps @tailwindcss/postcss + typescript)
 echo "==> npm ci --include=dev (clean env — do NOT source $ENV_FILE)"

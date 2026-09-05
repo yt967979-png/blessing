@@ -27,7 +27,7 @@ else
   for key in DATABASE_URL SESSION_SECRET ADMIN_EMAIL ADMIN_PASSWORD \
     NEXT_PUBLIC_GOOGLE_CLIENT_ID PUBLIC_BASE_URL NEXT_PUBLIC_SITE_URL \
     RAZORPAY_KEY_ID RAZORPAY_KEY_SECRET RAZORPAY_WEBHOOK_SECRET \
-    CLOUDINARY_CLOUD_NAME CLOUDINARY_UPLOAD_PRESET ADMIN_PHONE; do
+    ADMIN_PHONE; do
     if grep -qE "^${key}=.+" "$ENV_FILE" 2>/dev/null; then
       val="$(grep -E "^${key}=" "$ENV_FILE" | head -1 | cut -d= -f2- | tr -d '\r')"
       if [[ -z "$val" || "$val" == CHANGE_ME* || "$val" == *xxxx* || "$val" == *example* ]]; then

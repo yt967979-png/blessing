@@ -45,37 +45,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Only JPEG, PNG, WebP, GIF or PDF documents allowed.' }, { status: 400 });
     }
 
-    const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
-    const uploadPreset = process.env.CLOUDINARY_UPLOAD_PRESET;
-    const uploadFolder = isReviewUpload ? 'blessing_reviews' : folder;
-
-    // 1. Cloudinary Free CDN (25 GB free storage & fast delivery)
-    if (cloudName && uploadPreset) {
-      const cldFormData = new FormData();
-      cldFormData.append('file', file);
-      cldFormData.append('upload_preset', uploadPreset);
-      cldFormData.append('folder', uploadFolder);
-
-      try {
-        const cldRes = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
-          method: 'POST',
-          body: cldFormData,
-        });
-
-        if (cldRes.ok) {
-          const cldData = await cldRes.json();
-          return NextResponse.json({
-            url: cldData.secure_url,
-            public_id: cldData.public_id,
-            provider: 'cloudinary',
-          });
-        }
-      } catch (cldErr) {
-        console.warn('[upload] Cloudinary direct upload failed, falling back to local storage:', cldErr);
-      }
-    }
-
-    // 2. Local Public Storage fallback (Always works 100% out-of-the-box on VPS/local)
+    // Save directly to VPS disk storage (/public/uploads)
     try {
       const uploadSubDir = isReviewUpload ? 'reviews' : (isPdf ? 'samples' : 'catalog');
       const uploadDir = path.join(process.cwd(), 'public', 'uploads', uploadSubDir);
@@ -93,11 +63,11 @@ export async function POST(request: Request) {
 
       return NextResponse.json({
         url: `/uploads/${uploadSubDir}/${filename}`,
-        provider: 'local-disk',
+        provider: 'vps-disk',
       });
     } catch (diskErr: any) {
-      console.error('[upload] Disk write failed:', diskErr);
-      return NextResponse.json({ error: 'Failed to save image to server storage' }, { status: 500 });
+      console.error('[upload] VPS disk write failed:', diskErr);
+      return NextResponse.json({ error: 'Failed to save file to VPS storage' }, { status: 500 });
     }
   } catch (err: any) {
     return NextResponse.json({ error: err.message || 'Upload failed' }, { status: 500 });

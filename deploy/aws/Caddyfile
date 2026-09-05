@@ -4,6 +4,12 @@
 blessingpowerguide.duckdns.org {
 	encode gzip
 
+	@uploads path /uploads/*
+	handle @uploads {
+		root * /opt/blessing/public
+		file_server
+	}
+
 	@sse path /api/stock/stream /api/orders/stream
 	handle @sse {
 		reverse_proxy 127.0.0.1:3000 {

@@ -8,6 +8,7 @@ import { ShoppingBag, X, Truck, Plus, Minus, ArrowRight, AlertTriangle } from 'l
 import { useStore } from '@/context/StoreContext';
 import { getSTCourierDeliveryEstimate } from '@/lib/deliveryEstimator';
 import { getCartItemStockState, anyCartItemBlocking } from '@/lib/cartStock';
+import { imageNeedsUnoptimized } from '@/lib/productImage';
 
 export const CartDrawer = () => {
   const {
@@ -136,10 +137,7 @@ export const CartDrawer = () => {
                           fill
                           className="object-contain p-1"
                           sizes="56px"
-                          unoptimized={
-                            !item.image ||
-                            (!item.image.includes('cloudinary.com') && !item.image.includes('unsplash.com'))
-                          }
+                          unoptimized={imageNeedsUnoptimized(item.image || '')}
                         />
                       </div>
                       <div className="flex-1 min-w-0">
