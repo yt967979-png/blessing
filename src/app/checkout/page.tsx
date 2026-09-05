@@ -87,11 +87,16 @@ export default function CheckoutPage() {
     try {
       const res = await fetch('/api/coupons/validate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(user?.token ? { Authorization: `Bearer ${user.token}` } : {}),
+        },
         body: JSON.stringify({
           code: couponInput.trim(),
           cartQty: cartCount,
           subtotal: cartTotal,
+          items: cart.map((i) => ({ id: i.id, qty: i.qty })),
         }),
       });
       const data = await res.json();
@@ -118,6 +123,14 @@ export default function CheckoutPage() {
     setCouponError(null);
     showToast('Coupon removed');
   };
+
+  // Drop a stale preview if the cart changed after apply (server re-prices at pay)
+  useEffect(() => {
+    if (!appliedCoupon) return;
+    setAppliedCoupon(null);
+    setCouponError('Cart changed — please apply the coupon again.');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cartCount, cartTotal]);
 
   useEffect(() => {
     setIsCheckoutOpen(false);
@@ -370,6 +383,18 @@ export default function CheckoutPage() {
         showToast(`❌ ${rzpData.error || 'Payment initialization failed'}`);
         release();
         return;
+      }
+
+      if (typeof rzpData.discountAmount === 'number' && appliedCoupon) {
+        setAppliedCoupon((prev) =>
+          prev
+            ? {
+                ...prev,
+                discountAmount: rzpData.discountAmount,
+                message: `✓ Coupon applied: save ₹${rzpData.discountAmount}`,
+              }
+            : prev
+        );
       }
 
       // Stock is reserved server-side as of this response (POST /api/razorpay
@@ -844,7 +869,7 @@ export default function CheckoutPage() {
                         type="text"
                         value={couponInput}
                         onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
-                        placeholder="e.g. BLESSING10 or STUDENT50"
+                        placeholder="Enter promo code from the shop offer"
                         className="flex-1 px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-mono font-bold uppercase tracking-wider outline-none focus:border-blue-600 shadow-2xs"
                       />
                       <button

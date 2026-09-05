@@ -26,6 +26,8 @@ import { useStore } from '@/context/StoreContext';
 interface Coupon {
   id: string;
   code: string;
+  title: string;
+  showOnHero: boolean;
   discountType: 'percentage' | 'flat';
   discountValue: number;
   minCartQty: number;
@@ -56,9 +58,11 @@ export default function CouponsSection() {
   const [formMinQty, setFormMinQty] = useState<number>(4);
   const [formMinAmount, setFormMinAmount] = useState<number>(0);
   const [formMaxDiscount, setFormMaxDiscount] = useState<number | ''>(150);
-  const [formMaxUses, setFormMaxUses] = useState<number>(1000);
+  const [formMaxUses, setFormMaxUses] = useState<number>(100);
   const [formExpiresAt, setFormExpiresAt] = useState('');
   const [formIsActive, setFormIsActive] = useState(true);
+  const [formTitle, setFormTitle] = useState('');
+  const [formShowOnHero, setFormShowOnHero] = useState(true);
 
   const fetchCoupons = useCallback(async () => {
     setLoading(true);
@@ -85,6 +89,33 @@ export default function CouponsSection() {
     navigator.clipboard.writeText(code);
     setCopiedCode(code);
     setTimeout(() => setCopiedCode(null), 2000);
+  };
+
+  const handleToggleHero = async (coupon: Coupon) => {
+    try {
+      const res = await fetch('/api/admin/coupons', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders(user),
+        },
+        body: JSON.stringify({
+          id: coupon.id,
+          showOnHero: !coupon.showOnHero,
+        }),
+      });
+      if (res.ok) {
+        const next = !coupon.showOnHero;
+        setCoupons((prev) =>
+          prev.map((c) => ({
+            ...c,
+            showOnHero: next && c.id === coupon.id,
+          }))
+        );
+      }
+    } catch (err) {
+      console.error('Failed to pin coupon to hero:', err);
+    }
   };
 
   const handleToggleActive = async (coupon: Coupon) => {
@@ -159,6 +190,8 @@ export default function CouponsSection() {
           maxUses: formMaxUses,
           expiresAt: formExpiresAt ? formExpiresAt : null,
           isActive: formIsActive,
+          title: formTitle,
+          showOnHero: formShowOnHero,
         }),
       });
 
@@ -186,9 +219,11 @@ export default function CouponsSection() {
     setFormMinQty(4);
     setFormMinAmount(0);
     setFormMaxDiscount(150);
-    setFormMaxUses(1000);
+    setFormMaxUses(100);
     setFormExpiresAt('');
     setFormIsActive(true);
+    setFormTitle('');
+    setFormShowOnHero(true);
     setError(null);
   };
 
@@ -354,6 +389,14 @@ export default function CouponsSection() {
                           <span className="font-mono font-black text-sm text-slate-900 bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200">
                             {coupon.code}
                           </span>
+                          {coupon.title ? (
+                            <span className="text-[11px] font-bold text-slate-500">{coupon.title}</span>
+                          ) : null}
+                          {coupon.showOnHero ? (
+                            <span className="text-[10px] font-black uppercase tracking-wide text-amber-800 bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded">
+                              Hero
+                            </span>
+                          ) : null}
                           <button
                             onClick={() => handleCopy(coupon.code)}
                             className="p-1 hover:bg-slate-200/60 rounded text-slate-400 hover:text-slate-600 transition-colors"
@@ -403,6 +446,7 @@ export default function CouponsSection() {
                         <div className="text-xs font-bold text-slate-800">
                           {coupon.usedCount}{' '}
                           <span className="text-slate-400 font-normal">/ {coupon.maxUses} uses</span>
+                          <div className="text-[10px] text-slate-400 font-semibold mt-0.5">1 use per customer</div>
                         </div>
                         <div className="w-24 bg-slate-100 rounded-full h-1.5 mt-1 overflow-hidden">
                           <div
@@ -453,6 +497,16 @@ export default function CouponsSection() {
                       {/* Actions */}
                       <td className="px-5 py-4 text-right">
                         <div className="flex items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleToggleHero(coupon)}
+                            className="p-1.5 rounded-lg transition-colors"
+                            title={coupon.showOnHero ? 'Remove from home hero' : 'Show on home hero'}
+                          >
+                            <Sparkles
+                              className={`w-4 h-4 ${coupon.showOnHero ? 'text-amber-500' : 'text-slate-400'}`}
+                            />
+                          </button>
                           <button
                             onClick={() => handleToggleActive(coupon)}
                             className="p-1 text-slate-400 hover:text-slate-700 transition-colors"
@@ -511,6 +565,19 @@ export default function CouponsSection() {
                   {error}
                 </div>
               )}
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Hero title (shown as-is on home)
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Christmas Offer — use XMAS20 get 20% off, only for 100 users"
+                  value={formTitle}
+                  onChange={(e) => setFormTitle(e.target.value.slice(0, 200))}
+                  className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
+                />
+              </div>
 
               {/* Coupon Code Input */}
               <div>
@@ -640,6 +707,9 @@ export default function CouponsSection() {
                     onChange={(e) => setFormMaxUses(Number(e.target.value))}
                     className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
                   />
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Shop-wide cap (e.g. 100). Each logged-in customer can still use it only once.
+                  </p>
                 </div>
 
                 <div>
@@ -653,6 +723,21 @@ export default function CouponsSection() {
                     className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none bg-white"
                   />
                 </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                <span className="text-xs font-bold text-slate-700">Show on home hero</span>
+                <button
+                  type="button"
+                  onClick={() => setFormShowOnHero(!formShowOnHero)}
+                  className="p-1 transition-colors"
+                >
+                  {formShowOnHero ? (
+                    <ToggleRight className="w-7 h-7 text-amber-500" />
+                  ) : (
+                    <ToggleLeft className="w-7 h-7 text-slate-400" />
+                  )}
+                </button>
               </div>
 
               {/* Active Toggle */}

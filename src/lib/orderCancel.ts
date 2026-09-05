@@ -208,7 +208,7 @@ export async function executeOrderCancel(opts: {
       console.warn('[cancel] audit log insert skipped:', e?.message);
     }
 
-    // Legacy coupon columns only — promo tables are dropped; ignore if missing
+    // Coupon usage rollback on cancel
     if (row.coupon_id) {
       try {
         await queryDb(

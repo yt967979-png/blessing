@@ -1181,19 +1181,36 @@ async function runSchemaInit(client: any) {
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
         CREATE INDEX IF NOT EXISTS idx_coupons_code ON coupons (code);
+        ALTER TABLE coupons ADD COLUMN IF NOT EXISTS title VARCHAR(255);
+        ALTER TABLE coupons ALTER COLUMN title TYPE VARCHAR(255);
+        ALTER TABLE coupons ADD COLUMN IF NOT EXISTS show_on_hero BOOLEAN DEFAULT FALSE;
+        -- No hardcoded shop codes — only admin-created coupons
+        UPDATE coupons SET is_active = FALSE, show_on_hero = FALSE
+         WHERE id IN ('cpn-blessing10', 'cpn-student50', 'cpn-exampass');
 
-        -- Seed initial active coupons if table is empty
-        INSERT INTO coupons (id, code, discount_type, discount_value, min_cart_qty, min_order_amount, max_discount_amount, is_active)
-        VALUES 
-          ('cpn-blessing10', 'BLESSING10', 'percentage', 10, 4, 0, 200, true),
-          ('cpn-student50', 'STUDENT50', 'flat', 50, 4, 0, NULL, true),
-          ('cpn-exampass', 'EXAMPASS', 'flat', 100, 5, 0, NULL, true)
-        ON CONFLICT (code) DO NOTHING;
+        CREATE TABLE IF NOT EXISTS coupon_redemptions (
+          id VARCHAR(255) PRIMARY KEY,
+          coupon_id VARCHAR(255) NOT NULL,
+          user_id VARCHAR(255) NOT NULL,
+          order_id VARCHAR(255) NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_coupon_redemptions_user
+          ON coupon_redemptions (coupon_id, user_id);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_coupon_redemptions_order
+          ON coupon_redemptions (order_id);
 
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS ordered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS coupon_code VARCHAR(50);
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS coupon_id VARCHAR(255);
+        INSERT INTO coupon_redemptions (id, coupon_id, user_id, order_id)
+        SELECT 'crd-' || o.id, o.coupon_id, o.user_id, o.id
+          FROM orders o
+         WHERE o.coupon_id IS NOT NULL
+           AND o.user_id IS NOT NULL
+           AND LOWER(COALESCE(o.order_status, '')) NOT LIKE '%cancel%'
+        ON CONFLICT DO NOTHING;
 
         ALTER TABLE order_timeline ADD COLUMN IF NOT EXISTS hub_city VARCHAR(255);
         ALTER TABLE order_timeline ADD COLUMN IF NOT EXISTS awb_number VARCHAR(255);

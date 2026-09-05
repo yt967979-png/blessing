@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { queryDb } from '@/lib/db';
 import { verifyAdminRequest, forbiddenResponse, unauthorizedResponse } from '@/lib/serverSecurity';
+import { mapAdminCoupon } from '@/lib/coupons';
 
 export async function GET(request: Request) {
   const auth = await verifyAdminRequest(request);
@@ -13,7 +14,9 @@ export async function GET(request: Request) {
     const result = await queryDb(
       `SELECT 
         id, 
-        code, 
+        code,
+        title,
+        show_on_hero,
         discount_type, 
         discount_value, 
         min_cart_qty, 
@@ -28,20 +31,7 @@ export async function GET(request: Request) {
        ORDER BY created_at DESC`
     );
 
-    const coupons = (result?.rows || []).map((row: any) => ({
-      id: row.id,
-      code: row.code,
-      discountType: row.discount_type,
-      discountValue: Number(row.discount_value),
-      minCartQty: Number(row.min_cart_qty || 4),
-      minOrderAmount: Number(row.min_order_amount || 0),
-      maxDiscountAmount: row.max_discount_amount != null ? Number(row.max_discount_amount) : null,
-      maxUses: Number(row.max_uses || 10000),
-      usedCount: Number(row.used_count || 0),
-      isActive: Boolean(row.is_active),
-      expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : null,
-      createdAt: row.created_at ? new Date(row.created_at).toISOString() : null,
-    }));
+    const coupons = (result?.rows || []).map((row: any) => mapAdminCoupon(row));
 
     return NextResponse.json({ coupons });
   } catch (error: any) {
@@ -66,9 +56,11 @@ export async function POST(request: Request) {
       minCartQty = 4,
       minOrderAmount = 0,
       maxDiscountAmount,
-      maxUses = 1000,
+      maxUses = 100,
       expiresAt,
       isActive = true,
+      title = '',
+      showOnHero = false,
     } = body;
 
     const cleanCode = String(code || '').trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '');
@@ -76,54 +68,56 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Coupon code must be at least 3 alphanumeric characters.' }, { status: 400 });
     }
 
+    const type = String(discountType || 'percentage').toLowerCase();
+    if (type !== 'percentage' && type !== 'flat') {
+      return NextResponse.json({ error: 'Discount type must be percentage or flat.' }, { status: 400 });
+    }
+
     const val = Number(discountValue);
     if (!val || isNaN(val) || val <= 0) {
       return NextResponse.json({ error: 'Valid discount value is required.' }, { status: 400 });
     }
 
-    if (discountType === 'percentage' && val > 90) {
+    if (type === 'percentage' && val > 90) {
       return NextResponse.json({ error: 'Percentage discount cannot exceed 90%.' }, { status: 400 });
     }
 
     const id = `cpn-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const parsedExpiresAt = expiresAt ? new Date(expiresAt).toISOString() : null;
 
+    const offerTitle = String(title || '').trim().slice(0, 200);
+    const pinHero = Boolean(showOnHero);
+
+    if (pinHero) {
+      await queryDb(`UPDATE coupons SET show_on_hero = FALSE WHERE COALESCE(show_on_hero, FALSE) = TRUE`);
+    }
+
     const result = await queryDb(
       `INSERT INTO coupons (
         id, code, discount_type, discount_value, min_cart_qty, 
-        min_order_amount, max_discount_amount, max_uses, is_active, expires_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        min_order_amount, max_discount_amount, max_uses, is_active, expires_at, title, show_on_hero
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
       RETURNING *`,
       [
         id,
         cleanCode,
-        discountType,
+        type,
         val,
         Number(minCartQty) || 4,
         Number(minOrderAmount) || 0,
         maxDiscountAmount ? Number(maxDiscountAmount) : null,
-        Number(maxUses) || 1000,
+        Number(maxUses) || 100,
         Boolean(isActive),
         parsedExpiresAt,
+        offerTitle || null,
+        pinHero,
       ]
     );
 
     const row = result?.rows?.[0];
     return NextResponse.json({
       success: true,
-      coupon: {
-        id: row.id,
-        code: row.code,
-        discountType: row.discount_type,
-        discountValue: Number(row.discount_value),
-        minCartQty: Number(row.min_cart_qty),
-        minOrderAmount: Number(row.min_order_amount),
-        maxDiscountAmount: row.max_discount_amount ? Number(row.max_discount_amount) : null,
-        maxUses: Number(row.max_uses),
-        usedCount: Number(row.used_count || 0),
-        isActive: Boolean(row.is_active),
-        expiresAt: row.expires_at,
-      },
+      coupon: mapAdminCoupon(row),
     });
   } catch (error: any) {
     console.error('[admin/coupons] POST error:', error);
@@ -143,25 +137,40 @@ export async function PATCH(request: Request) {
 
   try {
     const body = await request.json().catch(() => ({}));
-    const { id, isActive } = body;
+    const { id, isActive, showOnHero } = body;
 
     if (!id) {
       return NextResponse.json({ error: 'Coupon ID is required.' }, { status: 400 });
     }
 
+    if (showOnHero === true) {
+      await queryDb(`UPDATE coupons SET show_on_hero = FALSE WHERE id <> $1`, [id]);
+    }
+
+    const sets: string[] = [];
+    const params: any[] = [];
+    if (isActive !== undefined) {
+      params.push(Boolean(isActive));
+      sets.push(`is_active = $${params.length}`);
+    }
+    if (showOnHero !== undefined) {
+      params.push(Boolean(showOnHero));
+      sets.push(`show_on_hero = $${params.length}`);
+    }
+    if (sets.length === 0) {
+      return NextResponse.json({ error: 'Nothing to update.' }, { status: 400 });
+    }
+    params.push(id);
     const result = await queryDb(
-      `UPDATE coupons 
-       SET is_active = $1 
-       WHERE id = $2 
-       RETURNING *`,
-      [Boolean(isActive), id]
+      `UPDATE coupons SET ${sets.join(', ')} WHERE id = $${params.length} RETURNING *`,
+      params
     );
 
     if (!result || result.rowCount === 0) {
       return NextResponse.json({ error: 'Coupon not found.' }, { status: 404 });
     }
 
-    return NextResponse.json({ success: true, coupon: result.rows[0] });
+    return NextResponse.json({ success: true, coupon: mapAdminCoupon(result.rows[0]) });
   } catch (error: any) {
     console.error('[admin/coupons] PATCH error:', error);
     return NextResponse.json({ error: error.message || 'Failed to update coupon' }, { status: 500 });

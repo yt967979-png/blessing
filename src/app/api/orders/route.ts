@@ -12,6 +12,7 @@ import {
 } from '@/lib/serverSecurity';
 import { verifyRazorpayPayment } from '@/lib/orderPricing';
 import { priceCheckoutOrder } from '@/lib/checkoutPricing';
+import { consumeCouponUsage, recordCouponRedemption } from '@/lib/coupons';
 import { blocksShippingActions, isOrderCancelled, logOrderStateTransition } from '@/lib/orderStatus';
 import { refundRazorpayPayment } from '@/lib/razorpayRefund';
 import { confirmStockHolds, recordConfirmedSale, shrinkConfirmedHold, releaseStockHolds } from '@/lib/stockHold';
@@ -270,6 +271,7 @@ export async function POST(request: Request) {
       discountAmount,
       totalAmount,
       verifiedItems,
+      appliedCoupon,
     } = checkout;
     capturedAmountForRefund = totalAmount;
 
@@ -334,6 +336,13 @@ export async function POST(request: Request) {
     // past this point MUST refund — never let a confirmed capture sit orphaned.
     paymentAlreadyVerified = true;
 
+    if (appliedCoupon?.id) {
+      const consumed = await consumeCouponUsage(client, appliedCoupon.id);
+      if (!consumed) {
+        throw new Error('Coupon no longer available after payment — refunding.');
+      }
+    }
+
     const payStat = 'Payment Confirmed';
     const id = `ord-${Date.now()}`;
     // Collision-resistant: timestamp (ms) + random suffix gives ~2.8 trillion unique values.
@@ -359,7 +368,7 @@ export async function POST(request: Request) {
     await client.query(
       `INSERT INTO orders (id, order_number, user_id, subtotal, discount, total_amount, payment_method, payment_status, order_status,
         courier_name, shipment_id, awb_number, shipping_address, razorpay_order_id, razorpay_payment_id, razorpay_signature, coupon_code, coupon_id, idempotency_key, invoice_number)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'ST Courier Express', $10, NULL, $11, $12, $13, $14, $15, NULL, $16, $17)`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'ST Courier Express', $10, NULL, $11, $12, $13, $14, $15, $16, $17, $18)`,
       [
         id,
         orderNumber,
@@ -375,11 +384,23 @@ export async function POST(request: Request) {
         razorpayOrderId || null,
         razorpayPaymentId || null,
         razorpaySignature || null,
-        checkout.appliedCoupon?.code || couponCode || null,
+        appliedCoupon?.code || null,
+        appliedCoupon?.id || null,
         idemKey,
         invoiceNumber,
       ]
     );
+
+    if (appliedCoupon?.id) {
+      const recorded = await recordCouponRedemption(client, {
+        couponId: appliedCoupon.id,
+        userId,
+        orderId: id,
+      });
+      if (!recorded) {
+        throw new Error('This coupon was already used on your account — refunding.');
+      }
+    }
 
     // Convert the Razorpay order's held stock into a real sale (no second
     // decrement). Idempotent across webhook races — confirmStockHolds returns
