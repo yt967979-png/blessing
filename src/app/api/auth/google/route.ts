@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { NextResponse } from 'next/server';
 import { createSessionToken, hashPassword, applySessionCookies, createDeviceId } from '@/lib/auth';
+import { isConfiguredSuperAdminEmail } from '@/lib/superAdmins';
 import { applyRateLimitAsync, clientIp } from '@/lib/serverSecurity';
 import { verifyGoogleIdToken } from '@/lib/googleAuth';
 import { userNeedsProfile } from '@/lib/userProfile';
@@ -121,13 +122,8 @@ export async function POST(request: Request) {
       }
     }
 
-    const superAdminEmail = String(process.env.SUPER_ADMIN_EMAIL || process.env.ADMIN_EMAIL || '')
-      .toLowerCase()
-      .trim();
     const googleEmail = googleUser.email.toLowerCase().trim();
-    // Only the owner email becomes Super Admin automatically.
-    // Extra admins are granted only by Super Admin in Admin → Users.
-    const bootstrapRole = superAdminEmail && googleEmail === superAdminEmail ? 'super_admin' : null;
+    const bootstrapRole = isConfiguredSuperAdminEmail(googleEmail) ? 'super_admin' : null;
 
     if (!dbUser) {
       const userId = `usr-g-${Date.now()}`;

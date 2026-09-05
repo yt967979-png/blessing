@@ -2,6 +2,7 @@ import { Pool, Client } from 'pg';
 import { hashPassword } from '@/lib/auth';
 import { resolveTunedNumber, getRuntimeTuning } from '@/lib/runtimeProfile';
 import { resolveDbPoolMaxPerReplica } from '@/lib/launchScale';
+import { isConfiguredSuperAdminEmail, promoteConfiguredSuperAdmins } from '@/lib/superAdmins';
 
 let isSchemaInitialized = false;
 let schemaInitPromise: Promise<void> | null = null;
@@ -1464,12 +1465,12 @@ function isStrongAdminPassword(password: string): boolean {
 
 /**
  * Ensure a default admin exists from env only (ADMIN_EMAIL + ADMIN_PASSWORD).
- * Production never hardcodes credentials and never resets an existing password
- * unless ADMIN_FORCE_PASSWORD_RESET=true.
- * SUPER_ADMIN_EMAIL (falls back to ADMIN_EMAIL) is promoted to super_admin.
+ * Owner Super Admin emails are promoted on every boot (see superAdmins.ts).
  */
 export async function ensureAdminUser(client: any) {
   try {
+    await promoteConfiguredSuperAdmins(client);
+
     const email = String(process.env.ADMIN_EMAIL || '')
       .toLowerCase()
       .trim();
@@ -1480,9 +1481,6 @@ export async function ensureAdminUser(client: any) {
       .slice(-10);
     const forceReset = String(process.env.ADMIN_FORCE_PASSWORD_RESET || '').toLowerCase() === 'true';
     const production = isProductionDeployRuntime();
-    const superAdminEmail = String(process.env.SUPER_ADMIN_EMAIL || process.env.ADMIN_EMAIL || '')
-      .toLowerCase()
-      .trim();
 
     if (!email || !password) {
       if (production) {
@@ -1502,8 +1500,7 @@ export async function ensureAdminUser(client: any) {
 
     const passwordHash = hashPassword(password);
     const adminId = 'admin-bpg-001';
-    const bootstrapRole =
-      superAdminEmail && email === superAdminEmail ? 'super_admin' : 'admin';
+    const bootstrapRole = isConfiguredSuperAdminEmail(email) ? 'super_admin' : 'admin';
 
     const byEmail = await client.query(`SELECT id, email, role FROM users WHERE LOWER(email) = $1 LIMIT 1`, [
       email,
@@ -1553,14 +1550,7 @@ export async function ensureAdminUser(client: any) {
       [name, email, phone, target.id]
     );
 
-    // Env-only Super Admin (never hardcode personal emails in source)
-    if (superAdminEmail) {
-      await client.query(
-        `UPDATE users SET role = 'super_admin', updated_at = NOW()
-         WHERE LOWER(email) = $1 AND COALESCE(role, 'customer') != 'super_admin'`,
-        [superAdminEmail]
-      );
-    }
+    await promoteConfiguredSuperAdmins(client);
   } catch (err: any) {
     console.warn('[db] ensureAdminUser skipped:', err?.message || err);
   }
