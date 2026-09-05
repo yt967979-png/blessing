@@ -38,6 +38,10 @@ const TAB_TITLES: Record<AdminTab, { title: string; subtitle: string }> = {
     title: 'Book Catalog & Stock Inventory',
     subtitle: 'Manage standard allocations, book pricing, MRP, and stock copy levels',
   },
+  coupons: {
+    title: 'Coupons & Promo Codes',
+    subtitle: 'Create discount codes, set cart restrictions, and monitor redemptions',
+  },
   users: {
     title: 'Customer Accounts',
     subtitle: 'Customer directory, order histories, and staff access permissions',

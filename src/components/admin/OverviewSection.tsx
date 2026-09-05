@@ -17,6 +17,7 @@ import {
   AlertCircle,
   ChevronDown,
   ChevronUp,
+  Tag,
 } from 'lucide-react';
 import { AdminTab } from './AdminSidebar';
 
@@ -362,6 +363,18 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
               <div className="flex items-center gap-2.5">
                 <Plus className="w-4 h-4 text-emerald-600" />
                 <span>Add New Guide Book</span>
+              </div>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onNavigate('coupons')}
+              className="w-full p-3 rounded-xl bg-amber-50 hover:bg-amber-100/80 border border-amber-200 text-amber-800 text-xs font-bold flex items-center justify-between transition-colors cursor-pointer text-left"
+            >
+              <div className="flex items-center gap-2.5">
+                <Tag className="w-4 h-4 text-amber-600" />
+                <span>Manage Coupons & Offers</span>
               </div>
               <ArrowRight className="w-4 h-4" />
             </button>

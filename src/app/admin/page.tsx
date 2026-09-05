@@ -22,6 +22,7 @@ import OverviewSection from '@/components/admin/OverviewSection';
 import OrdersSection from '@/components/admin/OrdersSection';
 import CourierSection from '@/components/admin/CourierSection';
 import CatalogSection from '@/components/admin/CatalogSection';
+import CouponsSection from '@/components/admin/CouponsSection';
 import SystemHealthSection from '@/components/admin/SystemHealthSection';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -609,6 +610,11 @@ export default function AdminPage() {
               onShowToast={showToast}
               authHeaders={authHeaders(user)}
             />
+          )}
+
+          {/* SECTION: COUPONS & DISCOUNTS */}
+          {activeTab === 'coupons' && (
+            <CouponsSection />
           )}
 
           {/* SECTION E: CUSTOMERS */}

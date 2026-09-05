@@ -14,6 +14,7 @@ import {
   LogOut,
   ExternalLink,
   Activity,
+  Tag,
 } from 'lucide-react';
 import { BrandLogo } from '@/components/ui/BrandLogo';
 
@@ -22,6 +23,7 @@ export type AdminTab =
   | 'orders'
   | 'courier'
   | 'catalog'
+  | 'coupons'
   | 'users'
   | 'reviews'
   | 'analytics'
@@ -74,6 +76,12 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
       icon: BookOpen,
       badge: lowStockCount > 0 ? `${lowStockCount} Low` : undefined,
       badgeColor: 'bg-red-500 text-white',
+    },
+    {
+      key: 'coupons' as AdminTab,
+      label: 'Coupons & Promo Codes',
+      subtitle: 'Discounts, student offers & limits',
+      icon: Tag,
     },
     {
       key: 'users' as AdminTab,
