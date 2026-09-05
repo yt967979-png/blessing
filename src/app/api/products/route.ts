@@ -120,6 +120,7 @@ function mapCatalogRows(rows: any[]) {
         : 'bg-blue-600',
       image: safeImg,
       hoverImage: safeImg,
+      samplePdfUrl: d.sample_pdf_url || null,
       description: d.description || 'Complete guide book for exam success.',
       features: ['Solved Papers', 'Chapter Notes'],
       inStock: mapBookInStock(d),
@@ -185,7 +186,7 @@ export async function GET(request: Request) {
       // Avoid selecting huge base64 covers; skip subject in filter for older schemas.
       const sql = `
         SELECT b.id, b.slug, b.title, b.price, b.discount_price, b.stock, b.status,
-               b.badge, b.description, b.category_id, b.created_at,
+               b.badge, b.description, b.category_id, b.created_at, b.sample_pdf_url,
                CASE
                  WHEN b.cover_image IS NULL OR b.cover_image = '' THEN NULL
                  WHEN b.cover_image LIKE 'data:%' THEN NULL
@@ -208,7 +209,7 @@ export async function GET(request: Request) {
       const { where, params } = buildFilters();
       const sql = `
         SELECT b.id, b.slug, b.title, b.price, b.discount_price, b.stock, b.status,
-               b.badge, b.description, b.category_id, b.created_at,
+               b.badge, b.description, b.category_id, b.created_at, b.sample_pdf_url,
                NULL::text AS cover_image,
                0::int as review_count,
                0::numeric as avg_rating
@@ -268,7 +269,7 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json().catch(() => ({}));
-    const { title, cls, category, price, mrp, badge, image, description, stock, subject, status } = body;
+    const { title, cls, category, price, mrp, badge, image, description, stock, subject, status, samplePdfUrl, sample_pdf_url } = body;
 
     if (!title || price === undefined || price === null || price === '') {
       return NextResponse.json({ error: 'Title and price are required' }, { status: 400 });
@@ -303,14 +304,16 @@ export async function POST(request: Request) {
     const finalBadge = String(badge || '').trim().slice(0, 100);
     const finalSubject = String(subject || 'General').trim();
 
+    const finalPdf = String(samplePdfUrl || sample_pdf_url || '').trim() || null;
+
     // queryDb is a function — wrap so helpers that expect client.query work
     const db = { query: (text: string, params?: any[]) => queryDb(text, params) };
     await ensureDefaultCategories(db);
     await ensureCategory(categoryId, cls || '10th', category || 'guide');
 
     const sql = `
-      INSERT INTO books (id, title, slug, category_id, subject, price, discount_price, cover_image, description, status, featured, badge, stock)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, TRUE, $11, $12)
+      INSERT INTO books (id, title, slug, category_id, subject, price, discount_price, cover_image, description, status, featured, badge, stock, sample_pdf_url)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, TRUE, $11, $12, $13)
       RETURNING *
     `;
     const res = await queryDb(sql, [
@@ -326,6 +329,7 @@ export async function POST(request: Request) {
       bookStatus,
       finalBadge,
       stockQty,
+      finalPdf,
     ]);
     invalidateProductsCache();
     try {
@@ -352,7 +356,7 @@ export async function PATCH(request: Request) {
   if (!auth.isAdmin) return forbiddenResponse(auth.error);
 
   try {
-    const { id, title, price, mrp, inStock, stock, description, image, badge, hasDiscount } = await request.json().catch(() => ({}));
+    const { id, title, price, mrp, inStock, stock, description, image, badge, hasDiscount, samplePdfUrl, sample_pdf_url } = await request.json().catch(() => ({}));
     if (!id) return NextResponse.json({ error: 'Product id is required' }, { status: 400 });
 
     const fields: string[] = [];
@@ -382,6 +386,11 @@ export async function PATCH(request: Request) {
       }
       fields.push(`cover_image = $${idx++}`);
       values.push(img || PLACEHOLDER_COVER);
+    }
+    if (samplePdfUrl !== undefined || sample_pdf_url !== undefined) {
+      const pdf = String(samplePdfUrl || sample_pdf_url || '').trim() || null;
+      fields.push(`sample_pdf_url = $${idx++}`);
+      values.push(pdf);
     }
     if (badge !== undefined) { fields.push(`badge = $${idx++}`); values.push(String(badge || '').trim().slice(0, 100)); }
     let finalStatus: string | undefined = undefined;

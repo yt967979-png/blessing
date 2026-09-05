@@ -20,12 +20,10 @@ export async function POST(request: Request) {
   }
 
   try {
-    const body = await request.json().catch(() => ({}));
-    const {
-      items,
-      currency = 'INR',
-      receipt,
-    } = body;
+    const { items, couponCode, currency = 'INR', receipt } = await request.json().catch(() => ({}));
+    if (!Array.isArray(items) || items.length === 0) {
+      return NextResponse.json({ error: 'Cart is empty' }, { status: 400 });
+    }
 
     const keyId = process.env.RAZORPAY_KEY_ID;
     const keySecret = process.env.RAZORPAY_KEY_SECRET;
@@ -43,6 +41,7 @@ export async function POST(request: Request) {
     const checkout = await priceCheckoutOrder(queryDb, {
       items,
       userId: session.userId,
+      couponCode,
     });
 
     if (!checkout.ok) {

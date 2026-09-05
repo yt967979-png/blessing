@@ -34,14 +34,15 @@ export async function POST(request: Request) {
       return unauthorizedResponse('Admin login required to upload catalog images.');
     }
 
-    const maxBytes = isReviewUpload ? 5 * 1024 * 1024 : 10 * 1024 * 1024;
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    const maxBytes = isPdf ? 25 * 1024 * 1024 : (isReviewUpload ? 5 * 1024 * 1024 : 10 * 1024 * 1024);
     if (file.size > maxBytes) {
-      return NextResponse.json({ error: 'Image too large (max 10MB).' }, { status: 400 });
+      return NextResponse.json({ error: isPdf ? 'PDF too large (max 25MB).' : 'Image too large (max 10MB).' }, { status: 400 });
     }
 
-    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml'];
-    if (!allowed.includes(file.type)) {
-      return NextResponse.json({ error: 'Only JPEG, PNG, WebP or GIF images allowed.' }, { status: 400 });
+    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml', 'application/pdf'];
+    if (!allowed.includes(file.type) && !isPdf) {
+      return NextResponse.json({ error: 'Only JPEG, PNG, WebP, GIF or PDF documents allowed.' }, { status: 400 });
     }
 
     const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
@@ -76,13 +77,14 @@ export async function POST(request: Request) {
 
     // 2. Local Public Storage fallback (Always works 100% out-of-the-box on VPS/local)
     try {
-      const uploadSubDir = isReviewUpload ? 'reviews' : 'catalog';
+      const uploadSubDir = isReviewUpload ? 'reviews' : (isPdf ? 'samples' : 'catalog');
       const uploadDir = path.join(process.cwd(), 'public', 'uploads', uploadSubDir);
       await fs.promises.mkdir(uploadDir, { recursive: true });
 
-      const rawExt = file.name.split('.').pop() || file.type.split('/')[1] || 'jpg';
-      const cleanExt = rawExt.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || 'jpg';
-      const filename = `img-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${cleanExt}`;
+      const rawExt = isPdf ? 'pdf' : (file.name.split('.').pop() || file.type.split('/')[1] || 'jpg');
+      const cleanExt = rawExt.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || (isPdf ? 'pdf' : 'jpg');
+      const prefix = isPdf ? 'sample-' : 'img-';
+      const filename = `${prefix}${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${cleanExt}`;
       const filepath = path.join(uploadDir, filename);
 
       const arrayBuffer = await file.arrayBuffer();

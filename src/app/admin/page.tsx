@@ -569,6 +569,8 @@ export default function AdminPage() {
             <OrdersSection
               orders={orders}
               ordersLoading={ordersLoading}
+              products={products}
+              onRefreshOrders={loadLiveOrders}
               onUpdateStatus={async (orderId, newStatus) => {
                 const o = orders.find((x) => x.orderId === orderId || x.id === orderId);
                 if (o) {

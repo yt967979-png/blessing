@@ -20,9 +20,12 @@ import {
   AlertTriangle,
   RotateCcw,
   Clock,
+  Plus,
 } from 'lucide-react';
 import OrderStatusStamp from './OrderStatusStamp';
 import { openShippingLabelPrint } from '@/lib/shippingLabel';
+import { CreateCustomOrderModal } from './CreateCustomOrderModal';
+import type { Product } from '@/context/StoreContext';
 
 interface OrderItem {
   title: string;
@@ -57,9 +60,11 @@ interface Order {
 interface OrdersSectionProps {
   orders: Order[];
   ordersLoading: boolean;
+  products?: Product[];
   onUpdateStatus: (orderId: string, newStatus: string) => Promise<void>;
   onAssignAwb: (orderId: string, awb: string) => Promise<void>;
   onCancelOrder?: (orderId: string) => Promise<void>;
+  onRefreshOrders?: () => void;
   onShowToast: (msg: string) => void;
 }
 
@@ -68,9 +73,11 @@ const fmt = (n: number) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
 export const OrdersSection: React.FC<OrdersSectionProps> = ({
   orders,
   ordersLoading,
+  products = [],
   onUpdateStatus,
   onAssignAwb,
   onCancelOrder,
+  onRefreshOrders,
   onShowToast,
 }) => {
   const [search, setSearch] = useState('');
@@ -80,6 +87,7 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
   const [batchActionLoading, setBatchActionLoading] = useState(false);
   const [awbInputs, setAwbInputs] = useState<Record<string, string>>({});
   const [awbSaving, setAwbSaving] = useState<Record<string, boolean>>({});
+  const [showCustomOrderModal, setShowCustomOrderModal] = useState(false);
 
   // ── Status counts for filter pills ──────────────────────────────────────────
   const counts = useMemo(() => {
@@ -244,6 +252,17 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
               onChange={(e) => setSearch(e.target.value)}
               className="w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-[#2874f0] focus:bg-white text-slate-900 shadow-inner"
             />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowCustomOrderModal(true)}
+              className="px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 transition-all shadow-md active:scale-95 cursor-pointer shrink-0"
+            >
+              <Plus className="w-4 h-4 stroke-[2.5]" />
+              <span>+ New WhatsApp Order</span>
+            </button>
           </div>
 
           {/* Batch Action Buttons (When items selected) */}
@@ -657,6 +676,14 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
           </div>
         </>
       )}
+
+      <CreateCustomOrderModal
+        isOpen={showCustomOrderModal}
+        onClose={() => setShowCustomOrderModal(false)}
+        products={products}
+        onOrderCreated={() => onRefreshOrders?.()}
+        onShowToast={onShowToast}
+      />
     </div>
   );
 };

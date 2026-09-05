@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { Heart, Star, ShoppingBag, Truck, Check } from 'lucide-react';
+import { Heart, Star, ShoppingBag, Truck, Check, FileText } from 'lucide-react';
 import { Product } from '@/lib/products';
 import { useStore } from '@/context/StoreContext';
 import { imageNeedsUnoptimized } from '@/lib/productImage';
@@ -163,6 +163,20 @@ export const ProductCard = ({ product }: { product: Product }) => {
         <p className="mb-1.5 text-[9px] sm:text-xs font-bold text-slate-500 line-clamp-1">
           Unavailable — stock updates live.
         </p>
+      )}
+
+      {product.samplePdfUrl && (
+        <a
+          href={product.samplePdfUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className="w-full mb-1.5 py-1.5 px-2 bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200/80 rounded-xl text-[10px] sm:text-[11px] font-extrabold flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-2xs hover:shadow-xs touch-manipulation min-h-8"
+          title="Download or view sample pages before buying"
+        >
+          <FileText className="w-3.5 h-3.5 text-purple-600" />
+          <span>Preview Sample PDF</span>
+        </a>
       )}
 
       <div className="grid grid-cols-2 gap-1 sm:gap-2">

@@ -9,6 +9,10 @@ export type CheckoutPricingResult =
       shippingFee: number;
       totalAmount: number;
       verifiedItems: any[];
+      appliedCoupon?: {
+        code: string;
+        discount: number;
+      } | null;
     }
   | { ok: false; error: string; status: number };
 
@@ -22,16 +26,16 @@ async function execQuery(client: any, sql: string, params?: any[]): Promise<any>
   return queryDb(sql, params);
 }
 
-/** Server-side cart + minimum quantity check + shipping fee. No coupons. */
+/** Server-side cart + minimum quantity check + shipping fee + coupon validation. */
 export async function priceCheckoutOrder(
   client: any,
   opts: {
     items: any[];
     userId: string;
+    couponCode?: string | null;
   }
 ): Promise<CheckoutPricingResult> {
   void opts.userId;
-  void execQuery;
 
   const priced = await priceCartItems(client, opts.items);
   if (!priced.ok) return priced;
@@ -48,14 +52,50 @@ export async function priceCheckoutOrder(
   }
 
   const shippingFee = cartQty >= 5 ? 0 : 150;
-  const finalTotal = Math.max(0, calculatedSubtotal + shippingFee);
+  let discountAmount = 0;
+  let appliedCoupon: { code: string; discount: number } | null = null;
+
+  if (opts.couponCode && String(opts.couponCode).trim()) {
+    const rawCode = String(opts.couponCode).trim().toUpperCase();
+    const cRes = await execQuery(
+      client,
+      `SELECT id, code, discount_type, discount_value, min_cart_qty, min_order_amount,
+              max_discount_amount, max_uses, used_count, is_active, expires_at
+       FROM coupons
+       WHERE UPPER(code) = $1
+       LIMIT 1`,
+      [rawCode]
+    );
+
+    if (cRes.rows && cRes.rows.length > 0) {
+      const c = cRes.rows[0];
+      const active = c.is_active && (!c.expires_at || new Date(c.expires_at) >= new Date());
+      const meetsQty = cartQty >= (c.min_cart_qty || 4);
+      const meetsMin = calculatedSubtotal >= (Number(c.min_order_amount) || 0);
+
+      if (active && meetsQty && meetsMin) {
+        if (c.discount_type === 'percentage') {
+          discountAmount = Math.round((calculatedSubtotal * Number(c.discount_value)) / 100);
+          if (c.max_discount_amount && discountAmount > Number(c.max_discount_amount)) {
+            discountAmount = Number(c.max_discount_amount);
+          }
+        } else {
+          discountAmount = Math.min(calculatedSubtotal, Number(c.discount_value));
+        }
+        appliedCoupon = { code: c.code, discount: discountAmount };
+      }
+    }
+  }
+
+  const finalTotal = Math.max(0, calculatedSubtotal + shippingFee - discountAmount);
 
   return {
     ok: true,
     subtotal: calculatedSubtotal,
-    discountAmount: 0,
+    discountAmount,
     shippingFee,
     totalAmount: finalTotal,
     verifiedItems,
+    appliedCoupon,
   };
 }

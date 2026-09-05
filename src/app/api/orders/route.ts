@@ -244,6 +244,7 @@ export async function POST(request: Request) {
       razorpayOrderId,
       razorpaySignature,
       idempotencyKey,
+      couponCode,
     } = body;
     capturedPaymentId = razorpayPaymentId || null;
     capturedRazorpayOrderId = razorpayOrderId || null;
@@ -256,6 +257,7 @@ export async function POST(request: Request) {
     const checkout = await priceCheckoutOrder(client, {
       items,
       userId,
+      couponCode,
     });
 
     if (!checkout.ok) {
@@ -357,7 +359,7 @@ export async function POST(request: Request) {
     await client.query(
       `INSERT INTO orders (id, order_number, user_id, subtotal, discount, total_amount, payment_method, payment_status, order_status,
         courier_name, shipment_id, awb_number, shipping_address, razorpay_order_id, razorpay_payment_id, razorpay_signature, coupon_code, coupon_id, idempotency_key, invoice_number)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'ST Courier Express', $10, NULL, $11, $12, $13, $14, NULL, NULL, $15, $16)`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'ST Courier Express', $10, NULL, $11, $12, $13, $14, $15, NULL, $16, $17)`,
       [
         id,
         orderNumber,
@@ -373,6 +375,7 @@ export async function POST(request: Request) {
         razorpayOrderId || null,
         razorpayPaymentId || null,
         razorpaySignature || null,
+        checkout.appliedCoupon?.code || couponCode || null,
         idemKey,
         invoiceNumber,
       ]

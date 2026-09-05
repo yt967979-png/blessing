@@ -1160,14 +1160,38 @@ async function runSchemaInit(client: any) {
           ON reviews (user_id, book_id) WHERE user_id IS NOT NULL AND book_id IS NOT NULL;
         ALTER TABLE books ADD COLUMN IF NOT EXISTS badge VARCHAR(100) DEFAULT '';
         ALTER TABLE books ADD COLUMN IF NOT EXISTS stock INT DEFAULT 50;
+        ALTER TABLE books ADD COLUMN IF NOT EXISTS sample_pdf_url TEXT;
         ALTER TABLE users DROP COLUMN IF EXISTS email_verified;
         ALTER TABLE users ADD COLUMN IF NOT EXISTS security_question VARCHAR(100);
         ALTER TABLE users ADD COLUMN IF NOT EXISTS security_answer_hash VARCHAR(255);
         ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_completed BOOLEAN DEFAULT FALSE;
 
+        CREATE TABLE IF NOT EXISTS coupons (
+          id VARCHAR(255) PRIMARY KEY,
+          code VARCHAR(50) UNIQUE NOT NULL,
+          discount_type VARCHAR(20) NOT NULL DEFAULT 'percentage',
+          discount_value NUMERIC(10,2) NOT NULL,
+          min_cart_qty INT DEFAULT 4,
+          min_order_amount NUMERIC(10,2) DEFAULT 0,
+          max_discount_amount NUMERIC(10,2),
+          max_uses INT DEFAULT 10000,
+          used_count INT DEFAULT 0,
+          is_active BOOLEAN DEFAULT TRUE,
+          expires_at TIMESTAMP,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_coupons_code ON coupons (code);
+
+        -- Seed initial active coupons if table is empty
+        INSERT INTO coupons (id, code, discount_type, discount_value, min_cart_qty, min_order_amount, max_discount_amount, is_active)
+        VALUES 
+          ('cpn-blessing10', 'BLESSING10', 'percentage', 10, 4, 0, 200, true),
+          ('cpn-student50', 'STUDENT50', 'flat', 50, 4, 0, NULL, true),
+          ('cpn-exampass', 'EXAMPASS', 'flat', 100, 5, 0, NULL, true)
+        ON CONFLICT (code) DO NOTHING;
+
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS ordered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
-        -- Legacy coupon columns (always NULL on new orders; coupons removed)
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS coupon_code VARCHAR(50);
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS coupon_id VARCHAR(255);
 
@@ -1316,9 +1340,6 @@ async function runSchemaInit(client: any) {
       `DROP TABLE IF EXISTS whatsapp_logs CASCADE`,
       `DROP TABLE IF EXISTS whatsapp_sessions CASCADE`,
       `DROP TABLE IF EXISTS whatsapp_otps CASCADE`,
-      // Coupons product-removed — drop unused promo tables
-      `DROP TABLE IF EXISTS coupon_redemptions CASCADE`,
-      `DROP TABLE IF EXISTS coupons CASCADE`,
     ];
     for (const sql of heals) {
       try {

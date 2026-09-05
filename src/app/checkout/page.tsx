@@ -13,6 +13,9 @@ import {
   Check,
   AlertTriangle,
   CreditCard,
+  Tag,
+  X,
+  Loader2,
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { createUserAddress, migrateLocalAddressesToDb, type SavedAddress } from '@/lib/addresses';
@@ -65,6 +68,56 @@ export default function CheckoutPage() {
     city: '',
     pincode: '',
   });
+
+  const [couponInput, setCouponInput] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState<{
+    code: string;
+    discountAmount: number;
+    message: string;
+  } | null>(null);
+  const [couponLoading, setCouponLoading] = useState(false);
+  const [couponError, setCouponError] = useState<string | null>(null);
+
+  const finalPayable = Math.max(0, cartGrandTotal - (appliedCoupon?.discountAmount || 0));
+
+  const handleApplyCoupon = async () => {
+    if (!couponInput.trim()) return;
+    setCouponLoading(true);
+    setCouponError(null);
+    try {
+      const res = await fetch('/api/coupons/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: couponInput.trim(),
+          cartQty: cartCount,
+          subtotal: cartTotal,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setCouponError(data.error || 'Failed to apply coupon');
+        return;
+      }
+      setAppliedCoupon({
+        code: data.code,
+        discountAmount: data.discountAmount,
+        message: data.message,
+      });
+      showToast(data.message);
+    } catch {
+      setCouponError('Network error applying coupon');
+    } finally {
+      setCouponLoading(false);
+    }
+  };
+
+  const handleRemoveCoupon = () => {
+    setAppliedCoupon(null);
+    setCouponInput('');
+    setCouponError(null);
+    showToast('Coupon removed');
+  };
 
   useEffect(() => {
     setIsCheckoutOpen(false);
@@ -227,7 +280,8 @@ export default function CheckoutPage() {
       if (!idempotencyKeyRef.current) {
         idempotencyKeyRef.current = `bpg-${user.id}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
       }
-      const finalAmount = checkoutTotal > 0 ? checkoutTotal : cartGrandTotal > 0 ? cartGrandTotal : cartTotal;
+      const baseAmount = checkoutTotal > 0 ? checkoutTotal : cartGrandTotal > 0 ? cartGrandTotal : cartTotal;
+      const finalAmount = Math.max(0, baseAmount - (appliedCoupon?.discountAmount || 0));
 
       const processOrderCompletion = async (payId?: string, rzpOrderId?: string, rzpSignature?: string) => {
         const orderRes = await fetch('/api/orders', {
@@ -250,6 +304,7 @@ export default function CheckoutPage() {
             razorpayOrderId: rzpOrderId || null,
             razorpaySignature: rzpSignature || null,
             idempotencyKey: idempotencyKeyRef.current,
+            couponCode: appliedCoupon?.code || null,
           }),
         });
         const orderData = await orderRes.json();
@@ -305,6 +360,7 @@ export default function CheckoutPage() {
         },
         body: JSON.stringify({
           items: cartPayload,
+          couponCode: appliedCoupon?.code || null,
           receipt: `rcpt-${Date.now()}`,
         }),
       });
@@ -750,11 +806,81 @@ export default function CheckoutPage() {
                 </div>
               </div>
 
+              {/* Coupon Code Section */}
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 font-bold text-xs text-slate-800">
+                    <Tag className="w-4 h-4 text-blue-600" />
+                    <span>Have a Promo / Coupon Code?</span>
+                  </div>
+                  {appliedCoupon && (
+                    <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-300">
+                      APPLIED
+                    </span>
+                  )}
+                </div>
+
+                {appliedCoupon ? (
+                  <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-xl p-3">
+                    <div className="flex items-center gap-2">
+                      <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <div>
+                        <span className="font-mono font-black text-xs text-emerald-900">{appliedCoupon.code}</span>
+                        <p className="text-[10px] text-emerald-700 font-semibold">{appliedCoupon.message}</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleRemoveCoupon}
+                      className="text-xs font-bold text-red-600 hover:text-red-800 p-1 cursor-pointer"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={couponInput}
+                        onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                        placeholder="e.g. BLESSING10 or STUDENT50"
+                        className="flex-1 px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-mono font-bold uppercase tracking-wider outline-none focus:border-blue-600 shadow-2xs"
+                      />
+                      <button
+                        type="button"
+                        disabled={couponLoading || !couponInput.trim()}
+                        onClick={handleApplyCoupon}
+                        className="px-4 py-2.5 bg-[#001B3A] hover:bg-blue-600 disabled:opacity-50 text-white font-extrabold text-xs rounded-xl uppercase tracking-wider transition-colors cursor-pointer shrink-0 min-h-10"
+                      >
+                        {couponLoading ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          'Apply'
+                        )}
+                      </button>
+                    </div>
+                    {couponError && (
+                      <p className="text-[11px] text-red-600 font-semibold">{couponError}</p>
+                    )}
+                  </div>
+                )}
+              </div>
+
               <div className="space-y-1.5 p-4 bg-slate-50 rounded-2xl border border-slate-200">
                 <div className="flex justify-between text-slate-600">
                   <span>Subtotal ({cartCount} guides)</span>
                   <span>₹{cartTotal}</span>
                 </div>
+                {appliedCoupon && (
+                  <div className="flex justify-between text-emerald-700 font-bold text-xs">
+                    <span className="flex items-center gap-1">
+                      <Tag className="w-3.5 h-3.5" />
+                      Coupon Discount ({appliedCoupon.code})
+                    </span>
+                    <span>-₹{appliedCoupon.discountAmount}</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-slate-600">
                   <span>Delivery Charge</span>
                   <span className={shippingFee === 0 ? 'text-emerald-600 font-bold' : ''}>
@@ -763,7 +889,7 @@ export default function CheckoutPage() {
                 </div>
                 <div className="flex justify-between font-black text-lg text-[#001B3A] pt-2 border-t border-slate-200">
                   <span>Total Amount</span>
-                  <span>₹{cartGrandTotal}</span>
+                  <span>₹{finalPayable}</span>
                 </div>
               </div>
 
@@ -783,7 +909,7 @@ export default function CheckoutPage() {
                 onClick={() => void handlePlaceOrder()}
                 className="hidden sm:flex w-full items-center justify-center bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 hover:from-amber-500 hover:to-amber-700 text-[#001B3A] font-black text-sm py-4 rounded-xl uppercase tracking-wider shadow-lg shadow-amber-500/20 disabled:opacity-60 transition-all hover:scale-[1.01] min-h-12 touch-manipulation"
               >
-                {isPlacingOrder ? 'Opening Razorpay…' : `Confirm order · Pay ₹${cartGrandTotal}`}
+                {isPlacingOrder ? 'Opening Razorpay…' : `Confirm order · Pay ₹${finalPayable}`}
               </button>
               <button
                 type="button"
@@ -827,7 +953,7 @@ export default function CheckoutPage() {
             <div className="flex items-center gap-3 max-w-7xl mx-auto">
               <div className="min-w-0">
                 <p className="text-[10px] font-bold text-slate-500 uppercase">Pay</p>
-                <p className="font-black text-lg text-[#001B3A] leading-none">₹{cartGrandTotal}</p>
+                <p className="font-black text-lg text-[#001B3A] leading-none">₹{finalPayable}</p>
               </div>
               <button
                 type="button"

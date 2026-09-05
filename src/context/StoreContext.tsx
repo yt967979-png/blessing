@@ -24,6 +24,7 @@ export interface Product {
   features: string[];
   inStock: boolean;
   stock?: number;
+  samplePdfUrl?: string | null;
   isNew?: boolean;
   isBestSeller?: boolean;
   isTrending?: boolean;
