@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
 import { tryGetDbClient, releaseDbClient } from '@/lib/db';
-import { applyRateLimit } from '@/lib/serverSecurity';
+import { applyRateLimitAsync } from '@/lib/serverSecurity';
 import { isValidMobileNumber, normalizeMobileDigits } from '@/lib/authValidation';
 
 export async function POST(request: Request) {
   const ip = request.headers.get('x-forwarded-for') || 'anonymous';
-  const { allowed } = applyRateLimit(`contact-${ip}`, 5, 600000);
-  if (!allowed) {
+  const rl = await applyRateLimitAsync(`contact-${ip}`, 5, 600000);
+  if (!rl.allowed) {
     return NextResponse.json(
       { error: 'Too many messages sent. Please wait a few minutes before trying again.' },
       { status: 429 }

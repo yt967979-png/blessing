@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { queryDb } from '@/lib/db';
 import { applyRateLimitAsync } from '@/lib/serverSecurity';
-import { createSessionToken, verifyPassword, SESSION_COOKIE_MAX_AGE_SEC } from '@/lib/auth';
+import { createSessionToken, verifyPassword, applySessionCookies, createDeviceId } from '@/lib/auth';
 import { userNeedsProfile } from '@/lib/userProfile';
 
 export async function POST(request: Request) {
@@ -44,7 +44,8 @@ export async function POST(request: Request) {
     }
 
     const userRole = user.role || 'customer';
-    const token = createSessionToken(user.id, userRole);
+    const deviceId = createDeviceId();
+    const token = createSessionToken(user.id, userRole, deviceId);
     // Password accounts already collected phone at register; only flag incomplete profiles.
     const needsProfile =
       userNeedsProfile(user.phone) || String(user.name || '').trim().length < 2;
@@ -60,13 +61,7 @@ export async function POST(request: Request) {
       },
     });
 
-    response.cookies.set('bpg_session', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: SESSION_COOKIE_MAX_AGE_SEC, // 10 years (stay signed in)
-      path: '/',
-    });
+    applySessionCookies(response, { token, deviceId, role: userRole });
 
     return response;
   } catch (err: any) {

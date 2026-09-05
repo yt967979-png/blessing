@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { getDbClient, releaseDbClient } from '@/lib/db';
+import { clearSessionCookies } from '@/lib/auth';
 import {
   applyRateLimitAsync,
   clientIp,
@@ -204,6 +205,6 @@ export async function PATCH(request: Request) {
 
 export async function DELETE() {
   const cookieStore = await cookies();
-  cookieStore.delete('bpg_session');
+  clearSessionCookies(cookieStore);
   return NextResponse.json({ success: true });
 }

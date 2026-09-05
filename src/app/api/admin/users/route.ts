@@ -110,10 +110,10 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Action 2: Super Admin only: promote customer → admin, or revoke admin → customer
+    // Action 2: Super Admin only — make or remove a regular admin
     const superAdmin = await verifySuperAdminRequest(request);
     if (!superAdmin.isSuperAdmin) {
-      return forbiddenResponse(superAdmin.error || 'Only Super Admin can change admin roles.');
+      return forbiddenResponse('Only Super Admin can make or remove admins.');
     }
 
     const userId = String(body.userId || '').trim();
@@ -177,6 +177,13 @@ export async function PATCH(request: NextRequest) {
     if (String(userCheck.rows[0].role || '').toLowerCase() === 'super_admin') {
       return NextResponse.json({ error: 'Super Admin status cannot be modified.' }, { status: 400 });
     }
+    const targetRole = String(userCheck.rows[0].role || '').toLowerCase();
+    if (targetRole === 'admin') {
+      const superAdmin = await verifySuperAdminRequest(request);
+      if (!superAdmin.isSuperAdmin) {
+        return forbiddenResponse('Only Super Admin can ban or unban another admin.');
+      }
+    }
 
     await queryDb(
       `UPDATE users SET status = $1, updated_at = NOW() WHERE id::text = $2::text`,
@@ -186,5 +193,45 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ success: true, userId, status });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  const admin = await verifyAdminRequest(request);
+  if (!admin.isAdmin) return forbiddenResponse(admin.error);
+
+  try {
+    const userId = String(new URL(request.url).searchParams.get('userId') || '').trim();
+    if (!userId) {
+      return NextResponse.json({ error: 'userId required.' }, { status: 400 });
+    }
+
+    const userCheck = await queryDb(
+      `SELECT id, role FROM users WHERE id::text = $1::text LIMIT 1`,
+      [userId]
+    );
+    if (!userCheck.rows[0]) {
+      return NextResponse.json({ error: 'User not found.' }, { status: 404 });
+    }
+    const targetRole = String(userCheck.rows[0].role || 'customer').toLowerCase();
+    if (targetRole === 'super_admin') {
+      return NextResponse.json({ error: 'Super Admin cannot be deleted.' }, { status: 400 });
+    }
+    if (targetRole === 'admin') {
+      const superAdmin = await verifySuperAdminRequest(request);
+      if (!superAdmin.isSuperAdmin) {
+        return forbiddenResponse('Only Super Admin can delete another admin.');
+      }
+    }
+    if (String(userCheck.rows[0].id) === String(admin.user?.userId)) {
+      return NextResponse.json({ error: 'You cannot delete your own account here.' }, { status: 400 });
+    }
+
+    await queryDb(`DELETE FROM users WHERE id::text = $1::text AND COALESCE(role, 'customer') != 'super_admin'`, [
+      userId,
+    ]);
+    return NextResponse.json({ success: true, userId });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message || 'Delete failed' }, { status: 500 });
   }
 }

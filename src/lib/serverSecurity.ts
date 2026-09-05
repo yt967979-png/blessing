@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { verifySessionToken, getTokenFromRequest } from '@/lib/auth';
+import { verifySessionToken, getTokenFromRequest, getDeviceIdFromRequest } from '@/lib/auth';
 
 export function clientIp(request: Request): string {
   const xForwardedFor = request.headers.get('x-forwarded-for');
@@ -48,6 +48,33 @@ export function checkRateLimit(
   return { success: true, remaining: limit - existing.count };
 }
 
+/** Postgres-backed limiter so a Lightsail restart does not reset abuse counters. Falls back to memory. */
+async function checkRateLimitPersistent(
+  key: string,
+  limit: number,
+  windowMs: number
+): Promise<{ success: boolean; remaining: number }> {
+  const safeKey = String(key || 'anon').slice(0, 180);
+  try {
+    const { queryDb } = await import('@/lib/db');
+    const resetAt = new Date(Date.now() + windowMs).toISOString();
+    const res = await queryDb(
+      `INSERT INTO rate_limits (key, count, reset_at)
+       VALUES ($1, 1, $2::timestamptz)
+       ON CONFLICT (key) DO UPDATE SET
+         count = CASE WHEN rate_limits.reset_at < NOW() THEN 1 ELSE rate_limits.count + 1 END,
+         reset_at = CASE WHEN rate_limits.reset_at < NOW() THEN EXCLUDED.reset_at ELSE rate_limits.reset_at END
+       RETURNING count`,
+      [safeKey, resetAt]
+    );
+    const count = Number(res.rows?.[0]?.count || 1);
+    if (count > limit) return { success: false, remaining: 0 };
+    return { success: true, remaining: Math.max(0, limit - count) };
+  } catch {
+    return checkRateLimit(safeKey, limit, windowMs);
+  }
+}
+
 export function applyRateLimit(
   keyOrReq: string | Request,
   limit = 20,
@@ -79,7 +106,7 @@ export async function applyRateLimitAsync(
     win = windowMs;
   }
 
-  const res = checkRateLimit(key, limit, win);
+  const res = await checkRateLimitPersistent(key, limit, win);
   if (!res.success) {
     return {
       success: false,
@@ -98,7 +125,7 @@ export async function getAuthenticatedUser(
 ): Promise<{ userId: string; role: string } | null> {
   const token = getTokenFromRequest(request);
   if (!token) return null;
-  return verifySessionToken(token);
+  return verifySessionToken(token, getDeviceIdFromRequest(request));
 }
 
 export interface AdminVerifyResult {
@@ -116,6 +143,18 @@ export async function verifyAdminRequest(
     const session = await getAuthenticatedUser(request);
     if (!session) {
       return { isAdmin: false, isSuperAdmin: false, error: 'Unauthorized: Missing session' };
+    }
+
+    const method = String(request.method || 'GET').toUpperCase();
+    if (method !== 'GET' && method !== 'HEAD') {
+      const fetchSite = String(request.headers.get('sec-fetch-site') || '').toLowerCase();
+      if (fetchSite === 'cross-site') {
+        return { isAdmin: false, isSuperAdmin: false, error: 'Forbidden: Cross-site request blocked' };
+      }
+      const originCheck = verifyOriginOrReferer(request);
+      if (!originCheck.valid) {
+        return { isAdmin: false, isSuperAdmin: false, error: originCheck.error || 'Forbidden' };
+      }
     }
 
     try {

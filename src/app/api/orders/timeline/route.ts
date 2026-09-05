@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { queryDb } from '@/lib/db';
 import {
-  applyRateLimit,
+  applyRateLimitAsync,
   verifyAdminRequest,
   getAuthenticatedUser,
   unauthorizedResponse,
@@ -24,8 +24,8 @@ const STAGE_META: Record<string, { emoji: string; label: string; desc: string }>
 export async function POST(request: Request) {
   // Rate limit protection
   const ip = request.headers.get('x-forwarded-for') || 'anonymous';
-  const { allowed } = applyRateLimit(ip, 20, 60000);
-  if (!allowed) {
+  const rl = await applyRateLimitAsync(`timeline:${ip}`, 20, 60000);
+  if (!rl.allowed) {
     return NextResponse.json({ error: 'Too many requests. Please try again in 1 minute.' }, { status: 429 });
   }
 

@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
 import { queryDb } from '@/lib/db';
-import { createSessionToken, sessionCookieOptions } from '@/lib/auth';
+import { createSessionToken, applySessionCookies, createDeviceId, getDeviceIdFromRequest } from '@/lib/auth';
 import { getAuthenticatedUser, unauthorizedResponse, applyRateLimitAsync, clientIp } from '@/lib/serverSecurity';
 import { isValidMobileNumber, normalizeMobileDigits } from '@/lib/authValidation';
 import { isBookInStock } from '@/lib/stock';
 
-function setSessionCookie(response: NextResponse, token: string) {
-  response.cookies.set('bpg_session', token, sessionCookieOptions());
+function setSessionCookie(response: NextResponse, token: string, role: string | undefined, deviceId: string) {
+  applySessionCookies(response, { token, deviceId, role });
   return response;
 }
 
@@ -49,7 +49,9 @@ export async function POST(request: Request) {
       [cleanName, cleanPhone, session.userId]
     );
     const user = updated.rows[0];
-    const token = createSessionToken(user.id, user.role || 'customer');
+    const role = user.role || 'customer';
+    const deviceId = getDeviceIdFromRequest(request) || createDeviceId();
+    const token = createSessionToken(user.id, role, deviceId);
 
     const cartRes = await queryDb(
       `SELECT ci.book_id as id, ci.quantity as qty, ci.price,
@@ -98,7 +100,7 @@ export async function POST(request: Request) {
       cart: cartItems,
       wishlist: wishRes.rows.map((r: any) => r.book_id),
     });
-    return setSessionCookie(response, token);
+    return setSessionCookie(response, token, user.role || 'customer', deviceId);
   } catch (err: any) {
     console.error('[complete-profile]', err?.message || err);
     return NextResponse.json({ error: 'Could not save your details.' }, { status: 500 });

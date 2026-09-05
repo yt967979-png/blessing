@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { queryDb } from '@/lib/db';
 import { applyRateLimitAsync } from '@/lib/serverSecurity';
-import { createSessionToken, hashPassword, SESSION_COOKIE_MAX_AGE_SEC } from '@/lib/auth';
+import { createSessionToken, hashPassword, applySessionCookies, createDeviceId } from '@/lib/auth';
 import { isValidMobileNumber, normalizeMobileDigits } from '@/lib/authValidation';
 
 export async function POST(request: Request) {
@@ -56,7 +56,8 @@ export async function POST(request: Request) {
       [userId, name, email, cleanPhone, passwordHash]
     );
 
-    const token = createSessionToken(userId, 'customer');
+    const deviceId = createDeviceId();
+    const token = createSessionToken(userId, 'customer', deviceId);
     const userObj = {
       id: userId,
       name,
@@ -67,14 +68,7 @@ export async function POST(request: Request) {
     };
 
     const response = NextResponse.json({ success: true, user: userObj });
-
-    response.cookies.set('bpg_session', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: SESSION_COOKIE_MAX_AGE_SEC, // 10 years (stay signed in)
-      path: '/',
-    });
+    applySessionCookies(response, { token, deviceId, role: 'customer' });
 
     return response;
   } catch (err: any) {

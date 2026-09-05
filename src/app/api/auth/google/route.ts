@@ -1,13 +1,13 @@
 import crypto from 'crypto';
 import { NextResponse } from 'next/server';
-import { createSessionToken, hashPassword, sessionCookieOptions } from '@/lib/auth';
+import { createSessionToken, hashPassword, applySessionCookies, createDeviceId } from '@/lib/auth';
 import { applyRateLimitAsync, clientIp } from '@/lib/serverSecurity';
 import { verifyGoogleIdToken } from '@/lib/googleAuth';
 import { userNeedsProfile } from '@/lib/userProfile';
 import { isBookInStock } from '@/lib/stock';
 
-function setSessionCookie(response: NextResponse, token: string) {
-  response.cookies.set('bpg_session', token, sessionCookieOptions());
+function setSessionCookie(response: NextResponse, token: string, role: string | undefined, deviceId: string) {
+  applySessionCookies(response, { token, deviceId, role });
   return response;
 }
 
@@ -121,19 +121,13 @@ export async function POST(request: Request) {
       }
     }
 
-    const adminEmail = String(process.env.ADMIN_EMAIL || '').toLowerCase().trim();
     const superAdminEmail = String(process.env.SUPER_ADMIN_EMAIL || process.env.ADMIN_EMAIL || '')
       .toLowerCase()
       .trim();
     const googleEmail = googleUser.email.toLowerCase().trim();
-    // Only the env-configured owner email auto-receives elevated role on Google login.
-    // Regular admins are promoted only by Super Admin in Admin → Users.
-    const bootstrapRole =
-      superAdminEmail && googleEmail === superAdminEmail
-        ? 'super_admin'
-        : adminEmail && googleEmail === adminEmail
-          ? 'admin'
-          : null;
+    // Only the owner email becomes Super Admin automatically.
+    // Extra admins are granted only by Super Admin in Admin → Users.
+    const bootstrapRole = superAdminEmail && googleEmail === superAdminEmail ? 'super_admin' : null;
 
     if (!dbUser) {
       const userId = `usr-g-${Date.now()}`;
@@ -174,12 +168,6 @@ export async function POST(request: Request) {
       if (bootstrapRole === 'super_admin' && activeRole !== 'super_admin') {
         activeRole = 'super_admin';
         await queryDb(`UPDATE users SET role = 'super_admin' WHERE id = $1`, [dbUser.id]);
-      } else if (bootstrapRole === 'admin' && activeRole === 'customer') {
-        // Do not demote an existing super_admin; only lift customers to admin for ADMIN_EMAIL
-        activeRole = 'admin';
-        await queryDb(`UPDATE users SET role = 'admin' WHERE id = $1 AND COALESCE(role, 'customer') = 'customer'`, [
-          dbUser.id,
-        ]);
       }
       await queryDb(
         `UPDATE users SET name = COALESCE(NULLIF($1, ''), name),
@@ -195,7 +183,8 @@ export async function POST(request: Request) {
       dbUser.profile_completed !== true ||
       String(dbUser.name || '').trim().length < 2;
     const role = dbUser.role || 'customer';
-    const token = createSessionToken(dbUser.id, role);
+    const deviceId = createDeviceId();
+    const token = createSessionToken(dbUser.id, role, deviceId);
     const sessionData = needsProfile
       ? { cart: [], wishlist: [], addresses: [] }
       : await loadUserSessionData(queryDb, dbUser.id);
@@ -204,7 +193,7 @@ export async function POST(request: Request) {
       user: buildUserResponse(dbUser, needsProfile),
       ...sessionData,
     });
-    return setSessionCookie(response, token);
+    return setSessionCookie(response, token, role, deviceId);
   } catch (err: any) {
     console.error('[auth/google]', err?.message || err);
     const msg = String(err?.message || err);

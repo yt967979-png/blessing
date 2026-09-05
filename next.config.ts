@@ -24,6 +24,27 @@ const nextConfig: NextConfig = {
   },
 
   async headers() {
+    const isDev = process.env.NODE_ENV !== "production";
+    const scriptSrc = [
+      "script-src 'self' 'unsafe-inline'",
+      isDev ? "'unsafe-eval'" : "",
+      "https://accounts.google.com",
+      "https://apis.google.com",
+      "https://www.gstatic.com",
+      "https://checkout.razorpay.com",
+      "https://cdn.razorpay.com",
+    ]
+      .filter(Boolean)
+      .join(" ");
+    const scriptSrcElem = [
+      "script-src-elem 'self' 'unsafe-inline'",
+      "https://accounts.google.com",
+      "https://apis.google.com",
+      "https://www.gstatic.com",
+      "https://checkout.razorpay.com",
+      "https://cdn.razorpay.com",
+    ].join(" ");
+
     return [
       {
         source: "/(.*)",
@@ -38,7 +59,7 @@ const nextConfig: NextConfig = {
           },
           {
             key: "Referrer-Policy",
-            value: "no-referrer-when-downgrade",
+            value: "strict-origin-when-cross-origin",
           },
           {
             key: "Strict-Transport-Security",
@@ -46,22 +67,21 @@ const nextConfig: NextConfig = {
           },
           {
             key: "Content-Security-Policy",
-            // Razorpay checkout.js loads risk detection from cdn.razorpay.com
-            // (not checkout.razorpay.com). Set script-src-elem explicitly so
-            // browsers do not rely on script-src fallback alone.
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://accounts.google.com https://apis.google.com https://checkout.razorpay.com https://cdn.razorpay.com",
-              "script-src-elem 'self' 'unsafe-inline' https://accounts.google.com https://apis.google.com https://checkout.razorpay.com https://cdn.razorpay.com",
+              scriptSrc,
+              scriptSrcElem,
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com",
               "font-src 'self' https://fonts.gstatic.com data:",
               "img-src 'self' data: blob: https://res.cloudinary.com https://images.unsplash.com https://*.googleusercontent.com https://*.gstatic.com https://*.razorpay.com",
-              "connect-src 'self' https://accounts.google.com https://oauth2.googleapis.com https://stcourier.com https://erpstcourier.com https://api.razorpay.com https://lumberjack.razorpay.com https://checkout.razorpay.com https://cdn.razorpay.com",
+              "connect-src 'self' https://accounts.google.com https://oauth2.googleapis.com https://www.googleapis.com https://stcourier.com https://erpstcourier.com https://api.razorpay.com https://lumberjack.razorpay.com https://lumberjack-cx.razorpay.com https://checkout.razorpay.com https://cdn.razorpay.com",
               "frame-src 'self' https://accounts.google.com https://checkout.razorpay.com https://api.razorpay.com https://maps.google.com https://www.google.com",
+              "worker-src 'self' blob:",
               "object-src 'none'",
               "base-uri 'self'",
               "form-action 'self'",
               "frame-ancestors 'none'",
+              "upgrade-insecure-requests",
             ].join("; "),
           },
           {

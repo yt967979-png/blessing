@@ -31,11 +31,15 @@ export function assertSessionSecretConfigured(): void {
   getSessionSecret();
 }
 
-/** ~10 years — stay signed in until user logs out or clears browser data */
-export const SESSION_TTL_MS = 10 * 365 * 24 * 60 * 60 * 1000;
+/** Stay signed in for 30 days, then sign in again. Same for customers and admin. */
+export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+export const ADMIN_SESSION_TTL_MS = SESSION_TTL_MS;
 export const SESSION_COOKIE_MAX_AGE_SEC = Math.floor(SESSION_TTL_MS / 1000);
+export const ADMIN_SESSION_COOKIE_MAX_AGE_SEC = SESSION_COOKIE_MAX_AGE_SEC;
 
-export function sessionCookieOptions() {
+export const DEVICE_COOKIE_NAME = 'bpg_device';
+
+export function sessionCookieOptions(_role?: string | null) {
   return {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
@@ -43,6 +47,34 @@ export function sessionCookieOptions() {
     maxAge: SESSION_COOKIE_MAX_AGE_SEC,
     path: '/',
   };
+}
+
+export function createDeviceId(): string {
+  return crypto.randomBytes(16).toString('hex');
+}
+
+function cookieValue(cookieHeader: string, name: string): string | null {
+  const match = cookieHeader.match(new RegExp(`(?:^|;\\s*)${name}=([^;]+)`));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+export function getDeviceIdFromRequest(request: Request): string | null {
+  return cookieValue(request.headers.get('cookie') || '', DEVICE_COOKIE_NAME);
+}
+
+/** Set session + device cookies together. Both are httpOnly — JS cannot read them. */
+export function applySessionCookies(
+  response: { cookies: { set: (name: string, value: string, opts: any) => void } },
+  opts: { token: string; deviceId: string; role?: string | null }
+) {
+  const cookieOpts = sessionCookieOptions(opts.role);
+  response.cookies.set('bpg_session', opts.token, cookieOpts);
+  response.cookies.set(DEVICE_COOKIE_NAME, opts.deviceId, cookieOpts);
+}
+
+export function clearSessionCookies(cookieStore: { delete: (name: string) => void }) {
+  cookieStore.delete('bpg_session');
+  cookieStore.delete(DEVICE_COOKIE_NAME);
 }
 
 function timingSafeHexEqual(a: string, b: string): boolean {
@@ -75,14 +107,28 @@ export function verifyPassword(password: string, stored: string): boolean {
   return timingSafeHexEqual(hash, verify);
 }
 
-export function createSessionToken(userId: string, role: string): string {
-  const payload = { userId, role, exp: Date.now() + SESSION_TTL_MS };
+export function createSessionToken(userId: string, role: string, deviceId: string): string {
+  const payload = { userId, role, exp: Date.now() + SESSION_TTL_MS, did: deviceId };
   const payloadStr = JSON.stringify(payload);
   const sig = crypto.createHmac('sha256', getSessionSecret()).update(payloadStr).digest('hex');
   return Buffer.from(JSON.stringify({ p: payloadStr, s: sig })).toString('base64url');
 }
 
-export function verifySessionToken(token: string): { userId: string; role: string } | null {
+function timingSafeUtf8Equal(a: string, b: string): boolean {
+  try {
+    const bufA = Buffer.from(String(a));
+    const bufB = Buffer.from(String(b));
+    if (bufA.length !== bufB.length) return false;
+    return crypto.timingSafeEqual(bufA, bufB);
+  } catch {
+    return false;
+  }
+}
+
+export function verifySessionToken(
+  token: string,
+  deviceId?: string | null
+): { userId: string; role: string } | null {
   try {
     const decoded = JSON.parse(Buffer.from(token, 'base64url').toString('utf8'));
     const payloadStr = decoded.p as string;
@@ -90,7 +136,10 @@ export function verifySessionToken(token: string): { userId: string; role: strin
     const expected = crypto.createHmac('sha256', getSessionSecret()).update(payloadStr).digest('hex');
     if (!timingSafeHexEqual(sig, expected)) return null;
     const payload = JSON.parse(payloadStr);
-    if (payload.exp < Date.now()) return null;
+    if (!payload.exp || payload.exp < Date.now()) return null;
+    if (payload.exp - Date.now() > SESSION_TTL_MS + 60_000) return null;
+    const bound = String(payload.did || '');
+    if (!bound || !deviceId || !timingSafeUtf8Equal(bound, deviceId)) return null;
     return { userId: payload.userId, role: payload.role };
   } catch {
     return null;
@@ -103,6 +152,5 @@ export function getTokenFromRequest(request: Request): string | null {
     return authHeader.substring(7).trim();
   }
   const cookieHeader = request.headers.get('cookie') || '';
-  const match = cookieHeader.match(/(?:^|;\s*)bpg_session=([^;]+)/);
-  return match ? decodeURIComponent(match[1]) : null;
+  return cookieValue(cookieHeader, 'bpg_session');
 }

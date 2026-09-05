@@ -41,7 +41,7 @@ export default function AdminUsersTab({
   const isSuperAdmin = user?.role === 'super_admin';
 
   const load = useCallback(async () => {
-    if (!user?.token) {
+    if (!user?.id) {
       setLoading(false);
       return;
     }
@@ -49,6 +49,7 @@ export default function AdminUsersTab({
     try {
       const headers = authHeaders(user);
       const usersRes = await fetch('/api/admin/users', {
+        credentials: 'include',
         headers,
         signal: AbortSignal.timeout(20000),
       });
@@ -62,6 +63,7 @@ export default function AdminUsersTab({
       }
 
       void fetch('/api/admin/users?view=low_stock', {
+        credentials: 'include',
         headers,
         signal: AbortSignal.timeout(15000),
       })
@@ -76,18 +78,23 @@ export default function AdminUsersTab({
     } finally {
       setLoading(false);
     }
-  }, [user?.token, user?.id, showToast]);
+  }, [user?.id, showToast]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
   const toggleSubAdminRole = async (userId: string, currentRole: string) => {
+    if (!isSuperAdmin) {
+      showToast('Only Super Admin can make or remove admins.');
+      return;
+    }
     const targetRole = currentRole === 'admin' ? 'customer' : 'admin';
     setUpdatingId(userId);
     try {
       const r = await fetch('/api/admin/users', {
         method: 'POST',
+        credentials: 'include',
         headers: authHeaders(user),
         body: JSON.stringify({ userId, role: targetRole }),
       });
@@ -110,6 +117,7 @@ export default function AdminUsersTab({
     try {
       const r = await fetch('/api/admin/users', {
         method: 'PATCH',
+        credentials: 'include',
         headers: authHeaders(user),
         body: JSON.stringify({ userId, status }),
       });
@@ -133,6 +141,7 @@ export default function AdminUsersTab({
     try {
       const r = await fetch(`/api/admin/users?userId=${encodeURIComponent(userId)}`, {
         method: 'DELETE',
+        credentials: 'include',
         headers: authHeaders(user),
       });
       if (r.ok) {
@@ -213,7 +222,9 @@ export default function AdminUsersTab({
             User Management
           </h2>
           <p className="text-xs text-gray-400 mt-0.5">
-            {customers.length} registered users — manage user accounts and grant Admin privileges
+            {isSuperAdmin
+              ? `${customers.length} users — only you can Make Admin or remove admin`
+              : `${customers.length} users — you can manage customers. Only Super Admin can make another admin`}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -318,7 +329,8 @@ export default function AdminUsersTab({
                         </button>
                       )}
 
-                      {c.status === 'banned' ? (
+                      {(isSuperAdmin || c.role !== 'admin') &&
+                        (c.status === 'banned' ? (
                         <button
                           type="button"
                           disabled={updatingId === c.id}
@@ -341,9 +353,9 @@ export default function AdminUsersTab({
                           <Ban className="w-3 h-3" />
                           Ban
                         </button>
-                      )}
+                      ))}
 
-                      {c.role !== 'super_admin' && (
+                      {c.role !== 'super_admin' && (isSuperAdmin || c.role !== 'admin') && (
                         <button
                           type="button"
                           disabled={updatingId === c.id}

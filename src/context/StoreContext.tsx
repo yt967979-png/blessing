@@ -805,7 +805,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     localStorage.removeItem('bpg_cart_next');
     localStorage.removeItem('bpg_wishlist_next');
     localStorage.removeItem('bpg_user_addresses');
-    fetch('/api/auth', { method: 'DELETE' }).catch(() => {});
+    fetch('/api/auth', { method: 'DELETE', credentials: 'include' }).catch(() => {});
     showToast('Logged out successfully');
   };
 
