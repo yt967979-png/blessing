@@ -888,6 +888,12 @@ export default function CheckoutPage() {
                     {couponError && (
                       <p className="text-[11px] text-red-600 font-semibold">{couponError}</p>
                     )}
+                    <Link
+                      href="/profile?tab=coupons"
+                      className="text-[11px] font-bold text-blue-700 hover:underline"
+                    >
+                      See all available coupons
+                    </Link>
                   </div>
                 )}
               </div>

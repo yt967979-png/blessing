@@ -175,6 +175,62 @@ export async function validateCouponForCart(
   };
 }
 
+export type CustomerCouponOffer = {
+  id: string;
+  code: string;
+  title: string;
+  discountType: 'percentage' | 'flat';
+  discountValue: number;
+  minCartQty: number;
+  minOrderAmount: number;
+  maxDiscountAmount: number | null;
+  expiresAt: string | null;
+  alreadyUsed: boolean;
+};
+
+/** Active, unexpired coupons a signed-in customer can see (no usage counters). */
+export async function listAvailableCouponsForUser(userId: string): Promise<CustomerCouponOffer[]> {
+  const res = await queryDb(
+    `SELECT id, code, title, discount_type, discount_value, min_cart_qty, min_order_amount,
+            max_discount_amount, expires_at
+     FROM coupons
+     WHERE COALESCE(is_active, FALSE) = TRUE
+       AND (expires_at IS NULL OR expires_at > NOW())
+       AND (max_uses IS NULL OR max_uses <= 0 OR COALESCE(used_count, 0) < max_uses)
+     ORDER BY COALESCE(show_on_hero, FALSE) DESC, created_at DESC
+     LIMIT 50`
+  );
+  const rows = res.rows || [];
+  if (!rows.length) return [];
+
+  const ids = rows.map((r: any) => String(r.id));
+  let usedIds = new Set<string>();
+  if (userId) {
+    const used = await queryDb(
+      `SELECT coupon_id FROM coupon_redemptions
+       WHERE user_id = $1 AND coupon_id = ANY($2::text[])`,
+      [userId, ids]
+    ).catch(() => ({ rows: [] as any[] }));
+    usedIds = new Set((used.rows || []).map((r: any) => String(r.coupon_id)));
+  }
+
+  return rows.map((row: any) => {
+    const discountType = String(row.discount_type) === 'flat' ? 'flat' : 'percentage';
+    return {
+      id: String(row.id),
+      code: String(row.code || '').toUpperCase(),
+      title: String(row.title || '').trim() || 'Shop offer',
+      discountType,
+      discountValue: Number(row.discount_value || 0),
+      minCartQty: Number(row.min_cart_qty || 4),
+      minOrderAmount: Number(row.min_order_amount || 0),
+      maxDiscountAmount: row.max_discount_amount != null ? Number(row.max_discount_amount) : null,
+      expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : null,
+      alreadyUsed: usedIds.has(String(row.id)),
+    };
+  });
+}
+
 /** Increment used_count inside the order transaction. Fails if the last use was taken. */
 export async function consumeCouponUsage(client: any, couponId: string): Promise<boolean> {
   const res = await execQuery(

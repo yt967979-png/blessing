@@ -21,6 +21,7 @@ import {
   ShoppingBag,
   Download,
   X,
+  TicketPercent,
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { createUserAddress, deleteUserAddress, migrateLocalAddressesToDb, updateUserAddress } from '@/lib/addresses';
@@ -29,11 +30,12 @@ import { useOrderLiveSync } from '@/hooks/useOrderLiveSync';
 import { Header } from '@/components/layout/Header';
 import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
 import { Footer } from '@/components/layout/Footer';
+import { ProfileCouponsSection } from '@/components/profile/ProfileCouponsSection';
 
 export default function ProfilePage() {
   const router = useRouter();
   const { user, loginUser, logoutUser, wishlist, products, cart, showToast, setIsAuthOpen } = useStore();
-  const [activeTab, setActiveTab] = useState<'profile' | 'orders' | 'addresses' | 'wishlist'>('orders');
+  const [activeTab, setActiveTab] = useState<'profile' | 'orders' | 'addresses' | 'wishlist' | 'coupons'>('orders');
 
   // Dynamic user edit form state
   const [isEditing, setIsEditing] = useState(false);
@@ -56,6 +58,13 @@ export default function ProfilePage() {
       setPhone(user.phone || '');
     }
   }, [user]);
+
+  useEffect(() => {
+    const tab = new URLSearchParams(window.location.search).get('tab');
+    if (tab === 'coupons' || tab === 'orders' || tab === 'profile' || tab === 'addresses' || tab === 'wishlist') {
+      setActiveTab(tab);
+    }
+  }, []);
 
   // Load addresses from DB (migrate old localStorage once)
   useEffect(() => {
@@ -288,6 +297,7 @@ export default function ProfilePage() {
                 {(
                   [
                     { id: 'orders' as const, label: `Orders (${liveOrders.length})`, Icon: Package },
+                    { id: 'coupons' as const, label: 'Coupons', Icon: TicketPercent },
                     { id: 'profile' as const, label: 'Profile', Icon: User },
                     { id: 'addresses' as const, label: `Address (${addresses.length})`, Icon: MapPin },
                     { id: 'wishlist' as const, label: `Wishlist (${wishlist.length})`, Icon: Heart },
@@ -337,6 +347,22 @@ export default function ProfilePage() {
                 <div className="flex items-center gap-3">
                   <Package className="w-4 h-4 text-amber-500" />
                   <span>My Orders &amp; Tracking ({liveOrders.length})</span>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-400" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('coupons')}
+                className={`w-full text-left px-4 py-3.5 rounded-xl flex items-center justify-between transition-colors ${
+                  activeTab === 'coupons'
+                    ? 'bg-blue-50 text-blue-700 font-black'
+                    : 'text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <TicketPercent className="w-4 h-4 text-amber-500" />
+                  <span>Available Coupons</span>
                 </div>
                 <ChevronRight className="w-4 h-4 text-slate-400" />
               </button>
@@ -405,6 +431,10 @@ export default function ProfilePage() {
 
           {/* Right Main Dynamic Content Panel */}
           <div className="lg:col-span-8 space-y-4">
+            {activeTab === 'coupons' && (
+              <ProfileCouponsSection user={user} showToast={showToast} />
+            )}
+
             {/* 1. Personal Information */}
             {activeTab === 'profile' && (
               <div className="bg-white border border-slate-200 rounded-2xl p-6 md:p-8 shadow-xs space-y-6">
