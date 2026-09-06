@@ -1,4 +1,5 @@
 import QRCode from 'qrcode';
+import { publicSiteOrigin } from '@/lib/publicSiteUrl';
 
 /**
  * Generates a clean, vector SVG QR code string.
@@ -10,7 +11,7 @@ export async function generateQrSvg(
   options: { size?: number; margin?: number } = {}
 ): Promise<string> {
   try {
-    const rawSvg = await QRCode.toString(text || 'https://blessingpowerguide.com/track', {
+    const rawSvg = await QRCode.toString(text || `${publicSiteOrigin()}/track`, {
       type: 'svg',
       margin: options.margin ?? 0,
       width: options.size ?? 120,
@@ -34,7 +35,7 @@ export async function generateQrDataUrl(
   options: { size?: number; margin?: number } = {}
 ): Promise<string> {
   try {
-    const dataUrl = await QRCode.toDataURL(text || 'https://blessingpowerguide.com/track', {
+    const dataUrl = await QRCode.toDataURL(text || `${publicSiteOrigin()}/track`, {
       margin: options.margin ?? 0,
       width: options.size ?? 140,
       color: {

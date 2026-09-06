@@ -3,6 +3,7 @@
 import React, { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStore } from '@/context/StoreContext';
+import { isAdminShopPreview } from '@/lib/adminShopPreview';
 import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
 import { Header } from '@/components/layout/Header';
 import { HeroSection } from '@/components/home/HeroSection';
@@ -21,7 +22,7 @@ export default function Home() {
   const { user } = useStore();
 
   useEffect(() => {
-    if (user && (user.role === 'admin' || user.role === 'super_admin')) {
+    if (user && (user.role === 'admin' || user.role === 'super_admin') && !isAdminShopPreview()) {
       router.replace('/admin');
     }
   }, [user, router]);

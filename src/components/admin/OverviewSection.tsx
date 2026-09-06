@@ -20,6 +20,7 @@ import {
   Tag,
 } from 'lucide-react';
 import { AdminTab } from './AdminSidebar';
+import { isRecordCancelled, fulfillmentStatus } from '@/lib/orderStatus';
 
 export interface StockHoldItem {
   id: string;
@@ -71,19 +72,20 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
 
   // Unfulfilled orders needing packing
   const pendingOrders = orders.filter((o) => {
-    const s = String(o.courierStatus || o.order_status || '').toLowerCase();
+    if (isRecordCancelled(o)) return false;
+    const s = String(fulfillmentStatus(o) || o.courierStatus || o.order_status || '').toLowerCase();
     return (
       (s.includes('confirm') || s.includes('placed') || s.includes('paid')) &&
       !s.includes('pack') &&
       !s.includes('handed') &&
       !s.includes('transit') &&
-      !s.includes('deliver') &&
-      !s.includes('cancel')
+      !s.includes('deliver')
     );
   });
 
   const inTransitOrders = orders.filter((o) => {
-    const s = String(o.courierStatus || o.order_status || '').toLowerCase();
+    if (isRecordCancelled(o)) return false;
+    const s = String(fulfillmentStatus(o) || o.courierStatus || o.order_status || '').toLowerCase();
     return s.includes('transit') || s.includes('handed') || s.includes('out');
   });
 

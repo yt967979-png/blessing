@@ -26,6 +26,7 @@ import OrderStatusStamp from './OrderStatusStamp';
 import { openShippingLabelPrint } from '@/lib/shippingLabel';
 import { CreateCustomOrderModal } from './CreateCustomOrderModal';
 import type { Product } from '@/context/StoreContext';
+import { fulfillmentStatus, isRecordCancelled } from '@/lib/orderStatus';
 
 interface OrderItem {
   title: string;
@@ -55,6 +56,8 @@ interface Order {
   courierName: string;
   items: OrderItem[];
   createdAt: string;
+  isCancelled?: boolean;
+  orderStatus?: string;
 }
 
 interface OrdersSectionProps {
@@ -93,9 +96,12 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
   const counts = useMemo(() => {
     const res = { all: orders.length, pending: 0, packed: 0, dispatched: 0, delivered: 0, cancelled: 0 };
     orders.forEach((o) => {
-      const s = String(o.courierStatus || o.paymentStatus || '').toLowerCase();
-      if (s.includes('cancel') || s.includes('refund')) res.cancelled++;
-      else if (s.includes('deliver') && !s.includes('attempt')) res.delivered++;
+      if (isRecordCancelled(o)) {
+        res.cancelled++;
+        return;
+      }
+      const s = String(fulfillmentStatus(o) || '').toLowerCase();
+      if (s.includes('deliver') && !s.includes('attempt')) res.delivered++;
       else if (s.includes('transit') || s.includes('handed') || s.includes('out')) res.dispatched++;
       else if (s.includes('pack')) res.packed++;
       else res.pending++;
@@ -107,7 +113,8 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
   const filteredOrders = useMemo(() => {
     return orders.filter((o) => {
       const q = search.trim().toLowerCase();
-      const s = String(o.courierStatus || o.paymentStatus || '').toLowerCase();
+      const cancelled = isRecordCancelled(o);
+      const s = String(fulfillmentStatus(o) || '').toLowerCase();
 
       // Search match
       const matchSearch =
@@ -121,16 +128,18 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
 
       // Status match
       let matchStatus = true;
-      if (statusFilter === 'pending') {
-        matchStatus = !s.includes('pack') && !s.includes('handed') && !s.includes('transit') && !s.includes('deliver') && !s.includes('cancel');
+      if (statusFilter === 'cancelled') {
+        matchStatus = cancelled;
+      } else if (cancelled) {
+        matchStatus = false;
+      } else if (statusFilter === 'pending') {
+        matchStatus = !s.includes('pack') && !s.includes('handed') && !s.includes('transit') && !s.includes('deliver');
       } else if (statusFilter === 'packed') {
         matchStatus = s.includes('pack') && !s.includes('handed') && !s.includes('transit') && !s.includes('deliver');
       } else if (statusFilter === 'dispatched') {
         matchStatus = s.includes('transit') || s.includes('handed') || s.includes('out');
       } else if (statusFilter === 'delivered') {
         matchStatus = s.includes('deliver') && !s.includes('attempt');
-      } else if (statusFilter === 'cancelled') {
-        matchStatus = s.includes('cancel') || s.includes('refund');
       }
 
       return matchSearch && matchStatus;
@@ -161,12 +170,16 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
 
   // ── Batch Actions ──────────────────────────────────────────────────────────
   const handleBatchMarkPacked = async () => {
-    if (selectedIds.size === 0) return;
+    const selectedOrders = orders.filter((o) => selectedIds.has(o.id) && !isRecordCancelled(o));
+    if (selectedOrders.length === 0) {
+      onShowToast('No packable orders selected (cancelled orders are skipped).');
+      return;
+    }
     setBatchActionLoading(true);
     let successCount = 0;
     try {
-      for (const id of Array.from(selectedIds)) {
-        await onUpdateStatus(id, 'Packed');
+      for (const o of selectedOrders) {
+        await onUpdateStatus(o.id, 'Packed');
         successCount++;
       }
       onShowToast(`✅ Marked ${successCount} order(s) as Packed`);
@@ -179,7 +192,7 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
   };
 
   const handleBatchPrintSlips = () => {
-    const selectedOrders = orders.filter((o) => selectedIds.has(o.id));
+    const selectedOrders = orders.filter((o) => selectedIds.has(o.id) && !isRecordCancelled(o));
     if (selectedOrders.length === 0) return;
     openShippingLabelPrint(selectedOrders, 'thermal4x6');
   };
@@ -299,8 +312,18 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
           Loading orders...
         </div>
       ) : filteredOrders.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-400 text-xs font-medium">
-          No orders found matching the filter criteria.
+        <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-500 space-y-2">
+          <Package className="w-8 h-8 mx-auto text-slate-300" />
+          <p className="font-bold text-sm text-slate-800">
+            {orders.length === 0
+              ? 'Waiting for the first Razorpay order'
+              : 'No orders match this filter'}
+          </p>
+          <p className="text-xs text-slate-500 max-w-md mx-auto">
+            {orders.length === 0
+              ? 'Paid checkouts appear here automatically. Use + New WhatsApp Order for phone orders.'
+              : 'Try All Orders, or clear the search box.'}
+          </p>
         </div>
       ) : (
         <>
@@ -335,7 +358,8 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
                   {filteredOrders.map((order) => {
                     const isSelected = selectedIds.has(order.id);
                     const hasAwb = Boolean(order.trackingNumber && !order.trackingNumber.startsWith('SHP-') && !order.trackingNumber.includes('Pending'));
-                    const isCancelled = String(order.courierStatus || order.paymentStatus || '').toLowerCase().includes('cancel');
+                    const isCancelled = isRecordCancelled(order);
+                    const stampStatus = fulfillmentStatus(order);
 
                     return (
                       <tr
@@ -395,7 +419,7 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
 
                         {/* Status Stamp */}
                         <td className="p-3.5">
-                          <OrderStatusStamp status={order.courierStatus || order.paymentStatus} size="sm" />
+                          <OrderStatusStamp status={stampStatus} size="sm" />
                         </td>
 
                         {/* ST Courier AWB */}
@@ -459,6 +483,7 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
             {filteredOrders.map((order) => {
               const isSelected = selectedIds.has(order.id);
               const hasAwb = Boolean(order.trackingNumber && !order.trackingNumber.startsWith('SHP-') && !order.trackingNumber.includes('Pending'));
+              const stampStatus = fulfillmentStatus(order);
 
               return (
                 <div
@@ -484,7 +509,7 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
                         #{order.orderId}
                       </span>
                     </div>
-                    <OrderStatusStamp status={order.courierStatus || order.paymentStatus} size="sm" />
+                    <OrderStatusStamp status={stampStatus} size="sm" />
                   </div>
 
                   <div className="border-t border-slate-100 pt-2 text-xs space-y-1">
@@ -550,10 +575,10 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
                     Current Status
                   </span>
                   <span className="font-bold text-slate-900">
-                    {activeDrawerOrder.courierStatus || activeDrawerOrder.paymentStatus}
+                    {fulfillmentStatus(activeDrawerOrder) || activeDrawerOrder.paymentStatus}
                   </span>
                 </div>
-                <OrderStatusStamp status={activeDrawerOrder.courierStatus || activeDrawerOrder.paymentStatus} />
+                <OrderStatusStamp status={fulfillmentStatus(activeDrawerOrder)} />
               </div>
 
               {/* Customer & Shipping Address */}
@@ -608,7 +633,11 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
                   <Truck className="w-3.5 h-3.5 text-[#2874f0]" />
                   <span>ST Courier Logistics</span>
                 </h4>
-                {activeDrawerOrder.trackingNumber ? (
+                {isRecordCancelled(activeDrawerOrder) ? (
+                  <p className="text-xs text-red-600 font-semibold">
+                    Cancelled — do not ship. AWB assignment is locked.
+                  </p>
+                ) : activeDrawerOrder.trackingNumber ? (
                   <div className="space-y-2">
                     <p className="font-mono text-xs">
                       Docket: <strong className="text-blue-700">{activeDrawerOrder.trackingNumber}</strong>

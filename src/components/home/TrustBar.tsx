@@ -26,8 +26,8 @@ export const TrustBar = () => {
             <Truck className="w-5 h-5" />
           </div>
           <div>
-            <h4 className="font-heading font-black text-xs text-white uppercase tracking-wider">EXPRESS ST COURIER</h4>
-            <p className="text-[10px] text-slate-300 font-medium">Doorstep Delivery in 24-48 Hours</p>
+            <h4 className="font-heading font-black text-xs text-white uppercase tracking-wider">ST COURIER DELIVERY</h4>
+            <p className="text-[10px] text-slate-300 font-medium">Usually 2–4 days in Tamil Nadu</p>
           </div>
         </div>
 
@@ -46,8 +46,8 @@ export const TrustBar = () => {
             <Phone className="w-5 h-5" />
           </div>
           <div>
-            <h4 className="font-heading font-black text-xs text-white uppercase tracking-wider">24/7 WHATSAPP SUPPORT</h4>
-            <p className="text-[10px] text-slate-300 font-medium">Direct Live Assistance for Students</p>
+            <h4 className="font-heading font-black text-xs text-white uppercase tracking-wider">WHATSAPP SUPPORT</h4>
+            <p className="text-[10px] text-slate-300 font-medium">Mon–Sat, 9 AM – 8 PM</p>
           </div>
         </div>
       </div>

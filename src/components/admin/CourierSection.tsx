@@ -11,6 +11,7 @@ import {
   Package,
 } from 'lucide-react';
 import OrderStatusStamp from './OrderStatusStamp';
+import { isRecordCancelled, fulfillmentStatus } from '@/lib/orderStatus';
 
 interface CourierSectionProps {
   orders: any[];
@@ -29,15 +30,15 @@ export const CourierSection: React.FC<CourierSectionProps> = ({
   const [docketSearch, setDocketSearch] = useState('');
 
   // Filter orders that have an assigned AWB
-  const shippedOrders = orders.filter((o) => Boolean(o.trackingNumber));
+  const shippedOrders = orders.filter((o) => Boolean(o.trackingNumber) && !isRecordCancelled(o));
 
   const activeInTransit = shippedOrders.filter((o) => {
-    const s = String(o.courierStatus || '').toLowerCase();
-    return !s.includes('deliver') && !s.includes('cancel');
+    const s = String(fulfillmentStatus(o) || '').toLowerCase();
+    return !s.includes('deliver');
   });
 
   const deliveredCount = shippedOrders.filter((o) => {
-    const s = String(o.courierStatus || '').toLowerCase();
+    const s = String(fulfillmentStatus(o) || '').toLowerCase();
     return s.includes('deliver') && !s.includes('attempt');
   }).length;
 
@@ -176,7 +177,7 @@ export const CourierSection: React.FC<CourierSectionProps> = ({
                         {o.trackingNumber}
                       </td>
                       <td className="p-3.5">
-                        <OrderStatusStamp status={o.courierStatus || 'DISPATCHED'} />
+                        <OrderStatusStamp status={fulfillmentStatus(o) || 'DISPATCHED'} />
                       </td>
                       <td className="p-3.5 text-right">
                         <a

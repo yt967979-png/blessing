@@ -22,6 +22,7 @@ import { getSTCourierDeliveryEstimate } from '@/lib/deliveryEstimator';
 import { pincodeDeliveryMessage } from '@/lib/pincode';
 import { authHeaders } from '@/lib/clientAuth';
 import { imageNeedsUnoptimized } from '@/lib/productImage';
+import { MIN_BOOKS_PER_ORDER, booksUntilMinOrder, minOrderCheckoutMessage } from '@/lib/deliveryRules';
 
 function applyReviewsPayload(
   data: any,
@@ -52,7 +53,7 @@ function applyReviewsPayload(
 
 export default function ProductDetailClient({ slug }: { slug: string }) {
   const router = useRouter();
-  const { products, productsLoading, addToCart, toggleWishlist, wishlist, user, setIsAuthOpen, setIsCheckoutOpen } = useStore();
+  const { products, productsLoading, addToCart, toggleWishlist, wishlist, user, setIsAuthOpen, setIsCheckoutOpen, cartCount, showToast } = useStore();
   const [dbProduct, setDbProduct] = useState<any>(null);
   const [productFetchDone, setProductFetchDone] = useState(false);
   const [dbReviews, setDbReviews] = useState<any[]>([]);
@@ -82,6 +83,23 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
       }
     : storeProduct;
   const [activeImg, setActiveImg] = useState('');
+  const minOrderMsg = minOrderCheckoutMessage(cartCount);
+
+  const tryBuyNow = () => {
+    if (!product) return;
+    if (!user) {
+      setIsAuthOpen(true);
+      return;
+    }
+    addToCart(product);
+    const need = booksUntilMinOrder(cartCount + 1);
+    if (need > 0) {
+      showToast(`Added to cart. Minimum ${MIN_BOOKS_PER_ORDER} books — add ${need} more to checkout.`);
+      return;
+    }
+    setIsCheckoutOpen(true);
+    router.push('/checkout');
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -572,12 +590,7 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
                   </button>
                   <button
                     type="button"
-                    onClick={() => {
-                      if (!user) { setIsAuthOpen(true); return; }
-                      addToCart(product);
-                      setIsCheckoutOpen(true);
-                      router.push('/checkout');
-                    }}
+                    onClick={tryBuyNow}
                     className="flex-1 bg-gradient-to-r from-amber-400 to-amber-500 text-[#001B3A] font-extrabold text-sm py-3.5 px-4 rounded-xl shadow-md uppercase tracking-wider min-h-12"
                   >
                     BUY NOW
@@ -585,6 +598,11 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
                 </>
               )}
             </div>
+            {minOrderMsg && product.inStock !== false && (
+              <p className="hidden sm:block mt-3 text-[11px] text-amber-800 font-medium bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                {minOrderMsg} Same title can be added multiple times.
+              </p>
+            )}
           </div>
         </div>
 
@@ -820,12 +838,7 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
             </button>
             <button
               type="button"
-              onClick={() => {
-                if (!user) { setIsAuthOpen(true); return; }
-                addToCart(product);
-                setIsCheckoutOpen(true);
-                router.push('/checkout');
-              }}
+              onClick={tryBuyNow}
               className="flex-[1.2] bg-gradient-to-r from-amber-400 to-amber-500 text-[#001B3A] font-extrabold text-[11px] py-3.5 rounded-xl uppercase tracking-wider min-h-12 touch-manipulation shadow-md"
             >
               BUY NOW

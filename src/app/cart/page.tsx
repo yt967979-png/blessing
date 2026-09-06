@@ -23,6 +23,7 @@ import { pincodeDeliveryMessage } from '@/lib/pincode';
 import { getSTCourierDeliveryEstimate } from '@/lib/deliveryEstimator';
 import { imageNeedsUnoptimized } from '@/lib/productImage';
 import { getCartItemStockState, anyCartItemBlocking } from '@/lib/cartStock';
+import { MIN_BOOKS_PER_ORDER, booksUntilMinOrder, minOrderCheckoutMessage } from '@/lib/deliveryRules';
 import { Header } from '@/components/layout/Header';
 import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
 import { Footer } from '@/components/layout/Footer';
@@ -51,6 +52,8 @@ export default function CartPage() {
   const [pincodeMsg, setPincodeMsg] = useState('✓ Deliverable via ST Courier — usually 2–3 days in Tamil Nadu.');
   const [pincodeOk, setPincodeOk] = useState(true);
   const hasBlockingItem = anyCartItemBlocking(cart, products);
+  const booksNeeded = booksUntilMinOrder(cartCount);
+  const minOrderMsg = minOrderCheckoutMessage(cartCount);
 
   // Instant stock re-check the moment a customer opens the cart page.
   useEffect(() => {
@@ -310,7 +313,7 @@ export default function CartPage() {
                         setIsAuthOpen(true);
                         return;
                       }
-                      if (!pincodeOk || hasBlockingItem) {
+                      if (!pincodeOk || hasBlockingItem || booksNeeded > 0) {
                         return;
                       }
                       const clean = await validateCartStock();
@@ -319,11 +322,18 @@ export default function CartPage() {
                       setIsCheckoutOpen(true);
                       router.push('/checkout');
                     }}
-                    disabled={!pincodeOk || hasBlockingItem}
+                    disabled={!pincodeOk || hasBlockingItem || booksNeeded > 0}
                     className="w-full bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 disabled:opacity-50 text-[#001B3A] font-extrabold text-xs py-3.5 rounded-xl shadow-md uppercase tracking-wider transition-colors min-h-12"
                   >
-                    PLACE ORDER
+                    {booksNeeded > 0
+                      ? `Add ${booksNeeded} more book${booksNeeded === 1 ? '' : 's'} (min ${MIN_BOOKS_PER_ORDER})`
+                      : 'PLACE ORDER'}
                   </button>
+                  {minOrderMsg && (
+                    <p className="text-[10px] text-center text-amber-800 font-medium bg-amber-50 border border-amber-200 rounded-lg p-2">
+                      {minOrderMsg}
+                    </p>
+                  )}
                   {!user && (
                     <p className="text-[10px] text-center text-slate-500 font-medium">Sign in with Google to place an order</p>
                   )}

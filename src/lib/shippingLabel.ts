@@ -2,6 +2,8 @@ import { OFFICE_ADDRESS_LINES, OFFICE_COMPANY_NAME } from '@/lib/officeLocation'
 import { generateCode128Svg } from '@/lib/barcode128';
 import { generateQrSvg } from '@/lib/qrCode';
 import { generateTrackingToken } from '@/lib/trackToken';
+import { isRecordCancelled } from '@/lib/orderStatus';
+import { publicSiteOrigin } from '@/lib/publicSiteUrl';
 
 export type ShippingLabelSize = 'thermal4x6' | 'a4' | 'a5';
 
@@ -22,6 +24,8 @@ export interface ShippingLabelOrder {
   courierName?: string;
   createdAt?: string;
   items?: Array<{ title?: string; qty?: number; price?: number; subtotal?: number }>;
+  isCancelled?: boolean;
+  orderStatus?: string;
 }
 
 function esc(s: string): string {
@@ -38,7 +42,7 @@ function esc(s: string): string {
  * Uses pure vector SVG for barcode and QR code (0 network dependencies, zero broken image icons).
  */
 export function generateSingleThermalLabelHtml(o: ShippingLabelOrder, qrSvg: string = ''): string {
-  const isCancelled = String(o.courierStatus || o.paymentStatus || '').toLowerCase().includes('cancel');
+  const isCancelled = isRecordCancelled(o);
   const hasAwb = Boolean(o.trackingNumber && !String(o.trackingNumber).startsWith('SHP-') && !String(o.trackingNumber).includes('Pending'));
   const barcodeText = hasAwb ? String(o.trackingNumber) : String(o.orderId || 'BPG-00000');
   const barcodeSvg = generateCode128Svg(barcodeText, { height: 46, barWidth: 2, showText: true });
@@ -427,7 +431,7 @@ export async function generateShippingLabelsHtml(
   initialSize: ShippingLabelSize = 'thermal4x6'
 ): Promise<string> {
   const orderList = orders && orders.length > 0 ? orders : [];
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://blessingpowerguide.com';
+  const siteUrl = publicSiteOrigin();
 
   const labelsHtmlPromises = orderList.map(async (o) => {
     const trackToken = generateTrackingToken(o.orderId, o.customerPhone || '');

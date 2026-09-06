@@ -31,6 +31,7 @@ import { Header } from '@/components/layout/Header';
 import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
 import { Footer } from '@/components/layout/Footer';
 import { ProfileCouponsSection } from '@/components/profile/ProfileCouponsSection';
+import { isRecordCancelled } from '@/lib/orderStatus';
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -570,7 +571,7 @@ export default function ProfilePage() {
                   <div className="space-y-5">
                     {liveOrders.map((o) => {
                       const rawStatus = o.courierStatus || o.status || 'Confirmed';
-                      const cancelled = String(rawStatus).toLowerCase().includes('cancel');
+                      const cancelled = isRecordCancelled(o);
                       const currentStatus = String(rawStatus).toLowerCase().includes('awaiting')
                         ? 'Confirmed'
                         : rawStatus;

@@ -1,6 +1,8 @@
 import { formatGstinLine, getShopInvoiceAddress, getShopLegalName } from '@/lib/shopConfig';
 import { OFFICE_ADDRESS_LINES, OFFICE_COMPANY_NAME } from '@/lib/officeLocation';
 import { generateQrSvg } from '@/lib/qrCode';
+import { isOrderCancelled } from '@/lib/orderStatus';
+import { publicSiteOrigin } from '@/lib/publicSiteUrl';
 
 export function getFinancialYearString(date: Date = new Date()): string {
   const month = date.getMonth(); // 0 = Jan, 3 = Apr
@@ -109,14 +111,14 @@ export async function generateTaxInvoiceHtml(orderData: InvoiceData): Promise<st
     ? orderData.items
     : [{ title: 'Educational Guide Book', qty: 1, price: orderData.totalAmount, hsn: '4901' }];
 
-  const cancelled = String(orderData.orderStatus || orderData.courierStatus || '').toLowerCase().includes('cancel');
+  const cancelled = isOrderCancelled(orderData.orderStatus || orderData.courierStatus);
   const totalAmount = Number(orderData.totalAmount || 0);
   const wordsAmount = numberToIndianRupeesWords(totalAmount);
   const gstinLine = formatGstinLine();
   const legalName = getShopLegalName();
   const addressLine = getShopInvoiceAddress();
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://blessingpowerguide.com';
+  const siteUrl = publicSiteOrigin();
   const cleanPhone = (orderData.customerPhone || '').replace(/\D/g, '').slice(-10);
   const trackTargetUrl = `${siteUrl}/track?orderId=${encodeURIComponent(orderData.orderId)}${cleanPhone ? `&phone=${encodeURIComponent(cleanPhone)}` : ''}`;
   const qrSvg = await generateQrSvg(trackTargetUrl, { size: 140, margin: 1 });

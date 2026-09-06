@@ -8,6 +8,49 @@ export function isOrderCancelled(status: string | null | undefined): boolean {
   return String(status || '').toLowerCase().includes('cancel');
 }
 
+/** Mapped order rows from GET /api/orders (admin + customer). */
+export type OrderStatusLike = {
+  isCancelled?: boolean;
+  order_status?: string | null;
+  orderStatus?: string | null;
+  status?: string | null;
+  courierStatus?: string | null;
+  paymentStatus?: string | null;
+};
+
+/** True if any status field (or API flag) says the order is cancelled. */
+export function isRecordCancelled(order: OrderStatusLike | null | undefined): boolean {
+  if (!order) return false;
+  if (order.isCancelled === true) return true;
+  return (
+    isOrderCancelled(order.order_status) ||
+    isOrderCancelled(order.orderStatus) ||
+    isOrderCancelled(order.status) ||
+    isOrderCancelled(order.courierStatus) ||
+    isOrderCancelled(order.paymentStatus)
+  );
+}
+
+/** Label for packing stamps — cancelled wins over courier/payment lag. */
+export function fulfillmentStatus(order: OrderStatusLike | null | undefined): string {
+  if (!order) return '';
+  if (isRecordCancelled(order)) {
+    const labelled = [
+      order.order_status,
+      order.orderStatus,
+      order.status,
+      order.courierStatus,
+      order.paymentStatus,
+    ]
+      .map((s) => String(s || ''))
+      .find((s) => isOrderCancelled(s));
+    return labelled || 'Cancelled';
+  }
+  return String(
+    order.courierStatus || order.status || order.orderStatus || order.order_status || ''
+  );
+}
+
 export function isAwaitingConfirmation(status: string | null | undefined): boolean {
   const s = String(status || '').toLowerCase();
   return s.includes('awaiting confirmation') || s.includes('awaiting_confirmation') || s.includes('awaiting');

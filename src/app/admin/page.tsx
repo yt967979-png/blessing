@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef, Suspense } from 'react';
 import dynamic from 'next/dynamic';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Package, ShoppingCart, Users, ArrowLeft, Edit2, Check,
   Plus, Trash2, Truck, Send, ShieldCheck,
@@ -16,7 +16,8 @@ import { authHeaders } from '@/lib/clientAuth';
 import { BrandLogo } from '@/components/ui/BrandLogo';
 import AdminUsersTab from '@/components/admin/AdminUsersTab';
 import AdminReviewsTab from '@/components/admin/AdminReviewsTab';
-import AdminSidebar, { AdminTab } from '@/components/admin/AdminSidebar';
+import AdminSidebar, { AdminTab, ADMIN_TAB_KEYS } from '@/components/admin/AdminSidebar';
+import { isRecordCancelled } from '@/lib/orderStatus';
 import AdminHeader from '@/components/admin/AdminHeader';
 import OverviewSection from '@/components/admin/OverviewSection';
 import OrdersSection from '@/components/admin/OrdersSection';
@@ -34,6 +35,12 @@ interface Order {
   paymentMethod: string; paymentStatus: string; courierStatus: string;
   trackingNumber: string; shipmentId: string; isOfficialAwb: boolean;
   trackingUrl: string; courierName: string; items: OrderItem[]; createdAt: string;
+  isCancelled?: boolean; orderStatus?: string;
+}
+
+function parseAdminTab(raw: string | null): AdminTab {
+  if (raw && (ADMIN_TAB_KEYS as string[]).includes(raw)) return raw as AdminTab;
+  return 'overview';
 }
 interface AnalyticsSummary {
   totalOrders: number; totalRevenue: number; avgOrderValue: number;
@@ -122,8 +129,9 @@ function playAdminNewOrderBeep() {
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
-export default function AdminPage() {
+function AdminPageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const {
     user,
     setIsAuthOpen,
@@ -137,7 +145,26 @@ export default function AdminPage() {
   } = useStore();
   const products = storeProducts || [];
 
-  const [activeTab, setActiveTab] = useState<AdminTab>('overview');
+  const [activeTab, setActiveTabState] = useState<AdminTab>(() =>
+    parseAdminTab(searchParams.get('tab'))
+  );
+
+  useEffect(() => {
+    const fromUrl = parseAdminTab(searchParams.get('tab'));
+    setActiveTabState((cur) => (cur === fromUrl ? cur : fromUrl));
+  }, [searchParams]);
+
+  const setActiveTab = useCallback(
+    (tab: AdminTab) => {
+      setActiveTabState(tab);
+      const params = new URLSearchParams(searchParams.toString());
+      if (tab === 'overview') params.delete('tab');
+      else params.set('tab', tab);
+      const q = params.toString();
+      router.replace(q ? `/admin?${q}` : '/admin', { scroll: false });
+    },
+    [router, searchParams]
+  );
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
 
@@ -477,8 +504,9 @@ export default function AdminPage() {
   // Pending count for sidebar badge
   const pendingCount = useMemo(() => {
     return orders.filter((o) => {
-      const s = String(o.courierStatus || o.paymentStatus || '').toLowerCase();
-      return !s.includes('pack') && !s.includes('transit') && !s.includes('deliver') && !s.includes('cancel');
+      if (isRecordCancelled(o)) return false;
+      const s = String(o.courierStatus || o.orderStatus || '').toLowerCase();
+      return !s.includes('pack') && !s.includes('transit') && !s.includes('deliver');
     }).length;
   }, [orders]);
 
@@ -794,5 +822,13 @@ export default function AdminPage() {
         </main>
       </div>
     </div>
+  );
+}
+
+export default function AdminPage() {
+  return (
+    <Suspense fallback={null}>
+      <AdminPageInner />
+    </Suspense>
   );
 }

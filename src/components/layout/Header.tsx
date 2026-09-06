@@ -10,6 +10,7 @@ import { BrandLogo } from '@/components/ui/BrandLogo';
 import { imageNeedsUnoptimized } from '@/lib/productImage';
 import { useCartBadgeBump } from '@/hooks/useCartBadgeBump';
 import { authHeaders } from '@/lib/clientAuth';
+import { isAdminShopPreview } from '@/lib/adminShopPreview';
 
 export const Header = () => {
   const router = useRouter();
@@ -28,6 +29,8 @@ export const Header = () => {
   const [showSearchDropdown, setShowSearchDropdown] = useState(false);
   const [localQuery, setLocalQuery] = useState(searchQuery);
   const cartBump = useCartBadgeBump(cartCount);
+  const staffPreview =
+    Boolean(user && (user.role === 'admin' || user.role === 'super_admin') && isAdminShopPreview());
 
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
   const [notificationsList, setNotificationsList] = useState<any[]>([]);
@@ -166,6 +169,17 @@ export const Header = () => {
   );
 
   return (
+    <>
+      {staffPreview && (
+        <div className="bg-[#0a192f] text-white text-[11px] sm:text-xs px-3 sm:px-4 py-2 flex items-center justify-between gap-3">
+          <span className="font-medium">
+            Viewing shop as a customer. Your admin session stays signed in.
+          </span>
+          <Link href="/admin" className="font-bold underline shrink-0">
+            Back to admin
+          </Link>
+        </div>
+      )}
     <header className="sticky top-0 z-40 bg-white border-b border-slate-200 shadow-sm mobile-no-blur md:bg-white/95 md:backdrop-blur-md">
       <div className="max-w-7xl mx-auto px-3 sm:px-4 py-2 sm:py-3 flex items-center justify-between gap-2 sm:gap-6">
         <Link
@@ -394,5 +408,6 @@ export const Header = () => {
         </div>
       </div>
     </header>
+    </>
   );
 };

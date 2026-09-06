@@ -28,7 +28,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { downloadTaxInvoice } from '@/lib/invoiceGenerator';
-import { customerRefundStage, isOrderCancelled } from '@/lib/orderStatus';
+import { customerRefundStage, isOrderCancelled, isRecordCancelled } from '@/lib/orderStatus';
 import { getSTCourierDeliveryEstimate } from '@/lib/deliveryEstimator';
 import { imageNeedsUnoptimized } from '@/lib/productImage';
 import { shopWhatsAppChatUrl } from '@/lib/shopContact';
@@ -332,7 +332,7 @@ function OrdersContent() {
 
   const currentStepIdx = searchedOrderData ? getCurrentStepIndex(searchedOrderData.courierStatus || searchedOrderData.status) : 0;
   const orderIsCancelled = searchedOrderData
-    ? isOrderCancelled(searchedOrderData.courierStatus || searchedOrderData.status || '')
+    ? isRecordCancelled(searchedOrderData)
     : false;
   const isOfficialAwb = searchedOrderData?.trackingNumber && (searchedOrderData.trackingNumber.startsWith('STC') || !searchedOrderData.trackingNumber.startsWith('SHP-'));
   const progressPercent = orderIsCancelled
@@ -985,7 +985,7 @@ function OrdersContent() {
               </div>
             ) : null}
             {filteredOrders.map((ord: any) => {
-              const listCancelled = isOrderCancelled(ord.courierStatus || ord.status || '');
+              const listCancelled = isRecordCancelled(ord);
               const listOfficialAwb =
                 ord.trackingNumber &&
                 (String(ord.trackingNumber).startsWith('STC') ||

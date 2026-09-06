@@ -2,6 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
+import { enableAdminShopPreview } from '@/lib/adminShopPreview';
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -28,6 +29,18 @@ export type AdminTab =
   | 'reviews'
   | 'analytics'
   | 'health';
+
+export const ADMIN_TAB_KEYS: AdminTab[] = [
+  'overview',
+  'orders',
+  'courier',
+  'catalog',
+  'coupons',
+  'users',
+  'reviews',
+  'analytics',
+  'health',
+];
 
 interface AdminSidebarProps {
   activeTab: AdminTab;
@@ -132,7 +145,11 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
       >
         {/* Official Brand Header */}
         <div className="p-4 border-b border-slate-800/80 bg-[#061121] flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2.5 group">
+          <Link
+            href="/?preview=1"
+            onClick={() => enableAdminShopPreview()}
+            className="flex items-center gap-2.5 group"
+          >
             <BrandLogo size={36} className="shadow-md group-hover:scale-105 transition-transform" />
             <div>
               <span className="font-bold text-sm text-white tracking-tight block leading-tight">
@@ -144,9 +161,10 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
             </div>
           </Link>
           <Link
-            href="/"
+            href="/?preview=1"
+            onClick={() => enableAdminShopPreview()}
             className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
-            title="View Live Storefront"
+            title="View shop as customer"
           >
             <ExternalLink className="w-4 h-4" />
           </Link>
