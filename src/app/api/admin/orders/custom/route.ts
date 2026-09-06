@@ -4,6 +4,12 @@ import { verifyAdminRequest, forbiddenResponse, unauthorizedResponse } from '@/l
 import { generateTrackingToken } from '@/lib/trackToken';
 import { generateNextGstInvoiceNumber } from '@/lib/invoiceGenerator';
 import { priceCartItems } from '@/lib/orderPricing';
+import {
+  MIN_BOOKS_PER_ORDER,
+  deliveryFeeForQty,
+  FREE_DELIVERY_AT_QTY,
+} from '@/lib/deliveryRules';
+import { publicSiteOrigin } from '@/lib/publicSiteUrl';
 
 export async function POST(request: Request) {
   const auth = await verifyAdminRequest(request);
@@ -55,7 +61,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Delivery address and pincode are required.' }, { status: 400 });
     }
     if (!Array.isArray(items) || items.length === 0) {
-      return NextResponse.json({ error: 'Please select at least 1 guidebook for this order.' }, { status: 400 });
+      return NextResponse.json({ error: 'Please select guidebooks for this order.' }, { status: 400 });
     }
 
     const priced = await priceCartItems(client, items);
@@ -63,6 +69,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: priced.error }, { status: priced.status });
     }
     const { total: calculatedSubtotal, verifiedItems } = priced;
+    const bookQty = verifiedItems.reduce((s, i) => s + Number(i.qty || 0), 0);
+    if (bookQty < MIN_BOOKS_PER_ORDER) {
+      return NextResponse.json(
+        {
+          error: `Minimum ${MIN_BOOKS_PER_ORDER} books required (same as website checkout). Current: ${bookQty}.`,
+        },
+        { status: 400 }
+      );
+    }
+    const shippingFee = deliveryFeeForQty(bookQty);
+    const totalAmount = calculatedSubtotal + shippingFee;
 
     const randomSuffix = Math.random().toString(36).substring(2, 8).toUpperCase();
     const orderNumber = `BPG-WA-${randomSuffix}`;
@@ -81,6 +98,8 @@ export async function POST(request: Request) {
       pincode: String(pincode).trim(),
       source: 'whatsapp_custom_order',
       adminNotes: String(adminNotes || '').trim() || null,
+      shippingFee,
+      bookQty,
     });
 
     await client.query('BEGIN');
@@ -102,7 +121,7 @@ export async function POST(request: Request) {
         orderNumber,
         `wa_${cleanPhone}`,
         calculatedSubtotal,
-        calculatedSubtotal,
+        totalAmount,
         payMethod,
         paymentStatus,
         orderStatus,
@@ -139,16 +158,56 @@ export async function POST(request: Request) {
     await client.query(
       `INSERT INTO order_timeline (id, order_id, status, remarks, hub_city, created_at)
        VALUES ($1, $2, 'Order Confirmed', 'Custom WhatsApp order registered and confirmed by Store Admin.', $3, NOW())`,
-      [eventId, id, String(city || 'Arani')]
+      [eventId, id, String(city || 'Tamil Nadu').trim()],
     );
 
     await client.query('COMMIT');
 
     const token = generateTrackingToken(orderNumber, cleanPhone);
-    const appOrigin = process.env.NEXT_PUBLIC_APP_URL || 'https://blessingpowerguide.com';
+    const appOrigin = publicSiteOrigin();
     const trackingUrl = `${appOrigin}/track?orderId=${encodeURIComponent(orderNumber)}&phone=${cleanPhone}&t=${token}`;
-    const itemsSummary = verifiedItems.map((it: any) => `• ${it.title} (x${it.qty || 1})`).join('\n');
-    const whatsappMessage = `வணக்கம் ${cleanName}! 📚\n\nThank you for ordering with *Blessing Power Guide*!\n\n*Order ID:* #${orderNumber}\n*Amount:* ₹${calculatedSubtotal} (${payMethod})\n*Status:* ${paymentStatus}\n\n*Ordered Books:*\n${itemsSummary}\n\n*Delivery Address:*\n${address}, ${landmark ? `Near ${landmark}, ` : ''}${city} - ${pincode}\n\n🚚 *Track your parcel live here:*\n${trackingUrl}\n\nWe will dispatch your order shortly via ST Courier Express! ✨`;
+    const itemsSummary = verifiedItems.map((it: any) => `• ${it.title} (Qty: ${it.qty || 1})`).join('\n');
+    const deliveryCity = String(city || '').trim();
+    const deliveryLine = [
+      String(address || '').trim(),
+      landmark ? String(landmark).trim() : '',
+      deliveryCity,
+      pincode ? `PIN ${pincode}` : '',
+      'Tamil Nadu',
+    ]
+      .filter(Boolean)
+      .join(', ');
+    const deliveryChargeLine =
+      shippingFee === 0
+        ? `Delivery: FREE (${FREE_DELIVERY_AT_QTY}+ books)`
+        : `Delivery: ₹${shippingFee} (FREE from ${FREE_DELIVERY_AT_QTY} books)`;
+    const whatsappMessage = [
+      `Dear ${cleanName},`,
+      '',
+      'Thank you for your order with Blessing Power Guide.',
+      '',
+      `Order ID: ${orderNumber}`,
+      `Books: ${bookQty} (minimum ${MIN_BOOKS_PER_ORDER})`,
+      `Subtotal: ₹${calculatedSubtotal}`,
+      deliveryChargeLine,
+      `Amount payable: ₹${totalAmount}`,
+      `Payment: ${payMethod}`,
+      `Status: ${paymentStatus}`,
+      '',
+      'Items:',
+      itemsSummary,
+      '',
+      'Delivery address:',
+      deliveryLine,
+      '',
+      'Track your order:',
+      trackingUrl,
+      '',
+      'Your order will be dispatched via ST Courier Express.',
+      '',
+      'Blessing Power Guide',
+      'Tamil Nadu State Board guides (Classes 6–12)',
+    ].join('\n');
     const whatsappUrl = `https://wa.me/91${cleanPhone}?text=${encodeURIComponent(whatsappMessage)}`;
 
     try {
@@ -166,7 +225,7 @@ export async function POST(request: Request) {
       orderNumber,
       orderId: id,
       invoiceNumber,
-      totalAmount: calculatedSubtotal,
+      totalAmount,
       trackingUrl,
       whatsappUrl,
       whatsappMessage,

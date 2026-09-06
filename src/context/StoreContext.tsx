@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { userNeedsProfile } from '@/lib/userProfile';
+import { deliveryFeeForQty } from '@/lib/deliveryRules';
 
 export interface Product {
   id: string | number;
@@ -966,8 +967,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const cartTotal = cart.reduce((acc, item) => acc + item.price * item.qty, 0);
   const cartCount = cart.reduce((acc, item) => acc + item.qty, 0);
-  // Free shipping for 5+ books, ₹150 for <5 books
-  const shippingFee = cartCount >= 5 ? 0 : (cartCount > 0 ? 150 : 0);
+  const shippingFee = deliveryFeeForQty(cartCount);
   const [checkoutTotal, setCheckoutTotal] = useState(0);
   const cartGrandTotal = cartCount > 0 ? cartTotal + shippingFee : 0;
 

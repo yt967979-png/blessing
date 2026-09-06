@@ -1,5 +1,8 @@
 import { priceCartItems } from '@/lib/orderPricing';
 import { validateCouponForCart, type AppliedCoupon } from '@/lib/coupons';
+import { MIN_BOOKS_PER_ORDER, deliveryFeeForQty } from '@/lib/deliveryRules';
+
+export { MIN_BOOKS_PER_ORDER, FREE_DELIVERY_AT_QTY, STANDARD_DELIVERY_FEE, deliveryFeeForQty } from '@/lib/deliveryRules';
 
 export type CheckoutPricingResult =
   | {
@@ -28,15 +31,15 @@ export async function priceCheckoutOrder(
   const { total: calculatedSubtotal, verifiedItems } = priced;
 
   const cartQty = verifiedItems.reduce((s, i) => s + Number(i.qty || 0), 0);
-  if (cartQty < 4) {
+  if (cartQty < MIN_BOOKS_PER_ORDER) {
     return {
       ok: false,
-      error: `Minimum order quantity is 4 books. You currently have ${cartQty} book(s) in your cart.`,
+      error: `Minimum order quantity is ${MIN_BOOKS_PER_ORDER} books. You currently have ${cartQty} book(s) in your cart.`,
       status: 400,
     };
   }
 
-  const shippingFee = cartQty >= 5 ? 0 : 150;
+  const shippingFee = deliveryFeeForQty(cartQty);
   let discountAmount = 0;
   let appliedCoupon: AppliedCoupon | null = null;
 

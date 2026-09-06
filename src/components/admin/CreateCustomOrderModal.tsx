@@ -23,6 +23,7 @@ import {
 import type { Product } from '@/context/StoreContext';
 import { authHeaders } from '@/lib/clientAuth';
 import { useStore } from '@/context/StoreContext';
+import { MIN_BOOKS_PER_ORDER, FREE_DELIVERY_AT_QTY, deliveryFeeForQty } from '@/lib/deliveryRules';
 
 interface CreateCustomOrderModalProps {
   isOpen: boolean;
@@ -47,7 +48,7 @@ export const CreateCustomOrderModal: React.FC<CreateCustomOrderModalProps> = ({
   const [customerAltPhone, setCustomerAltPhone] = useState('');
   const [address, setAddress] = useState('');
   const [landmark, setLandmark] = useState('');
-  const [city, setCity] = useState('Arani');
+  const [city, setCity] = useState('');
   const [pincode, setPincode] = useState('');
   const [state, setState] = useState('Tamil Nadu');
   const [paymentMethod, setPaymentMethod] = useState('WhatsApp UPI (GPay / PhonePe / Paytm)');
@@ -100,7 +101,10 @@ export const CreateCustomOrderModal: React.FC<CreateCustomOrderModalProps> = ({
     );
   };
 
-  const calculatedTotal = selectedItems.reduce((sum, it) => sum + it.price * it.qty, 0);
+  const bookQty = selectedItems.reduce((sum, it) => sum + it.qty, 0);
+  const booksSubtotal = selectedItems.reduce((sum, it) => sum + it.price * it.qty, 0);
+  const shippingFee = deliveryFeeForQty(bookQty);
+  const calculatedTotal = booksSubtotal + shippingFee;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -118,8 +122,8 @@ export const CreateCustomOrderModal: React.FC<CreateCustomOrderModalProps> = ({
       onShowToast('Please provide delivery address and pincode');
       return;
     }
-    if (selectedItems.length === 0) {
-      onShowToast('Please select at least 1 guidebook');
+    if (bookQty < MIN_BOOKS_PER_ORDER) {
+      onShowToast(`Minimum ${MIN_BOOKS_PER_ORDER} books required. Add ${MIN_BOOKS_PER_ORDER - bookQty} more.`);
       return;
     }
 
@@ -183,6 +187,7 @@ export const CreateCustomOrderModal: React.FC<CreateCustomOrderModalProps> = ({
     setCustomerAltPhone('');
     setAddress('');
     setLandmark('');
+    setCity('');
     setPincode('');
     setSelectedItems([]);
     setAdminNotes('');
@@ -203,7 +208,9 @@ export const CreateCustomOrderModal: React.FC<CreateCustomOrderModalProps> = ({
                 {createdOrderResult ? 'Order Created Successfully!' : 'Create Custom / WhatsApp Order'}
               </h2>
               <p className="text-[11px] text-amber-300 font-medium">
-                {createdOrderResult ? 'Dispatch live tracking directly to the customer' : 'Take orders via WhatsApp or phone and issue live tracking'}
+                {createdOrderResult
+                  ? 'Send the order confirmation and tracking link to the customer'
+                  : 'Record a phone or WhatsApp order and issue tracking'}
               </p>
             </div>
           </div>
@@ -240,7 +247,7 @@ export const CreateCustomOrderModal: React.FC<CreateCustomOrderModalProps> = ({
                 <span>Customer Notification Dispatch</span>
               </div>
               <p className="text-xs text-emerald-800 leading-relaxed">
-                Click below to instantly open WhatsApp and send the customer their official live tracking link and order confirmation text.
+                Opens WhatsApp with a professional order confirmation and tracking link for this customer.
               </p>
               <div className="flex flex-col sm:flex-row gap-2 pt-1">
                 <a
@@ -340,7 +347,7 @@ export const CreateCustomOrderModal: React.FC<CreateCustomOrderModalProps> = ({
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Arani / Chennai / Madurai"
+                    placeholder="e.g. Chennai, Coimbatore, Madurai"
                     value={city}
                     onChange={(e) => setCity(e.target.value)}
                     className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-600 font-medium"
@@ -471,9 +478,31 @@ export const CreateCustomOrderModal: React.FC<CreateCustomOrderModalProps> = ({
                     </div>
                   ))}
 
-                  <div className="flex justify-between items-center p-3 bg-blue-50 border border-blue-200 rounded-xl">
-                    <span className="font-bold text-blue-950">Calculated Order Total:</span>
-                    <span className="font-black text-base text-[#001B3A]">₹{calculatedTotal}</span>
+                  <div className="space-y-1.5 p-3 bg-blue-50 border border-blue-200 rounded-xl">
+                    <div className="flex justify-between text-blue-950">
+                      <span>Books ({bookQty})</span>
+                      <span className="font-bold">₹{booksSubtotal}</span>
+                    </div>
+                    <div className="flex justify-between text-blue-950">
+                      <span>
+                        Delivery
+                        {shippingFee === 0
+                          ? ` (FREE at ${FREE_DELIVERY_AT_QTY}+ books)`
+                          : ` (FREE from ${FREE_DELIVERY_AT_QTY} books)`}
+                      </span>
+                      <span className={`font-bold ${shippingFee === 0 ? 'text-emerald-700' : ''}`}>
+                        {shippingFee === 0 ? 'FREE' : `₹${shippingFee}`}
+                      </span>
+                    </div>
+                    {bookQty < MIN_BOOKS_PER_ORDER ? (
+                      <p className="text-[11px] font-semibold text-amber-800">
+                        Minimum {MIN_BOOKS_PER_ORDER} books. Add {MIN_BOOKS_PER_ORDER - bookQty} more.
+                      </p>
+                    ) : null}
+                    <div className="flex justify-between items-center pt-1 border-t border-blue-200">
+                      <span className="font-bold text-blue-950">Amount payable</span>
+                      <span className="font-black text-base text-[#001B3A]">₹{calculatedTotal}</span>
+                    </div>
                   </div>
                 </div>
               )}
@@ -536,7 +565,7 @@ export const CreateCustomOrderModal: React.FC<CreateCustomOrderModalProps> = ({
               </button>
               <button
                 type="submit"
-                disabled={loading || selectedItems.length === 0}
+                disabled={loading || bookQty < MIN_BOOKS_PER_ORDER}
                 className="px-6 py-2.5 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 disabled:opacity-50 text-white font-extrabold rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer"
               >
                 {loading ? (
