@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { Copy, Check, Gift, TicketPercent, ShoppingBag } from 'lucide-react';
 import { authHeaders } from '@/lib/clientAuth';
 import type { UserData } from '@/context/StoreContext';
 import type { CustomerCouponOffer } from '@/lib/coupons';
+import { useCouponCatalogSync } from '@/hooks/useCouponCatalogSync';
 
 function discountLabel(c: CustomerCouponOffer) {
   if (c.discountType === 'flat') return `₹${c.discountValue} off`;
@@ -23,29 +24,27 @@ export function ProfileCouponsSection({
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState('');
 
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      setLoading(true);
-      try {
-        const res = await fetch('/api/coupons/available', {
-          credentials: 'include',
-          headers: authHeaders(user),
-          cache: 'no-store',
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!cancelled && Array.isArray(data.coupons)) setCoupons(data.coupons);
-      } catch {
-        if (!cancelled) setCoupons([]);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-    void load();
-    return () => {
-      cancelled = true;
-    };
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch('/api/coupons/available', {
+        credentials: 'include',
+        headers: authHeaders(user),
+        cache: 'no-store',
+      });
+      const data = await res.json().catch(() => ({}));
+      if (Array.isArray(data.coupons)) setCoupons(data.coupons);
+    } catch {
+      setCoupons([]);
+    } finally {
+      setLoading(false);
+    }
   }, [user?.id]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  useCouponCatalogSync(load);
 
   const copyCode = async (code: string) => {
     try {

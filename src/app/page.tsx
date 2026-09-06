@@ -14,6 +14,7 @@ import { TrustBar } from '@/components/home/TrustBar';
 import { Footer } from '@/components/layout/Footer';
 import { ContactSection } from '@/components/home/ContactSection';
 import { PromoSection } from '@/components/home/PromoSection';
+import { HomeCouponsSection } from '@/components/home/HomeCouponsSection';
 
 export default function Home() {
   const router = useRouter();
@@ -94,6 +95,7 @@ export default function Home() {
       <ClassPicker />
       <ProductGrid />
       <PromoSection />
+      <HomeCouponsSection />
       <WhyChoose />
       <ContactSection />
       <FAQSection />

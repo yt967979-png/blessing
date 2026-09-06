@@ -116,8 +116,25 @@ export async function notifyCatalogChanged(
     } finally {
       releaseDbClient(client);
     }
-  } catch (err: any) {
+    } catch (err: any) {
     console.error('[catalog-notify] failed:', err?.message || err);
+  }
+}
+
+/** Shop home / hero / profile refetch coupon cards after admin create/edit/delete. */
+export async function notifyCouponsChanged(): Promise<void> {
+  try {
+    const payload = { type: 'COUPONS_CHANGED', timestamp: Date.now() };
+    broadcastStockChange(payload);
+    const client = await getDbClient();
+    if (!client) return;
+    try {
+      await client.query(`SELECT pg_notify('stock_changed', $1)`, [JSON.stringify(payload)]);
+    } finally {
+      releaseDbClient(client);
+    }
+  } catch (err: any) {
+    console.error('[coupon-notify] failed:', err?.message || err);
   }
 }
 

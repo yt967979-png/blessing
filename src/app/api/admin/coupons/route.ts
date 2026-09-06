@@ -118,6 +118,10 @@ export async function POST(request: Request) {
     );
 
     const row = result?.rows?.[0];
+    try {
+      const { notifyCouponsChanged } = await import('@/app/api/stock/stream/route');
+      void notifyCouponsChanged();
+    } catch (_) {}
     return NextResponse.json({
       success: true,
       coupon: mapAdminCoupon(row),
@@ -173,6 +177,10 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: 'Coupon not found.' }, { status: 404 });
     }
 
+    try {
+      const { notifyCouponsChanged } = await import('@/app/api/stock/stream/route');
+      void notifyCouponsChanged();
+    } catch (_) {}
     return NextResponse.json({ success: true, coupon: mapAdminCoupon(result.rows[0]) });
   } catch (error: any) {
     console.error('[admin/coupons] PATCH error:', error);
@@ -201,6 +209,10 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'Coupon not found.' }, { status: 404 });
     }
 
+    try {
+      const { notifyCouponsChanged } = await import('@/app/api/stock/stream/route');
+      void notifyCouponsChanged();
+    } catch (_) {}
     return NextResponse.json({ success: true, deletedId: id });
   } catch (error: any) {
     console.error('[admin/coupons] DELETE error:', error);

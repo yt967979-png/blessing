@@ -401,6 +401,10 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       es.onmessage = (evt) => {
         try {
           const data = JSON.parse(evt.data);
+          if (data?.type === 'COUPONS_CHANGED') {
+            window.dispatchEvent(new Event('bpg:coupons-changed'));
+            return;
+          }
           if (data?.type === 'CATALOG_CHANGED') {
             // Admin added/edited/deleted a book — soft-refresh full catalog
             refreshProducts(true);

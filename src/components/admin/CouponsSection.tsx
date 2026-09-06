@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { authHeaders } from '@/lib/clientAuth';
 import { useStore } from '@/context/StoreContext';
+import { useCouponCatalogSync } from '@/hooks/useCouponCatalogSync';
 
 interface Coupon {
   id: string;
@@ -64,8 +65,8 @@ export default function CouponsSection() {
   const [formTitle, setFormTitle] = useState('');
   const [formShowOnHero, setFormShowOnHero] = useState(true);
 
-  const fetchCoupons = useCallback(async () => {
-    setLoading(true);
+  const fetchCoupons = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const res = await fetch('/api/admin/coupons', {
         headers: authHeaders(user),
@@ -77,13 +78,17 @@ export default function CouponsSection() {
     } catch (err) {
       console.error('Failed to load coupons:', err);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [user]);
 
   useEffect(() => {
     fetchCoupons();
   }, [fetchCoupons]);
+
+  useCouponCatalogSync(() => {
+    void fetchCoupons(true);
+  });
 
   useEffect(() => {
     if (!isModalOpen) return;
@@ -259,7 +264,7 @@ export default function CouponsSection() {
 
       <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
           <button
-            onClick={fetchCoupons}
+            onClick={() => void fetchCoupons()}
             className="p-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 transition-colors shadow-sm min-h-11 min-w-11"
             title="Refresh coupons"
           >

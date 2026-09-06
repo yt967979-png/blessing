@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import {
@@ -16,6 +16,7 @@ import {
 import { useStore, Product } from '@/context/StoreContext';
 import { BrandLogo } from '@/components/ui/BrandLogo';
 import { imageNeedsUnoptimized } from '@/lib/productImage';
+import { useCouponCatalogSync } from '@/hooks/useCouponCatalogSync';
 
 function pickHeroBook(products: Product[]): Product | null {
   const withCover = products.filter((p) => String(p.image || '').trim());
@@ -96,25 +97,21 @@ export const HeroSection = () => {
     };
   }, [heroBook?.id, heroBook?.image]);
 
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      try {
-        const res = await fetch('/api/coupons/hero', { cache: 'no-store' });
-        const data = await res.json().catch(() => ({}));
-        const title = String(data.offer?.title || '').trim();
-        if (!cancelled) setHeroTitle(title);
-      } catch {
-        if (!cancelled) setHeroTitle('');
-      }
-    };
-    void load();
-    const t = window.setInterval(load, 30_000);
-    return () => {
-      cancelled = true;
-      clearInterval(t);
-    };
+  const loadHeroOffer = useCallback(async () => {
+    try {
+      const res = await fetch('/api/coupons/hero', { cache: 'no-store' });
+      const data = await res.json().catch(() => ({}));
+      setHeroTitle(String(data.offer?.title || '').trim());
+    } catch {
+      setHeroTitle('');
+    }
   }, []);
+
+  useEffect(() => {
+    void loadHeroOffer();
+  }, [loadHeroOffer]);
+
+  useCouponCatalogSync(loadHeroOffer);
 
   const scrollToProducts = () => {
     document.getElementById('products')?.scrollIntoView({ behavior: 'smooth' });
