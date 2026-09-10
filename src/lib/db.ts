@@ -1185,9 +1185,6 @@ async function runSchemaInit(client: any) {
         ALTER TABLE coupons ADD COLUMN IF NOT EXISTS title VARCHAR(255);
         ALTER TABLE coupons ALTER COLUMN title TYPE VARCHAR(255);
         ALTER TABLE coupons ADD COLUMN IF NOT EXISTS show_on_hero BOOLEAN DEFAULT FALSE;
-        -- No hardcoded shop codes — only admin-created coupons
-        UPDATE coupons SET is_active = FALSE, show_on_hero = FALSE
-         WHERE id IN ('cpn-blessing10', 'cpn-student50', 'cpn-exampass');
 
         CREATE TABLE IF NOT EXISTS coupon_redemptions (
           id VARCHAR(255) PRIMARY KEY,

@@ -416,8 +416,7 @@ async function migrateDatabase(connStr, dbName) {
 
       ALTER TABLE orders ADD COLUMN IF NOT EXISTS coupon_code VARCHAR(50);
       ALTER TABLE orders ADD COLUMN IF NOT EXISTS coupon_id VARCHAR(255);
-      DROP TABLE IF EXISTS coupon_redemptions CASCADE;
-      DROP TABLE IF EXISTS coupons CASCADE;
+      -- Coupons persist across builds. Do not DROP coupons / coupon_redemptions here.
 
       CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders (user_id);
       CREATE INDEX IF NOT EXISTS idx_orders_status ON orders (order_status);
