@@ -20,7 +20,7 @@ import {
   Tag,
 } from 'lucide-react';
 import { AdminTab } from './AdminSidebar';
-import { isRecordCancelled, fulfillmentStatus } from '@/lib/orderStatus';
+import { adminFulfillmentBucket } from '@/lib/orderStatus';
 
 export interface StockHoldItem {
   id: string;
@@ -70,24 +70,9 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
   const monthRevenue = summary.monthRevenue || summary.totalRevenue || 0;
   const monthOrders = summary.monthOrders || summary.totalOrders || 0;
 
-  // Unfulfilled orders needing packing
-  const pendingOrders = orders.filter((o) => {
-    if (isRecordCancelled(o)) return false;
-    const s = String(fulfillmentStatus(o) || o.courierStatus || o.order_status || '').toLowerCase();
-    return (
-      (s.includes('confirm') || s.includes('placed') || s.includes('paid')) &&
-      !s.includes('pack') &&
-      !s.includes('handed') &&
-      !s.includes('transit') &&
-      !s.includes('deliver')
-    );
-  });
-
-  const inTransitOrders = orders.filter((o) => {
-    if (isRecordCancelled(o)) return false;
-    const s = String(fulfillmentStatus(o) || o.courierStatus || o.order_status || '').toLowerCase();
-    return s.includes('transit') || s.includes('handed') || s.includes('out');
-  });
+  // Unfulfilled orders needing packing (excludes last-mile / RTO)
+  const pendingOrders = orders.filter((o) => adminFulfillmentBucket(o) === 'pending');
+  const inTransitOrders = orders.filter((o) => adminFulfillmentBucket(o) === 'dispatched');
 
   const handleRelease = async (hold: StockHoldItem) => {
     if (!onReleaseHold) return;
@@ -168,7 +153,7 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
         {/* Active ST Courier Parcels */}
         <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between text-xs text-slate-500 font-medium mb-2">
-            <span>IN TRANSIT (ST COURIER)</span>
+            <span>IN TRANSIT / RETRY</span>
             <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
               <Truck className="w-4 h-4" />
             </div>

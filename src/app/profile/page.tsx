@@ -24,6 +24,7 @@ import {
   TicketPercent,
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
+import { isValidMobileNumber, normalizeRequiredAlternateMobile } from '@/lib/authValidation';
 import { createUserAddress, deleteUserAddress, migrateLocalAddressesToDb, updateUserAddress } from '@/lib/addresses';
 import { authHeaders } from '@/lib/clientAuth';
 import { useOrderLiveSync } from '@/hooks/useOrderLiveSync';
@@ -151,6 +152,7 @@ export default function ProfilePage() {
   };
 
   const [showAddAddrForm, setShowAddAddrForm] = useState(false);
+  const [editingAddrId, setEditingAddrId] = useState<string | null>(null);
   const [newAddrType, setNewAddrType] = useState('HOME');
   const [newAddrName, setNewAddrName] = useState('');
   const [newAddrPhone, setNewAddrPhone] = useState('');
@@ -167,29 +169,93 @@ export default function ProfilePage() {
       showToast('⚠️ Enter full address and 6-digit pincode');
       return;
     }
+    if (!isValidMobileNumber(newAddrPhone || user.phone || '')) {
+      showToast('Enter a valid 10-digit primary mobile number');
+      return;
+    }
+    const alt = normalizeRequiredAlternateMobile(newAddrAltPhone, newAddrPhone || user.phone || '');
+    if (!alt.ok) {
+      showToast(alt.error);
+      return;
+    }
     const created = await createUserAddress(user, {
       type: newAddrType,
       name: newAddrName || user.name || 'Customer',
       phone: newAddrPhone || user.phone || '',
-      alternatePhone: newAddrAltPhone || '',
+      alternatePhone: alt.value,
       address: newAddrText,
       landmark: newAddrLandmark || '',
       city: newAddrCity || 'Chennai',
       pincode: newAddrPincode,
       isDefault: addresses.length === 0,
     });
-    if (!created) {
-      showToast('❌ Failed to save address. Check phone numbers and try again.');
+    if (!created.ok) {
+      showToast(created.error);
       return;
     }
-    setAddresses((prev) => [created, ...prev]);
+    setAddresses((prev) => [created.address, ...prev]);
     setShowAddAddrForm(false);
+    setEditingAddrId(null);
     setNewAddrText('');
     setNewAddrLandmark('');
     setNewAddrPincode('');
     setNewAddrCity('');
     setNewAddrAltPhone('');
     showToast('✓ Address saved to your account');
+  };
+
+  const startEditAddress = (addr: (typeof addresses)[number]) => {
+    setShowAddAddrForm(true);
+    setEditingAddrId(String(addr.id));
+    setNewAddrType(String(addr.type || 'HOME'));
+    setNewAddrName(addr.name || '');
+    setNewAddrPhone(addr.phone || '');
+    setNewAddrAltPhone(addr.alternatePhone || '');
+    setNewAddrText(addr.address || '');
+    setNewAddrLandmark(addr.landmark || '');
+    setNewAddrCity(addr.city || '');
+    setNewAddrPincode(String(addr.pincode || ''));
+  };
+
+  const handleUpdateAddress = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user?.id || !editingAddrId) return;
+    if (!newAddrText.trim() || String(newAddrPincode).length !== 6) {
+      showToast('⚠️ Enter full address and 6-digit pincode');
+      return;
+    }
+    if (!isValidMobileNumber(newAddrPhone || user.phone || '')) {
+      showToast('Enter a valid 10-digit primary mobile number');
+      return;
+    }
+    const alt = normalizeRequiredAlternateMobile(newAddrAltPhone, newAddrPhone || user.phone || '');
+    if (!alt.ok) {
+      showToast(alt.error);
+      return;
+    }
+    const updated = await updateUserAddress(user, editingAddrId, {
+      type: newAddrType,
+      name: newAddrName || user.name || 'Customer',
+      phone: newAddrPhone || user.phone || '',
+      alternatePhone: alt.value,
+      address: newAddrText,
+      landmark: newAddrLandmark || '',
+      city: newAddrCity || 'Chennai',
+      pincode: newAddrPincode,
+    });
+    if (!updated.ok) {
+      showToast(updated.error);
+      return;
+    }
+    setAddresses((prev) => prev.map((a) => (String(a.id) === editingAddrId ? updated.address : a)));
+    setShowAddAddrForm(false);
+    setEditingAddrId(null);
+    setNewAddrText('');
+    setNewAddrLandmark('');
+    setNewAddrPincode('');
+    setNewAddrCity('');
+    setNewAddrAltPhone('');
+    showToast('✓ Address updated');
   };
 
   const handleDeleteAddress = async (id: string | number) => {
@@ -206,8 +272,8 @@ export default function ProfilePage() {
   const handleSetDefaultAddress = async (id: string | number) => {
     if (!user?.id) return;
     const updated = await updateUserAddress(user, String(id), { isDefault: true });
-    if (!updated) {
-      showToast('❌ Could not set default');
+    if (!updated.ok) {
+      showToast(updated.error);
       return;
     }
     setAddresses((prev) =>
@@ -733,7 +799,15 @@ export default function ProfilePage() {
                     <p className="text-xs text-slate-400 px-1">Loading your saved addresses…</p>
                   )}
                   <button
-                    onClick={() => setShowAddAddrForm(!showAddAddrForm)}
+                    onClick={() => {
+                      if (showAddAddrForm) {
+                        setShowAddAddrForm(false);
+                        setEditingAddrId(null);
+                      } else {
+                        setEditingAddrId(null);
+                        setShowAddAddrForm(true);
+                      }
+                    }}
                     className="bg-blue-600 hover:bg-[#001B3A] text-white font-extrabold text-xs px-4 py-2 rounded-xl flex items-center gap-1 shadow-xs transition-colors"
                   >
                     <Plus className="w-4 h-4" />
@@ -743,7 +817,7 @@ export default function ProfilePage() {
 
                 {showAddAddrForm && (
                   <form
-                    onSubmit={handleAddAddress}
+                    onSubmit={editingAddrId ? handleUpdateAddress : handleAddAddress}
                     className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-4 text-xs"
                   >
                     <div className="flex gap-3">
@@ -788,15 +862,17 @@ export default function ProfilePage() {
                     </div>
 
                     <div>
-                      <label className="block font-bold text-slate-700 mb-1">Alternate Phone <span className="font-normal text-slate-400">(optional — for delivery)</span></label>
+                      <label className="block font-bold text-slate-700 mb-1">Alternate Phone *</label>
                       <input
                         type="tel"
-                        placeholder="Alternate 10-digit mobile"
+                        required
+                        placeholder="Different 10-digit mobile for ST Courier"
                         maxLength={10}
                         value={newAddrAltPhone}
                         onChange={(e) => setNewAddrAltPhone(e.target.value.replace(/\D/g, ''))}
                         className="w-full px-3 py-3 min-h-12 bg-white border border-slate-300 rounded-xl outline-none focus:border-blue-600 text-sm"
                       />
+                      <p className="text-[10px] text-slate-500 mt-1">Required. Must not be the same as the primary number.</p>
                     </div>
 
                     <div>
@@ -850,7 +926,7 @@ export default function ProfilePage() {
                       type="submit"
                       className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs px-5 py-3 min-h-12 rounded-xl uppercase tracking-wider transition-colors touch-manipulation"
                     >
-                      SAVE ADDRESS
+                      {editingAddrId ? 'SAVE CHANGES' : 'SAVE ADDRESS'}
                     </button>
                   </form>
                 )}
@@ -888,10 +964,19 @@ export default function ProfilePage() {
                             <span className="text-slate-500">• {addr.phone}</span>
                             {addr.alternatePhone ? (
                               <span className="text-slate-400">· alt {addr.alternatePhone}</span>
-                            ) : null}
+                            ) : (
+                              <span className="text-amber-700 font-extrabold">· add alternate number</span>
+                            )}
                           </div>
 
                           <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => startEditAddress(addr)}
+                              className="text-[10px] font-extrabold text-blue-700 hover:underline"
+                            >
+                              Edit
+                            </button>
                             {!addr.isDefault && (
                               <button
                                 type="button"

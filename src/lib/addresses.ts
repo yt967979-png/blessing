@@ -15,6 +15,22 @@ export interface SavedAddress {
   isDefault?: boolean;
 }
 
+export type AddressMutationResult =
+  | { ok: true; address: SavedAddress }
+  | { ok: false; error: string };
+
+async function readAddressApiError(res: Response): Promise<string> {
+  const text = await res.text();
+  try {
+    const data = JSON.parse(text) as { error?: string; message?: string };
+    if (data?.error) return String(data.error);
+    if (data?.message) return String(data.message);
+  } catch {
+    /* not JSON */
+  }
+  return text.slice(0, 180) || `Could not save address (${res.status}).`;
+}
+
 export async function fetchUserAddresses(user: UserData | null): Promise<SavedAddress[]> {
   if (!user?.id) return [];
   const res = await fetch(`/api/addresses?userId=${encodeURIComponent(String(user.id))}`, {
@@ -28,30 +44,30 @@ export async function fetchUserAddresses(user: UserData | null): Promise<SavedAd
 export async function createUserAddress(
   user: UserData | null,
   addr: Omit<SavedAddress, 'id'> & { isDefault?: boolean }
-): Promise<SavedAddress | null> {
-  if (!user?.id) return null;
+): Promise<AddressMutationResult> {
+  if (!user?.id) return { ok: false, error: 'Login required to save an address.' };
   const res = await fetch('/api/addresses', {
     method: 'POST',
     headers: authHeaders(user),
     body: JSON.stringify({ userId: user.id, ...addr }),
   });
-  if (!res.ok) return null;
-  return res.json();
+  if (!res.ok) return { ok: false, error: await readAddressApiError(res) };
+  return { ok: true, address: await res.json() };
 }
 
 export async function updateUserAddress(
   user: UserData | null,
   id: string,
   patch: Partial<Omit<SavedAddress, 'id'>> & { isDefault?: boolean }
-): Promise<SavedAddress | null> {
-  if (!user?.id || !id) return null;
+): Promise<AddressMutationResult> {
+  if (!user?.id || !id) return { ok: false, error: 'Login required to update an address.' };
   const res = await fetch('/api/addresses', {
     method: 'PATCH',
     headers: authHeaders(user),
     body: JSON.stringify({ id, userId: user.id, ...patch }),
   });
-  if (!res.ok) return null;
-  return res.json();
+  if (!res.ok) return { ok: false, error: await readAddressApiError(res) };
+  return { ok: true, address: await res.json() };
 }
 
 export async function deleteUserAddress(user: UserData | null, id: string): Promise<boolean> {

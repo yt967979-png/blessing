@@ -24,6 +24,7 @@ import type { Product } from '@/context/StoreContext';
 import { authHeaders } from '@/lib/clientAuth';
 import { useStore } from '@/context/StoreContext';
 import { MIN_BOOKS_PER_ORDER, FREE_DELIVERY_AT_QTY, deliveryFeeForQty } from '@/lib/deliveryRules';
+import { normalizeRequiredAlternateMobile } from '@/lib/authValidation';
 
 interface CreateCustomOrderModalProps {
   isOpen: boolean;
@@ -118,6 +119,11 @@ export const CreateCustomOrderModal: React.FC<CreateCustomOrderModalProps> = ({
       onShowToast('Please enter a valid 10-digit mobile number');
       return;
     }
+    const alt = normalizeRequiredAlternateMobile(customerAltPhone, cleanPhone);
+    if (!alt.ok) {
+      onShowToast(alt.error);
+      return;
+    }
     if (!address.trim() || !pincode.trim()) {
       onShowToast('Please provide delivery address and pincode');
       return;
@@ -138,7 +144,7 @@ export const CreateCustomOrderModal: React.FC<CreateCustomOrderModalProps> = ({
         body: JSON.stringify({
           customerName: customerName.trim(),
           customerPhone: cleanPhone,
-          customerAltPhone: customerAltPhone.trim(),
+          customerAltPhone: alt.value,
           address: address.trim(),
           landmark: landmark.trim(),
           city: city.trim(),
@@ -331,11 +337,12 @@ export const CreateCustomOrderModal: React.FC<CreateCustomOrderModalProps> = ({
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Alternate Phone (Optional)</label>
+                  <label className="block font-bold text-slate-700 mb-1">Alternate Phone *</label>
                   <input
                     type="tel"
+                    required
                     maxLength={10}
-                    placeholder="e.g. 9123456780"
+                    placeholder="Different 10-digit number"
                     value={customerAltPhone}
                     onChange={(e) => setCustomerAltPhone(e.target.value.replace(/\D/g, ''))}
                     className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-600 font-medium font-mono"

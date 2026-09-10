@@ -26,7 +26,7 @@ import OrderStatusStamp from './OrderStatusStamp';
 import { openShippingLabelPrint } from '@/lib/shippingLabel';
 import { CreateCustomOrderModal } from './CreateCustomOrderModal';
 import type { Product } from '@/context/StoreContext';
-import { fulfillmentStatus, isRecordCancelled } from '@/lib/orderStatus';
+import { adminFulfillmentBucket, fulfillmentStatus, isRecordCancelled } from '@/lib/orderStatus';
 
 interface OrderItem {
   title: string;
@@ -96,14 +96,11 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
   const counts = useMemo(() => {
     const res = { all: orders.length, pending: 0, packed: 0, dispatched: 0, delivered: 0, cancelled: 0 };
     orders.forEach((o) => {
-      if (isRecordCancelled(o)) {
-        res.cancelled++;
-        return;
-      }
-      const s = String(fulfillmentStatus(o) || '').toLowerCase();
-      if (s.includes('deliver') && !s.includes('attempt')) res.delivered++;
-      else if (s.includes('transit') || s.includes('handed') || s.includes('out')) res.dispatched++;
-      else if (s.includes('pack')) res.packed++;
+      const bucket = adminFulfillmentBucket(o);
+      if (bucket === 'cancelled') res.cancelled++;
+      else if (bucket === 'delivered') res.delivered++;
+      else if (bucket === 'dispatched') res.dispatched++;
+      else if (bucket === 'packed') res.packed++;
       else res.pending++;
     });
     return res;
@@ -113,8 +110,7 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
   const filteredOrders = useMemo(() => {
     return orders.filter((o) => {
       const q = search.trim().toLowerCase();
-      const cancelled = isRecordCancelled(o);
-      const s = String(fulfillmentStatus(o) || '').toLowerCase();
+      const bucket = adminFulfillmentBucket(o);
 
       // Search match
       const matchSearch =
@@ -123,24 +119,11 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
         o.id.toLowerCase().includes(q) ||
         o.customerName.toLowerCase().includes(q) ||
         o.customerPhone.includes(q) ||
+        String(o.customerAltPhone || '').includes(q) ||
         o.city.toLowerCase().includes(q) ||
         o.trackingNumber?.toLowerCase().includes(q);
 
-      // Status match
-      let matchStatus = true;
-      if (statusFilter === 'cancelled') {
-        matchStatus = cancelled;
-      } else if (cancelled) {
-        matchStatus = false;
-      } else if (statusFilter === 'pending') {
-        matchStatus = !s.includes('pack') && !s.includes('handed') && !s.includes('transit') && !s.includes('deliver');
-      } else if (statusFilter === 'packed') {
-        matchStatus = s.includes('pack') && !s.includes('handed') && !s.includes('transit') && !s.includes('deliver');
-      } else if (statusFilter === 'dispatched') {
-        matchStatus = s.includes('transit') || s.includes('handed') || s.includes('out');
-      } else if (statusFilter === 'delivered') {
-        matchStatus = s.includes('deliver') && !s.includes('attempt');
-      }
+      const matchStatus = statusFilter === 'all' || bucket === statusFilter;
 
       return matchSearch && matchStatus;
     });
@@ -226,7 +209,7 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
             { key: 'all', label: 'ALL ORDERS', count: counts.all },
             { key: 'pending', label: 'UNPACKED', count: counts.pending, color: 'text-blue-600' },
             { key: 'packed', label: 'PACKED', count: counts.packed, color: 'text-amber-600' },
-            { key: 'dispatched', label: 'IN TRANSIT', count: counts.dispatched, color: 'text-purple-600' },
+            { key: 'dispatched', label: 'IN TRANSIT / RETRY', count: counts.dispatched, color: 'text-purple-600' },
             { key: 'delivered', label: 'DELIVERED', count: counts.delivered, color: 'text-emerald-600' },
             { key: 'cancelled', label: 'CANCELLED', count: counts.cancelled, color: 'text-red-600' },
           ].map((tab) => (

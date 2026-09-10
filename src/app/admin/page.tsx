@@ -17,7 +17,7 @@ import { BrandLogo } from '@/components/ui/BrandLogo';
 import AdminUsersTab from '@/components/admin/AdminUsersTab';
 import AdminReviewsTab from '@/components/admin/AdminReviewsTab';
 import AdminSidebar, { AdminTab, ADMIN_TAB_KEYS } from '@/components/admin/AdminSidebar';
-import { isRecordCancelled } from '@/lib/orderStatus';
+import { adminFulfillmentBucket } from '@/lib/orderStatus';
 import AdminHeader from '@/components/admin/AdminHeader';
 import OverviewSection from '@/components/admin/OverviewSection';
 import OrdersSection from '@/components/admin/OrdersSection';
@@ -503,11 +503,7 @@ function AdminPageInner() {
 
   // Pending count for sidebar badge
   const pendingCount = useMemo(() => {
-    return orders.filter((o) => {
-      if (isRecordCancelled(o)) return false;
-      const s = String(o.courierStatus || o.orderStatus || '').toLowerCase();
-      return !s.includes('pack') && !s.includes('transit') && !s.includes('deliver');
-    }).length;
+    return orders.filter((o) => adminFulfillmentBucket(o) === 'pending').length;
   }, [orders]);
 
   if (!user || !isAdmin) {

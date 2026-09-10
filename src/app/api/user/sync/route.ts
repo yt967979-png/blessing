@@ -65,11 +65,12 @@ export async function POST(request: Request) {
         for (const addr of addresses) {
           const addrId = String(addr.id || `addr-${Date.now()}`);
           await client.query(
-            `INSERT INTO addresses (id, user_id, full_name, phone, address_line1, city, pincode, landmark)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            `INSERT INTO addresses (id, user_id, full_name, phone, alternate_phone, address_line1, city, pincode, landmark)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
              ON CONFLICT (id) DO UPDATE SET
                full_name = EXCLUDED.full_name,
                phone = EXCLUDED.phone,
+               alternate_phone = COALESCE(NULLIF(EXCLUDED.alternate_phone, ''), addresses.alternate_phone),
                address_line1 = EXCLUDED.address_line1,
                city = EXCLUDED.city,
                pincode = EXCLUDED.pincode`,
@@ -78,6 +79,7 @@ export async function POST(request: Request) {
               userId,
               addr.name || 'User',
               addr.phone || '',
+              addr.alternatePhone || addr.alternate_phone || '',
               addr.address || '',
               addr.city || 'Chennai',
               addr.pincode || '600012',

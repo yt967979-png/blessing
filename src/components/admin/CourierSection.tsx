@@ -11,7 +11,7 @@ import {
   Package,
 } from 'lucide-react';
 import OrderStatusStamp from './OrderStatusStamp';
-import { isRecordCancelled, fulfillmentStatus } from '@/lib/orderStatus';
+import { isRecordCancelled, fulfillmentStatus, isParcelDelivered } from '@/lib/orderStatus';
 
 interface CourierSectionProps {
   orders: any[];
@@ -33,14 +33,11 @@ export const CourierSection: React.FC<CourierSectionProps> = ({
   const shippedOrders = orders.filter((o) => Boolean(o.trackingNumber) && !isRecordCancelled(o));
 
   const activeInTransit = shippedOrders.filter((o) => {
-    const s = String(fulfillmentStatus(o) || '').toLowerCase();
-    return !s.includes('deliver');
+    const st = fulfillmentStatus(o);
+    return !isParcelDelivered(st) && !String(st).toLowerCase().includes('rto');
   });
 
-  const deliveredCount = shippedOrders.filter((o) => {
-    const s = String(fulfillmentStatus(o) || '').toLowerCase();
-    return s.includes('deliver') && !s.includes('attempt');
-  }).length;
+  const deliveredCount = shippedOrders.filter((o) => isParcelDelivered(fulfillmentStatus(o))).length;
 
   const handleManualSyncAll = async () => {
     setSyncing(true);
@@ -158,9 +155,7 @@ export const CourierSection: React.FC<CourierSectionProps> = ({
                   const trackingUrl =
                     o.trackingUrl ||
                     `https://stcourier.com/track/view?docket=${encodeURIComponent(o.trackingNumber)}`;
-                  const isDelivered = String(o.courierStatus || '')
-                    .toLowerCase()
-                    .includes('deliver');
+                  const isDelivered = isParcelDelivered(fulfillmentStatus(o));
 
                   return (
                     <tr key={o.id} className="hover:bg-slate-50/80 transition-colors">

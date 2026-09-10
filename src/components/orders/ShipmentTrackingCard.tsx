@@ -13,6 +13,13 @@ import {
   Copy,
   Check,
 } from 'lucide-react';
+import {
+  classifyCourierActivity,
+  customerCourierHeadline,
+  isDeliveryAttempted,
+  isParcelDelivered,
+  isRtoStatus,
+} from '@/lib/orderStatus';
 
 export type TrackingScan = {
   activity?: string;
@@ -76,6 +83,9 @@ type Props = {
   destinationPincode?: string;
   scans?: TrackingScan[];
   liveSynced?: boolean;
+  /** Exact line from ST Courier ERP when we have it */
+  stRawStatus?: string | null;
+  statusHeadline?: string | null;
   /** Shop estimate only — never claim official ST ETA */
   estimatedArrival?: string;
   estimatedArrivalHint?: string | null;
@@ -99,6 +109,8 @@ export function ShipmentTrackingCard({
   destinationPincode,
   scans,
   liveSynced,
+  stRawStatus,
+  statusHeadline,
   estimatedArrival,
   estimatedArrivalHint,
   lastUpdatedAt,
@@ -118,19 +130,18 @@ export function ShipmentTrackingCard({
   const stUrl =
     trackingUrl ||
     (hasAwb ? `https://stcourier.com/track/shipment?docket=${encodeURIComponent(awbText)}` : null);
-  const delivered = String(status || '').toLowerCase().includes('deliver');
-  const statusLabel = delivered
-    ? 'Delivered'
-    : String(status || '').toLowerCase().includes('out for delivery')
-      ? 'Out for Delivery'
-      : String(status || '').toLowerCase().includes('transit')
-        ? 'In Transit'
-        : String(status || '').toLowerCase().includes('packed') ||
-            String(status || '').toLowerCase().includes('handed')
-          ? String(status)
-          : hasAwb
-            ? String(status || 'With ST Courier')
-            : 'Confirmed';
+  const delivered = isParcelDelivered(status);
+  const attempted = isDeliveryAttempted(status) || classifyCourierActivity(latest?.activity) === 'attempted';
+  const rto = isRtoStatus(status);
+  const retrying =
+    !delivered &&
+    !rto &&
+    classifyCourierActivity(latest?.activity) === 'ofd' &&
+    list.some((s) => classifyCourierActivity(s.activity) === 'attempted');
+  const statusLabel =
+    statusHeadline ||
+    (retrying ? 'ST Courier is retrying delivery' : customerCourierHeadline(status));
+  const stSays = String(stRawStatus || latest?.activity || '').trim();
   const dest =
     [destinationCity, destinationPincode].filter(Boolean).join(' — ') || 'Tamil Nadu';
   const updatedLabel = formatRelativeUpdated(lastUpdatedAt || latest?.timeRaw);
@@ -171,11 +182,22 @@ export function ShipmentTrackingCard({
             <h3 className="font-heading font-black text-lg sm:text-xl mt-0.5 leading-snug">
               {statusLabel}
             </h3>
+            {stSays && (
+              <p className="text-[11px] text-amber-100/95 mt-1 font-medium leading-snug">
+                ST Courier shows: {stSays}
+              </p>
+            )}
             <p className="text-xs text-slate-200 mt-1 leading-relaxed flex items-start gap-1.5">
               <MapPin className="w-3.5 h-3.5 text-amber-300 shrink-0 mt-0.5" />
               <span>
                 {delivered
                   ? 'Delivered to your address.'
+                  : rto
+                    ? 'Parcel is returning to the shop (RTO). Contact us on WhatsApp.'
+                    : attempted
+                      ? 'Courier tried delivery. Keep both phone numbers reachable — ST usually retries.'
+                      : retrying
+                        ? 'A previous attempt missed you. The boy is out again with your parcel.'
                   : latest?.location
                     ? `Last known hub: ${latest.location}`
                     : hasAwb
@@ -273,7 +295,7 @@ export function ShipmentTrackingCard({
 
           {hasAwb && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {onRefresh && !delivered && (
+              {onRefresh && !delivered && !rto && (
                 <button
                   type="button"
                   onClick={onRefresh}
@@ -290,7 +312,7 @@ export function ShipmentTrackingCard({
                   target="_blank"
                   rel="noopener noreferrer"
                   className={`inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-[#001B3A] hover:bg-[#002B5B] text-white text-[11px] font-extrabold uppercase tracking-wide touch-manipulation min-h-11 ${
-                    onRefresh && !delivered ? '' : 'sm:col-span-2'
+                    onRefresh && !delivered && !rto ? '' : 'sm:col-span-2'
                   }`}
                 >
                   Track on ST Courier website
@@ -332,28 +354,54 @@ export function ShipmentTrackingCard({
             <ol className="relative space-y-0 border-l-2 border-slate-200 ml-2.5 pl-4">
               {list.map((scan, idx) => {
                 const isLatest = idx === 0;
+                const kind = classifyCourierActivity(scan.activity);
+                const dot =
+                  kind === 'delivered'
+                    ? 'bg-emerald-500'
+                    : kind === 'attempted' || kind === 'rto'
+                      ? 'bg-amber-500'
+                      : isLatest
+                        ? 'bg-blue-600'
+                        : 'bg-slate-400';
+                const titleColor =
+                  kind === 'delivered'
+                    ? 'text-emerald-800'
+                    : kind === 'attempted' || kind === 'rto'
+                      ? 'text-amber-900'
+                      : isLatest
+                        ? 'text-[#001B3A]'
+                        : 'text-slate-900';
                 return (
                   <li key={`${scan.timeLabel}-${idx}`} className="relative pb-4 last:pb-0">
                     <span
-                      className={`absolute -left-[1.4rem] top-1 w-3 h-3 rounded-full ring-4 ring-white ${
-                        isLatest ? 'bg-emerald-500' : 'bg-[#2874f0]'
-                      }`}
+                      className={`absolute -left-[1.4rem] top-1 w-3 h-3 rounded-full ring-4 ring-white ${dot}`}
                     />
                     <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
-                      <p className={`text-xs font-extrabold ${isLatest ? 'text-emerald-800' : 'text-slate-900'}`}>
-                        {scan.location || scan.activity}
+                      <p className={`text-xs font-extrabold ${titleColor}`}>
+                        {scan.activity}
                       </p>
                       {scan.timeLabel && (
                         <time className="text-[10px] font-mono text-slate-400">{scan.timeLabel}</time>
                       )}
                     </div>
-                    {scan.location && scan.activity && scan.location !== scan.activity && (
-                      <p className="text-[11px] text-slate-600 mt-0.5 leading-snug">{scan.activity}</p>
+                    {scan.location && scan.location !== scan.activity && (
+                      <p className="text-[11px] text-slate-600 mt-0.5 leading-snug">{scan.location}</p>
                     )}
-                    {isLatest && (
+                    {kind === 'attempted' && (
+                      <p className="mt-1 text-[10px] font-bold text-amber-800">Missed attempt — ST typically retries</p>
+                    )}
+                    {kind === 'ofd' && list.some((s) => classifyCourierActivity(s.activity) === 'attempted') && isLatest && (
+                      <p className="mt-1 text-[10px] font-bold text-blue-800">Reattempt — courier is out again</p>
+                    )}
+                    {kind === 'delivered' && isLatest && (
                       <p className="inline-flex items-center gap-1 mt-1 text-[10px] font-bold text-emerald-700">
                         <CheckCircle2 className="w-3 h-3" />
-                        Latest update
+                        Delivered (from ST Courier)
+                      </p>
+                    )}
+                    {isLatest && kind !== 'delivered' && kind !== 'attempted' && kind !== 'ofd' && (
+                      <p className="inline-flex items-center gap-1 mt-1 text-[10px] font-bold text-blue-800">
+                        Latest ST scan
                       </p>
                     )}
                   </li>

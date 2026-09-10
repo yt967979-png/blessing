@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { queryDb } from '@/lib/db';
 import { getAuthenticatedUser } from '@/lib/serverSecurity';
-import { isValidMobileNumber, normalizeMobileDigits } from '@/lib/authValidation';
+import { isValidMobileNumber, normalizeMobileDigits, normalizeRequiredAlternateMobile } from '@/lib/authValidation';
 
 function mapAddress(row: any) {
   return {
@@ -27,15 +27,6 @@ async function ensureAddressColumns(db: typeof queryDb) {
 async function resolveUserId(request: Request): Promise<string | null> {
   const session = await getAuthenticatedUser(request);
   return session?.userId || null;
-}
-
-function normalizeOptionalAlt(raw: string): { ok: true; value: string } | { ok: false; error: string } {
-  const trimmed = String(raw || '').trim();
-  if (!trimmed) return { ok: true, value: '' };
-  if (!isValidMobileNumber(trimmed)) {
-    return { ok: false, error: 'Enter a valid 10-digit alternate mobile number.' };
-  }
-  return { ok: true, value: normalizeMobileDigits(trimmed) };
 }
 
 // GET /api/addresses
@@ -73,7 +64,10 @@ export async function POST(request: Request) {
   const pincode = String(body.pincode || '').replace(/\D/g, '').slice(0, 6);
   const type = String(body.type || 'HOME').trim();
   const isDefault = !!body.isDefault;
-  const alt = normalizeOptionalAlt(String(body.alternatePhone || body.alternate_phone || ''));
+  const alt = normalizeRequiredAlternateMobile(
+    String(body.alternatePhone || body.alternate_phone || ''),
+    phoneRaw
+  );
 
   if (!name || !address || pincode.length !== 6) {
     return NextResponse.json({ error: 'Name, address, and 6-digit pincode are required.' }, { status: 400 });
@@ -86,12 +80,6 @@ export async function POST(request: Request) {
   }
 
   const phone = normalizeMobileDigits(phoneRaw);
-  if (alt.value && alt.value === phone) {
-    return NextResponse.json(
-      { error: 'Alternate number must be different from the primary phone.' },
-      { status: 400 }
-    );
-  }
 
   try {
     await ensureAddressColumns(queryDb);
@@ -109,7 +97,7 @@ export async function POST(request: Request) {
       `INSERT INTO addresses (id, user_id, full_name, phone, alternate_phone, address_line1, near_landmark, city, pincode, landmark, state, is_default)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'Tamil Nadu', $11)
        RETURNING *`,
-      [id, userId, name, phone, alt.value || null, address, nearLandmark || null, city, pincode, type, isDefault]
+      [id, userId, name, phone, alt.value, address, nearLandmark || null, city, pincode, type, isDefault]
     );
 
     return NextResponse.json(mapAddress(res.rows[0]), { status: 201 });
@@ -129,6 +117,12 @@ export async function PATCH(request: Request) {
 
   try {
     await ensureAddressColumns(queryDb);
+    const existing = await queryDb(`SELECT * FROM addresses WHERE id = $1 AND user_id = $2`, [id, userId]);
+    if (existing.rows.length === 0) {
+      return NextResponse.json({ error: 'Address not found.' }, { status: 404 });
+    }
+    const current = existing.rows[0];
+
     if (body.isDefault) {
       await queryDb(`UPDATE addresses SET is_default = FALSE WHERE user_id = $1`, [userId]);
     }
@@ -149,13 +143,22 @@ export async function PATCH(request: Request) {
       fields.push(`phone = $${idx++}`);
       values.push(normalizeMobileDigits(phoneRaw));
     }
-    if (body.alternatePhone !== undefined || body.alternate_phone !== undefined) {
-      const alt = normalizeOptionalAlt(String(body.alternatePhone ?? body.alternate_phone ?? ''));
+
+    const altTouched = body.alternatePhone !== undefined || body.alternate_phone !== undefined;
+    const phoneTouched = body.phone !== undefined;
+    if (altTouched || phoneTouched) {
+      const primaryRaw = phoneTouched ? String(body.phone) : String(current.phone || '');
+      const altRaw = altTouched
+        ? String(body.alternatePhone ?? body.alternate_phone ?? '')
+        : String(current.alternate_phone || '');
+      const alt = normalizeRequiredAlternateMobile(altRaw, primaryRaw);
       if (!alt.ok) {
         return NextResponse.json({ error: alt.error }, { status: 400 });
       }
-      fields.push(`alternate_phone = $${idx++}`);
-      values.push(alt.value || null);
+      if (altTouched) {
+        fields.push(`alternate_phone = $${idx++}`);
+        values.push(alt.value);
+      }
     }
     if (body.address !== undefined) {
       fields.push(`address_line1 = $${idx++}`);
@@ -193,11 +196,9 @@ export async function PATCH(request: Request) {
        RETURNING *`,
       values
     );
-
-    if (res.rows.length === 0) {
+    if (!res.rows[0]) {
       return NextResponse.json({ error: 'Address not found.' }, { status: 404 });
     }
-
     return NextResponse.json(mapAddress(res.rows[0]));
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });

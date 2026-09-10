@@ -12,7 +12,8 @@ export type OrderStageLabel =
   | 'In Transit'
   | 'Out for Delivery'
   | 'Delivered'
-  | 'Delivery Attempted';
+  | 'Delivery Attempted'
+  | 'RTO';
 
 const STAGE_RANK: Record<string, number> = {
   'Order Placed': 0,
@@ -20,8 +21,9 @@ const STAGE_RANK: Record<string, number> = {
   'Handed to ST Courier': 2,
   'In Transit': 3,
   'Out for Delivery': 4,
-  Delivered: 5,
   'Delivery Attempted': 4,
+  Delivered: 6,
+  RTO: 5,
 };
 
 export function cleanDocket(docket: string): string {
@@ -40,10 +42,21 @@ export function mapCourierStatusToOrderStatus(raw: string): OrderStageLabel {
   const s = (raw || '').toLowerCase();
 
   if (!s) return 'Handed to ST Courier';
-  if (s.includes('deliver') && (s.includes('fail') || s.includes('undeliver') || s.includes('attempt'))) {
+  if (s.includes('rto')) return 'RTO';
+  if (
+    s.includes('attempt') ||
+    s.includes('undeliver') ||
+    s.includes('not delivered') ||
+    s.includes('not home') ||
+    s.includes('consignee not') ||
+    (s.includes('deliver') && s.includes('fail'))
+  ) {
     return 'Delivery Attempted';
   }
-  if (s.includes('delivered') || s.includes('rto delivered') || s === 'dlv' || s.includes('consignee')) {
+  if (s.includes('reattempt') || s.includes('re-attempt') || s.includes('re attempt')) {
+    return 'Out for Delivery';
+  }
+  if (s.includes('delivered') || s === 'dlv' || s.includes('delivered to consignee')) {
     return 'Delivered';
   }
   if (
@@ -98,11 +111,23 @@ function extractEvents(erpData: any): Array<{ time: string; activity: string; lo
 
   if (!Array.isArray(raw)) return [];
 
-  return raw.slice(0, 20).map((e: any) => ({
+  const mapped = raw.slice(0, 40).map((e: any) => ({
     time: String(e.time || e.date || e.datetime || e.scanDate || e.created_at || ''),
     activity: String(e.activity || e.status || e.remark || e.remarks || e.scan || e.description || 'Update'),
     location: String(e.location || e.hub || e.city || e.place || ''),
   }));
+
+  const dated = mapped.filter((e) => !Number.isNaN(Date.parse(e.time)));
+  if (dated.length >= Math.min(2, mapped.length)) {
+    mapped.sort((a, b) => {
+      const ta = Date.parse(a.time);
+      const tb = Date.parse(b.time);
+      if (Number.isNaN(ta) || Number.isNaN(tb)) return 0;
+      return tb - ta;
+    });
+  }
+
+  return mapped;
 }
 
 function extractRawStatus(erpData: any): string {
@@ -210,9 +235,15 @@ export async function fetchStCourierTrack(docketInput: string): Promise<TrackRes
 }
 
 function shouldAdvance(current: string, next: OrderStageLabel): boolean {
+  if (String(current).toLowerCase().includes('cancel')) return false;
+  if (current === 'Delivered') return false;
+  if (current === next) return false;
+  if (next === 'Delivered' || next === 'RTO') return true;
+  // Last-mile loop: missed delivery → ST retries OFD / back to hub
+  const lastMile = new Set(['Out for Delivery', 'Delivery Attempted', 'In Transit']);
+  if (lastMile.has(current) && lastMile.has(next)) return true;
   const curRank = STAGE_RANK[current] ?? -1;
   const nextRank = STAGE_RANK[next] ?? 0;
-  if (current === 'Delivered') return false;
   return nextRank > curRank;
 }
 
@@ -251,13 +282,21 @@ async function persistCourierEvents(
         await client.query(col);
       } catch (_) {}
     }
-    for (const ev of events.slice(0, 10)) {
+    for (const ev of events.slice(0, 30)) {
       const id = `ct-${docket}-${Buffer.from(`${ev.time}|${ev.activity}`).toString('base64url').slice(0, 24)}`;
       await client.query(
         `INSERT INTO courier_tracking (id, order_id, awb_number, docket_number, status, location, remarks, event_time)
-         VALUES ($1, $2, $3, $3, $4, $5, $6, NOW())
+         VALUES ($1, $2, $3, $3, $4, $5, $6, $7)
          ON CONFLICT (id) DO NOTHING`,
-        [id, orderId, docket, ev.activity, ev.location || null, ev.time || null]
+        [
+          id,
+          orderId,
+          docket,
+          ev.activity,
+          ev.location || null,
+          ev.time || ev.activity,
+          Number.isNaN(Date.parse(ev.time)) ? new Date() : new Date(ev.time),
+        ]
       );
     }
   } catch (_) {}
@@ -275,6 +314,7 @@ export async function syncOrderByAwb(docketInput: string): Promise<{
   error?: string;
   trackingUrl?: string;
   events?: Array<{ time: string; activity: string; location: string }>;
+  rawStatus?: string;
 }> {
   const tracked = await fetchStCourierTrack(docketInput);
   if (!tracked.ok) {
@@ -283,7 +323,15 @@ export async function syncOrderByAwb(docketInput: string): Promise<{
 
   const client = await getDbClient();
   if (!client) {
-    return { verified: true, updated: false, error: 'Database unavailable', trackingUrl: tracked.trackingUrl };
+    return {
+      verified: true,
+      updated: false,
+      error: 'Database unavailable',
+      trackingUrl: tracked.trackingUrl,
+      rawStatus: tracked.rawStatus,
+      status: tracked.status,
+      events: tracked.events,
+    };
   }
   try {
     const orderRes = await client.query(
@@ -304,6 +352,7 @@ export async function syncOrderByAwb(docketInput: string): Promise<{
         status: tracked.status,
         trackingUrl: tracked.trackingUrl,
         events: tracked.events,
+        rawStatus: tracked.rawStatus,
       };
     }
 
@@ -323,6 +372,7 @@ export async function syncOrderByAwb(docketInput: string): Promise<{
         trackingUrl: tracked.trackingUrl,
         events: tracked.events,
         error: 'Order is cancelled — status not updated.',
+        rawStatus: tracked.rawStatus,
       };
     }
     if (String(previous).toLowerCase().includes('awaiting confirmation')) {
@@ -335,6 +385,7 @@ export async function syncOrderByAwb(docketInput: string): Promise<{
         trackingUrl: tracked.trackingUrl,
         events: tracked.events,
         error: 'Order not confirmed yet — status not updated.',
+        rawStatus: tracked.rawStatus,
       };
     }
 
@@ -391,6 +442,7 @@ export async function syncOrderByAwb(docketInput: string): Promise<{
       orderId: order.order_number || order.id,
       trackingUrl: tracked.trackingUrl,
       events: tracked.events,
+      rawStatus: tracked.rawStatus,
     };
   } finally {
     releaseDbClient(client);
@@ -407,8 +459,8 @@ export async function syncAllActiveAwbOrders(): Promise<{ checked: number; updat
       `SELECT DISTINCT awb_number FROM orders
        WHERE awb_number IS NOT NULL
          AND awb_number NOT ILIKE 'SHP-%'
-         AND COALESCE(order_status, '') NOT ILIKE '%delivered%'
-         AND COALESCE(order_status, '') NOT ILIKE '%rto%'
+         AND COALESCE(order_status, '') NOT ILIKE 'Delivered'
+         AND COALESCE(order_status, '') NOT ILIKE '%RTO%'
          AND COALESCE(order_status, '') NOT ILIKE '%cancel%'
          AND COALESCE(order_status, '') NOT ILIKE '%awaiting confirmation%'
        LIMIT 40`

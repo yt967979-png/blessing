@@ -28,7 +28,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { downloadTaxInvoice } from '@/lib/invoiceGenerator';
-import { customerRefundStage, isOrderCancelled, isRecordCancelled } from '@/lib/orderStatus';
+import { customerRefundStage, isOrderCancelled, isRecordCancelled, isParcelDelivered, isDeliveryAttempted } from '@/lib/orderStatus';
 import { getSTCourierDeliveryEstimate } from '@/lib/deliveryEstimator';
 import { imageNeedsUnoptimized } from '@/lib/productImage';
 import { shopWhatsAppChatUrl } from '@/lib/shopContact';
@@ -54,6 +54,8 @@ function OrdersContent() {
     lastUpdatedAt?: string;
     liveSynced?: boolean;
     status?: string;
+    stRawStatus?: string | null;
+    statusHeadline?: string | null;
   }>({});
   const [reviewModalItem, setReviewModalItem] = useState<any>(null);
   const [rating, setRating] = useState(5);
@@ -64,8 +66,8 @@ function OrdersContent() {
   const getCurrentStepIndex = (status: string) => {
     const s = (status || '').toLowerCase();
     if (isOrderCancelled(status)) return -1;
-    if (s.includes('delivered')) return 6;
-    if (s.includes('out for delivery')) return 5;
+    if (isParcelDelivered(status)) return 6;
+    if (isDeliveryAttempted(status) || s.includes('out for delivery')) return 5;
     if (s.includes('in transit') || s.includes('shipped')) return 4;
     if (s.includes('handed to st courier')) return 3;
     if (s.includes('packed')) return 2;
@@ -107,8 +109,8 @@ function OrdersContent() {
     const s = String(o.courierStatus || o.status || '');
     if (orderTab === 'all') return true;
     if (orderTab === 'cancelled') return isOrderCancelled(s);
-    if (orderTab === 'delivered') return s.toLowerCase().includes('delivered');
-    if (orderTab === 'active') return !isOrderCancelled(s) && !s.toLowerCase().includes('delivered');
+    if (orderTab === 'delivered') return isParcelDelivered(s);
+    if (orderTab === 'active') return !isOrderCancelled(s) && !isParcelDelivered(s);
     return true;
   });
 
@@ -214,8 +216,7 @@ function OrdersContent() {
       return;
     }
     const statusLower = String(statusStr).toLowerCase();
-    const isTerminal =
-      statusLower.includes('deliver') || statusLower.includes('rto');
+    const isTerminal = isParcelDelivered(statusStr) || statusLower.includes('rto');
 
     const targetDocket =
       searchedOrderData.trackingNumber || searchedOrderData.orderId || searchedOrderData.id;
@@ -239,6 +240,8 @@ function OrdersContent() {
           lastUpdatedAt: ord?.lastUpdatedAt,
           liveSynced: !!(ord?.liveSynced || ord?.autoUpdated),
           status: ord?.status,
+          stRawStatus: ord?.stRawStatus || ord?.lastActivity || null,
+          statusHeadline: ord?.statusHeadline || null,
         });
       } catch {
         /* ignore */
@@ -744,6 +747,8 @@ function OrdersContent() {
               destinationPincode={searchedOrderData.pincode || searchedOrderData.shippingAddress?.pincode}
               scans={liveTrackingScans}
               liveSynced={!!trackMeta.liveSynced}
+              stRawStatus={trackMeta.stRawStatus}
+              statusHeadline={trackMeta.statusHeadline}
               estimatedArrival={
                 trackMeta.estimatedArrival ||
                 (orderIsCancelled
@@ -927,8 +932,8 @@ function OrdersContent() {
                           </div>
                         </div>
                       </div>
-                      {(searchedOrderData.courierStatus || '').toLowerCase().includes('delivered') ||
-                      (searchedOrderData.orderStatus || '').toLowerCase().includes('delivered') ? (
+                      {isParcelDelivered(searchedOrderData.courierStatus) ||
+                      isParcelDelivered(searchedOrderData.orderStatus) ? (
                         <button
                           onClick={() => handleOpenReviewModal({ ...item, id: item.id || item.bookId })}
                           className="bg-amber-400/10 text-amber-900 hover:bg-amber-400/20 border border-amber-300 font-extrabold text-[11px] px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
@@ -1027,12 +1032,12 @@ function OrdersContent() {
                   <span className={`font-black text-xs px-3.5 py-1.5 rounded-full border flex items-center gap-1.5 ${
                     listCancelled
                       ? 'bg-red-50 text-red-700 border-red-200'
-                      : (ord.courierStatus || '').toLowerCase().includes('delivered')
+                      : isParcelDelivered(ord.courierStatus)
                         ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                         : 'bg-blue-50 text-blue-700 border-blue-200'
                   }`}>
                     <span className={`w-1.5 h-1.5 rounded-full ${
-                      listCancelled ? 'bg-red-500' : (ord.courierStatus || '').toLowerCase().includes('delivered') ? 'bg-emerald-500' : 'bg-blue-500'
+                      listCancelled ? 'bg-red-500' : isParcelDelivered(ord.courierStatus) ? 'bg-emerald-500' : 'bg-blue-500'
                     }`} />
                     <span>{listCancelled ? 'Cancelled' : (ord.courierStatus || 'Order Placed')}</span>
                   </span>
@@ -1219,6 +1224,8 @@ function OrdersContent() {
                 destinationPincode={searchedOrderData.pincode || searchedOrderData.shippingAddress?.pincode}
                 scans={liveTrackingScans}
                 liveSynced={!!trackMeta.liveSynced}
+                stRawStatus={trackMeta.stRawStatus}
+                statusHeadline={trackMeta.statusHeadline}
                 estimatedArrival={
                   trackMeta.estimatedArrival ||
                   `Usually ${

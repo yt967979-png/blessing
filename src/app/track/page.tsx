@@ -17,6 +17,7 @@ import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
 import { BrandLogo } from '@/components/ui/BrandLogo';
 import { ShipmentTrackingCard } from '@/components/orders/ShipmentTrackingCard';
 import { useStore } from '@/context/StoreContext';
+import { isParcelDelivered, isDeliveryAttempted, customerCourierHeadline } from '@/lib/orderStatus';
 import { authHeaders } from '@/lib/clientAuth';
 import { useOrderLiveSync } from '@/hooks/useOrderLiveSync';
 
@@ -99,7 +100,7 @@ function TrackForm() {
     if (!order?.orderId) return;
     if (order.cancelled) return;
     const st = String(order.status || '').toLowerCase();
-    if (st.includes('deliver') || st.includes('rto')) return;
+    if (isParcelDelivered(st) || st.includes('rto')) return;
     const mobile = phone || user?.phone || '';
     if (!mobile) return;
     const t = window.setInterval(() => {
@@ -235,11 +236,11 @@ function TrackForm() {
               className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full border ${
                 order.cancelled
                   ? 'bg-red-50 text-red-800 border-red-200'
-                  : String(order.status || '')
-                        .toLowerCase()
-                        .includes('deliver')
+                  : isParcelDelivered(order.status)
                     ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                    : 'bg-blue-50 text-blue-800 border-blue-200'
+                    : isDeliveryAttempted(order.status)
+                      ? 'bg-amber-50 text-amber-900 border-amber-200'
+                      : 'bg-blue-50 text-blue-800 border-blue-200'
               }`}
             >
               {order.cancelled ? (
@@ -249,9 +250,7 @@ function TrackForm() {
               ) : (
                 <>
                   <CheckCircle2 className="w-3.5 h-3.5" />
-                  {String(order.status || '').toLowerCase().includes('awaiting')
-                    ? 'Confirmed'
-                    : order.status}
+                  {order.statusHeadline || customerCourierHeadline(order.status)}
                 </>
               )}
             </span>
@@ -302,6 +301,8 @@ function TrackForm() {
             destinationPincode={order.customer?.pincode}
             scans={order.scans}
             liveSynced={!!order.liveSynced || !!order.autoUpdated}
+            stRawStatus={order.stRawStatus}
+            statusHeadline={order.statusHeadline}
             estimatedArrival={order.estimatedArrival}
             estimatedArrivalHint={order.estimatedArrivalHint}
             lastUpdatedAt={order.lastUpdatedAt}

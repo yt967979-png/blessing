@@ -3,7 +3,7 @@
  * Customers cannot cancel. Paid Razorpay: refund first, then cancel.
  */
 import { queryDb } from '@/lib/db';
-import { paymentStatusAfterCancel, isOrderCancelled, logOrderStateTransition } from '@/lib/orderStatus';
+import { paymentStatusAfterCancel, isOrderCancelled, isParcelDelivered, logOrderStateTransition } from '@/lib/orderStatus';
 import { broadcastOrderChange, notifyOrderChanged } from '@/app/api/orders/stream/route';
 import { notifyStockChanged } from '@/app/api/stock/stream/route';
 import { needsRazorpayRefund, refundRazorpayPayment } from '@/lib/razorpayRefund';
@@ -60,7 +60,7 @@ export async function executeOrderCancel(opts: {
       };
     }
 
-    if (opts.actor === 'admin' && status.includes('delivered')) {
+    if (opts.actor === 'admin' && isParcelDelivered(status)) {
       return { ok: false, error: 'Delivered orders cannot be cancelled.', status: 409 };
     }
 

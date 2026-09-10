@@ -56,9 +56,13 @@ async function loadUserSessionData(queryFn: any, userId: string) {
       type: row.landmark || 'HOME',
       name: row.full_name,
       phone: row.phone,
+      alternatePhone: row.alternate_phone || '',
       address: row.address_line1,
+      landmark: row.near_landmark || '',
       city: row.city,
       pincode: row.pincode,
+      state: row.state || 'Tamil Nadu',
+      isDefault: !!row.is_default,
     }));
 
     return {

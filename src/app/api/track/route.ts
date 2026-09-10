@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getDbClient, releaseDbClient } from '@/lib/db';
 import { applyRateLimitAsync, clientIp, getAuthenticatedUser } from '@/lib/serverSecurity';
 import { isOfficialAwb, syncOrderByAwb } from '@/lib/stCourier';
-import { isOrderCancelled, isAwaitingConfirmation } from '@/lib/orderStatus';
+import { isOrderCancelled, isAwaitingConfirmation, isParcelDelivered, isDeliveryAttempted, customerCourierHeadline } from '@/lib/orderStatus';
 import { getSTCourierDeliveryEstimate } from '@/lib/deliveryEstimator';
 import { verifyTrackingToken } from '@/lib/trackToken';
 
@@ -31,12 +31,11 @@ function phonesMatch(input: string, stored: string): boolean {
 function stepIndex(status: string): number {
   const s = (status || '').toLowerCase();
   if (isOrderCancelled(s)) return -1;
-  if (s.includes('delivered')) return 5;
-  if (s.includes('out for delivery')) return 4;
+  if (isParcelDelivered(s)) return 5;
+  if (isDeliveryAttempted(s) || s.includes('out for delivery') || s.includes('rto')) return 4;
   if (s.includes('in transit') || s.includes('shipped')) return 3;
   if (s.includes('handed to st courier')) return 2;
   if (s.includes('packed')) return 1;
-  // Confirmed / Order Placed / Payment Confirmed / legacy awaiting → confirmed step
   return 0;
 }
 
@@ -177,7 +176,7 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string, tokenRaw?: stri
             OR awb_number = $2
             OR docket_number = $2
          ORDER BY COALESCE(event_time, created_at, updated_at) DESC NULLS LAST
-         LIMIT 15`,
+         LIMIT 30`,
         [o.id, o.awb_number || '']
       );
       scans = ct.rows.map((r: any) => ({
@@ -211,7 +210,6 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string, tokenRaw?: stri
     }
 
     const rawStatus = o.order_status || 'Confirmed';
-    // Prepaid flow: legacy awaiting YES is treated as Confirmed for customer display
     const status = !cancelled && awaiting ? 'Confirmed' : rawStatus;
     const currentStep = stepIndex(status);
     const awb = isOfficialAwb(o.awb_number) ? o.awb_number : null;
@@ -219,13 +217,13 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string, tokenRaw?: stri
       o.tracking_url ||
       (awb ? `https://stcourier.com/track/shipment?docket=${encodeURIComponent(awb)}` : null);
 
-    const delivered = String(status).toLowerCase().includes('deliver');
-    // Shop estimate only — not an official ST Courier ETA (ST rarely returns one)
+    const delivered = isParcelDelivered(status);
     const shopEta = getSTCourierDeliveryEstimate(addr.city || addr.state || 'Tamil Nadu');
     const eta = delivered
       ? 'Delivered'
       : `Usually ${shopEta.daysRemaining <= 2 ? '2–3' : '2–4'} business days (shop estimate)`;
     const lastScan = !cancelled && scans.length > 0 ? scans[0] : null;
+    const stRawStatus = String(live?.rawStatus || lastScan?.activity || '').trim() || null;
     const lastUpdatedAt =
       lastScan?.time ||
       (live?.updated || live?.verified ? new Date().toISOString() : null) ||
@@ -237,6 +235,8 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string, tokenRaw?: stri
       order: {
         orderId: o.order_number || o.id,
         status,
+        statusHeadline: cancelled ? 'Cancelled' : customerCourierHeadline(status),
+        stRawStatus: cancelled ? null : stRawStatus,
         cancelled,
         awaitingConfirmation: false,
         currentStep,

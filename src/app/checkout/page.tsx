@@ -18,9 +18,9 @@ import {
   Loader2,
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
-import { createUserAddress, migrateLocalAddressesToDb, type SavedAddress } from '@/lib/addresses';
+import { createUserAddress, migrateLocalAddressesToDb, updateUserAddress, type SavedAddress } from '@/lib/addresses';
 import { pincodeDeliveryMessage } from '@/lib/pincode';
-import { isValidMobileNumber } from '@/lib/authValidation';
+import { isValidMobileNumber, addressHasRequiredAlternate, normalizeRequiredAlternateMobile } from '@/lib/authValidation';
 import { userNeedsProfile } from '@/lib/userProfile';
 import { imageNeedsUnoptimized } from '@/lib/productImage';
 import { getCartItemStockState, anyCartItemBlocking } from '@/lib/cartStock';
@@ -54,6 +54,7 @@ export default function CheckoutPage() {
   const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
   const [selectedAddrId, setSelectedAddrId] = useState('new');
   const [savingAddress, setSavingAddress] = useState(false);
+  const [editDraft, setEditDraft] = useState<SavedAddress | null>(null);
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const orderSubmitLock = useRef(false);
   const idempotencyKeyRef = useRef<string | null>(null);
@@ -197,8 +198,9 @@ export default function CheckoutPage() {
       showToast('Enter a valid 10-digit primary mobile number');
       return false;
     }
-    if (newAddr.alternatePhone && !isValidMobileNumber(newAddr.alternatePhone)) {
-      showToast('Enter a valid alternate mobile number (or leave blank)');
+    const alt = normalizeRequiredAlternateMobile(newAddr.alternatePhone, newAddr.phone || user.phone || '');
+    if (!alt.ok) {
+      showToast(alt.error);
       return false;
     }
     const pinCheck = pincodeDeliveryMessage(String(newAddr.pincode));
@@ -208,27 +210,75 @@ export default function CheckoutPage() {
     }
     setSavingAddress(true);
     try {
-      const added = await createUserAddress(user, {
+      const result = await createUserAddress(user, {
         type: newAddr.type,
         name: newAddr.name,
         phone: newAddr.phone,
-        alternatePhone: newAddr.alternatePhone,
+        alternatePhone: alt.value,
         address: newAddr.address,
         landmark: newAddr.landmark,
         city: newAddr.city || 'Chennai',
         pincode: String(newAddr.pincode),
         isDefault: true,
       });
-      if (added) {
-        setSavedAddresses((prev) => [added, ...prev.map((a) => ({ ...a, isDefault: false }))]);
-        setSelectedAddrId(added.id);
+      if (result.ok) {
+        setSavedAddresses((prev) => [result.address, ...prev.map((a) => ({ ...a, isDefault: false }))]);
+        setSelectedAddrId(result.address.id);
+        setEditDraft(null);
         showToast('Address saved');
         return true;
       }
+      showToast(result.error);
+      return false;
     } finally {
       setSavingAddress(false);
     }
-    return false;
+  };
+
+  const handleUpdateSavedAddress = async () => {
+    if (!user?.id || !editDraft?.id) return false;
+    if (!editDraft.name || !editDraft.address || !editDraft.pincode) {
+      showToast('Fill name, address and pincode');
+      return false;
+    }
+    if (!isValidMobileNumber(editDraft.phone || user.phone || '')) {
+      showToast('Enter a valid 10-digit primary mobile number');
+      return false;
+    }
+    const alt = normalizeRequiredAlternateMobile(editDraft.alternatePhone || '', editDraft.phone || user.phone || '');
+    if (!alt.ok) {
+      showToast(alt.error);
+      return false;
+    }
+    const pinCheck = pincodeDeliveryMessage(String(editDraft.pincode));
+    if (!pinCheck.ok) {
+      showToast(pinCheck.message);
+      return false;
+    }
+    setSavingAddress(true);
+    try {
+      const result = await updateUserAddress(user, editDraft.id, {
+        type: editDraft.type,
+        name: editDraft.name,
+        phone: editDraft.phone,
+        alternatePhone: alt.value,
+        address: editDraft.address,
+        landmark: editDraft.landmark,
+        city: editDraft.city || 'Chennai',
+        pincode: String(editDraft.pincode),
+      });
+      if (result.ok) {
+        setSavedAddresses((prev) => prev.map((a) => (a.id === result.address.id ? result.address : a)));
+        setSelectedAddrId(result.address.id);
+        setEditDraft(null);
+        showToast('Address updated');
+        return true;
+      }
+      showToast(result.error);
+      return false;
+    } finally {
+      setSavingAddress(false);
+    }
   };
 
   const goToReview = async () => {
@@ -236,9 +286,20 @@ export default function CheckoutPage() {
       showToast('Minimum order quantity is 4 books.');
       return;
     }
-    if (selectedAddrId === 'new') {
+    if (selectedAddrId === 'new' || savedAddresses.length === 0) {
       const ok = await handleSaveInlineAddress();
       if (!ok) return;
+    } else {
+      const chosen = savedAddresses.find((a) => a.id === selectedAddrId);
+      if (!chosen?.address) {
+        showToast('Select a delivery address to continue.');
+        return;
+      }
+      if (!addressHasRequiredAlternate(chosen)) {
+        showToast('Add a different 10-digit alternate mobile on this address before paying.');
+        setEditDraft({ ...chosen });
+        return;
+      }
     }
     setStep(2);
   };
@@ -289,6 +350,22 @@ export default function CheckoutPage() {
       return;
     }
 
+    if (!selectedAddress?.address) {
+      showToast('Select a delivery address before paying.');
+      setStep(1);
+      release();
+      return;
+    }
+    if (!addressHasRequiredAlternate(selectedAddress)) {
+      showToast('Add a valid alternate mobile number on the delivery address.');
+      if ('id' in selectedAddress && selectedAddress.id) {
+        setEditDraft({ ...selectedAddress });
+      }
+      setStep(1);
+      release();
+      return;
+    }
+
     try {
       if (!idempotencyKeyRef.current) {
         idempotencyKeyRef.current = `bpg-${user.id}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
@@ -307,7 +384,7 @@ export default function CheckoutPage() {
             userId: user.id,
             customerName: selectedAddress.name || user.name || 'Customer',
             customerPhone: selectedAddress.phone || user.phone || '',
-            alternatePhone: (selectedAddress as any).alternatePhone || '',
+            alternatePhone: selectedAddress.alternatePhone || '',
             address: selectedAddress.address,
             city: selectedAddress.city || 'Chennai',
             pincode: selectedAddress.pincode || '600012',
@@ -532,13 +609,33 @@ export default function CheckoutPage() {
                         type="radio"
                         name="addr"
                         checked={selectedAddrId === a.id}
-                        onChange={() => setSelectedAddrId(a.id)}
+                        onChange={() => {
+                          setSelectedAddrId(a.id);
+                          setEditDraft(addressHasRequiredAlternate(a) ? null : { ...a });
+                        }}
                         className="sr-only"
                       />
                       <span className="font-bold text-slate-900">{a.name}</span> · {a.phone}
+                      {a.alternatePhone ? (
+                        <span className="text-slate-500"> · alt {a.alternatePhone}</span>
+                      ) : (
+                        <span className="text-amber-700 font-bold"> · add alternate number</span>
+                      )}
                       <p className="text-slate-600 text-[11px] mt-0.5">
                         {a.address}, {a.city} — {a.pincode}
                       </p>
+                      {selectedAddrId === a.id ? (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            setEditDraft({ ...a });
+                          }}
+                          className="mt-1.5 text-[11px] font-extrabold text-blue-700 hover:underline"
+                        >
+                          Edit this address
+                        </button>
+                      ) : null}
                     </label>
                   ))}
                   <label
@@ -550,13 +647,93 @@ export default function CheckoutPage() {
                       type="radio"
                       name="addr"
                       checked={selectedAddrId === 'new'}
-                      onChange={() => setSelectedAddrId('new')}
+                      onChange={() => {
+                        setSelectedAddrId('new');
+                        setEditDraft(null);
+                      }}
                       className="sr-only"
                     />
                     <span className="font-bold text-blue-600 flex items-center gap-1">
                       <Plus className="w-3.5 h-3.5" /> Add a new address
                     </span>
                   </label>
+                </div>
+              )}
+
+              {editDraft && selectedAddrId !== 'new' && (
+                <div className="space-y-3 pt-2 border-t border-slate-100">
+                  <p className="font-extrabold text-slate-800">Update this address</p>
+                  <p className="text-[11px] text-amber-800">
+                    ST Courier needs a second mobile that is different from the primary number.
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Full Name *</label>
+                      <input
+                        value={editDraft.name}
+                        onChange={(e) => setEditDraft({ ...editDraft, name: e.target.value })}
+                        className="w-full px-3 py-3 min-h-12 border border-slate-300 rounded-xl bg-white outline-none focus:border-blue-600 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Mobile Phone *</label>
+                      <input
+                        maxLength={10}
+                        value={editDraft.phone}
+                        onChange={(e) => setEditDraft({ ...editDraft, phone: e.target.value.replace(/\D/g, '') })}
+                        className="w-full px-3 py-3 min-h-12 border border-slate-300 rounded-xl bg-white outline-none focus:border-blue-600 text-sm"
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="block font-bold text-slate-700 mb-1">Alternate Mobile *</label>
+                      <input
+                        maxLength={10}
+                        value={editDraft.alternatePhone || ''}
+                        onChange={(e) =>
+                          setEditDraft({ ...editDraft, alternatePhone: e.target.value.replace(/\D/g, '') })
+                        }
+                        className="w-full px-3 py-3 min-h-12 border border-slate-300 rounded-xl bg-white outline-none focus:border-blue-600 text-sm"
+                        placeholder="Different 10-digit number for ST Courier"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Address *</label>
+                    <input
+                      value={editDraft.address}
+                      onChange={(e) => setEditDraft({ ...editDraft, address: e.target.value })}
+                      className="w-full px-3 py-3 min-h-12 border border-slate-300 rounded-xl bg-white outline-none focus:border-blue-600 text-sm"
+                    />
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">City / District *</label>
+                      <input
+                        value={editDraft.city}
+                        onChange={(e) => setEditDraft({ ...editDraft, city: e.target.value })}
+                        className="w-full px-3 py-3 min-h-12 border border-slate-300 rounded-xl bg-white outline-none focus:border-blue-600 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Pincode *</label>
+                      <input
+                        maxLength={6}
+                        value={editDraft.pincode}
+                        onChange={(e) =>
+                          setEditDraft({ ...editDraft, pincode: e.target.value.replace(/\D/g, '') })
+                        }
+                        className="w-full px-3 py-3 min-h-12 border border-slate-300 rounded-xl bg-white outline-none focus:border-blue-600 text-sm"
+                      />
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={savingAddress}
+                    onClick={() => void handleUpdateSavedAddress()}
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold min-h-12 py-3 rounded-lg disabled:opacity-60 transition-all touch-manipulation"
+                  >
+                    {savingAddress ? 'Saving…' : 'Save address changes'}
+                  </button>
                 </div>
               )}
 
@@ -581,6 +758,19 @@ export default function CheckoutPage() {
                         className="w-full px-3 py-3 min-h-12 border border-slate-300 rounded-xl bg-white outline-none focus:border-blue-600 text-sm"
                         placeholder="10-digit mobile"
                       />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="block font-bold text-slate-700 mb-1">Alternate Mobile *</label>
+                      <input
+                        maxLength={10}
+                        value={newAddr.alternatePhone}
+                        onChange={(e) => setNewAddr({ ...newAddr, alternatePhone: e.target.value.replace(/\D/g, '') })}
+                        className="w-full px-3 py-3 min-h-12 border border-slate-300 rounded-xl bg-white outline-none focus:border-blue-600 text-sm"
+                        placeholder="Different 10-digit number for ST Courier"
+                      />
+                      <p className="text-[10px] text-slate-500 mt-1">
+                        Required. Courier calls this if the first number does not answer. Must be a different mobile.
+                      </p>
                     </div>
                   </div>
                   <div>
@@ -653,6 +843,7 @@ export default function CheckoutPage() {
                   </p>
                   <p className="text-slate-600 mt-0.5">
                     {selectedAddress?.name} · {selectedAddress?.phone}
+                    {selectedAddress?.alternatePhone ? ` · alt ${selectedAddress.alternatePhone}` : ''}
                     <br />
                     {selectedAddress?.address}, {selectedAddress?.city} — {selectedAddress?.pincode}
                   </p>
@@ -772,6 +963,7 @@ export default function CheckoutPage() {
                 </p>
                 <p className="text-slate-600 mt-0.5">
                   {selectedAddress?.name} · {selectedAddress?.phone}
+                  {selectedAddress?.alternatePhone ? ` · alt ${selectedAddress.alternatePhone}` : ''}
                   <br />
                   {selectedAddress?.address}, {selectedAddress?.city} — {selectedAddress?.pincode}
                 </p>

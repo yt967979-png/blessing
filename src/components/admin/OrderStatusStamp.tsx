@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { isDeliveryAttempted, isParcelDelivered, isRtoStatus } from '@/lib/orderStatus';
 
 export type StampStatus =
   | 'Order Placed'
@@ -33,7 +34,13 @@ export const OrderStatusStamp: React.FC<OrderStatusStampProps> = ({
   let colorClass = 'text-[#55607A] border-[#55607A]/40 bg-[#FAF7F0]';
   let label = String(status || 'UNKNOWN').toUpperCase();
 
-  if (normalized.includes('deliver') && !normalized.includes('attempt') && !normalized.includes('fail')) {
+  if (isRtoStatus(normalized)) {
+    colorClass = 'text-[#C43B3B] border-[#C43B3B]/80 bg-[#C43B3B]/5 ring-1 ring-[#C43B3B]/30';
+    label = 'RTO';
+  } else if (isDeliveryAttempted(normalized)) {
+    colorClass = 'text-[#D98C2B] border-[#D98C2B]/80 bg-[#D98C2B]/5 ring-1 ring-[#D98C2B]/30';
+    label = 'DELIVERY ATTEMPTED';
+  } else if (isParcelDelivered(normalized)) {
     colorClass = 'text-[#2F9E60] border-[#2F9E60]/80 bg-[#2F9E60]/5 ring-1 ring-[#2F9E60]/30 shadow-xs';
     label = 'DELIVERED';
   } else if (normalized.includes('packed')) {

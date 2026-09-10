@@ -81,6 +81,93 @@ export function isPaymentRefunded(paymentStatus: string | null | undefined): boo
   return String(paymentStatus || '').toLowerCase().includes('refund');
 }
 
+/** True only when the parcel was handed to the customer — not a failed attempt or RTO. */
+export function isParcelDelivered(status: string | null | undefined): boolean {
+  const s = String(status || '').toLowerCase();
+  if (!s) return false;
+  if (s.includes('attempt') || s.includes('undeliver') || s.includes('fail') || s.includes('rto')) {
+    return false;
+  }
+  return s.includes('delivered') || s === 'dlv';
+}
+
+export function isDeliveryAttempted(status: string | null | undefined): boolean {
+  const s = String(status || '').toLowerCase();
+  if (s.includes('rto')) return false;
+  return (
+    s.includes('attempt') ||
+    s.includes('undeliver') ||
+    s.includes('not delivered') ||
+    (s.includes('deliver') && s.includes('fail'))
+  );
+}
+
+export function isRtoStatus(status: string | null | undefined): boolean {
+  return String(status || '').toLowerCase().includes('rto');
+}
+
+export function classifyCourierActivity(
+  text: string | null | undefined
+): 'delivered' | 'attempted' | 'ofd' | 'rto' | 'transit' | 'other' {
+  const s = String(text || '').toLowerCase();
+  if (!s) return 'other';
+  if (s.includes('rto')) return 'rto';
+  if (
+    s.includes('attempt') ||
+    s.includes('undeliver') ||
+    s.includes('not delivered') ||
+    s.includes('not home') ||
+    s.includes('consignee not') ||
+    (s.includes('deliver') && s.includes('fail'))
+  ) {
+    return 'attempted';
+  }
+  if (s.includes('delivered') || s === 'dlv') return 'delivered';
+  if (s.includes('out for delivery') || s.includes('ofd') || s.includes('reattempt') || s.includes('re-attempt')) {
+    return 'ofd';
+  }
+  if (s.includes('transit') || s.includes('hub') || s.includes('dispatched')) return 'transit';
+  return 'other';
+}
+
+/**
+ * Admin Orders / Overview buckets. Last-mile (OFD, missed delivery, RTO)
+ * stays under In Transit — never Unpacked and never Delivered.
+ */
+export type AdminFulfillmentBucket = 'cancelled' | 'pending' | 'packed' | 'dispatched' | 'delivered';
+
+export function adminFulfillmentBucket(order: OrderStatusLike | null | undefined): AdminFulfillmentBucket {
+  if (!order || isRecordCancelled(order)) return 'cancelled';
+  const status = fulfillmentStatus(order);
+  const s = String(status || '').toLowerCase();
+  const kind = classifyCourierActivity(status);
+  if (kind === 'delivered' || isParcelDelivered(status)) return 'delivered';
+  if (
+    kind === 'ofd' ||
+    kind === 'attempted' ||
+    kind === 'rto' ||
+    kind === 'transit' ||
+    s.includes('handed') ||
+    s.includes('out for delivery') ||
+    s.includes('dispatched')
+  ) {
+    return 'dispatched';
+  }
+  if (s.includes('pack')) return 'packed';
+  return 'pending';
+}
+
+/** Customer-facing headline that matches ST last-mile, not a fake GPS label. */
+export function customerCourierHeadline(status: string | null | undefined): string {
+  const raw = String(status || '').trim();
+  if (!raw) return 'With ST Courier';
+  if (isRtoStatus(raw)) return 'Returning to shop (RTO)';
+  if (isDeliveryAttempted(raw)) return 'Delivery attempted — ST will retry';
+  if (isParcelDelivered(raw)) return 'Delivered';
+  if (raw.toLowerCase().includes('out for delivery')) return 'Out for Delivery';
+  return raw;
+}
+
 /**
  * Customer-facing refund stages after admin cancel.
  * Razorpay "processed" ≠ money already in bank — bank credit is usually 5–7 working days.

@@ -10,6 +10,7 @@ import {
   FREE_DELIVERY_AT_QTY,
 } from '@/lib/deliveryRules';
 import { publicSiteOrigin } from '@/lib/publicSiteUrl';
+import { normalizeRequiredAlternateMobile } from '@/lib/authValidation';
 
 export async function POST(request: Request) {
   const auth = await verifyAdminRequest(request);
@@ -57,6 +58,10 @@ export async function POST(request: Request) {
     if (!cleanPhone || cleanPhone.length !== 10) {
       return NextResponse.json({ error: 'Valid 10-digit primary mobile number is required.' }, { status: 400 });
     }
+    const altPhone = normalizeRequiredAlternateMobile(customerAltPhone, cleanPhone);
+    if (!altPhone.ok) {
+      return NextResponse.json({ error: altPhone.error }, { status: 400 });
+    }
     if (!address || !pincode) {
       return NextResponse.json({ error: 'Delivery address and pincode are required.' }, { status: 400 });
     }
@@ -89,7 +94,7 @@ export async function POST(request: Request) {
     const shippingAddressObj = JSON.stringify({
       name: cleanName,
       phone: cleanPhone,
-      alternatePhone: String(customerAltPhone || '').replace(/\D/g, '').slice(-10) || null,
+      alternatePhone: altPhone.value,
       address: String(address).trim(),
       landmark: String(landmark || '').trim() || null,
       near_landmark: String(landmark || '').trim() || null,

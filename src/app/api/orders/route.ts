@@ -16,6 +16,7 @@ import { consumeCouponUsage, recordCouponRedemption } from '@/lib/coupons';
 import { blocksShippingActions, isOrderCancelled, logOrderStateTransition } from '@/lib/orderStatus';
 import { refundRazorpayPayment } from '@/lib/razorpayRefund';
 import { confirmStockHolds, recordConfirmedSale, shrinkConfirmedHold, releaseStockHolds } from '@/lib/stockHold';
+import { isValidMobileNumber, normalizeRequiredAlternateMobile } from '@/lib/authValidation';
 
 /**
  * Money-safety net: payment is captured by Razorpay client-side BEFORE this
@@ -250,6 +251,24 @@ export async function POST(request: Request) {
     capturedPaymentId = razorpayPaymentId || null;
     capturedRazorpayOrderId = razorpayOrderId || null;
 
+    const altPhone = normalizeRequiredAlternateMobile(alternatePhone, customerPhone);
+    if (!String(customerName || '').trim() || !String(address || '').trim()) {
+      return NextResponse.json(
+        { error: 'Select a delivery address before paying. Name and street address are required.' },
+        { status: 400 }
+      );
+    }
+    if (!isValidMobileNumber(String(customerPhone || ''))) {
+      return NextResponse.json({ error: 'Enter a valid 10-digit primary mobile number on the address.' }, { status: 400 });
+    }
+    if (!altPhone.ok) {
+      return NextResponse.json({ error: altPhone.error }, { status: 400 });
+    }
+    const pinDigits = String(pincode || '').replace(/\D/g, '').slice(0, 6);
+    if (pinDigits.length !== 6) {
+      return NextResponse.json({ error: 'Enter a valid 6-digit delivery pincode.' }, { status: 400 });
+    }
+
     const userId = session.userId;
     const isRazorpay = String(paymentMethod || '').toLowerCase().includes('razorpay');
 
@@ -357,10 +376,10 @@ export async function POST(request: Request) {
     const shippingAddressObj = JSON.stringify({
       name: customerName,
       phone: customerPhone,
-      alternatePhone: String(alternatePhone || '').replace(/\D/g, '').slice(-10) || '',
+      alternatePhone: altPhone.value,
       address: address || '',
       city: city || 'Chennai',
-      pincode: pincode || '600012',
+      pincode: pinDigits,
     });
 
     const { generateNextGstInvoiceNumber } = await import('@/lib/invoiceGenerator');

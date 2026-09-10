@@ -48,6 +48,33 @@ export function normalizeMobileDigits(phone: string): string {
   return digits.slice(-10);
 }
 
+/** ST Courier needs a second reachable number, different from the primary. */
+export function normalizeRequiredAlternateMobile(
+  altRaw: string,
+  primaryRaw?: string
+): { ok: true; value: string } | { ok: false; error: string } {
+  if (!isValidMobileNumber(altRaw)) {
+    return {
+      ok: false,
+      error:
+        'Enter a valid 10-digit alternate mobile number. ST Courier uses this if the primary number is unreachable.',
+    };
+  }
+  const alt = normalizeMobileDigits(altRaw);
+  const primary = primaryRaw && isValidMobileNumber(primaryRaw) ? normalizeMobileDigits(primaryRaw) : '';
+  if (primary && alt === primary) {
+    return { ok: false, error: 'Alternate number must be different from the primary phone.' };
+  }
+  return { ok: true, value: alt };
+}
+
+export function addressHasRequiredAlternate(addr: {
+  phone?: string | null;
+  alternatePhone?: string | null;
+}): boolean {
+  return normalizeRequiredAlternateMobile(String(addr.alternatePhone || ''), String(addr.phone || '')).ok;
+}
+
 export interface PasswordCriteria {
   minLength: boolean;
   hasUpper: boolean;
