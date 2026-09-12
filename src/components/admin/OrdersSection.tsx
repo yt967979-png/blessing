@@ -174,10 +174,26 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
     }
   };
 
-  const handleBatchPrintSlips = () => {
+  const handleSelectAllUnpacked = () => {
+    const unpacked = filteredOrders.filter(
+      (o) => adminFulfillmentBucket(o) === 'pending' && !isRecordCancelled(o)
+    );
+    if (unpacked.length === 0) {
+      onShowToast('No unpacked orders found in this view.');
+      return;
+    }
+    setSelectedIds(new Set(unpacked.map((o) => o.id)));
+    onShowToast(`Selected ${unpacked.length} unpacked order(s) for batch printing.`);
+  };
+
+  const handleBatchPrintSlips = (size: 'thermal4x6' | 'a4' = 'thermal4x6') => {
     const selectedOrders = orders.filter((o) => selectedIds.has(o.id) && !isRecordCancelled(o));
-    if (selectedOrders.length === 0) return;
-    openShippingLabelPrint(selectedOrders, 'thermal4x6');
+    if (selectedOrders.length === 0) {
+      onShowToast('Please select at least one active order to print labels.');
+      return;
+    }
+    openShippingLabelPrint(selectedOrders, size);
+    onShowToast(`🖨️ Opening print window for ${selectedOrders.length} shipping label(s)...`);
   };
 
   const handleInlineSaveAwb = async (orderId: string) => {
@@ -250,7 +266,19 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
             />
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {counts.pending > 0 && selectedIds.size === 0 && (
+              <button
+                type="button"
+                onClick={handleSelectAllUnpacked}
+                className="px-3 py-2 bg-blue-50 hover:bg-blue-100 text-[#2874f0] border border-blue-200 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer"
+                title="Quickly select all unpacked orders for batch printing"
+              >
+                <Package className="w-3.5 h-3.5 text-[#2874f0]" />
+                <span>Select All Unpacked ({counts.pending})</span>
+              </button>
+            )}
+
             <button
               type="button"
               onClick={() => setShowCustomOrderModal(true)}
@@ -263,7 +291,7 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
 
           {/* Batch Action Buttons (When items selected) */}
           {selectedIds.size > 0 && (
-            <div className="flex items-center gap-2 bg-blue-50 p-1.5 rounded-xl border border-blue-200 animate-fade-slide-up">
+            <div className="flex flex-wrap items-center gap-2 bg-blue-50 p-1.5 rounded-xl border border-blue-200 animate-fade-slide-up w-full sm:w-auto">
               <span className="text-xs font-bold text-[#2874f0] px-2">
                 {selectedIds.size} Selected
               </span>
@@ -278,11 +306,29 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
               </button>
               <button
                 type="button"
-                onClick={handleBatchPrintSlips}
+                onClick={() => handleBatchPrintSlips('thermal4x6')}
                 className="px-3.5 py-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                title="Print 4×6 inch thermal sticker rolls"
               >
                 <Printer className="w-3.5 h-3.5" />
                 <span>Print 4×6&quot; Labels</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleBatchPrintSlips('a4')}
+                className="px-3.5 py-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                title="Print standard A4 sheet"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>A4 Sheet</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedIds(new Set())}
+                className="px-2 py-1.5 text-slate-400 hover:text-slate-700 text-xs font-semibold cursor-pointer"
+                title="Clear selection"
+              >
+                ✕ Clear
               </button>
             </div>
           )}

@@ -416,10 +416,9 @@ const THERMAL_CSS = `
     .toolbar { display: none !important; }
     .labels-container { padding: 0; gap: 0; }
     .thermal-label-page { box-shadow: none; margin: 0; }
-    @page {
-      size: 4in 6in;
-      margin: 0;
-    }
+  }
+  @page {
+    margin: 0;
   }
 `;
 

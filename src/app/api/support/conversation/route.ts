@@ -1,0 +1,244 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { queryDb } from '@/lib/db';
+import { getAuthenticatedUser } from '@/lib/serverSecurity';
+import { generateSupportRagAnswer } from '@/lib/supportRag';
+import { notifySupportEvent } from '@/lib/supportEvents';
+import crypto from 'crypto';
+
+export const dynamic = 'force-dynamic';
+
+function getOrCreateSessionToken(req: NextRequest): { sessionToken: string; isNew: boolean } {
+  const existing = req.cookies.get('bpg_support_session')?.value;
+  if (existing && existing.length >= 16) {
+    return { sessionToken: existing, isNew: false };
+  }
+  return { sessionToken: crypto.randomBytes(16).toString('hex'), isNew: true };
+}
+
+/**
+ * GET /api/support/conversation
+ * Fetches the active or most recent conversation and message history.
+ */
+export async function GET(req: NextRequest) {
+  try {
+    const { sessionToken } = getOrCreateSessionToken(req);
+    const user = await getAuthenticatedUser(req).catch(() => null);
+    const convIdParam = req.nextUrl.searchParams.get('id');
+
+    let conv: any = null;
+
+    if (convIdParam) {
+      const res = await queryDb(`SELECT * FROM support_conversations WHERE id = $1 LIMIT 1`, [convIdParam]);
+      conv = res.rows[0];
+    } else if (user?.userId) {
+      const res = await queryDb(
+        `SELECT * FROM support_conversations 
+         WHERE customer_id = $1 OR session_token = $2 
+         ORDER BY updated_at DESC LIMIT 1`,
+        [user.userId, sessionToken]
+      );
+      conv = res.rows[0];
+    } else {
+      const res = await queryDb(
+        `SELECT * FROM support_conversations 
+         WHERE session_token = $1 
+         ORDER BY updated_at DESC LIMIT 1`,
+        [sessionToken]
+      );
+      conv = res.rows[0];
+    }
+
+    if (!conv) {
+      return NextResponse.json({ conversation: null, messages: [] });
+    }
+
+    const msgsRes = await queryDb(
+      `SELECT id, conversation_id, sender_type, sender_name, sender_id, text, is_read, read_at, created_at 
+       FROM support_messages 
+       WHERE conversation_id = $1 
+       ORDER BY created_at ASC`,
+      [conv.id]
+    );
+
+    return NextResponse.json({
+      conversation: conv,
+      messages: msgsRes.rows,
+    });
+  } catch (err: any) {
+    return NextResponse.json({ error: err?.message || 'Failed to fetch conversation' }, { status: 500 });
+  }
+}
+
+/**
+ * POST /api/support/conversation
+ * Sends a customer message.
+ * If conversation status is 'BOT', triggers automated RAG response.
+ * If user requests human, escalates to 'WAITING_ADMIN'.
+ */
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json().catch(() => ({}));
+    const text = String(body.text || '').trim();
+    const action = String(body.action || '').trim();
+    const customerName = String(body.name || 'Student/Parent').trim();
+    const customerPhone = String(body.phone || '').trim();
+    const linkedOrderId = String(body.orderId || '').trim();
+
+    const { sessionToken, isNew } = getOrCreateSessionToken(req);
+    const user = await getAuthenticatedUser(req).catch(() => null);
+
+    let conversationId = body.conversationId;
+    let conv: any = null;
+
+    if (conversationId) {
+      const cRes = await queryDb(`SELECT * FROM support_conversations WHERE id = $1 LIMIT 1`, [conversationId]);
+      conv = cRes.rows[0];
+    }
+
+    if (!conv) {
+      conversationId = `conv_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+      const insRes = await queryDb(
+        `INSERT INTO support_conversations 
+           (id, customer_id, session_token, customer_name, customer_phone, order_id, status)
+         VALUES ($1, $2, $3, $4, $5, $6, 'BOT')
+         RETURNING *`,
+        [conversationId, user?.userId || null, sessionToken, customerName, customerPhone || null, linkedOrderId || null]
+      );
+      conv = insRes.rows[0];
+    }
+
+    // ── Direct Human Escalation Action
+    if (action === 'escalate_human' || body.escalate === true) {
+      await queryDb(
+        `UPDATE support_conversations 
+         SET status = 'WAITING_ADMIN', updated_at = NOW(), last_message_at = NOW() 
+         WHERE id = $1`,
+        [conv.id]
+      );
+
+      const sysMsgId = `msg_${Date.now()}_sys`;
+      await queryDb(
+        `INSERT INTO support_messages (id, conversation_id, sender_type, sender_name, text)
+         VALUES ($1, $2, 'SYSTEM', 'System', $3)`,
+        [sysMsgId, conv.id, '⏳ Connecting you to our support team... Please wait while an agent joins.']
+      );
+
+      // Alert all online admins
+      await notifySupportEvent({
+        type: 'SUPPORT_REQUESTED',
+        conversationId: conv.id,
+        senderType: 'SYSTEM',
+        senderName: customerName,
+        text: 'Customer requested human assistance',
+        status: 'WAITING_ADMIN',
+        timestamp: new Date().toISOString(),
+      });
+
+      const res = NextResponse.json({
+        success: true,
+        conversationId: conv.id,
+        status: 'WAITING_ADMIN',
+      });
+      if (isNew) {
+        res.cookies.set('bpg_support_session', sessionToken, { httpOnly: true, sameSite: 'lax', maxAge: 60 * 60 * 24 * 30 });
+      }
+      return res;
+    }
+
+    if (!text) {
+      return NextResponse.json({ error: 'Message text is required' }, { status: 400 });
+    }
+
+    // Insert Customer Message
+    const custMsgId = `msg_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
+    await queryDb(
+      `INSERT INTO support_messages (id, conversation_id, sender_type, sender_name, sender_id, text)
+       VALUES ($1, $2, 'CUSTOMER', $3, $4, $5)`,
+      [custMsgId, conv.id, customerName, user?.userId || null, text]
+    );
+
+    await queryDb(`UPDATE support_conversations SET last_message_at = NOW(), updated_at = NOW() WHERE id = $1`, [conv.id]);
+
+    await notifySupportEvent({
+      type: 'NEW_MESSAGE',
+      conversationId: conv.id,
+      senderType: 'CUSTOMER',
+      senderName: customerName,
+      text,
+      status: conv.status,
+      timestamp: new Date().toISOString(),
+    });
+
+    // If conversation is in ACTIVE state (human assigned), do NOT run bot; notify assigned admin
+    if (conv.status === 'ACTIVE') {
+      const res = NextResponse.json({
+        success: true,
+        conversationId: conv.id,
+        messageId: custMsgId,
+        status: 'ACTIVE',
+      });
+      if (isNew) {
+        res.cookies.set('bpg_support_session', sessionToken, { httpOnly: true, sameSite: 'lax', maxAge: 60 * 60 * 24 * 30 });
+      }
+      return res;
+    }
+
+    // ── BOT MODE: Execute RAG Engine
+    const ragResult = await generateSupportRagAnswer(text, {
+      phone: customerPhone || conv.customer_phone,
+      customerId: user?.userId,
+      sessionOrder: linkedOrderId || conv.order_id,
+    });
+
+    if (ragResult.linkedOrderId && !conv.order_id) {
+      await queryDb(`UPDATE support_conversations SET order_id = $1 WHERE id = $2`, [ragResult.linkedOrderId, conv.id]);
+    }
+
+    const aiMsgId = `msg_${Date.now() + 50}_ai`;
+    await queryDb(
+      `INSERT INTO support_messages (id, conversation_id, sender_type, sender_name, text)
+       VALUES ($1, $2, 'AI', 'Blessing AI Assistant', $3)`,
+      [aiMsgId, conv.id, ragResult.answer]
+    );
+
+    await notifySupportEvent({
+      type: 'NEW_MESSAGE',
+      conversationId: conv.id,
+      senderType: 'AI',
+      senderName: 'Blessing AI Assistant',
+      text: ragResult.answer,
+      status: conv.status,
+      data: { suggestions: ragResult.suggestions },
+      timestamp: new Date().toISOString(),
+    });
+
+    // If RAG detected need for human escalation
+    if (ragResult.shouldEscalate) {
+      await queryDb(`UPDATE support_conversations SET status = 'WAITING_ADMIN' WHERE id = $1`, [conv.id]);
+      await notifySupportEvent({
+        type: 'SUPPORT_REQUESTED',
+        conversationId: conv.id,
+        senderType: 'SYSTEM',
+        senderName: customerName,
+        text: text,
+        status: 'WAITING_ADMIN',
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    const res = NextResponse.json({
+      success: true,
+      conversationId: conv.id,
+      reply: ragResult.answer,
+      suggestions: ragResult.suggestions,
+      status: ragResult.shouldEscalate ? 'WAITING_ADMIN' : 'BOT',
+    });
+
+    if (isNew) {
+      res.cookies.set('bpg_support_session', sessionToken, { httpOnly: true, sameSite: 'lax', maxAge: 60 * 60 * 24 * 30 });
+    }
+    return res;
+  } catch (err: any) {
+    return NextResponse.json({ error: err?.message || 'Support processing error' }, { status: 500 });
+  }
+}

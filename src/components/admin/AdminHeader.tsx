@@ -32,6 +32,10 @@ const TAB_TITLES: Record<AdminTab, { title: string; subtitle: string }> = {
     title: 'Live Orders & Fulfillment',
     subtitle: 'Process student orders, print packing slips, and assign ST Courier AWBs',
   },
+  support: {
+    title: 'Live Customer Support',
+    subtitle: 'Real-time WhatsApp-style chat, incoming queue, and customer intelligence',
+  },
   courier: {
     title: 'ST Courier Logistics',
     subtitle: 'Real-time parcel delivery tracking and ST Courier network synchronization',

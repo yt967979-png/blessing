@@ -15,6 +15,7 @@ import {
   LogOut,
   ExternalLink,
   Activity,
+  Headphones,
   Tag,
 } from 'lucide-react';
 import { BrandLogo } from '@/components/ui/BrandLogo';
@@ -22,6 +23,7 @@ import { BrandLogo } from '@/components/ui/BrandLogo';
 export type AdminTab =
   | 'overview'
   | 'orders'
+  | 'support'
   | 'courier'
   | 'catalog'
   | 'coupons'
@@ -33,6 +35,7 @@ export type AdminTab =
 export const ADMIN_TAB_KEYS: AdminTab[] = [
   'overview',
   'orders',
+  'support',
   'courier',
   'catalog',
   'coupons',
@@ -47,6 +50,7 @@ interface AdminSidebarProps {
   setActiveTab: (tab: AdminTab) => void;
   pendingOrdersCount?: number;
   lowStockCount?: number;
+  waitingSupportCount?: number;
   isOpenMobile?: boolean;
   onCloseMobile?: () => void;
   onLogout?: () => void;
@@ -57,6 +61,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   setActiveTab,
   pendingOrdersCount = 0,
   lowStockCount = 0,
+  waitingSupportCount = 0,
   isOpenMobile = false,
   onCloseMobile,
   onLogout,
@@ -64,8 +69,8 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   const navItems = [
     {
       key: 'overview' as AdminTab,
-      label: 'Store Overview',
-      subtitle: "Today's sales & quick actions",
+      label: 'Storefront Overview',
+      subtitle: 'Quick metrics & alerts',
       icon: LayoutDashboard,
     },
     {
@@ -75,6 +80,14 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
       icon: ShoppingCart,
       badge: pendingOrdersCount > 0 ? String(pendingOrdersCount) : undefined,
       badgeColor: 'bg-amber-500 text-white animate-pulse',
+    },
+    {
+      key: 'support' as AdminTab,
+      label: 'Live Customer Support',
+      subtitle: 'WhatsApp-style chat & 360 card',
+      icon: Headphones,
+      badge: waitingSupportCount > 0 ? `${waitingSupportCount} New` : undefined,
+      badgeColor: 'bg-amber-500 text-white animate-bounce',
     },
     {
       key: 'courier' as AdminTab,

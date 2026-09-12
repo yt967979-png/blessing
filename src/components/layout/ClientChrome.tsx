@@ -7,6 +7,7 @@ import { Toast } from '@/components/ui/Toast';
 import { FloatingActions } from '@/components/layout/FloatingActions';
 import { ScrollRestore } from '@/components/layout/ScrollRestore';
 import { Modals } from '@/components/modals/Modals';
+import { BlessingChatWidget } from '@/components/chat/BlessingChatWidget';
 
 /** Shared storefront chrome — mount once from root layout */
 export function ClientChrome({ children }: { children: React.ReactNode }) {
@@ -17,6 +18,7 @@ export function ClientChrome({ children }: { children: React.ReactNode }) {
       <Toast />
       <CartDrawer />
       <Modals />
+      <BlessingChatWidget />
       <FloatingActions />
       <MobileBottomNav />
     </>

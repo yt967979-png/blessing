@@ -400,6 +400,55 @@ async function migrateDatabase(connStr, dbName) {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
 
+      CREATE TABLE IF NOT EXISTS support_conversations (
+        id VARCHAR(255) PRIMARY KEY,
+        customer_id VARCHAR(255),
+        session_token VARCHAR(255) NOT NULL,
+        customer_name VARCHAR(255),
+        customer_phone VARCHAR(50),
+        order_id VARCHAR(255),
+        status VARCHAR(50) NOT NULL DEFAULT 'BOT',
+        assigned_admin_id VARCHAR(255),
+        assigned_admin_name VARCHAR(255),
+        accepted_at TIMESTAMP,
+        resolved_at TIMESTAMP,
+        last_message_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_support_conv_status ON support_conversations (status);
+      CREATE INDEX IF NOT EXISTS idx_support_conv_session ON support_conversations (session_token);
+      CREATE INDEX IF NOT EXISTS idx_support_conv_customer ON support_conversations (customer_id);
+      CREATE INDEX IF NOT EXISTS idx_support_conv_order ON support_conversations (order_id);
+      CREATE INDEX IF NOT EXISTS idx_support_conv_last_msg ON support_conversations (last_message_at DESC);
+
+      CREATE TABLE IF NOT EXISTS support_messages (
+        id VARCHAR(255) PRIMARY KEY,
+        conversation_id VARCHAR(255) NOT NULL REFERENCES support_conversations(id) ON DELETE CASCADE,
+        sender_type VARCHAR(50) NOT NULL,
+        sender_name VARCHAR(255) NOT NULL,
+        sender_id VARCHAR(255),
+        text TEXT NOT NULL,
+        is_read BOOLEAN DEFAULT FALSE,
+        read_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_support_msg_conv ON support_messages (conversation_id, created_at ASC);
+
+      CREATE TABLE IF NOT EXISTS support_feedback (
+        id VARCHAR(255) PRIMARY KEY,
+        conversation_id VARCHAR(255) UNIQUE NOT NULL REFERENCES support_conversations(id) ON DELETE CASCADE,
+        customer_name VARCHAR(255),
+        admin_id VARCHAR(255),
+        admin_name VARCHAR(255),
+        rating INT NOT NULL CHECK (rating >= 1 AND rating <= 5),
+        tags TEXT,
+        comment TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_support_feedback_rating ON support_feedback (rating);
+      CREATE INDEX IF NOT EXISTS idx_support_feedback_admin ON support_feedback (admin_id);
+
       DROP TABLE IF EXISTS whatsapp_outbox CASCADE;
       DROP TABLE IF EXISTS whatsapp_logs CASCADE;
       DROP TABLE IF EXISTS whatsapp_sessions CASCADE;

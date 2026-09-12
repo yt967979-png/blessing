@@ -25,6 +25,7 @@ import CourierSection from '@/components/admin/CourierSection';
 import CatalogSection from '@/components/admin/CatalogSection';
 import CouponsSection from '@/components/admin/CouponsSection';
 import SystemHealthSection from '@/components/admin/SystemHealthSection';
+import { LiveSupportSection } from '@/components/admin/LiveSupportSection';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface OrderItem { title: string; qty: number; price?: number; subtotal?: number; }
@@ -102,29 +103,55 @@ function SimpleBarChart({ data, height = 140 }: { data: DailyPoint[]; height?: n
   );
 }
 
-/** Short chime for new paid orders. */
+/**
+ * Synthesizes a crisp, celebratory cash-register / payment chime via Web Audio API.
+ * Zero external audio assets, zero network latency, 100% reliable across browsers.
+ */
 function playAdminNewOrderBeep() {
   try {
     const AC = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!AC) return;
     const ctx = new AC();
-    void ctx.resume();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = 'sine';
-    osc.connect(gain);
-    gain.connect(ctx.destination);
+    if (ctx.state === 'suspended') {
+      void ctx.resume();
+    }
+
     const t0 = ctx.currentTime;
-    osc.frequency.setValueAtTime(880, t0);
-    osc.frequency.setValueAtTime(1175, t0 + 0.12);
-    gain.gain.setValueAtTime(0.0001, t0);
-    gain.gain.exponentialRampToValueAtTime(0.18, t0 + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.38);
-    osc.start(t0);
-    osc.stop(t0 + 0.4);
-    osc.onended = () => {
-      void ctx.close().catch(() => {});
+
+    // Helper for pure bell tones with smooth exponential decay
+    const playBellTone = (freq: number, startDelay: number, duration: number, gainPeak: number) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, t0 + startDelay);
+
+      gain.gain.setValueAtTime(0.0001, t0 + startDelay);
+      gain.gain.exponentialRampToValueAtTime(gainPeak, t0 + startDelay + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + startDelay + duration);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(t0 + startDelay);
+      osc.stop(t0 + startDelay + duration);
     };
+
+    // Tone 1: Initial metallic register strike (988 Hz - B5)
+    playBellTone(988, 0.0, 0.25, 0.22);
+    playBellTone(1976, 0.0, 0.15, 0.08); // Subtle overtone
+
+    // Tone 2: Bright ascending register chime (1319 Hz - E6)
+    playBellTone(1319, 0.08, 0.35, 0.25);
+    playBellTone(2638, 0.08, 0.20, 0.09); // Subtle overtone
+
+    // Tone 3: Sparkling coin ring climax (2093 Hz - C7)
+    playBellTone(2093, 0.16, 0.55, 0.28);
+    playBellTone(4186, 0.16, 0.25, 0.05); // High shimmer
+
+    // Clean up AudioContext when sound finishes
+    setTimeout(() => {
+      void ctx.close().catch(() => {});
+    }, 850);
   } catch {}
 }
 
@@ -175,10 +202,39 @@ function AdminPageInner() {
   const knownOrderIdsRef = useRef<Set<string> | null>(null);
   const soundUnlockedRef = useRef(false);
 
+  // Auto-unlock Web Audio on first user interaction (click, touch, keydown)
+  useEffect(() => {
+    const unlockAudio = () => {
+      soundUnlockedRef.current = true;
+      window.removeEventListener('pointerdown', unlockAudio);
+      window.removeEventListener('keydown', unlockAudio);
+    };
+    window.addEventListener('pointerdown', unlockAudio, { once: true });
+    window.addEventListener('keydown', unlockAudio, { once: true });
+    return () => {
+      window.removeEventListener('pointerdown', unlockAudio);
+      window.removeEventListener('keydown', unlockAudio);
+    };
+  }, []);
+
   // ── Analytics state
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [analyticsRange, setAnalyticsRange] = useState(30);
+
+  // ── Support Queue State
+  const [waitingSupportCount, setWaitingSupportCount] = useState(0);
+
+  const loadWaitingSupport = useCallback(async () => {
+    if (!user) return;
+    try {
+      const res = await fetch('/api/admin/support?view=overview', { headers: authHeaders(user) });
+      if (res.ok) {
+        const d = await res.json();
+        setWaitingSupportCount(d.stats?.waitingCount || 0);
+      }
+    } catch (_) {}
+  }, [user]);
 
   // ── Low stock & holds state (Real-time live sync)
   const [lowStockAlerts, setLowStockAlerts] = useState<{ id: string; title: string; stock: number; cls?: string; subject?: string }[]>([]);
@@ -226,7 +282,7 @@ function AdminPageInner() {
             if (!knownOrderIdsRef.current.has(id)) newcomers.push(id);
           }
           if (newcomers.length > 0) {
-            if (soundUnlockedRef.current) playAdminNewOrderBeep();
+            if (soundEnabled && soundUnlockedRef.current) playAdminNewOrderBeep();
             showToast(`🔔 New order ${newcomers[0]}${newcomers.length > 1 ? ` (+${newcomers.length - 1})` : ''}`);
             if (opts?.fromStream) setActiveTab('orders');
           }
@@ -319,8 +375,9 @@ function AdminPageInner() {
       loadLowStock();
       loadContent();
       loadSystemHealth();
+      loadWaitingSupport();
     }
-  }, [user, isAdmin, loadLiveOrders, loadAnalytics, loadLowStock, loadContent, loadSystemHealth]);
+  }, [user, isAdmin, loadLiveOrders, loadAnalytics, loadLowStock, loadContent, loadSystemHealth, loadWaitingSupport]);
 
   // Real-time synchronization for stock, orders, and checkout holds
   useEffect(() => {
@@ -542,6 +599,7 @@ function AdminPageInner() {
         setActiveTab={setActiveTab}
         pendingOrdersCount={pendingCount}
         lowStockCount={lowStockAlerts.length}
+        waitingSupportCount={waitingSupportCount}
         isOpenMobile={isMobileMenuOpen}
         onCloseMobile={() => setIsMobileMenuOpen(false)}
         onLogout={() => {
@@ -561,13 +619,14 @@ function AdminPageInner() {
             setSoundEnabled(next);
             soundUnlockedRef.current = next;
             if (next) playAdminNewOrderBeep();
-            showToast(next ? '🔔 Order sound notifications ON' : '🔕 Sound muted');
+            showToast(next ? '🔔 Order chime ON (Played test chime)' : '🔕 Sound notifications muted');
           }}
           onRefresh={() => {
             void loadLiveOrders();
             void loadAnalytics();
             void loadLowStock();
             void loadContent();
+            void loadWaitingSupport();
             showToast('🔄 Store records refreshed');
           }}
           isRefreshing={ordersLoading || analyticsLoading}
@@ -586,6 +645,15 @@ function AdminPageInner() {
               activeStockHolds={activeStockHolds}
               onNavigate={(tab) => setActiveTab(tab)}
               onReleaseHold={handleReleaseHold}
+            />
+          )}
+
+          {/* SECTION: LIVE CUSTOMER SUPPORT */}
+          {activeTab === 'support' && (
+            <LiveSupportSection
+              user={user}
+              onShowToast={showToast}
+              playChime={playAdminNewOrderBeep}
             />
           )}
 
