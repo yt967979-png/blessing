@@ -19,6 +19,7 @@ import {
   Maximize2,
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
+import { authHeaders } from '@/lib/clientAuth';
 import { ChatMarkdown } from './ChatMarkdown';
 import { ChatInteractiveCard } from './ChatInteractiveCard';
 import { ChatSuggestionButtons } from './ChatSuggestionButtons';
@@ -68,14 +69,20 @@ export const BlessingChatWidget: React.FC = () => {
   const [feedbackComment, setFeedbackComment] = useState('');
   const [unreadCount, setUnreadCount] = useState(0);
 
-  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const chatContainerRef = useRef<HTMLDivElement | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
 
   const isStorefront = !pathname?.startsWith('/admin');
 
-  // Auto-scroll to latest message
+  // Auto-scroll to latest message inside chat widget only
   const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
-    messagesEndRef.current?.scrollIntoView({ behavior });
+    const el = chatContainerRef.current;
+    if (!el) return;
+    if (behavior === 'auto') {
+      el.scrollTop = el.scrollHeight;
+    } else {
+      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    }
   };
 
   useEffect(() => {
@@ -88,7 +95,9 @@ export const BlessingChatWidget: React.FC = () => {
   // Load conversation & messages
   const loadConversation = useCallback(async () => {
     try {
-      const res = await fetch('/api/support/conversation');
+      const res = await fetch('/api/support/conversation', {
+        headers: authHeaders(user),
+      });
       if (res.ok) {
         const data = await res.json();
         if (data.conversation) {
@@ -97,7 +106,7 @@ export const BlessingChatWidget: React.FC = () => {
         }
       }
     } catch (_) {}
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     if (isStorefront) {
@@ -183,13 +192,17 @@ export const BlessingChatWidget: React.FC = () => {
     try {
       const res = await fetch('/api/support/conversation', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders(user),
+        },
         body: JSON.stringify({
           conversationId: conversation?.id,
           text,
           action: isEscalation ? 'escalate_human' : undefined,
           name: user?.name || 'Customer',
           phone: user?.phone || '',
+          customerId: user?.id,
         }),
       });
 
@@ -372,7 +385,10 @@ export const BlessingChatWidget: React.FC = () => {
           </div>
 
           {/* Messages Stream */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/50 text-xs custom-scrollbar">
+          <div
+            ref={chatContainerRef}
+            className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/50 text-xs custom-scrollbar"
+          >
             {/* Greeting card */}
             <div className="bg-blue-50/80 border border-blue-100 rounded-2xl p-3 text-slate-700 space-y-1">
               <p className="font-bold text-xs text-[#2874f0] flex items-center gap-1">
@@ -541,8 +557,6 @@ export const BlessingChatWidget: React.FC = () => {
                 ✓ Thank you for your feedback! We look forward to serving you again.
               </div>
             )}
-
-            <div ref={messagesEndRef} />
           </div>
 
           {/* Quick Suggestions Bar */}

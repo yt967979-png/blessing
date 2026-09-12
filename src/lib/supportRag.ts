@@ -63,14 +63,48 @@ function extractAwb(prompt: string): string | null {
   return awbMatch ? awbMatch[1] : null;
 }
 
+export interface CustomerContext {
+  phone?: string;
+  customerId?: string;
+  userName?: string;
+  email?: string;
+  sessionOrder?: string;
+}
+
 /**
  * Core RAG Generation: Resolves user intent against live PostgreSQL database and verified store knowledge.
  */
 export async function generateSupportRagAnswer(
   userPrompt: string,
-  customerContext?: { phone?: string; customerId?: string; sessionOrder?: string }
+  customerContext?: CustomerContext
 ): Promise<RagResponse> {
   const q = userPrompt.trim().toLowerCase();
+
+  // ── Pre-fetch logged-in user's account orders ───────────────────────────────
+  let accountOrders: any[] = [];
+  let userAccountName = customerContext?.userName || '';
+  const customerId = customerContext?.customerId;
+  const userPhone = customerContext?.phone;
+  const cleanUserPhone = userPhone ? userPhone.replace(/\D/g, '').slice(-10) : '';
+
+  if (customerId || cleanUserPhone) {
+    try {
+      const ordersRes = await queryDb(
+        `SELECT id, order_number, customer_name, customer_phone, city, pincode, total_amount, 
+                order_status, courier_status, awb_number, courier_name, is_official_awb, tracking_url, ordered_at, shipping_address 
+         FROM orders 
+         WHERE (user_id IS NOT NULL AND user_id = $1)
+            OR ($2 <> '' AND customer_phone IS NOT NULL AND customer_phone LIKE $2)
+         ORDER BY ordered_at DESC 
+         LIMIT 5`,
+        [customerId || 'NONE', cleanUserPhone ? `%${cleanUserPhone}` : '']
+      );
+      accountOrders = ordersRes.rows;
+      if (!userAccountName && accountOrders.length > 0 && accountOrders[0].customer_name) {
+        userAccountName = accountOrders[0].customer_name;
+      }
+    } catch (_) {}
+  }
 
   // ── 1. Explicit Human Escalation Request ────────────────────────────────────
   const humanEscalatePattern = /\b(admin|human|agent|person|manager|representative|customer care|call me|speak with someone|connect admin|talk to an? admin|talk to support|need real person|pesa mudiyuma|staff)\b/i;
@@ -85,12 +119,11 @@ export async function generateSupportRagAnswer(
 
   // ── 2. Order Tracking & Live Delivery Status Inquiries (Live DB Resolution) ──
   const orderRef = extractOrderRef(userPrompt) || customerContext?.sessionOrder;
-  const phoneRef = extractPhone(userPrompt) || customerContext?.phone;
+  const phoneRef = extractPhone(userPrompt) || cleanUserPhone;
   const awbRef = extractAwb(userPrompt);
 
   const isOrderQuery =
     Boolean(orderRef) ||
-    Boolean(phoneRef) ||
     Boolean(awbRef) ||
     q.includes('order') ||
     q.includes('track') ||
@@ -134,6 +167,9 @@ export async function generateSupportRagAnswer(
           [awbRef]
         );
         orderRow = res.rows[0];
+      } else if (accountOrders.length > 0) {
+        // Automatically take the logged-in user's latest order!
+        orderRow = accountOrders[0];
       } else if (phoneRef) {
         const cleanPhone = phoneRef.replace(/\D/g, '').slice(-10);
         const res = await queryDb(
@@ -144,17 +180,6 @@ export async function generateSupportRagAnswer(
            ORDER BY ordered_at DESC 
            LIMIT 1`,
           [`%${cleanPhone}`]
-        );
-        orderRow = res.rows[0];
-      } else if (customerContext?.customerId) {
-        const res = await queryDb(
-          `SELECT id, order_number, customer_name, customer_phone, city, pincode, total_amount, 
-                  order_status, courier_status, awb_number, courier_name, is_official_awb, tracking_url, ordered_at, shipping_address 
-           FROM orders 
-           WHERE user_id = $1 
-           ORDER BY ordered_at DESC 
-           LIMIT 1`,
-          [customerContext.customerId]
         );
         orderRow = res.rows[0];
       }
@@ -174,8 +199,9 @@ export async function generateSupportRagAnswer(
       const isCancelled = isRecordCancelled(orderRow);
       const awb = orderRow.awb_number;
       const hasAwb = Boolean(awb && !awb.startsWith('SHP-') && !awb.includes('Pending'));
+      const greeting = userAccountName ? `Hello **${userAccountName}**! ` : 'Hello! ';
 
-      let statusDescription = `📦 **Order Details for #${orderCode}**:\n\n• **Current Status**: **${statusLabel.toUpperCase()}**\n• **Customer**: ${orderRow.customer_name || 'Valued Customer'}\n• **Destination**: ${orderRow.city || 'Tamil Nadu'}${orderRow.pincode ? ` (${orderRow.pincode})` : ''}\n• **Total Paid**: ₹${orderRow.total_amount} (Prepaid via Razorpay)\n\n`;
+      let statusDescription = `${greeting}Here is your order **#${orderCode}**:\n\n• **Current Status**: **${statusLabel.toUpperCase()}**\n• **Customer**: ${orderRow.customer_name || userAccountName || 'Valued Customer'}\n• **Destination**: ${orderRow.city || 'Tamil Nadu'}${orderRow.pincode ? ` (${orderRow.pincode})` : ''}\n• **Total Paid**: ₹${orderRow.total_amount} (Prepaid via Razorpay)\n\n`;
 
       if (isCancelled) {
         statusDescription += `❌ **Status**: This order was cancelled. Any pre-paid amount has been initiated for refund back to the original payment source within 5-7 business days.`;
@@ -190,9 +216,22 @@ export async function generateSupportRagAnswer(
           orderItems.map((it) => `• ${it.book_title} (×${it.quantity})`).join('\n');
       }
 
+      if (accountOrders.length > 1) {
+        statusDescription += `\n\n📋 **You have ${accountOrders.length} recent orders under this account**:\n` +
+          accountOrders.slice(1, 4).map((o) => `• #${o.order_number || o.id} — ₹${o.total_amount} (${fulfillmentStatus(o)})`).join('\n');
+      }
+
+      const suggestionsList = [
+        '📍 View Live Tracking',
+        '📄 Download Tax Invoice',
+        ...accountOrders.slice(1, 3).map((o) => `🚚 Track #${o.order_number || o.id}`),
+        '🔄 Report Damaged Book',
+        '👨‍💼 Talk to Admin',
+      ];
+
       return {
         answer: statusDescription,
-        suggestions: ['📍 View Live Tracking', '📄 Download Tax Invoice', '🔄 Report Damaged Book', '👨‍💼 Talk to Admin', '📦 Order More Books'],
+        suggestions: suggestionsList,
         shouldEscalate: false,
         linkedOrderId: orderCode,
         cardType: 'order',
@@ -210,13 +249,21 @@ export async function generateSupportRagAnswer(
       };
     }
 
-    if (!orderRef && !phoneRef && !awbRef) {
+    // Logged in user but no orders found
+    if (customerId || cleanUserPhone) {
       return {
-        answer: 'To check your live delivery status and ST Courier tracking docket, please provide:\n\n1. Your **Order ID** (e.g. `BPG-1048` or `#1048`)\n2. Or the **10-digit mobile number** used during checkout\n3. Or your **ST Courier AWB number**\n\nYou can also find your order number in the instant SMS sent after your Razorpay payment.',
-        suggestions: ['🚚 Where is my order?', '👨‍💼 Talk to Admin', '📚 Browse 10th Guides', '📞 Call Helpline'],
+        answer: `Hello **${userAccountName || 'there'}**! We checked your account and found no orders placed yet.\n\nWould you like to browse our Class 10 guides? All orders with 5 or more books unlock **100% Free Doorstep Delivery** anywhere in Tamil Nadu!`,
+        suggestions: ['📚 View 10th Full Set (5 Books - Free Delivery)', '🚚 Shipping & Delivery Rules', '💳 Payment Options', '👨‍💼 Talk to Admin'],
         shouldEscalate: false,
       };
     }
+
+    // Completely anonymous user (no logged-in account, no phone, no order #)
+    return {
+      answer: 'To check your live delivery status and ST Courier tracking docket, please provide:\n\n1. Your **Order ID** (e.g. `BPG-1048` or `#1048`)\n2. Or the **10-digit mobile number** used during checkout\n3. Or your **ST Courier AWB number**\n\nYou can also log in to your account to track all your orders automatically!',
+      suggestions: ['🚚 Where is my order?', '👨‍💼 Talk to Admin', '📚 Browse 10th Guides', '📞 Call Helpline'],
+      shouldEscalate: false,
+    };
   }
 
   // ── 3. Minimum Order Quantity (MOQ) Queries ─────────────────────────────────
@@ -532,8 +579,33 @@ export async function generateSupportRagAnswer(
   } catch (_) {}
 
   // ── 17. Welcoming & General Intelligent Fallback ────────────────────────────
+  if (accountOrders.length > 0) {
+    const greeting = userAccountName ? `Hello **${userAccountName}**! ` : 'Hello! ';
+    const latest = accountOrders[0];
+    const latestCode = latest.order_number || latest.id;
+    const latestStatus = fulfillmentStatus(latest);
+    return {
+      answer: `${greeting}Welcome back to the **Blessing AI Assistant** 🤖.\n\nI found your recent order **#${latestCode}** (Status: **${latestStatus.toUpperCase()}**).\n\nClick below for live tracking or ask anything about our 10th standard guides:`,
+      suggestions: [`🚚 Track Order #${latestCode}`, '📚 10th Guides & Prices', '📦 Shipping & Delivery Rules', '🛡️ Damaged Book Replacement', '👨‍💼 Talk to Admin'],
+      shouldEscalate: false,
+      linkedOrderId: latestCode,
+      cardType: 'order',
+      linkedOrderData: {
+        orderId: latestCode,
+        status: latestStatus,
+        totalAmount: Number(latest.total_amount || 0),
+        trackingNumber: latest.awb_number,
+        courierName: latest.courier_name || 'ST Courier Express',
+        city: latest.city,
+        pincode: latest.pincode,
+        trackingUrl: latest.tracking_url || `/track?orderId=${encodeURIComponent(latestCode)}`,
+      },
+    };
+  }
+
+  const genericGreeting = userAccountName ? `Hello **${userAccountName}**! ` : 'Hello! ';
   return {
-    answer: `Hello! I am the **Blessing Power Guide AI Assistant** 🤖.\n\nI can assist you immediately with:\n1. 🚚 **Live Shipment Tracking** (ST Courier docket & estimated arrival)\n2. 📚 **10th Class Guides & Prices** (Tamil, English, Maths, Science & Social)\n3. 📦 **Order Rules** (Minimum 4 books MOQ, 100% Free delivery on 5+ books)\n4. 🛡️ **100% Free Replacement** for damaged or misprinted books\n5. 💳 **Razorpay Online Payments** (UPI, GPay, PhonePe, Cards)\n6. 👨‍💼 **Instant connection to our Chennai office support team**\n\nClick any topic below or type your question:`,
+    answer: `${genericGreeting}I am the **Blessing Power Guide AI Assistant** 🤖.\n\nI can assist you immediately with:\n1. 🚚 **Live Shipment Tracking** (ST Courier docket & estimated arrival)\n2. 📚 **10th Class Guides & Prices** (Tamil, English, Maths, Science & Social)\n3. 📦 **Order Rules** (Minimum 4 books MOQ, 100% Free delivery on 5+ books)\n4. 🛡️ **100% Free Replacement** for damaged or misprinted books\n5. 💳 **Razorpay Online Payments** (UPI, GPay, PhonePe, Cards)\n6. 👨‍💼 **Instant connection to our Chennai office support team**\n\nClick any topic below or type your question:`,
     suggestions: ['🚚 Track My Order', '📦 Minimum Order & Delivery Fee', '📚 10th Guides & Prices', '🔄 Damaged Book Replacement', '👨‍💼 Talk to Admin'],
     shouldEscalate: false,
   };

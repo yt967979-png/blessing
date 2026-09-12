@@ -94,12 +94,18 @@ function HelpCenterContent() {
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
   const [submittingFeedback, setSubmittingFeedback] = useState(false);
 
-  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const chatContainerRef = useRef<HTMLDivElement | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
 
-  // Scroll to bottom of chat
+  // Scroll ONLY the inner chat messages container — NEVER scrolls the browser window!
   const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
-    messagesEndRef.current?.scrollIntoView({ behavior });
+    const el = chatContainerRef.current;
+    if (!el) return;
+    if (behavior === 'auto') {
+      el.scrollTop = el.scrollHeight;
+    } else {
+      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    }
   };
 
   useEffect(() => {
@@ -155,7 +161,9 @@ function HelpCenterContent() {
   // Load or Initialize Support Conversation
   const loadConversation = useCallback(async () => {
     try {
-      const res = await fetch('/api/support/conversation');
+      const res = await fetch('/api/support/conversation', {
+        headers: authHeaders(user),
+      });
       if (res.ok) {
         const data = await res.json();
         if (data.conversation) {
@@ -164,7 +172,7 @@ function HelpCenterContent() {
         }
       }
     } catch (_) {}
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     loadConversation();
@@ -216,7 +224,7 @@ function HelpCenterContent() {
     // Polling safety net every 4 seconds
     const interval = setInterval(() => {
       if (active) {
-        fetch('/api/support/conversation')
+        fetch('/api/support/conversation', { headers: authHeaders(user) })
           .then((r) => (r.ok ? r.json() : null))
           .then((data) => {
             if (data?.conversation && active) {
@@ -261,11 +269,15 @@ function HelpCenterContent() {
     try {
       const res = await fetch('/api/support/conversation', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders(user),
+        },
         body: JSON.stringify({
           text,
-          customerName: user?.name || 'Customer',
-          customerPhone: queryPhone || user?.phone || '',
+          name: user?.name || 'Customer',
+          phone: user?.phone || queryPhone || '',
+          customerId: user?.id,
           orderId: selectedOrderId || orderData?.orderId || undefined,
         }),
       });
@@ -300,7 +312,10 @@ function HelpCenterContent() {
     try {
       const res = await fetch('/api/support/feedback', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders(user),
+        },
         body: JSON.stringify({
           conversationId: conversation.id,
           rating,
@@ -606,7 +621,10 @@ function HelpCenterContent() {
           )}
 
           {/* ── Message Stream ──────────────────────────────────────────────── */}
-          <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3.5 bg-slate-50/40 text-xs custom-scrollbar">
+          <div
+            ref={chatContainerRef}
+            className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3.5 bg-slate-50/40 text-xs custom-scrollbar"
+          >
             {/* Greeting welcome banner */}
             <div className="bg-white border border-blue-100 rounded-2xl p-4 text-slate-700 space-y-1.5 shadow-2xs">
               <div className="flex items-center gap-2 text-[#2874f0] font-black text-xs">
@@ -773,8 +791,6 @@ function HelpCenterContent() {
                 ✅ Thank you! Your rating has been recorded.
               </div>
             )}
-
-            <div ref={messagesEndRef} />
           </div>
 
           {/* ── Quick Action Chips & Input Box ─────────────────────────────── */}

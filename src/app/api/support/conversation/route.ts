@@ -95,12 +95,33 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const text = String(body.text || '').trim();
     const action = String(body.action || '').trim();
-    const customerName = String(body.name || 'Student/Parent').trim();
-    const customerPhone = String(body.phone || '').trim();
     const linkedOrderId = String(body.orderId || '').trim();
 
     const { sessionToken, isNew } = getOrCreateSessionToken(req);
     const user = await getAuthenticatedUser(req).catch(() => null);
+    const customerId = user?.userId || String(body.customerId || '').trim() || null;
+
+    let customerName = String(body.name || '').trim();
+    let customerPhone = String(body.phone || '').trim();
+    let customerEmail = '';
+
+    if (customerId) {
+      try {
+        const uRes = await queryDb(`SELECT id, name, phone, email FROM users WHERE id = $1 LIMIT 1`, [customerId]);
+        if (uRes.rows.length > 0) {
+          const uRow = uRes.rows[0];
+          if (!customerName || customerName === 'Student/Parent' || customerName === 'Customer' || customerName === 'You') {
+            customerName = uRow.name || customerName;
+          }
+          if (!customerPhone) {
+            customerPhone = uRow.phone || customerPhone;
+          }
+          customerEmail = uRow.email || '';
+        }
+      } catch (_) {}
+    }
+
+    if (!customerName) customerName = 'Student/Parent';
 
     let conversationId = body.conversationId;
     let conv: any = null;
@@ -117,9 +138,14 @@ export async function POST(req: NextRequest) {
            (id, customer_id, session_token, customer_name, customer_phone, order_id, status)
          VALUES ($1, $2, $3, $4, $5, $6, 'BOT')
          RETURNING *`,
-        [conversationId, user?.userId || null, sessionToken, customerName, customerPhone || null, linkedOrderId || null]
+        [conversationId, customerId, sessionToken, customerName, customerPhone || null, linkedOrderId || null]
       );
       conv = insRes.rows[0];
+    } else if (customerId && !conv.customer_id) {
+      await queryDb(
+        `UPDATE support_conversations SET customer_id = $1, customer_name = $2, customer_phone = COALESCE(customer_phone, $3) WHERE id = $4`,
+        [customerId, customerName, customerPhone || null, conv.id]
+      );
     }
 
     // ── Direct Human Escalation Action
@@ -200,9 +226,11 @@ export async function POST(req: NextRequest) {
 
     // ── BOT MODE: Execute RAG Engine
     const ragResult = await generateSupportRagAnswer(text, {
-      phone: customerPhone || conv.customer_phone,
-      customerId: user?.userId,
-      sessionOrder: linkedOrderId || conv.order_id,
+      phone: customerPhone || conv.customer_phone || undefined,
+      customerId: customerId || undefined,
+      userName: customerName || conv.customer_name || undefined,
+      email: customerEmail || undefined,
+      sessionOrder: linkedOrderId || conv.order_id || undefined,
     });
 
     if (ragResult.linkedOrderId && !conv.order_id) {
