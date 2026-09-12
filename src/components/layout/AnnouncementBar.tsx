@@ -14,15 +14,13 @@ export const AnnouncementBar = () => {
     <div className="hidden sm:block bg-[#001226] text-slate-300 text-xs py-2 border-b border-slate-800">
       <div className="max-w-7xl mx-auto px-4 flex justify-end items-center gap-2">
         <div className="flex items-center gap-4 font-medium flex-shrink-0">
-          <a
-            href={shopWhatsAppChatUrl('Hello Blessing Power Guide Support')}
-            target="_blank"
-            rel="noopener noreferrer"
+          <Link
+            href="/help"
             className="flex items-center gap-1 hover:text-amber-400 transition-colors cursor-pointer"
           >
             <HelpCircle className="w-3 h-3 text-amber-400" />
             <span>Help</span>
-          </a>
+          </Link>
           <span className="text-slate-700">|</span>
           <Link
             href="/track"

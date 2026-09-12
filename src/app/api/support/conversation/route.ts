@@ -21,7 +21,7 @@ function getOrCreateSessionToken(req: NextRequest): { sessionToken: string; isNe
  */
 export async function GET(req: NextRequest) {
   try {
-    const { sessionToken } = getOrCreateSessionToken(req);
+    const { sessionToken, isNew } = getOrCreateSessionToken(req);
     const user = await getAuthenticatedUser(req).catch(() => null);
     const convIdParam = req.nextUrl.searchParams.get('id');
 
@@ -75,10 +75,14 @@ export async function GET(req: NextRequest) {
       created_at: r.created_at,
     }));
 
-    return NextResponse.json({
+    const res = NextResponse.json({
       conversation: conv,
       messages: formattedMessages,
     });
+    if (isNew) {
+      res.cookies.set('bpg_support_session', sessionToken, { httpOnly: true, sameSite: 'lax', maxAge: 60 * 60 * 24 * 30 });
+    }
+    return res;
   } catch (err: any) {
     return NextResponse.json({ error: err?.message || 'Failed to fetch conversation' }, { status: 500 });
   }
@@ -175,9 +179,25 @@ export async function POST(req: NextRequest) {
         timestamp: new Date().toISOString(),
       });
 
+      const sysMsg = {
+        id: sysMsgId,
+        conversation_id: conv.id,
+        sender_type: 'SYSTEM' as const,
+        sender_name: 'System',
+        text: '⏳ Connecting you to our support team... Please wait while an agent joins.',
+        created_at: new Date().toISOString(),
+      };
+
       const res = NextResponse.json({
         success: true,
         conversationId: conv.id,
+        conversation: {
+          id: conv.id,
+          status: 'WAITING_ADMIN',
+          customer_name: customerName,
+          customer_phone: customerPhone,
+        },
+        systemMessage: sysMsg,
         status: 'WAITING_ADMIN',
       });
       if (isNew) {
@@ -287,12 +307,32 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    const finalStatus = ragResult.shouldEscalate ? 'WAITING_ADMIN' : conv.status || 'BOT';
     const res = NextResponse.json({
       success: true,
       conversationId: conv.id,
+      conversation: {
+        id: conv.id,
+        status: finalStatus,
+        customer_name: customerName,
+        customer_phone: customerPhone,
+        order_id: ragResult.linkedOrderId || conv.order_id || null,
+      },
       reply: ragResult.answer,
-      suggestions: ragResult.suggestions,
-      status: ragResult.shouldEscalate ? 'WAITING_ADMIN' : 'BOT',
+      suggestions: ragResult.suggestions || [],
+      aiMessage: {
+        id: aiMsgId,
+        conversation_id: conv.id,
+        sender_type: 'AI' as const,
+        sender_name: 'Blessing AI Assistant',
+        text: ragResult.answer,
+        suggestions: ragResult.suggestions || [],
+        linkedOrderData: ragResult.linkedOrderData || null,
+        cardType: ragResult.cardType || null,
+        cardData: ragResult.cardData || null,
+        created_at: new Date().toISOString(),
+      },
+      status: finalStatus,
     });
 
     if (isNew) {

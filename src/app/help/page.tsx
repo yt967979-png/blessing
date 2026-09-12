@@ -132,25 +132,46 @@ function HelpCenterContent() {
   // Load Order Details for the selected Order ID
   const fetchOrderDetails = useCallback(async (oid: string) => {
     if (!oid) return;
+    const localMatch = userOrders.find((o) => o.orderId === oid || o.id === oid);
+    if (localMatch) {
+      setOrderData({
+        orderId: localMatch.orderId || localMatch.id,
+        status: localMatch.orderStatus || localMatch.courierStatus || 'Order Placed',
+        statusHeadline: localMatch.courierStatus || localMatch.orderStatus,
+        trackingNumber: localMatch.trackingNumber,
+        trackingUrl: localMatch.trackingUrl,
+        customer: {
+          city: localMatch.city,
+          pincode: localMatch.pincode,
+        },
+        items: Array.isArray(localMatch.items)
+          ? localMatch.items.map((it: any) => ({ title: it.title || it.book_title, qty: it.qty || it.quantity }))
+          : [],
+      });
+    }
+
     setLoadingOrder(true);
     try {
       const res = await fetch('/api/track', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orderId: oid, phone: queryPhone }),
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders(user),
+        },
+        body: JSON.stringify({ orderId: oid, phone: queryPhone || user?.phone || '' }),
       });
       if (res.ok) {
         const data = await res.json();
         setOrderData(data.order);
-      } else {
+      } else if (!localMatch) {
         setOrderData(null);
       }
     } catch {
-      setOrderData(null);
+      if (!localMatch) setOrderData(null);
     } finally {
       setLoadingOrder(false);
     }
-  }, [queryPhone]);
+  }, [user, userOrders, queryPhone]);
 
   useEffect(() => {
     if (selectedOrderId) {
@@ -248,7 +269,7 @@ function HelpCenterContent() {
   }, [conversation?.id]);
 
   // Send Message Handler
-  const handleSendMessage = async (textToSend?: string) => {
+  const handleSendMessage = async (textToSend?: string, isEscalate?: boolean) => {
     const text = (textToSend || inputText).trim();
     if (!text || sending) return;
 
@@ -274,6 +295,8 @@ function HelpCenterContent() {
           ...authHeaders(user),
         },
         body: JSON.stringify({
+          conversationId: conversation?.id || undefined,
+          action: isEscalate ? 'escalate_human' : undefined,
           text,
           name: user?.name || 'Customer',
           phone: user?.phone || queryPhone || '',
@@ -286,10 +309,43 @@ function HelpCenterContent() {
         const data = await res.json();
         if (data.conversation) {
           setConversation(data.conversation);
+        } else if (data.conversationId) {
+          setConversation((prev) => ({
+            id: data.conversationId,
+            status: data.status || prev?.status || 'BOT',
+          }));
         }
-        if (Array.isArray(data.messages)) {
-          setMessages(data.messages);
+
+        // If system message returned (e.g. connecting to admin)
+        if (data.systemMessage) {
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === data.systemMessage.id)) return prev;
+            return [...prev, data.systemMessage];
+          });
         }
+
+        // Immediately append AI message if returned
+        if (data.aiMessage) {
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === data.aiMessage.id)) return prev;
+            return [...prev, data.aiMessage];
+          });
+        } else if (data.reply) {
+          const directAi: Message = {
+            id: `ai_${Date.now()}`,
+            sender_type: 'AI',
+            sender_name: 'Blessing AI Assistant',
+            text: data.reply,
+            suggestions: data.suggestions || [],
+            linkedOrderData: data.linkedOrderData,
+            cardType: data.cardType,
+            cardData: data.cardData,
+            created_at: new Date().toISOString(),
+          };
+          setMessages((prev) => [...prev, directAi]);
+        }
+      } else {
+        showToast('❌ Failed to send message. Please try again.');
       }
     } catch (_) {
       showToast('❌ Network issue sending message');
@@ -300,7 +356,7 @@ function HelpCenterContent() {
 
   // Request Human Escalation (Connect to Admin)
   const handleConnectToAdmin = async () => {
-    await handleSendMessage('I would like to speak directly with an admin / support agent.');
+    await handleSendMessage('I would like to speak directly with an admin / support agent.', true);
   };
 
   // CSAT Feedback Submission
@@ -626,14 +682,30 @@ function HelpCenterContent() {
             className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3.5 bg-slate-50/40 text-xs custom-scrollbar"
           >
             {/* Greeting welcome banner */}
-            <div className="bg-white border border-blue-100 rounded-2xl p-4 text-slate-700 space-y-1.5 shadow-2xs">
+            <div className="bg-white border border-blue-100 rounded-2xl p-4 text-slate-700 space-y-3 shadow-2xs">
               <div className="flex items-center gap-2 text-[#2874f0] font-black text-xs">
                 <Sparkles className="w-4 h-4" />
-                <span>Welcome to Blessing Customer Support!</span>
+                <span>
+                  {user?.name
+                    ? `Hello ${user.name.split(' ')[0]}! Welcome to Blessing Support`
+                    : 'Welcome to Blessing Customer Support!'}
+                </span>
               </div>
               <p className="text-xs text-slate-600 leading-relaxed">
-                I can check real-time courier tracking, provide syllabus information, handle damaged book replacements, or immediately connect you with our Chennai office team.
+                I can check real-time ST Courier tracking, answer Tamil Nadu Class 10 syllabus questions, process book replacements, or connect you directly with our Chennai office team.
               </p>
+              {selectedOrderId && (
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={() => handleSendMessage(`Where is my order #${selectedOrderId}?`)}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs"
+                  >
+                    <Truck className="w-3.5 h-3.5 text-blue-600" />
+                    <span>🚚 Track My Selected Order #{selectedOrderId}</span>
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Conversation Messages */}

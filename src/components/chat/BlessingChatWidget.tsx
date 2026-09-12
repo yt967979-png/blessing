@@ -72,7 +72,7 @@ export const BlessingChatWidget: React.FC = () => {
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
 
-  const isStorefront = !pathname?.startsWith('/admin');
+  const isStorefront = !pathname?.startsWith('/admin') && pathname !== '/help' && pathname !== '/support';
 
   // Auto-scroll to latest message inside chat widget only
   const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
@@ -217,8 +217,21 @@ export const BlessingChatWidget: React.FC = () => {
           setConversation((prev) => (prev ? { ...prev, status: data.status } : null));
         }
 
-        // If RAG returned immediate reply in BOT mode
-        if (data.reply) {
+        // If system message returned (e.g. connecting staff)
+        if (data.systemMessage) {
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === data.systemMessage.id)) return prev;
+            return [...prev, data.systemMessage];
+          });
+        }
+
+        // If RAG returned rich aiMessage or text reply
+        if (data.aiMessage) {
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === data.aiMessage.id)) return prev;
+            return [...prev, data.aiMessage];
+          });
+        } else if (data.reply) {
           setMessages((prev) => [
             ...prev,
             {
@@ -226,6 +239,7 @@ export const BlessingChatWidget: React.FC = () => {
               sender_type: 'AI',
               sender_name: 'Blessing AI Assistant',
               text: data.reply,
+              suggestions: data.suggestions || [],
               created_at: new Date().toISOString(),
             },
           ]);
