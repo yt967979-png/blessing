@@ -10,6 +10,9 @@ import {
   X,
   ChevronRight,
   ShoppingBag,
+  Headphones,
+  MessageSquare,
+  HelpCircle,
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
@@ -323,6 +326,46 @@ function TrackForm() {
               </ul>
             </div>
           )}
+
+          {/* ── Flipkart-Style Need Help with this Order? Card ──────────── */}
+          <div className="bg-gradient-to-r from-blue-50/70 via-white to-indigo-50/70 border border-blue-200 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-start gap-3.5">
+              <div className="w-11 h-11 rounded-2xl bg-[#001B3A] text-white flex items-center justify-center shrink-0 shadow-xs">
+                <Headphones className="w-5 h-5 text-blue-300" />
+              </div>
+              <div>
+                <h4 className="font-black text-sm text-[#001B3A]">
+                  Need Help with Order #{order.orderId}?
+                </h4>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Chat directly with our 24/7 AI Assistant or human support team for delivery assistance, address updates, or replacement.
+                </p>
+              </div>
+            </div>
+            <Link
+              href={`/help?orderId=${encodeURIComponent(order.orderId)}&phone=${encodeURIComponent(phone || user?.phone || '')}`}
+              className="w-full sm:w-auto px-5 py-3 bg-[#2874f0] hover:bg-blue-700 text-white font-black text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 shrink-0 cursor-pointer"
+            >
+              <MessageSquare className="w-4 h-4" />
+              <span>Chat with Support</span>
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {/* General Help Hint for Guests */}
+      {!order && (
+        <div className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-2xl text-xs text-slate-600 shadow-2xs">
+          <span className="flex items-center gap-2.5 font-semibold text-slate-700">
+            <HelpCircle className="w-4 h-4 text-blue-600 shrink-0" />
+            <span>Have a question about books, delivery dates, or payment?</span>
+          </span>
+          <Link
+            href="/help"
+            className="font-extrabold text-[#2874f0] hover:text-blue-700 hover:underline shrink-0 ml-2"
+          >
+            Visit Help Center ↗
+          </Link>
         </div>
       )}
     </div>

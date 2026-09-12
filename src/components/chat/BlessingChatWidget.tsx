@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   MessageSquare,
@@ -15,8 +16,10 @@ import {
   Clock,
   Sparkles,
   ArrowRight,
+  Maximize2,
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
+import { ChatMarkdown } from './ChatMarkdown';
 
 interface Message {
   id: string;
@@ -340,6 +343,14 @@ export const BlessingChatWidget: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-1">
+              <Link
+                href="/help"
+                onClick={() => setIsOpen(false)}
+                className="p-2 text-slate-300 hover:text-white hover:bg-white/10 rounded-xl transition-colors cursor-pointer"
+                title="Open in full screen"
+              >
+                <Maximize2 className="w-4 h-4" />
+              </Link>
               <button
                 type="button"
                 onClick={() => setIsOpen(false)}
@@ -387,13 +398,13 @@ export const BlessingChatWidget: React.FC = () => {
                     {msg.sender_name}
                   </span>
                   <div
-                    className={`max-w-[82%] px-3.5 py-2.5 rounded-2xl text-xs leading-relaxed break-words whitespace-pre-wrap ${
+                    className={`max-w-[85%] px-3.5 py-2.5 rounded-2xl text-xs leading-relaxed ${
                       isCust
                         ? 'bg-[#2874f0] text-white rounded-br-xs shadow-xs'
                         : 'bg-white text-slate-800 border border-slate-200 rounded-bl-xs shadow-xs'
                     }`}
                   >
-                    {msg.text}
+                    <ChatMarkdown content={msg.text} isCustomer={isCust} />
                     <div
                       className={`flex items-center justify-end gap-1 mt-1 text-[9px] ${
                         isCust ? 'text-blue-200' : 'text-slate-400'
