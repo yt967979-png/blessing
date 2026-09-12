@@ -8,6 +8,7 @@ export type SupportStreamEvent = {
   senderType?: 'CUSTOMER' | 'AI' | 'ADMIN' | 'SYSTEM';
   senderName?: string;
   text?: string;
+  message?: any;
   assignedAdminName?: string;
   status?: string;
   data?: any;

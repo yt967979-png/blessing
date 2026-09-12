@@ -1338,6 +1338,7 @@ async function runSchemaInit(client: any) {
       `ALTER TABLE stock_holds ADD COLUMN IF NOT EXISTS razorpay_order_id VARCHAR(255)`,
       `ALTER TABLE stock_holds ADD COLUMN IF NOT EXISTS release_reason VARCHAR(100)`,
       `ALTER TABLE stock_holds ADD COLUMN IF NOT EXISTS released_at TIMESTAMP`,
+      `ALTER TABLE support_messages ADD COLUMN IF NOT EXISTS metadata JSONB`,
       `UPDATE courier_tracking SET awb_number = COALESCE(NULLIF(awb_number, ''), docket_number) WHERE awb_number IS NULL OR awb_number = ''`,
       `UPDATE courier_tracking SET status = COALESCE(NULLIF(status, ''), current_status) WHERE status IS NULL OR status = ''`,
       `UPDATE orders SET ordered_at = COALESCE(ordered_at, created_at, updated_at, NOW()) WHERE ordered_at IS NULL`,

@@ -29,6 +29,9 @@ import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
 import { ChatMarkdown } from '@/components/chat/ChatMarkdown';
+import { ChatInteractiveCard } from '@/components/chat/ChatInteractiveCard';
+import { ChatSuggestionButtons } from '@/components/chat/ChatSuggestionButtons';
+import { ChatQuickMenu } from '@/components/chat/ChatQuickMenu';
 import { useStore } from '@/context/StoreContext';
 import { authHeaders } from '@/lib/clientAuth';
 import { customerCourierHeadline, isParcelDelivered, isDeliveryAttempted } from '@/lib/orderStatus';
@@ -38,6 +41,10 @@ interface Message {
   sender_type: 'CUSTOMER' | 'AI' | 'ADMIN' | 'SYSTEM';
   sender_name: string;
   text: string;
+  suggestions?: string[];
+  linkedOrderData?: any;
+  cardType?: 'order' | 'books' | 'contact' | 'policy';
+  cardData?: any;
   created_at: string;
 }
 
@@ -176,10 +183,21 @@ function HelpCenterContent() {
       es.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          if (data.type === 'NEW_MESSAGE' && data.message) {
+          if (data.type === 'NEW_MESSAGE') {
+            const newMsg = data.message || {
+              id: data.id || `msg_${Date.now()}_${Math.random()}`,
+              sender_type: data.senderType,
+              sender_name: data.senderName,
+              text: data.text,
+              suggestions: data.data?.suggestions || [],
+              linkedOrderData: data.data?.linkedOrderData || null,
+              cardType: data.data?.cardType || null,
+              cardData: data.data?.cardData || null,
+              created_at: data.timestamp || new Date().toISOString(),
+            };
             setMessages((prev) => {
-              if (prev.some((m) => m.id === data.message.id)) return prev;
-              return [...prev, data.message];
+              if (prev.some((m) => m.id === newMsg.id || (m.text === newMsg.text && m.sender_type === newMsg.sender_type))) return prev;
+              return [...prev, newMsg];
             });
             setIsTyping(false);
           } else if (data.type === 'TYPING') {
@@ -632,6 +650,27 @@ function HelpCenterContent() {
                   >
                     <ChatMarkdown content={msg.text} isCustomer={isCust} />
 
+                    {/* Interactive Action Card (e.g. Order Tracking Card, Books Showcase, Contact) */}
+                    {!isCust && (msg.linkedOrderData || msg.cardType) && (
+                      <ChatInteractiveCard
+                        cardType={msg.cardType}
+                        linkedOrderData={msg.linkedOrderData}
+                        cardData={msg.cardData}
+                        onSendMessage={handleSendMessage}
+                        onEscalateAdmin={handleConnectToAdmin}
+                      />
+                    )}
+
+                    {/* Interactive Action Buttons attached to this message */}
+                    {!isCust && Array.isArray(msg.suggestions) && msg.suggestions.length > 0 && (
+                      <ChatSuggestionButtons
+                        suggestions={msg.suggestions}
+                        orderId={msg.linkedOrderData?.orderId || conversation?.order_id || selectedOrderId}
+                        onSendMessage={handleSendMessage}
+                        onEscalateAdmin={handleConnectToAdmin}
+                      />
+                    )}
+
                     <div
                       className={`flex items-center justify-end gap-1 mt-1.5 text-[9.5px] ${
                         isCust ? 'text-blue-200' : 'text-slate-400'
@@ -738,8 +777,14 @@ function HelpCenterContent() {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* ── Input Box & Send Bar ────────────────────────────────────────── */}
-          <div className="p-3 sm:p-4 border-t border-slate-200 bg-white shrink-0">
+          {/* ── Quick Action Chips & Input Box ─────────────────────────────── */}
+          <div className="p-3 sm:p-4 border-t border-slate-200 bg-white shrink-0 space-y-2.5">
+            {/* Quick 1-Tap Action Pills */}
+            <ChatQuickMenu
+              onSendMessage={handleSendMessage}
+              onEscalateAdmin={handleConnectToAdmin}
+            />
+
             <form
               onSubmit={(e) => {
                 e.preventDefault();

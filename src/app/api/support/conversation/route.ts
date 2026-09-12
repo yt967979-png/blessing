@@ -53,16 +53,31 @@ export async function GET(req: NextRequest) {
     }
 
     const msgsRes = await queryDb(
-      `SELECT id, conversation_id, sender_type, sender_name, sender_id, text, is_read, read_at, created_at 
+      `SELECT id, conversation_id, sender_type, sender_name, sender_id, text, metadata, is_read, read_at, created_at 
        FROM support_messages 
        WHERE conversation_id = $1 
        ORDER BY created_at ASC`,
       [conv.id]
     );
 
+    const formattedMessages = msgsRes.rows.map((r: any) => ({
+      id: r.id,
+      conversation_id: r.conversation_id,
+      sender_type: r.sender_type,
+      sender_name: r.sender_name,
+      sender_id: r.sender_id,
+      text: r.text,
+      suggestions: Array.isArray(r.metadata?.suggestions) ? r.metadata.suggestions : [],
+      linkedOrderData: r.metadata?.linkedOrderData || null,
+      cardType: r.metadata?.cardType || null,
+      cardData: r.metadata?.cardData || null,
+      is_read: r.is_read,
+      created_at: r.created_at,
+    }));
+
     return NextResponse.json({
       conversation: conv,
-      messages: msgsRes.rows,
+      messages: formattedMessages,
     });
   } catch (err: any) {
     return NextResponse.json({ error: err?.message || 'Failed to fetch conversation' }, { status: 500 });
@@ -195,10 +210,16 @@ export async function POST(req: NextRequest) {
     }
 
     const aiMsgId = `msg_${Date.now() + 50}_ai`;
+    const aiMetadata = {
+      suggestions: ragResult.suggestions,
+      linkedOrderData: ragResult.linkedOrderData,
+      cardType: ragResult.cardType,
+      cardData: ragResult.cardData,
+    };
     await queryDb(
-      `INSERT INTO support_messages (id, conversation_id, sender_type, sender_name, text)
-       VALUES ($1, $2, 'AI', 'Blessing AI Assistant', $3)`,
-      [aiMsgId, conv.id, ragResult.answer]
+      `INSERT INTO support_messages (id, conversation_id, sender_type, sender_name, text, metadata)
+       VALUES ($1, $2, 'AI', 'Blessing AI Assistant', $3, $4)`,
+      [aiMsgId, conv.id, ragResult.answer, JSON.stringify(aiMetadata)]
     );
 
     await notifySupportEvent({
@@ -207,8 +228,20 @@ export async function POST(req: NextRequest) {
       senderType: 'AI',
       senderName: 'Blessing AI Assistant',
       text: ragResult.answer,
+      message: {
+        id: aiMsgId,
+        conversation_id: conv.id,
+        sender_type: 'AI',
+        sender_name: 'Blessing AI Assistant',
+        text: ragResult.answer,
+        suggestions: ragResult.suggestions,
+        linkedOrderData: ragResult.linkedOrderData,
+        cardType: ragResult.cardType,
+        cardData: ragResult.cardData,
+        created_at: new Date().toISOString(),
+      },
       status: conv.status,
-      data: { suggestions: ragResult.suggestions },
+      data: aiMetadata,
       timestamp: new Date().toISOString(),
     });
 
