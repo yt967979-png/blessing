@@ -469,7 +469,99 @@ export async function generateSupportRagAnswer(
     };
   }
 
-  // ── 7. Books, Class 10th Subjects, Syllabus & Prices (Dynamic DB Query) ────
+  // ── 7. Return, Damaged, Torn or Misprinted Replacement Guarantee ─────────────
+  if (
+    q.includes('return') ||
+    q.includes('replace') ||
+    q.includes('damage') ||
+    q.includes('wrong book') ||
+    q.includes('misprint') ||
+    q.includes('missing page') ||
+    q.includes('torn') ||
+    q.includes('defect') ||
+    q.includes('book kizhinjirukku') ||
+    q.includes('exchange')
+  ) {
+    return {
+      answer: `🛡️ **100% Free Replacement Guarantee**:\n\n${STORE_POLICIES.returnPolicy}\n\nIf your parcel arrived damaged in transit or has any printing defect, please click **Connect to Admin Now** below or send a photo of the parcel/book to our WhatsApp helpline at **+91 98404 18228**. Our Chennai dispatch office will send a fresh copy immediately.`,
+      suggestions: ['👨‍💼 Connect to Admin Now', '📞 Call Helpline (+91 98404 18228)', '💬 WhatsApp Support', '🚚 Track Order'],
+      shouldEscalate: true,
+      cardType: 'contact',
+    };
+  }
+
+  // ── 8. Address, Phone Number or Pincode Correction ─────────────────────────
+  if (
+    q.includes('change address') ||
+    q.includes('wrong address') ||
+    q.includes('change phone') ||
+    q.includes('wrong phone') ||
+    q.includes('update address') ||
+    q.includes('delivery phone') ||
+    q.includes('update phone') ||
+    (q.includes('update') && (q.includes('phone') || q.includes('mobile') || q.includes('number'))) ||
+    (q.includes('change') && (q.includes('phone') || q.includes('mobile') || q.includes('number'))) ||
+    q.includes('pincode') ||
+    q.includes('address mathanum')
+  ) {
+    return {
+      answer: `✏️ **Update Delivery Address or Mobile Number**:\n\nIf your parcel has not yet been scanned and picked up by ST Courier Express, our team can update your shipping label immediately.\n\nClick **Connect to Admin Now** so our warehouse staff can update your delivery phone number or address before dispatch.`,
+      suggestions: ['👨‍💼 Connect to Admin Now', '📞 Call Office Directly (+91 98404 18228)', '💬 WhatsApp Helpline', '🚚 Track Order'],
+      shouldEscalate: true,
+      cardType: 'contact',
+    };
+  }
+
+  // ── 9. Order Cancellation & Refund ─────────────────────────────────────────
+  if (
+    q.includes('cancel') ||
+    q.includes('cancellation') ||
+    q.includes('refund') ||
+    q.includes('money back') ||
+    q.includes('order cancel')
+  ) {
+    return {
+      answer: `❌ **Order Cancellation & Refund Process**:\n\n• **Before Dispatch**: You can cancel an order before it has been dispatched from our Chennai packaging hub.\n• **Refund Processing**: Once cancelled, 100% of your pre-paid amount is automatically refunded via Razorpay back to your original payment method (Bank Account, UPI, or Card) within **5 to 7 business days**.\n• **After Dispatch**: Once an official ST Courier AWB docket has been scanned, the package is in transit with the courier and cannot be cancelled, but is fully covered under our Free Replacement Guarantee.`,
+      suggestions: ['👨‍💼 Request Cancellation with Admin', '🚚 Track Order', '📞 Call Office'],
+      shouldEscalate: true,
+    };
+  }
+
+  // ── 10. Payment Methods, Razorpay & Cash on Delivery (COD) ───────────────────
+  if (
+    q.includes('cod') ||
+    q.includes('cash on delivery') ||
+    q.includes('pay on delivery') ||
+    q.includes('payment') ||
+    q.includes('pay') ||
+    q.includes('upi') ||
+    q.includes('google pay') ||
+    q.includes('gpay') ||
+    q.includes('phonepe') ||
+    q.includes('paytm') ||
+    q.includes('bhim') ||
+    q.includes('card') ||
+    q.includes('safe') ||
+    q.includes('secure')
+  ) {
+    return {
+      answer: `💳 **Payment Options & COD Policy**:\n\n• **Supported Online Payments**: ${STORE_POLICIES.payments}\n• **Cash on Delivery (COD)**: We do **not** offer Cash on Delivery. Educational textbooks are packaged in special protective wrappers that cannot be kept in open transit. Online prepaid orders receive priority same-day packaging, instant SMS confirmation, and live ST Courier tracking.`,
+      suggestions: ['📦 How to Place Order', '📚 View 10th Full Set', '🛡️ Is Payment Safe?', '👨‍💼 Talk to Admin'],
+      shouldEscalate: false,
+      cardType: 'policy',
+    };
+  }
+
+  // ── 11. Sample PDFs & Book Preview ───────────────────────────────────────────
+  if (q.includes('sample') || q.includes('pdf') || q.includes('preview') || q.includes('inside book') || q.includes('demo') || q.includes('view page')) {
+    return {
+      answer: `📄 **Sample PDFs**:\n\nYou can preview and download sample chapter PDFs for all available 10th standard guides directly on each book's page on our website before placing an order.`,
+      suggestions: ['📚 Browse 10th Guides', '🛒 Buy 10th Full Set', '🚚 Check Delivery Days', '👨‍💼 Talk to Admin'],
+      shouldEscalate: false,
+    };
+  }
+
+  // ── 12. Books, Class 10th Subjects, Syllabus & Prices (Dynamic DB Query) ────
   if (
     q.includes('book') ||
     q.includes('guide') ||
@@ -522,98 +614,6 @@ export async function generateSupportRagAnswer(
       shouldEscalate: false,
       cardType: 'books',
       cardData: sampleBooks,
-    };
-  }
-
-  // ── 8. Sample PDFs & Book Preview ───────────────────────────────────────────
-  if (q.includes('sample') || q.includes('pdf') || q.includes('preview') || q.includes('inside book') || q.includes('demo') || q.includes('view page')) {
-    return {
-      answer: `📄 **Sample PDFs**:\n\nYou can preview and download sample chapter PDFs for all available 10th standard guides directly on each book's page on our website before placing an order.`,
-      suggestions: ['📚 Browse 10th Guides', '🛒 Buy 10th Full Set', '🚚 Check Delivery Days', '👨‍💼 Talk to Admin'],
-      shouldEscalate: false,
-    };
-  }
-
-  // ── 9. Payment Methods, Razorpay & Cash on Delivery (COD) ───────────────────
-  if (
-    q.includes('cod') ||
-    q.includes('cash on delivery') ||
-    q.includes('pay on delivery') ||
-    q.includes('payment') ||
-    q.includes('pay') ||
-    q.includes('upi') ||
-    q.includes('google pay') ||
-    q.includes('gpay') ||
-    q.includes('phonepe') ||
-    q.includes('paytm') ||
-    q.includes('bhim') ||
-    q.includes('card') ||
-    q.includes('safe') ||
-    q.includes('secure')
-  ) {
-    return {
-      answer: `💳 **Payment Options & COD Policy**:\n\n• **Supported Online Payments**: ${STORE_POLICIES.payments}\n• **Cash on Delivery (COD)**: We do **not** offer Cash on Delivery. Educational textbooks are packaged in special protective wrappers that cannot be kept in open transit. Online prepaid orders receive priority same-day packaging, instant SMS confirmation, and live ST Courier tracking.`,
-      suggestions: ['📦 How to Place Order', '📚 View 10th Full Set', '🛡️ Is Payment Safe?', '👨‍💼 Talk to Admin'],
-      shouldEscalate: false,
-      cardType: 'policy',
-    };
-  }
-
-  // ── 10. Return, Damaged, Torn or Misprinted Replacement Guarantee ─────────────
-  if (
-    q.includes('return') ||
-    q.includes('replace') ||
-    q.includes('damage') ||
-    q.includes('wrong book') ||
-    q.includes('misprint') ||
-    q.includes('missing page') ||
-    q.includes('torn') ||
-    q.includes('defect') ||
-    q.includes('book kizhinjirukku') ||
-    q.includes('exchange')
-  ) {
-    return {
-      answer: `🛡️ **100% Free Replacement Guarantee**:\n\n${STORE_POLICIES.returnPolicy}\n\nIf your parcel arrived damaged in transit or has any printing defect, please click **Connect to Admin Now** below or send a photo of the parcel/book to our WhatsApp helpline at **+91 98404 18228**. Our Chennai dispatch office will send a fresh copy immediately.`,
-      suggestions: ['👨‍💼 Connect to Admin Now', '📞 Call Helpline (+91 98404 18228)', '💬 WhatsApp Support', '🚚 Track Order'],
-      shouldEscalate: true,
-      cardType: 'contact',
-    };
-  }
-
-  // ── 11. Address, Phone Number or Pincode Correction ─────────────────────────
-  if (
-    q.includes('change address') ||
-    q.includes('wrong address') ||
-    q.includes('change phone') ||
-    q.includes('wrong phone') ||
-    q.includes('update address') ||
-    q.includes('delivery phone') ||
-    q.includes('update phone') ||
-    (q.includes('update') && (q.includes('phone') || q.includes('mobile') || q.includes('number'))) ||
-    (q.includes('change') && (q.includes('phone') || q.includes('mobile') || q.includes('number'))) ||
-    q.includes('pincode') ||
-    q.includes('address mathanum')
-  ) {
-    return {
-      answer: `✏️ **Update Delivery Address or Mobile Number**:\n\nIf your parcel has not yet been scanned and picked up by ST Courier Express, our team can update your shipping label immediately.\n\nClick **Connect to Admin Now** so our warehouse staff can update your delivery phone number or address before dispatch.`,
-      suggestions: ['👨‍💼 Connect to Admin Now', '📞 Call Office Directly (+91 98404 18228)', '💬 WhatsApp Helpline', '🚚 Track Order'],
-      shouldEscalate: true,
-      cardType: 'contact',
-    };
-  }
-
-  // ── 12. Order Cancellation & Refund ─────────────────────────────────────────
-  if (
-    q.includes('cancel') ||
-    q.includes('cancellation') ||
-    q.includes('refund') ||
-    q.includes('money back') ||
-    q.includes('order cancel')
-  ) {
-    return {
-      answer: `❌ **Order Cancellation & Refund Process**:\n\n• **Before Dispatch**: You can cancel an order before it has been dispatched from our Chennai packaging hub.\n• **Refund Processing**: Once cancelled, 100% of your pre-paid amount is automatically refunded via Razorpay back to your original payment method (Bank Account, UPI, or Card) within **5 to 7 business days**.\n• **After Dispatch**: Once an official ST Courier AWB docket has been scanned, the package is in transit with the courier and cannot be cancelled, but is fully covered under our Free Replacement Guarantee.`,
-      suggestions: ['👨‍💼 Request Cancellation with Admin', '🚚 Track Order', '📞 Call Office'],
-      shouldEscalate: true,
     };
   }
 
