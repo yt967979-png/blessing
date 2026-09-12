@@ -254,8 +254,8 @@ export const LiveSupportSection: React.FC<LiveSupportSectionProps> = ({
               return [...prev, newMsg];
             });
             loadMessages(selectedConv.id);
-          } else if (ev.senderType === 'CUSTOMER') {
-            playChime?.();
+          } else if (ev.senderType === 'CUSTOMER' && ev.status === 'ACTIVE') {
+            // Only toast if an ongoing active conversation with admin; NEVER play sound for bot messages
             onShowToast(`💬 New message from ${ev.senderName || 'Customer'}`);
           }
           loadSupportData();
