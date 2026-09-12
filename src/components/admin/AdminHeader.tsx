@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import Link from 'next/link';
 import {
   Menu,
   Bell,
@@ -100,7 +101,7 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
 
       {/* Right: Store Live Pill, Audio Chime, Refresh, Profile */}
       <div className="flex items-center gap-2 sm:gap-3">
-        <a
+        <Link
           href="/?preview=1"
           onClick={() => enableAdminShopPreview()}
           className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-[#2874f0] cursor-pointer"
@@ -108,7 +109,7 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
         >
           <ExternalLink className="w-3.5 h-3.5" />
           <span>View shop</span>
-        </a>
+        </Link>
 
         {/* Store Active Pill */}
         <div className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
