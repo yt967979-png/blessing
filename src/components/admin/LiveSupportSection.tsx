@@ -112,12 +112,15 @@ export const LiveSupportSection: React.FC<LiveSupportSectionProps> = ({
   const [sendingReply, setSendingReply] = useState(false);
   const [claimingId, setClaimingId] = useState<string | null>(null);
 
-  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const adminName = user?.name || user?.email?.split('@')[0] || 'Admin';
 
-  // Auto-scroll message feed
+  // Auto-scroll message feed within its container only (NEVER scroll the browser window)
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const el = messagesContainerRef.current;
+    if (el) {
+      el.scrollTop = el.scrollHeight;
+    }
   }, [messages]);
 
   // Load support queues and stats
@@ -634,7 +637,7 @@ export const LiveSupportSection: React.FC<LiveSupportSectionProps> = ({
               </div>
 
               {/* Messages Feed */}
-              <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/40 text-xs custom-scrollbar">
+              <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/40 text-xs custom-scrollbar">
                 {messages.map((m, idx) => {
                   const isAdmin = m.sender_type === 'ADMIN';
                   const isSys = m.sender_type === 'SYSTEM';
@@ -683,7 +686,6 @@ export const LiveSupportSection: React.FC<LiveSupportSectionProps> = ({
                     </div>
                   );
                 })}
-                <div ref={messagesEndRef} />
               </div>
 
               {/* Canned Responses Toolbar */}

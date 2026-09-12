@@ -41,13 +41,20 @@ const STORE_POLICIES = {
  * Clean and extract potential order ID, phone number, or AWB docket from prompt.
  */
 function extractOrderRef(prompt: string): string | null {
-  const bpgMatch = prompt.match(/\b(BPG-?\d{3,8})\b/i);
-  if (bpgMatch) return bpgMatch[1].replace('-', '').toUpperCase().replace('BPG', 'BPG-');
-  const numMatch = prompt.match(/#(\d{4,8})\b/);
-  if (numMatch) return `BPG-${numMatch[1]}`;
-  const pureDigits = prompt.match(/\b(\d{4,6})\b/);
+  const bpgMatch = prompt.match(/\b(BPG-?[A-Z0-9_-]{4,16})\b/i);
+  if (bpgMatch) {
+    const raw = bpgMatch[1].toUpperCase();
+    return raw.startsWith('BPG-') ? raw : `BPG-${raw.replace(/^BPG-?/, '')}`;
+  }
+  const hashMatch = prompt.match(/#([A-Z0-9_-]{4,20})\b/i);
+  if (hashMatch) {
+    const code = hashMatch[1].toUpperCase();
+    return code.startsWith('BPG-') ? code : `BPG-${code}`;
+  }
+  const ordMatch = prompt.match(/\b(ord-[a-z0-9_-]{6,32})\b/i);
+  if (ordMatch) return ordMatch[1];
+  const pureDigits = prompt.match(/\b(\d{4,8})\b/);
   if (pureDigits && !prompt.match(/\b([6-9]\d{9})\b/)) {
-    // Potential pure order number like 1048
     return `BPG-${pureDigits[1]}`;
   }
   return null;
@@ -71,6 +78,31 @@ export interface CustomerContext {
   sessionOrder?: string;
 }
 
+function parseShippingAddress(raw: any): Record<string, any> {
+  if (!raw) return {};
+  if (typeof raw === 'object') return raw;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+}
+
+function normalizeDbOrder(row: any) {
+  if (!row) return null;
+  const addr = parseShippingAddress(row.shipping_address);
+  return {
+    ...row,
+    customer_name: addr.name || row.customer_name || 'Valued Customer',
+    customer_phone: addr.phone || row.customer_phone || '',
+    city: addr.city || row.city || 'Tamil Nadu',
+    pincode: addr.pincode || row.pincode || '',
+    courier_status: row.order_status || 'PACKED',
+    is_official_awb: Boolean(row.awb_number),
+    shipping_address: typeof row.shipping_address === 'string' ? row.shipping_address : JSON.stringify(addr),
+  };
+}
+
 /**
  * Core RAG Generation: Resolves user intent against live PostgreSQL database and verified store knowledge.
  */
@@ -90,20 +122,26 @@ export async function generateSupportRagAnswer(
   if (customerId || cleanUserPhone) {
     try {
       const ordersRes = await queryDb(
-        `SELECT id, order_number, customer_name, customer_phone, city, pincode, total_amount, 
-                order_status, courier_status, awb_number, courier_name, is_official_awb, tracking_url, ordered_at, shipping_address 
+        `SELECT id, order_number, user_id, total_amount, order_status, awb_number, 
+                courier_name, tracking_url, estimated_delivery, shipping_address, 
+                packed_at, shipped_at, delivered_at, ordered_at 
          FROM orders 
          WHERE (user_id IS NOT NULL AND user_id = $1)
-            OR ($2 <> '' AND customer_phone IS NOT NULL AND customer_phone LIKE $2)
+            OR ($2 <> '' AND (
+                shipping_address LIKE $2 
+                OR user_id IN (SELECT id FROM users WHERE phone LIKE $2 OR email LIKE $2)
+            ))
          ORDER BY ordered_at DESC 
          LIMIT 5`,
-        [customerId || 'NONE', cleanUserPhone ? `%${cleanUserPhone}` : '']
+        [customerId || 'NONE', cleanUserPhone ? `%${cleanUserPhone}%` : '']
       );
-      accountOrders = ordersRes.rows;
+      accountOrders = (ordersRes.rows || []).map(normalizeDbOrder);
       if (!userAccountName && accountOrders.length > 0 && accountOrders[0].customer_name) {
         userAccountName = accountOrders[0].customer_name;
       }
-    } catch (_) {}
+    } catch (err) {
+      console.error('[supportRag] Failed to prefetch orders:', err);
+    }
   }
 
   // ── 1. Greetings & Casual Hello ───────────────────────────────────────────
@@ -194,39 +232,43 @@ export async function generateSupportRagAnswer(
     try {
       if (orderRef) {
         const res = await queryDb(
-          `SELECT id, order_number, customer_name, customer_phone, city, pincode, total_amount, 
-                  order_status, courier_status, awb_number, courier_name, is_official_awb, tracking_url, ordered_at, shipping_address 
+          `SELECT id, order_number, user_id, total_amount, order_status, awb_number, 
+                  courier_name, tracking_url, estimated_delivery, shipping_address, 
+                  packed_at, shipped_at, delivered_at, ordered_at 
            FROM orders 
            WHERE order_number = $1 OR id = $1 OR UPPER(order_number) = $1 OR UPPER(id) = $1
            LIMIT 1`,
           [orderRef]
         );
-        orderRow = res.rows[0];
+        orderRow = normalizeDbOrder(res.rows[0]);
       } else if (awbRef) {
         const res = await queryDb(
-          `SELECT id, order_number, customer_name, customer_phone, city, pincode, total_amount, 
-                  order_status, courier_status, awb_number, courier_name, is_official_awb, tracking_url, ordered_at, shipping_address 
+          `SELECT id, order_number, user_id, total_amount, order_status, awb_number, 
+                  courier_name, tracking_url, estimated_delivery, shipping_address, 
+                  packed_at, shipped_at, delivered_at, ordered_at 
            FROM orders 
            WHERE awb_number = $1 OR shipment_id = $1
            LIMIT 1`,
           [awbRef]
         );
-        orderRow = res.rows[0];
+        orderRow = normalizeDbOrder(res.rows[0]);
       } else if (accountOrders.length > 0) {
         // Automatically take the logged-in user's latest order!
         orderRow = accountOrders[0];
       } else if (phoneRef) {
         const cleanPhone = phoneRef.replace(/\D/g, '').slice(-10);
         const res = await queryDb(
-          `SELECT id, order_number, customer_name, customer_phone, city, pincode, total_amount, 
-                  order_status, courier_status, awb_number, courier_name, is_official_awb, tracking_url, ordered_at, shipping_address 
+          `SELECT id, order_number, user_id, total_amount, order_status, awb_number, 
+                  courier_name, tracking_url, estimated_delivery, shipping_address, 
+                  packed_at, shipped_at, delivered_at, ordered_at 
            FROM orders 
-           WHERE customer_phone LIKE $1 
+           WHERE shipping_address LIKE $1 
+              OR user_id IN (SELECT id FROM users WHERE phone LIKE $1)
            ORDER BY ordered_at DESC 
            LIMIT 1`,
-          [`%${cleanPhone}`]
+          [`%${cleanPhone}%`]
         );
-        orderRow = res.rows[0];
+        orderRow = normalizeDbOrder(res.rows[0]);
       }
 
       if (orderRow) {
@@ -234,9 +276,11 @@ export async function generateSupportRagAnswer(
           `SELECT book_title, quantity, book_price FROM order_items WHERE order_id = $1`,
           [orderRow.id]
         );
-        orderItems = itemsRes.rows;
+        orderItems = itemsRes.rows || [];
       }
-    } catch (_) {}
+    } catch (err) {
+      console.error('[supportRag] order lookup error:', err);
+    }
 
     if (orderRow) {
       const orderCode = orderRow.order_number || orderRow.id;
