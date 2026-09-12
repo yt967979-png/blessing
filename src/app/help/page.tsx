@@ -153,36 +153,45 @@ function HelpCenterContent() {
   };
 
   // Scroll ONLY the inner chat messages container — NEVER scrolls the browser window!
-  const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
-    const el = chatContainerRef.current;
-    if (!el) return;
-    if (behavior === 'auto') {
-      el.scrollTop = el.scrollHeight;
-    } else {
-      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
-    }
-  };
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
+    requestAnimationFrame(() => {
+      const el = chatContainerRef.current;
+      if (!el) return;
+      if (behavior === 'auto') {
+        el.scrollTop = el.scrollHeight;
+      } else {
+        el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+      }
+    });
+  }, []);
 
   useEffect(() => {
     scrollToBottom('auto');
-  }, [messages, isTyping]);
+  }, [messages, isTyping, scrollToBottom]);
 
-  // Load user's recent orders for the selector
+  // Load user's recent orders for the selector — runs once when user is known
+  const ordersLoadedRef = useRef(false);
   useEffect(() => {
-    if (user?.token) {
+    if (user?.token && !ordersLoadedRef.current) {
+      ordersLoadedRef.current = true;
       fetch('/api/orders', { headers: authHeaders(user) })
-        .then((r) => (r.ok ? r.json() : []))
+        .then((r) => {
+          if (!r.ok) throw new Error(`Orders API ${r.status}`);
+          return r.json();
+        })
         .then((data) => {
-          if (Array.isArray(data)) {
+          if (Array.isArray(data) && data.length > 0) {
             setUserOrders(data);
-            if (!selectedOrderId && data.length > 0) {
+            if (!selectedOrderId) {
               setSelectedOrderId(data[0].orderId || data[0].id);
             }
           }
         })
-        .catch(() => {});
+        .catch(() => {
+          ordersLoadedRef.current = false; // allow retry on next render
+        });
     }
-  }, [user, selectedOrderId]);
+  }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load Order Details for the selected Order ID
   const fetchOrderDetails = useCallback(async (oid: string) => {
@@ -508,7 +517,7 @@ function HelpCenterContent() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-8 space-y-4">
+    <div className="max-w-7xl mx-auto px-3 sm:px-6 py-3 sm:py-6 space-y-3 sm:space-y-4">
       {/* ── Top Header & Breadcrumbs ────────────────────────────────────────── */}
       <div className="flex flex-wrap items-center justify-between gap-3 bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs">
         <div className="flex items-center gap-3">
@@ -713,7 +722,7 @@ function HelpCenterContent() {
         </div>
 
         {/* ── RIGHT COLUMN: Main Chat & Real-Time Interaction Canvas (8 cols) ─ */}
-        <div className="lg:col-span-8 bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col h-[750px] max-h-[85vh] overflow-hidden">
+        <div className="lg:col-span-8 bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col h-[calc(100vh-180px)] sm:h-[calc(100vh-200px)] lg:h-[750px] max-h-[85vh] min-h-[400px] overflow-hidden">
           {/* ── Chat Header ─────────────────────────────────────────────────── */}
           <div className="p-3.5 sm:p-4 border-b border-slate-200 bg-gradient-to-r from-slate-50 via-white to-blue-50/40 flex items-center justify-between shrink-0">
             <div className="flex items-center gap-3">
@@ -816,7 +825,7 @@ function HelpCenterContent() {
           {/* ── Message Stream ──────────────────────────────────────────────── */}
           <div
             ref={chatContainerRef}
-            className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3.5 bg-slate-50/40 text-xs custom-scrollbar"
+            className="flex-1 overflow-y-auto overscroll-contain p-3 sm:p-5 space-y-3.5 bg-slate-50/40 text-xs custom-scrollbar"
           >
             {/* Greeting welcome banner */}
             <div className="bg-white border border-blue-100 rounded-2xl p-4 text-slate-700 space-y-3 shadow-2xs">
@@ -1034,8 +1043,9 @@ function HelpCenterContent() {
                 type="text"
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
-                placeholder="Ask a question or type your order ID (e.g. BPG-1048)…"
+                placeholder={user?.name ? `Hi ${user.name.split(' ')[0]}, ask anything or type your order ID…` : 'Ask a question or type your order ID (e.g. BPG-1048)…'}
                 className="flex-1 px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm outline-none focus:border-blue-600 focus:bg-white transition-all shadow-inner"
+                autoComplete="off"
               />
               <button
                 type="submit"

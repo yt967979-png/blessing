@@ -106,7 +106,50 @@ export async function generateSupportRagAnswer(
     } catch (_) {}
   }
 
-  // ── 1. Explicit Human Escalation Request ────────────────────────────────────
+  // ── 1. Greetings & Casual Hello ───────────────────────────────────────────
+  const greetingPattern = /^(hi|hello|hey|good\s*(morning|afternoon|evening)|vanakkam|hlo|hii+|namaste|namaskar|howdy|ola)\b/i;
+  if (greetingPattern.test(q) && q.length < 30) {
+    const greeting = userAccountName ? `Hello **${userAccountName}**! 👋 ` : 'Hello! 👋 ';
+    if (accountOrders.length > 0) {
+      const latest = accountOrders[0];
+      const latestCode = latest.order_number || latest.id;
+      const latestStatus = fulfillmentStatus(latest);
+      return {
+        answer: `${greeting}Welcome to **Blessing Power Guide Support**!\n\nI can see your recent order **#${latestCode}** (Status: **${latestStatus.toUpperCase()}**). What would you like help with today?`,
+        suggestions: [`🚚 Track Order #${latestCode}`, '📚 10th Guides & Prices', '📦 Shipping & Delivery', '🔄 Damaged Book Replacement', '👨‍💼 Talk to Admin'],
+        shouldEscalate: false,
+        linkedOrderId: latestCode,
+        cardType: 'order',
+        linkedOrderData: {
+          orderId: latestCode,
+          status: latestStatus,
+          totalAmount: Number(latest.total_amount || 0),
+          trackingNumber: latest.awb_number,
+          courierName: latest.courier_name || 'ST Courier Express',
+          city: latest.city,
+          pincode: latest.pincode,
+          trackingUrl: latest.tracking_url || `/track?orderId=${encodeURIComponent(latestCode)}`,
+        },
+      };
+    }
+    return {
+      answer: `${greeting}Welcome to **Blessing Power Guide Support**! 🤖\n\nI can help you with:\n1. 🚚 **Live Order Tracking** (ST Courier docket & delivery status)\n2. 📚 **10th Class Guides & Prices** (Tamil, English, Maths, Science & Social)\n3. 📦 **Shipping & Free Delivery** (5+ books = free shipping!)\n4. 🛡️ **100% Free Replacement** for damaged or misprinted books\n5. 👨‍💼 **Connect with Admin** for personal assistance\n\nHow can I help you today?`,
+      suggestions: ['🚚 Track My Order', '📚 10th Guides & Prices', '📦 Shipping & Free Delivery', '🔄 Damaged Book Replacement', '👨‍💼 Talk to Admin'],
+      shouldEscalate: false,
+    };
+  }
+
+  // ── 1b. Thank You / Bye / OK Acknowledgement ─────────────────────────────
+  const thankPattern = /^(thanks?|thank\s*you|ok\s*thank|bye|goodbye|got\s*it|nandri|romba\s*nandri|super|great|perfect|nice|cool|awesome)\b/i;
+  if (thankPattern.test(q) && q.length < 40) {
+    return {
+      answer: `You're welcome! 🙏 If you need anything else — order tracking, book info, or admin support — I'm here 24/7. Have a great day!`,
+      suggestions: ['🚚 Track My Order', '📚 Browse 10th Guides', '👨‍💼 Talk to Admin'],
+      shouldEscalate: false,
+    };
+  }
+
+  // ── 2. Explicit Human Escalation Request ────────────────────────────────────
   const humanEscalatePattern = /\b(admin|human|agent|person|manager|representative|customer care|call me|speak with someone|connect admin|talk to an? admin|talk to support|need real person|pesa mudiyuma|staff)\b/i;
   if (humanEscalatePattern.test(q)) {
     return {
@@ -117,14 +160,14 @@ export async function generateSupportRagAnswer(
     };
   }
 
-  // ── 2. Order Tracking & Live Delivery Status Inquiries (Live DB Resolution) ──
+  // ── 3. Order Tracking & Live Delivery Status Inquiries (Live DB Resolution) ──
   const orderRef = extractOrderRef(userPrompt) || customerContext?.sessionOrder;
   const phoneRef = extractPhone(userPrompt) || cleanUserPhone;
   const awbRef = extractAwb(userPrompt);
 
-  const isOrderQuery =
-    Boolean(orderRef) ||
-    Boolean(awbRef) ||
+  // Only trigger order query for genuine order-related intents, not casual mentions
+  const isExplicitOrderRef = Boolean(orderRef) || Boolean(awbRef);
+  const isOrderKeyword =
     q.includes('order') ||
     q.includes('track') ||
     q.includes('shipped') ||
@@ -132,8 +175,8 @@ export async function generateSupportRagAnswer(
     q.includes('dispatch') ||
     q.includes('awb') ||
     q.includes('docket') ||
-    q.includes('status') ||
-    q.includes('delivery') ||
+    (q.includes('status') && !q.includes('stock')) ||
+    (q.includes('delivery') && !q.includes('charge') && !q.includes('fee') && !q.includes('free')) ||
     q.includes('courier') ||
     q.includes('reach') ||
     q.includes('arrive') ||
@@ -142,6 +185,8 @@ export async function generateSupportRagAnswer(
     q.includes('ennoda order') ||
     q.includes('order eppo varum') ||
     q.includes('parcel');
+
+  const isOrderQuery = isExplicitOrderRef || isOrderKeyword;
 
   if (isOrderQuery) {
     let orderRow: any = null;
@@ -260,13 +305,16 @@ export async function generateSupportRagAnswer(
 
     // Completely anonymous user (no logged-in account, no phone, no order #)
     return {
-      answer: 'To check your live delivery status and ST Courier tracking docket, please provide:\n\n1. Your **Order ID** (e.g. `BPG-1048` or `#1048`)\n2. Or the **10-digit mobile number** used during checkout\n3. Or your **ST Courier AWB number**\n\nYou can also log in to your account to track all your orders automatically!',
+      answer: 'To check your live delivery status, I need one of these:\n\n1. Your **Order ID** (e.g. `BPG-1048` or `#1048`)\n2. Or the **10-digit mobile number** used during checkout\n3. Or your **ST Courier AWB number**\n\n💡 **Tip**: Log in to your account to see all orders automatically!',
       suggestions: ['🚚 Where is my order?', '👨‍💼 Talk to Admin', '📚 Browse 10th Guides', '📞 Call Helpline'],
       shouldEscalate: false,
     };
   }
 
-  // ── 3. Minimum Order Quantity (MOQ) Queries ─────────────────────────────────
+  // ── 3b. If user is logged in with orders but query didn't match order keywords, still show context ──
+  // (This lets the fallback at the bottom handle it with order context)
+
+  // ── 4. Minimum Order Quantity (MOQ) Queries ─────────────────────────────────
   if (
     q.includes('minimum') ||
     q.includes('moq') ||
@@ -288,7 +336,7 @@ export async function generateSupportRagAnswer(
     };
   }
 
-  // ── 4. Shipping Charges & Free Delivery Offer ───────────────────────────────
+  // ── 5. Shipping Charges & Free Delivery Offer ───────────────────────────────
   if (
     q.includes('shipping') ||
     q.includes('delivery charge') ||
@@ -309,7 +357,7 @@ export async function generateSupportRagAnswer(
     };
   }
 
-  // ── 5. Delivery Timelines & Coverage Districts ──────────────────────────────
+  // ── 6. Delivery Timelines & Coverage Districts ──────────────────────────────
   if (
     q.includes('how many days') ||
     q.includes('when will it come') ||
@@ -337,7 +385,7 @@ export async function generateSupportRagAnswer(
     };
   }
 
-  // ── 6. Books, Class 10th Subjects, Syllabus & Prices (Dynamic DB Query) ────
+  // ── 7. Books, Class 10th Subjects, Syllabus & Prices (Dynamic DB Query) ────
   if (
     q.includes('book') ||
     q.includes('guide') ||
@@ -393,7 +441,7 @@ export async function generateSupportRagAnswer(
     };
   }
 
-  // ── 7. Sample PDFs & Book Preview ───────────────────────────────────────────
+  // ── 8. Sample PDFs & Book Preview ───────────────────────────────────────────
   if (q.includes('sample') || q.includes('pdf') || q.includes('preview') || q.includes('inside book') || q.includes('demo') || q.includes('view page')) {
     return {
       answer: `📄 **Download Free Sample Chapter PDFs**:\n\nYou can preview sample chapter pages, typography, question patterns, and solved exercises for all 10th standard guides directly on each book page on our website!\n\nEvery guide includes:\n1. Unit summaries\n2. 1-mark objective questions\n3. 2-mark & 5-mark structured answers\n4. Public exam model questions`,
@@ -402,7 +450,7 @@ export async function generateSupportRagAnswer(
     };
   }
 
-  // ── 8. Payment Methods, Razorpay & Cash on Delivery (COD) ───────────────────
+  // ── 9. Payment Methods, Razorpay & Cash on Delivery (COD) ───────────────────
   if (
     q.includes('cod') ||
     q.includes('cash on delivery') ||
@@ -427,7 +475,7 @@ export async function generateSupportRagAnswer(
     };
   }
 
-  // ── 9. Return, Damaged, Torn or Misprinted Replacement Guarantee ─────────────
+  // ── 10. Return, Damaged, Torn or Misprinted Replacement Guarantee ─────────────
   if (
     q.includes('return') ||
     q.includes('replace') ||
@@ -448,7 +496,7 @@ export async function generateSupportRagAnswer(
     };
   }
 
-  // ── 10. Address, Phone Number or Pincode Correction ─────────────────────────
+  // ── 11. Address, Phone Number or Pincode Correction ─────────────────────────
   if (
     q.includes('change address') ||
     q.includes('wrong address') ||
@@ -465,7 +513,7 @@ export async function generateSupportRagAnswer(
     };
   }
 
-  // ── 11. Order Cancellation & Refund ─────────────────────────────────────────
+  // ── 12. Order Cancellation & Refund ─────────────────────────────────────────
   if (
     q.includes('cancel') ||
     q.includes('cancellation') ||
@@ -480,7 +528,7 @@ export async function generateSupportRagAnswer(
     };
   }
 
-  // ── 12. Office Location, Timings & Contact Info ─────────────────────────────
+  // ── 13. Office Location, Timings & Contact Info ─────────────────────────────
   if (
     q.includes('office') ||
     q.includes('contact') ||
@@ -502,7 +550,7 @@ export async function generateSupportRagAnswer(
     };
   }
 
-  // ── 13. School / Institutional Bulk Orders & Teacher Discounts ──────────────
+  // ── 14. School / Institutional Bulk Orders & Teacher Discounts ──────────────
   if (
     q.includes('bulk') ||
     q.includes('school') ||
@@ -523,7 +571,7 @@ export async function generateSupportRagAnswer(
     };
   }
 
-  // ── 14. Exam Preparation & Public Exam Board Syllabus ───────────────────────
+  // ── 15. Exam Preparation & Public Exam Board Syllabus ───────────────────────
   if (
     q.includes('exam') ||
     q.includes('centum') ||
@@ -540,7 +588,7 @@ export async function generateSupportRagAnswer(
     };
   }
 
-  // ── 15. Other Classes / Standards (11th, 12th, 9th) ──────────────────────────
+  // ── 16. Other Classes / Standards (11th, 12th, 9th) ──────────────────────────
   if (
     q.includes('11th') ||
     q.includes('12th') ||
@@ -557,7 +605,7 @@ export async function generateSupportRagAnswer(
     };
   }
 
-  // ── 16. Dynamic FAQ Table Search in Database ────────────────────────────────
+  // ── 17. Dynamic FAQ Table Search in Database ────────────────────────────────
   try {
     const faqSearchWords = q.split(/\s+/).filter((w) => w.length > 3).slice(0, 3);
     if (faqSearchWords.length > 0) {
@@ -578,15 +626,15 @@ export async function generateSupportRagAnswer(
     }
   } catch (_) {}
 
-  // ── 17. Welcoming & General Intelligent Fallback ────────────────────────────
+  // ── 18. Intelligent Fallback with Account Context ────────────────────────
   if (accountOrders.length > 0) {
     const greeting = userAccountName ? `Hello **${userAccountName}**! ` : 'Hello! ';
     const latest = accountOrders[0];
     const latestCode = latest.order_number || latest.id;
     const latestStatus = fulfillmentStatus(latest);
     return {
-      answer: `${greeting}Welcome back to the **Blessing AI Assistant** 🤖.\n\nI found your recent order **#${latestCode}** (Status: **${latestStatus.toUpperCase()}**).\n\nClick below for live tracking or ask anything about our 10th standard guides:`,
-      suggestions: [`🚚 Track Order #${latestCode}`, '📚 10th Guides & Prices', '📦 Shipping & Delivery Rules', '🛡️ Damaged Book Replacement', '👨‍💼 Talk to Admin'],
+      answer: `${greeting}I'm not sure I understood that. Here's what I can help with:\n\n• 🚚 **Track your order #${latestCode}** (Currently: ${latestStatus.toUpperCase()})\n• 📚 **10th Standard guides info & pricing**\n• 📦 **Shipping & delivery timelines**\n• 🔄 **Damaged book replacement** (100% free)\n• 👨‍💼 **Connect with our admin team**\n\nPlease click one of the options below or rephrase your question:`,
+      suggestions: [`🚚 Track Order #${latestCode}`, '📚 10th Guides & Prices', '📦 Shipping & Delivery Rules', '🔄 Damaged Book Replacement', '👨‍💼 Talk to Admin'],
       shouldEscalate: false,
       linkedOrderId: latestCode,
       cardType: 'order',
