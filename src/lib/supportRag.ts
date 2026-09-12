@@ -204,40 +204,64 @@ export async function generateSupportRagAnswer(
   }
 
   // ── 3. Order Tracking & Live Delivery Status Inquiries (Live DB Resolution) ──
-  const orderRef = extractOrderRef(userPrompt) || customerContext?.sessionOrder;
-  const phoneRef = extractPhone(userPrompt) || cleanUserPhone;
-  const awbRef = extractAwb(userPrompt);
+  const explicitOrderInPrompt = extractOrderRef(userPrompt);
+  const explicitAwbInPrompt = extractAwb(userPrompt);
+  const hasExplicitOrderInPrompt = Boolean(explicitOrderInPrompt) || Boolean(explicitAwbInPrompt);
 
-  // Only trigger order query for genuine order-related intents, not casual mentions
-  const isOfficeLocationQuery =
-    (q.includes('office') || q.includes('shop') || q.includes('store') || q.includes('where are you') || q.includes('address')) &&
-    !q.includes('change address') &&
-    !q.includes('wrong address') &&
-    !q.includes('update address');
+  const isOrderTrackingIntent =
+    hasExplicitOrderInPrompt ||
+    q.includes('where is my order') ||
+    q.includes('track my order') ||
+    q.includes('track order') ||
+    q.includes('where is my parcel') ||
+    q.includes('order status') ||
+    q.includes('delivery status') ||
+    q.includes('when will my order arrive') ||
+    q.includes('order arrive') ||
+    q.includes('order reach') ||
+    q.includes('when will i get my order') ||
+    q.includes('ennoda order') ||
+    q.includes('order eppo varum') ||
+    q.includes('parcel status') ||
+    q === 'where is my order right now?' ||
+    q === 'where is my order?' ||
+    (q.includes('where is') && (q.includes('my') || q.includes('order') || q.includes('book') || q.includes('parcel')));
 
-  const isOrderKeyword =
-    !isOfficeLocationQuery &&
-    (
-      q.includes('order') ||
-      q.includes('track') ||
-      q.includes('shipped') ||
-      (q.includes('where is') && (q.includes('my') || q.includes('order') || q.includes('parcel') || q.includes('book'))) ||
-      q.includes('dispatch') ||
-      q.includes('awb') ||
-      q.includes('docket') ||
-      (q.includes('status') && !q.includes('stock')) ||
-      (q.includes('delivery') && !q.includes('charge') && !q.includes('fee') && !q.includes('free')) ||
-      (q.includes('courier') && !q.includes('st courier contact')) ||
-      q.includes('when will i get') ||
-      q.includes('ennoda order') ||
-      q.includes('order eppo varum') ||
-      q.includes('parcel')
-    );
+  // Guard: Specific queries (updating phone, replacement, what books available, etc.) must NEVER be intercepted by order tracking
+  const isSpecificOtherIntent =
+    q.includes('replace') ||
+    q.includes('damage') ||
+    q.includes('misprint') ||
+    q.includes('torn') ||
+    q.includes('defect') ||
+    (q.includes('update') && (q.includes('phone') || q.includes('mobile') || q.includes('number') || q.includes('address'))) ||
+    (q.includes('change') && (q.includes('phone') || q.includes('mobile') || q.includes('number') || q.includes('address'))) ||
+    q.includes('delivery phone') ||
+    q.includes('what guide') ||
+    q.includes('which guide') ||
+    q.includes('guides are available') ||
+    q.includes('available for 10th') ||
+    q.includes('minimum') ||
+    q.includes('moq') ||
+    q.includes('shipping fee') ||
+    q.includes('shipping charge') ||
+    q.includes('delivery charge') ||
+    q.includes('delivery fee') ||
+    q.includes('free delivery') ||
+    q.includes('cancel') ||
+    q.includes('refund') ||
+    q.includes('office') ||
+    q.includes('location') ||
+    q.includes('cod') ||
+    q.includes('payment');
 
-  const isExplicitOrderRef = Boolean(orderRef) || Boolean(awbRef);
-  const isOrderQuery = isExplicitOrderRef || isOrderKeyword;
+  const isOrderQuery = isOrderTrackingIntent && (!isSpecificOtherIntent || hasExplicitOrderInPrompt);
 
   if (isOrderQuery) {
+    const orderRef = explicitOrderInPrompt || customerContext?.sessionOrder;
+    const phoneRef = extractPhone(userPrompt) || cleanUserPhone;
+    const awbRef = explicitAwbInPrompt;
+
     let orderRow: any = null;
     let orderItems: any[] = [];
     try {
@@ -563,13 +587,18 @@ export async function generateSupportRagAnswer(
     q.includes('change phone') ||
     q.includes('wrong phone') ||
     q.includes('update address') ||
+    q.includes('delivery phone') ||
+    q.includes('update phone') ||
+    (q.includes('update') && (q.includes('phone') || q.includes('mobile') || q.includes('number'))) ||
+    (q.includes('change') && (q.includes('phone') || q.includes('mobile') || q.includes('number'))) ||
     q.includes('pincode') ||
     q.includes('address mathanum')
   ) {
     return {
-      answer: `✏️ **Update Delivery Address or Mobile Number**:\n\nIf your parcel has not yet been scanned and picked up by ST Courier Express, our team can update your shipping label immediately.\n\nClick **Connect to Admin Now** so our warehouse staff can make the change before dispatch.`,
-      suggestions: ['👨‍💼 Connect to Admin Now', '📞 Call Office Directly', '🚚 Track Order'],
+      answer: `✏️ **Update Delivery Address or Mobile Number**:\n\nIf your parcel has not yet been scanned and picked up by ST Courier Express, our team can update your shipping label immediately.\n\nClick **Connect to Admin Now** so our warehouse staff can update your delivery phone number or address before dispatch.`,
+      suggestions: ['👨‍💼 Connect to Admin Now', '📞 Call Office Directly (+91 98404 18228)', '💬 WhatsApp Helpline', '🚚 Track Order'],
       shouldEscalate: true,
+      cardType: 'contact',
     };
   }
 
