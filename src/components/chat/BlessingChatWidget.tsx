@@ -76,55 +76,14 @@ export const BlessingChatWidget: React.FC = () => {
 
   const isStorefront = !pathname?.startsWith('/admin') && pathname !== '/help' && pathname !== '/support';
 
-  // Auto-close chat widget whenever user navigates to another page
+  // Auto-close chat widget window when user navigates to another page
+  // (Window minimizes to not block the new page, but session and conversation history are preserved)
   useEffect(() => {
     if (prevPathnameRef.current !== pathname) {
       prevPathnameRef.current = pathname;
-      // Close the chat widget window immediately
       setIsOpen(false);
-
-      // If user was waiting for an admin or in an active admin chat, terminate session on page leave
-      if (conversation?.id && (conversation.status === 'WAITING_ADMIN' || conversation.status === 'ACTIVE')) {
-        const payload = JSON.stringify({
-          action: 'leave_chat',
-          conversationId: conversation.id,
-        });
-        if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
-          const blob = new Blob([payload], { type: 'application/json' });
-          navigator.sendBeacon('/api/support/conversation', blob);
-        } else {
-          fetch('/api/support/conversation', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: payload,
-            keepalive: true,
-          }).catch(() => {});
-        }
-        setConversation(null);
-        setMessages([]);
-      }
     }
-  }, [pathname, conversation]);
-
-  // Clean up if window or tab is closed / refreshed
-  useEffect(() => {
-    const handleBeforeUnload = () => {
-      if (conversation?.id && (conversation.status === 'WAITING_ADMIN' || conversation.status === 'ACTIVE')) {
-        const payload = JSON.stringify({
-          action: 'leave_chat',
-          conversationId: conversation.id,
-        });
-        if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
-          const blob = new Blob([payload], { type: 'application/json' });
-          navigator.sendBeacon('/api/support/conversation', blob);
-        }
-      }
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-    };
-  }, [conversation]);
+  }, [pathname]);
 
   // Auto-scroll to latest message inside chat widget only
   const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
@@ -147,7 +106,12 @@ export const BlessingChatWidget: React.FC = () => {
   // Load conversation & messages
   const loadConversation = useCallback(async () => {
     try {
-      const res = await fetch('/api/support/conversation', {
+      const savedConvId = typeof window !== 'undefined' ? localStorage.getItem('bpg_support_conv_id') : null;
+      const convUrl = savedConvId
+        ? `/api/support/conversation?id=${encodeURIComponent(savedConvId)}`
+        : '/api/support/conversation';
+
+      const res = await fetch(convUrl, {
         headers: authHeaders(user),
       });
       if (res.ok) {
@@ -155,6 +119,13 @@ export const BlessingChatWidget: React.FC = () => {
         if (data.conversation) {
           setConversation(data.conversation);
           setMessages(data.messages || []);
+          if (typeof window !== 'undefined' && data.conversation.id) {
+            localStorage.setItem('bpg_support_conv_id', data.conversation.id);
+          }
+        } else {
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('bpg_support_conv_id');
+          }
         }
       }
     } catch (_) {}
@@ -260,11 +231,19 @@ export const BlessingChatWidget: React.FC = () => {
 
       if (res.ok) {
         const data = await res.json();
-        if (!conversation && data.conversationId) {
-          setConversation({
+        if (data.conversationId) {
+          setConversation((prev) => ({
             id: data.conversationId,
-            status: data.status || 'BOT',
-          });
+            status: data.status || prev?.status || 'BOT',
+          }));
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('bpg_support_conv_id', data.conversationId);
+          }
+        } else if (data.conversation?.id) {
+          setConversation(data.conversation);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('bpg_support_conv_id', data.conversation.id);
+          }
         } else if (data.status) {
           setConversation((prev) => (prev ? { ...prev, status: data.status } : null));
         }
@@ -320,6 +299,9 @@ export const BlessingChatWidget: React.FC = () => {
         }),
       });
     } catch (_) {}
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('bpg_support_conv_id');
+    }
     setConversation(null);
     setMessages([]);
     setFeedbackSubmitted(false);
@@ -327,27 +309,8 @@ export const BlessingChatWidget: React.FC = () => {
     setLoading(false);
   };
 
-  // Minimize or close widget: if waiting for admin, clear the queue request
+  // Minimize or close widget window without destroying session
   const handleMinimize = () => {
-    if (conversation?.id && conversation.status === 'WAITING_ADMIN') {
-      const payload = JSON.stringify({
-        action: 'leave_chat',
-        conversationId: conversation.id,
-      });
-      if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
-        const blob = new Blob([payload], { type: 'application/json' });
-        navigator.sendBeacon('/api/support/conversation', blob);
-      } else {
-        fetch('/api/support/conversation', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: payload,
-          keepalive: true,
-        }).catch(() => {});
-      }
-      setConversation(null);
-      setMessages([]);
-    }
     setIsOpen(false);
   };
 

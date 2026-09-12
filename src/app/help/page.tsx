@@ -102,49 +102,7 @@ function HelpCenterContent() {
     conversationRef.current = conversation;
   }, [conversation]);
 
-  // If user navigates away, clicks back, closes window or unloads:
-  // Immediately cancel/resolve the waiting or active support session so Admin Waiting Queue removes the request
-  const leaveSession = useCallback(() => {
-    const conv = conversationRef.current;
-    if (conv?.id && (conv.status === 'WAITING_ADMIN' || conv.status === 'ACTIVE')) {
-      const payload = JSON.stringify({
-        action: 'leave_chat',
-        conversationId: conv.id,
-      });
-      if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
-        const blob = new Blob([payload], { type: 'application/json' });
-        navigator.sendBeacon('/api/support/conversation', blob);
-      } else {
-        fetch('/api/support/conversation', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: payload,
-          keepalive: true,
-        }).catch(() => {});
-      }
-    }
-  }, []);
-
-  // Listen for browser Back button, tab close, page refresh, or navigation away
-  useEffect(() => {
-    const handleUnload = () => {
-      leaveSession();
-    };
-
-    window.addEventListener('popstate', handleUnload);
-    window.addEventListener('pagehide', handleUnload);
-    window.addEventListener('beforeunload', handleUnload);
-
-    return () => {
-      window.removeEventListener('popstate', handleUnload);
-      window.removeEventListener('pagehide', handleUnload);
-      window.removeEventListener('beforeunload', handleUnload);
-      handleUnload();
-    };
-  }, [leaveSession]);
-
   const handleBack = () => {
-    leaveSession();
     if (typeof window !== 'undefined' && window.history.length > 1) {
       router.back();
     } else {
@@ -246,7 +204,12 @@ function HelpCenterContent() {
   // Load or Initialize Support Conversation
   const loadConversation = useCallback(async () => {
     try {
-      const res = await fetch('/api/support/conversation', {
+      const savedConvId = typeof window !== 'undefined' ? localStorage.getItem('bpg_support_conv_id') : null;
+      const convUrl = savedConvId
+        ? `/api/support/conversation?id=${encodeURIComponent(savedConvId)}`
+        : '/api/support/conversation';
+
+      const res = await fetch(convUrl, {
         headers: authHeaders(user),
       });
       if (res.ok) {
@@ -254,6 +217,13 @@ function HelpCenterContent() {
         if (data.conversation) {
           setConversation(data.conversation);
           setMessages(data.messages || []);
+          if (typeof window !== 'undefined' && data.conversation.id) {
+            localStorage.setItem('bpg_support_conv_id', data.conversation.id);
+          }
+        } else {
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('bpg_support_conv_id');
+          }
         }
       }
     } catch (_) {}
@@ -353,27 +323,7 @@ function HelpCenterContent() {
     };
   }, [conversation?.id]);
 
-  // If user leaves the page or closes window, terminate WAITING_ADMIN or ACTIVE session
-  useEffect(() => {
-    const cleanupSession = () => {
-      if (conversation?.id && (conversation.status === 'WAITING_ADMIN' || conversation.status === 'ACTIVE')) {
-        const payload = JSON.stringify({
-          action: 'leave_chat',
-          conversationId: conversation.id,
-        });
-        if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
-          const blob = new Blob([payload], { type: 'application/json' });
-          navigator.sendBeacon('/api/support/conversation', blob);
-        }
-      }
-    };
 
-    window.addEventListener('beforeunload', cleanupSession);
-    return () => {
-      window.removeEventListener('beforeunload', cleanupSession);
-      cleanupSession();
-    };
-  }, [conversation?.id, conversation?.status]);
 
   // Send Message Handler
   const handleSendMessage = async (textToSend?: string, isEscalate?: boolean) => {
@@ -416,11 +366,17 @@ function HelpCenterContent() {
         const data = await res.json();
         if (data.conversation) {
           setConversation(data.conversation);
+          if (typeof window !== 'undefined' && data.conversation.id) {
+            localStorage.setItem('bpg_support_conv_id', data.conversation.id);
+          }
         } else if (data.conversationId) {
           setConversation((prev) => ({
             id: data.conversationId,
             status: data.status || prev?.status || 'BOT',
           }));
+          if (typeof window !== 'undefined' && data.conversationId) {
+            localStorage.setItem('bpg_support_conv_id', data.conversationId);
+          }
         }
 
         // If system message returned (e.g. connecting to admin)
@@ -492,6 +448,9 @@ function HelpCenterContent() {
         }),
       });
     } catch (_) {}
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('bpg_support_conv_id');
+    }
     setConversation(null);
     setMessages([]);
     setFeedbackSubmitted(false);

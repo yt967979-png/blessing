@@ -29,7 +29,10 @@ export async function GET(req: NextRequest) {
 
     if (convIdParam) {
       const res = await queryDb(`SELECT * FROM support_conversations WHERE id = $1 LIMIT 1`, [convIdParam]);
-      conv = res.rows[0];
+      const candidate = res.rows[0];
+      if (candidate && candidate.status !== 'RESOLVED') {
+        conv = candidate;
+      }
     } else if (user?.userId) {
       const res = await queryDb(
         `SELECT * FROM support_conversations 
