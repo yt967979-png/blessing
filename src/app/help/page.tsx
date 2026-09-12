@@ -556,7 +556,7 @@ function HelpCenterContent() {
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                 Live Support Online
               </span>
-              <span className="text-xs text-slate-400 font-medium hidden sm:inline">· 24/7 AI & Team</span>
+              <span className="text-xs text-slate-400 font-medium hidden sm:inline">· AI Assistant & Chennai Team (Mon–Sat 9AM–8PM)</span>
             </div>
             <h1 className="text-lg sm:text-2xl font-black text-[#001B3A] tracking-tight mt-0.5">
               Blessing Help Center & Live Chat
@@ -784,7 +784,7 @@ function HelpCenterContent() {
                 <p className="text-[11px] text-slate-500">
                   {conversation?.status === 'ACTIVE'
                     ? 'Connected directly with store staff'
-                    : 'Grounded in Tamil Nadu syllabus, order tracking, and delivery rules'}
+                    : 'Live order tracking, delivery status, and 10th guides support'}
                 </p>
               </div>
             </div>
@@ -860,7 +860,7 @@ function HelpCenterContent() {
                 </span>
               </div>
               <p className="text-xs text-slate-600 leading-relaxed">
-                I can check real-time ST Courier tracking, answer Tamil Nadu Class 10 syllabus questions, process book replacements, or connect you directly with our Chennai office team.
+                I can check real-time ST Courier tracking, answer questions on Class 10 guides and prices, explain shipping rules, or connect you directly with our Chennai office team.
               </p>
               {selectedOrderId && (
                 <div className="pt-1">
