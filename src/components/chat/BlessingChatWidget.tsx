@@ -276,6 +276,30 @@ export const BlessingChatWidget: React.FC = () => {
     setLoading(false);
   };
 
+  // Minimize or close widget: if waiting for admin, clear the queue request
+  const handleMinimize = () => {
+    if (conversation?.id && conversation.status === 'WAITING_ADMIN') {
+      const payload = JSON.stringify({
+        action: 'leave_chat',
+        conversationId: conversation.id,
+      });
+      if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
+        const blob = new Blob([payload], { type: 'application/json' });
+        navigator.sendBeacon('/api/support/conversation', blob);
+      } else {
+        fetch('/api/support/conversation', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: payload,
+          keepalive: true,
+        }).catch(() => {});
+      }
+      setConversation(null);
+      setMessages([]);
+    }
+    setIsOpen(false);
+  };
+
   // 1-Click Human Escalation
   const handleEscalateToHuman = async () => {
     if (loading || conversation?.status === 'WAITING_ADMIN' || conversation?.status === 'ACTIVE') {
@@ -432,7 +456,7 @@ export const BlessingChatWidget: React.FC = () => {
               </Link>
               <button
                 type="button"
-                onClick={() => setIsOpen(false)}
+                onClick={handleMinimize}
                 className="p-2 text-slate-300 hover:text-white hover:bg-white/10 rounded-xl transition-colors cursor-pointer"
                 title="Minimize chat"
               >

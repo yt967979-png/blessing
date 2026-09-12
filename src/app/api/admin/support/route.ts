@@ -108,7 +108,7 @@ export async function GET(req: NextRequest) {
     }
 
     // ── 3. Support Queue Overview View
-    // Automatic self-healing: resolve any older duplicate waiting tickets for the same user/phone/session
+    // Automatic self-healing: resolve any older duplicate waiting tickets and abandoned requests
     try {
       await queryDb(`
         UPDATE support_conversations
@@ -120,6 +120,12 @@ export async function GET(req: NextRequest) {
             WHERE status = 'WAITING_ADMIN'
             ORDER BY COALESCE(customer_id, customer_phone, session_token), updated_at DESC
           )
+      `);
+      await queryDb(`
+        UPDATE support_conversations
+        SET status = 'RESOLVED', resolved_at = NOW()
+        WHERE status = 'WAITING_ADMIN'
+          AND updated_at < NOW() - INTERVAL '15 minutes'
       `);
     } catch (_) {}
 

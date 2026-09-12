@@ -132,29 +132,51 @@ export async function POST(req: NextRequest) {
     let conversationId = body.conversationId;
     let conv: any = null;
 
-    // ── Handle Customer Ending or Closing Chat to Start Fresh
-    if (action === 'close_chat' || action === 'close' || action === 'end_chat') {
+    // ── Handle Customer Ending, Leaving, or Closing Chat to Start Fresh
+    if (
+      action === 'close_chat' ||
+      action === 'close' ||
+      action === 'end_chat' ||
+      action === 'leave_chat' ||
+      action === 'cancel_waiting'
+    ) {
       if (conversationId) {
         const cRes = await queryDb(`SELECT * FROM support_conversations WHERE id = $1 LIMIT 1`, [conversationId]);
         conv = cRes.rows[0];
       }
-      if (!conv && (customerId || sessionToken)) {
+      if (!conv && (customerId || sessionToken || customerPhone)) {
         const cRes = await queryDb(
           `SELECT * FROM support_conversations 
-           WHERE (customer_id = $1 OR session_token = $2) AND status != 'RESOLVED' 
+           WHERE (
+             (customer_id IS NOT NULL AND customer_id = $1)
+             OR session_token = $2
+             OR ($3 <> '' AND customer_phone IS NOT NULL AND customer_phone = $3)
+           )
+           AND status != 'RESOLVED' 
            ORDER BY updated_at DESC LIMIT 1`,
-          [customerId || 'NONE', sessionToken]
+          [customerId || 'NONE', sessionToken, customerPhone || '']
         );
         conv = cRes.rows[0];
       }
 
       if (conv) {
+        const wasWaiting = conv.status === 'WAITING_ADMIN';
+        const wasActive = conv.status === 'ACTIVE';
+
         await queryDb(
           `UPDATE support_conversations 
            SET status = 'RESOLVED', resolved_at = NOW(), updated_at = NOW() 
            WHERE id = $1`,
           [conv.id]
         );
+
+        if (wasActive) {
+          await queryDb(
+            `INSERT INTO support_messages (id, conversation_id, sender_type, sender_name, text)
+             VALUES ($1, $2, 'SYSTEM', 'System', $3)`,
+            [`msg_${Date.now()}_sys`, conv.id, 'Customer left the chat session.']
+          );
+        }
 
         await notifySupportEvent({
           type: 'CONVERSATION_UPDATED',
@@ -165,7 +187,16 @@ export async function POST(req: NextRequest) {
               ...conv,
               status: 'RESOLVED',
             },
+            wasWaiting,
+            wasActive,
           },
+          timestamp: new Date().toISOString(),
+        });
+
+        await notifySupportEvent({
+          type: 'CHAT_RESOLVED',
+          conversationId: conv.id,
+          status: 'RESOLVED',
           timestamp: new Date().toISOString(),
         });
       }
@@ -174,6 +205,7 @@ export async function POST(req: NextRequest) {
       const res = NextResponse.json({
         success: true,
         closed: true,
+        left: true,
         conversation: null,
         messages: [],
       });

@@ -96,6 +96,61 @@ function HelpCenterContent() {
 
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
+  const conversationRef = useRef<Conversation | null>(null);
+
+  useEffect(() => {
+    conversationRef.current = conversation;
+  }, [conversation]);
+
+  // If user navigates away, clicks back, closes window or unloads:
+  // Immediately cancel/resolve the waiting or active support session so Admin Waiting Queue removes the request
+  const leaveSession = useCallback(() => {
+    const conv = conversationRef.current;
+    if (conv?.id && (conv.status === 'WAITING_ADMIN' || conv.status === 'ACTIVE')) {
+      const payload = JSON.stringify({
+        action: 'leave_chat',
+        conversationId: conv.id,
+      });
+      if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
+        const blob = new Blob([payload], { type: 'application/json' });
+        navigator.sendBeacon('/api/support/conversation', blob);
+      } else {
+        fetch('/api/support/conversation', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: payload,
+          keepalive: true,
+        }).catch(() => {});
+      }
+    }
+  }, []);
+
+  // Listen for browser Back button, tab close, page refresh, or navigation away
+  useEffect(() => {
+    const handleUnload = () => {
+      leaveSession();
+    };
+
+    window.addEventListener('popstate', handleUnload);
+    window.addEventListener('pagehide', handleUnload);
+    window.addEventListener('beforeunload', handleUnload);
+
+    return () => {
+      window.removeEventListener('popstate', handleUnload);
+      window.removeEventListener('pagehide', handleUnload);
+      window.removeEventListener('beforeunload', handleUnload);
+      handleUnload();
+    };
+  }, [leaveSession]);
+
+  const handleBack = () => {
+    leaveSession();
+    if (typeof window !== 'undefined' && window.history.length > 1) {
+      router.back();
+    } else {
+      router.push('/');
+    }
+  };
 
   // Scroll ONLY the inner chat messages container — NEVER scrolls the browser window!
   const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
@@ -205,7 +260,8 @@ function HelpCenterContent() {
 
     let active = true;
     try {
-      const streamUrl = `/api/support/stream?conversationId=${encodeURIComponent(conversation.id)}`;
+      const tokenParam = user?.token ? `&token=${encodeURIComponent(user.token)}` : '';
+      const streamUrl = `/api/support/stream?conversationId=${encodeURIComponent(conversation.id)}${tokenParam}`;
       const es = new EventSource(streamUrl);
       eventSourceRef.current = es;
 
@@ -229,6 +285,26 @@ function HelpCenterContent() {
               return [...prev, newMsg];
             });
             setIsTyping(false);
+          } else if (data.type === 'CHAT_CLAIMED') {
+            setConversation((prev) =>
+              prev
+                ? { ...prev, status: 'ACTIVE', assigned_admin_name: data.assignedAdminName }
+                : null
+            );
+            if (data.text) {
+              setMessages((prev) => [
+                ...prev,
+                {
+                  id: `claim_${Date.now()}`,
+                  sender_type: 'ADMIN',
+                  sender_name: data.assignedAdminName || 'Staff',
+                  text: data.text,
+                  created_at: data.timestamp || new Date().toISOString(),
+                },
+              ]);
+            }
+          } else if (data.type === 'CHAT_RESOLVED') {
+            setConversation((prev) => (prev ? { ...prev, status: 'RESOLVED' } : null));
           } else if (data.type === 'TYPING') {
             setIsTyping(data.isTyping);
           } else if (data.type === 'CONVERSATION_UPDATED' && data.conversation) {
@@ -437,7 +513,7 @@ function HelpCenterContent() {
       <div className="flex flex-wrap items-center justify-between gap-3 bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => router.back()}
+            onClick={handleBack}
             className="p-2 -ml-1 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
             title="Go Back"
           >

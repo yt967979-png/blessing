@@ -198,10 +198,21 @@ export const LiveSupportSection: React.FC<LiveSupportSectionProps> = ({
     loadContextCard(conv);
   };
 
+  // Continuous message sync for currently open conversation
+  useEffect(() => {
+    if (!selectedConv?.id) return;
+    loadMessages(selectedConv.id);
+    const timer = setInterval(() => {
+      loadMessages(selectedConv.id);
+    }, 2500);
+    return () => clearInterval(timer);
+  }, [selectedConv?.id, loadMessages]);
+
   // Real-time SSE listener
   useEffect(() => {
     if (!user) return;
-    const es = new EventSource('/api/support/stream?admin=1');
+    const tokenParam = user?.token ? `&token=${encodeURIComponent(user.token)}` : '';
+    const es = new EventSource(`/api/support/stream?admin=1${tokenParam}`);
 
     es.onmessage = (e) => {
       try {
@@ -210,21 +221,42 @@ export const LiveSupportSection: React.FC<LiveSupportSectionProps> = ({
           playChime?.();
           onShowToast(`🔔 New Support Request from ${ev.senderName || 'Customer'}!`);
           loadSupportData();
-        } else if (ev.type === 'CHAT_CLAIMED' || ev.type === 'CHAT_RESOLVED') {
+        } else if (ev.type === 'CHAT_CLAIMED' || ev.type === 'CHAT_RESOLVED' || ev.type === 'CONVERSATION_UPDATED') {
+          const targetId = ev.conversationId || ev.data?.conversation?.id;
+          if (ev.status === 'RESOLVED' || ev.type === 'CHAT_RESOLVED') {
+            if (targetId) {
+              setWaitingList((prev) => prev.filter((c) => c.id !== targetId));
+              setStats((prev) => ({
+                ...prev,
+                waitingCount: Math.max(0, prev.waitingCount - 1),
+              }));
+            }
+            if (selectedConv && selectedConv.id === targetId) {
+              onShowToast('ℹ️ Customer ended or left the chat session.');
+            }
+          }
           loadSupportData();
         } else if (ev.type === 'NEW_MESSAGE') {
-          if (selectedConv && ev.conversationId === selectedConv.id) {
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: `msg_${Date.now()}`,
-                conversation_id: ev.conversationId,
-                sender_type: ev.senderType,
-                sender_name: ev.senderName,
-                text: ev.text,
-                created_at: ev.timestamp || new Date().toISOString(),
-              },
-            ]);
+          const evConvId = ev.conversationId || ev.message?.conversation_id;
+          if (selectedConv && evConvId === selectedConv.id) {
+            const newMsg: SupportMessage = {
+              id: ev.message?.id || ev.id || `msg_${Date.now()}`,
+              conversation_id: evConvId,
+              sender_type: ev.senderType || ev.message?.sender_type,
+              sender_name: ev.senderName || ev.message?.sender_name || 'Customer',
+              text: ev.text || ev.message?.text || '',
+              created_at: ev.timestamp || new Date().toISOString(),
+            };
+            setMessages((prev) => {
+              if (prev.some((m) => m.id === newMsg.id || (m.text === newMsg.text && m.sender_type === newMsg.sender_type))) {
+                return prev;
+              }
+              return [...prev, newMsg];
+            });
+            loadMessages(selectedConv.id);
+          } else if (ev.senderType === 'CUSTOMER') {
+            playChime?.();
+            onShowToast(`💬 New message from ${ev.senderName || 'Customer'}`);
           }
           loadSupportData();
         }
