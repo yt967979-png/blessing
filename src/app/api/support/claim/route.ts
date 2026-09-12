@@ -65,6 +65,16 @@ export async function POST(req: NextRequest) {
 
     const claimedConv = casResult.rows[0];
 
+    // Clean up any other duplicate pending waiting requests for the same order
+    if (claimedConv.order_id) {
+      await queryDb(
+        `UPDATE support_conversations 
+         SET status = 'RESOLVED', resolved_at = NOW(), updated_at = NOW() 
+         WHERE status = 'WAITING_ADMIN' AND order_id = $1 AND id != $2`,
+        [claimedConv.order_id, conversationId]
+      );
+    }
+
     // Winner: Insert System join notice
     const sysMsgId = `msg_${Date.now()}_sys`;
     await queryDb(

@@ -28,30 +28,53 @@ export async function GET(req: NextRequest) {
 
       if (orderIdParam) {
         const oRes = await queryDb(
-          `SELECT * FROM orders WHERE order_id = $1 OR id = $1 LIMIT 1`,
+          `SELECT * FROM orders WHERE id = $1 OR order_number = $1 LIMIT 1`,
           [orderIdParam]
-        );
-        order = oRes.rows[0];
-      } else if (phoneParam) {
-        const oRes = await queryDb(
-          `SELECT * FROM orders WHERE customer_phone = $1 OR customer_phone = $2 ORDER BY ordered_at DESC LIMIT 1`,
-          [phoneParam, phoneParam.replace('+91', '')]
         );
         order = oRes.rows[0];
       }
 
+      if (!order && phoneParam) {
+        const cleanPhone = phoneParam.replace(/\D/g, '').slice(-10);
+        if (cleanPhone.length >= 10) {
+          const oRes = await queryDb(
+            `SELECT o.* FROM orders o
+             LEFT JOIN users u ON o.user_id = u.id
+             WHERE o.shipping_address LIKE $1 
+                OR u.phone = $2 
+                OR u.phone = $3
+             ORDER BY o.ordered_at DESC LIMIT 1`,
+            [`%${cleanPhone}%`, cleanPhone, `+91${cleanPhone}`]
+          );
+          order = oRes.rows[0];
+        }
+      }
+
+      let parsedAddr: any = {};
+      if (order?.shipping_address) {
+        try {
+          parsedAddr = typeof order.shipping_address === 'string'
+            ? JSON.parse(order.shipping_address)
+            : order.shipping_address;
+        } catch (_) {
+          parsedAddr = {};
+        }
+      }
+
       if (order?.id) {
         const iRes = await queryDb(
-          `SELECT title, qty, price, subtotal FROM order_items WHERE order_id = $1`,
+          `SELECT book_title as title, quantity as qty, book_price as price, subtotal FROM order_items WHERE order_id = $1`,
           [order.id]
         );
         items = iRes.rows;
       }
 
-      if (phoneParam) {
+      const effectivePhone = parsedAddr.phone || phoneParam;
+      if (effectivePhone) {
+        const cleanPhone = effectivePhone.replace(/\D/g, '').slice(-10);
         const tCountRes = await queryDb(
-          `SELECT COUNT(*) as cnt FROM support_conversations WHERE customer_phone = $1`,
-          [phoneParam]
+          `SELECT COUNT(*) as cnt FROM support_conversations WHERE customer_phone LIKE $1`,
+          [`%${cleanPhone}%`]
         );
         pastTicketsCount = parseInt(tCountRes.rows[0]?.cnt || '0', 10);
       }
@@ -67,20 +90,20 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({
         order: order
           ? {
-              orderId: order.order_id || order.id,
-              customerName: order.customer_name,
-              customerPhone: order.customer_phone,
-              customerAltPhone: order.customer_alt_phone,
-              address: order.shipping_address || order.address,
-              city: order.city,
-              pincode: order.pincode,
+              orderId: order.order_number || order.id,
+              customerName: parsedAddr.name || 'Customer',
+              customerPhone: parsedAddr.phone || '',
+              customerAltPhone: parsedAddr.alternatePhone || '',
+              address: parsedAddr.address || order.shipping_address || '',
+              city: parsedAddr.city || '',
+              pincode: parsedAddr.pincode || '',
               totalAmount: Number(order.total_amount || 0),
-              status: fulfillmentStatus(order),
+              status: order.order_status || fulfillmentStatus(order),
               isCancelled: isRecordCancelled(order),
               paymentMethod: order.payment_method,
               paymentStatus: order.payment_status,
               awbNumber: order.awb_number,
-              courierName: order.courier_name || 'ST Courier',
+              courierName: order.courier_name || 'ST Courier Express',
               isOfficialAwb: order.is_official_awb,
               trackingUrl: order.tracking_url,
               orderedAt: order.ordered_at,
@@ -130,10 +153,17 @@ export async function GET(req: NextRequest) {
     } catch (_) {}
 
     const waitingRes = await queryDb(
-      `SELECT DISTINCT ON (COALESCE(customer_id, customer_phone, session_token)) * 
+      `SELECT DISTINCT ON (COALESCE(NULLIF(order_id, ''), NULLIF(customer_id, ''), NULLIF(customer_phone, ''), session_token)) * 
        FROM support_conversations 
        WHERE status = 'WAITING_ADMIN' 
-       ORDER BY COALESCE(customer_id, customer_phone, session_token), updated_at DESC`
+         AND (
+           order_id IS NULL 
+           OR order_id NOT IN (
+             SELECT order_id FROM support_conversations 
+             WHERE status = 'ACTIVE' AND order_id IS NOT NULL AND order_id != ''
+           )
+         )
+       ORDER BY COALESCE(NULLIF(order_id, ''), NULLIF(customer_id, ''), NULLIF(customer_phone, ''), session_token), updated_at DESC`
     );
 
     const activeRes = await queryDb(
@@ -191,12 +221,24 @@ export async function PATCH(req: NextRequest) {
     if (!conversationId) return NextResponse.json({ error: 'conversationId required' }, { status: 400 });
 
     if (action === 'resolve') {
+      const cRes = await queryDb(`SELECT order_id FROM support_conversations WHERE id = $1`, [conversationId]);
+      const oid = cRes.rows[0]?.order_id;
+
       await queryDb(
         `UPDATE support_conversations 
          SET status = 'RESOLVED', resolved_at = NOW(), updated_at = NOW() 
          WHERE id = $1`,
         [conversationId]
       );
+
+      if (oid) {
+        await queryDb(
+          `UPDATE support_conversations 
+           SET status = 'RESOLVED', resolved_at = NOW(), updated_at = NOW() 
+           WHERE status = 'WAITING_ADMIN' AND order_id = $1`,
+          [oid]
+        );
+      }
 
       const sysMsgId = `msg_${Date.now()}_sys`;
       await queryDb(

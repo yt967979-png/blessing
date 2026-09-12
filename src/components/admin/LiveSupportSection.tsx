@@ -23,6 +23,7 @@ import {
 import OrderStatusStamp from './OrderStatusStamp';
 import { authHeaders } from '@/lib/clientAuth';
 import { shopWhatsAppChatUrl } from '@/lib/shopContact';
+import { ChatMarkdown } from '@/components/chat/ChatMarkdown';
 
 interface LiveSupportSectionProps {
   user: any;
@@ -607,7 +608,13 @@ export const LiveSupportSection: React.FC<LiveSupportSectionProps> = ({
               <div className="p-3.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
                 <div>
                   <h3 className="font-extrabold text-xs text-slate-900 flex items-center gap-2">
-                    <span>{selectedConv.customer_name || 'Customer'}</span>
+                    <span>
+                      {contextCard?.order?.customerName && contextCard.order.customerName !== 'Customer'
+                        ? contextCard.order.customerName
+                        : selectedConv.customer_name && selectedConv.customer_name !== 'Student/Parent'
+                          ? selectedConv.customer_name
+                          : 'Store Customer'}
+                    </span>
                     <span
                       className={`text-[9.5px] px-2 py-0.5 rounded-full font-bold uppercase ${
                         selectedConv.status === 'ACTIVE'
@@ -621,7 +628,11 @@ export const LiveSupportSection: React.FC<LiveSupportSectionProps> = ({
                     </span>
                   </h3>
                   <p className="text-[10.5px] text-slate-500">
-                    {selectedConv.customer_phone ? `+91 ${selectedConv.customer_phone}` : 'Store Guest'}
+                    {contextCard?.order?.customerPhone
+                      ? `☎ +91 ${contextCard.order.customerPhone}`
+                      : selectedConv.customer_phone
+                        ? `☎ +91 ${selectedConv.customer_phone}`
+                        : 'Store Guest'}
                   </p>
                 </div>
 
@@ -661,13 +672,13 @@ export const LiveSupportSection: React.FC<LiveSupportSectionProps> = ({
                         {m.sender_name}
                       </span>
                       <div
-                        className={`max-w-[82%] px-3.5 py-2.5 rounded-2xl leading-relaxed break-words whitespace-pre-wrap ${
+                        className={`max-w-[82%] px-3.5 py-2.5 rounded-2xl leading-relaxed break-words ${
                           isAdmin
                             ? 'bg-[#001b3a] text-white rounded-br-xs shadow-xs'
                             : 'bg-white text-slate-900 border border-slate-200 rounded-bl-xs shadow-xs'
                         }`}
                       >
-                        {m.text}
+                        <ChatMarkdown content={m.text} isCustomer={isAdmin} />
                         <div
                           className={`flex items-center justify-end gap-1 mt-1 text-[9px] ${
                             isAdmin ? 'text-blue-300' : 'text-slate-400'
@@ -757,12 +768,20 @@ export const LiveSupportSection: React.FC<LiveSupportSectionProps> = ({
               {/* Student Details */}
               <div className="space-y-1.5 text-xs bg-slate-50 p-3 rounded-xl border border-slate-200">
                 <span className="text-[10px] font-bold text-slate-400 uppercase">Student</span>
-                <p className="font-bold text-slate-900">{selectedConv.customer_name || 'Guest'}</p>
-                {selectedConv.customer_phone && (
+                <p className="font-bold text-slate-900">
+                  {contextCard?.order?.customerName && contextCard.order.customerName !== 'Customer'
+                    ? contextCard.order.customerName
+                    : selectedConv.customer_name && selectedConv.customer_name !== 'Student/Parent'
+                      ? selectedConv.customer_name
+                      : 'Store Guest'}
+                </p>
+                {Boolean(contextCard?.order?.customerPhone || selectedConv.customer_phone) && (
                   <div className="flex items-center gap-2 pt-1">
-                    <span className="text-slate-600 font-mono">☎ +91 {selectedConv.customer_phone}</span>
+                    <span className="text-slate-600 font-mono">
+                      ☎ +91 {contextCard?.order?.customerPhone || selectedConv.customer_phone}
+                    </span>
                     <a
-                      href={shopWhatsAppChatUrl('Hello, regarding your Blessing Power Guide order')}
+                      href={`https://wa.me/91${String(contextCard?.order?.customerPhone || selectedConv.customer_phone || '').replace(/\D/g, '').slice(-10)}?text=Hello%20${encodeURIComponent(contextCard?.order?.customerName || 'Customer')},%20regarding%20your%20Blessing%20Power%20Guide%20order`}
                       target="_blank"
                       rel="noreferrer"
                       className="text-emerald-600 hover:text-emerald-700 font-bold text-[11px]"
