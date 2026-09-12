@@ -10,7 +10,7 @@ blessingpowerguide.duckdns.org {
 		file_server
 	}
 
-	@sse path /api/stock/stream /api/orders/stream
+	@sse path /api/stock/stream /api/orders/stream /api/support/stream
 	handle @sse {
 		reverse_proxy 127.0.0.1:3000 {
 			flush_interval -1
