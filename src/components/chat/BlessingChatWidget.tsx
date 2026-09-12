@@ -72,8 +72,59 @@ export const BlessingChatWidget: React.FC = () => {
 
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
+  const prevPathnameRef = useRef(pathname);
 
   const isStorefront = !pathname?.startsWith('/admin') && pathname !== '/help' && pathname !== '/support';
+
+  // Auto-close chat widget whenever user navigates to another page
+  useEffect(() => {
+    if (prevPathnameRef.current !== pathname) {
+      prevPathnameRef.current = pathname;
+      // Close the chat widget window immediately
+      setIsOpen(false);
+
+      // If user was waiting for an admin or in an active admin chat, terminate session on page leave
+      if (conversation?.id && (conversation.status === 'WAITING_ADMIN' || conversation.status === 'ACTIVE')) {
+        const payload = JSON.stringify({
+          action: 'leave_chat',
+          conversationId: conversation.id,
+        });
+        if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
+          const blob = new Blob([payload], { type: 'application/json' });
+          navigator.sendBeacon('/api/support/conversation', blob);
+        } else {
+          fetch('/api/support/conversation', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: payload,
+            keepalive: true,
+          }).catch(() => {});
+        }
+        setConversation(null);
+        setMessages([]);
+      }
+    }
+  }, [pathname, conversation]);
+
+  // Clean up if window or tab is closed / refreshed
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (conversation?.id && (conversation.status === 'WAITING_ADMIN' || conversation.status === 'ACTIVE')) {
+        const payload = JSON.stringify({
+          action: 'leave_chat',
+          conversationId: conversation.id,
+        });
+        if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
+          const blob = new Blob([payload], { type: 'application/json' });
+          navigator.sendBeacon('/api/support/conversation', blob);
+        }
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [conversation]);
 
   // Auto-scroll to latest message inside chat widget only
   const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {

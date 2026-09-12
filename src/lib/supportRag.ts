@@ -605,7 +605,318 @@ export async function generateSupportRagAnswer(
     };
   }
 
-  // ── 17. Dynamic FAQ Table Search in Database ────────────────────────────────
+  // ── 17. How to Place an Order / Step-by-Step Purchase Guide ──────────────────
+  if (
+    q.includes('how to order') ||
+    q.includes('how to buy') ||
+    q.includes('order pannuradhu epdi') ||
+    q.includes('steps to order') ||
+    q.includes('how can i order') ||
+    q.includes('buy online') ||
+    q.includes('purchase guide') ||
+    q.includes('how do i get')
+  ) {
+    return {
+      answer: `🛒 **How to Place an Order in 4 Easy Steps**:\n\n1. **Select Books**: Go to the **Books** page and add your required 10th guides to your Cart (Minimum order: 4 books; Complete 5-book set gives **100% Free Shipping**).\n2. **Review Cart**: Click the Cart icon at the top right to verify selected subjects and quantities.\n3. **Enter Delivery Address**: Provide the student/parent name, mobile number, complete doorstep address, and accurate 6-digit Pincode.\n4. **Pay Online via Razorpay**: Choose UPI (Google Pay, PhonePe, Paytm, BHIM), NetBanking, or Debit/Credit Cards.\n\n✨ *Once placed, you will receive an instant SMS confirmation and an official ST Courier live tracking docket!*`,
+      suggestions: ['📚 Browse 10th Guides', '🛒 Buy 10th Full Set (Free Delivery)', '💳 Payment Options', '👨‍💼 Talk to Admin'],
+      shouldEscalate: false,
+    };
+  }
+
+  // ── 18. Why Minimum 4 Books (MOQ Policy Explained) ──────────────────────────
+  if (
+    q.includes('why 4 books') ||
+    q.includes('can i buy 1 book') ||
+    q.includes('only single book') ||
+    q.includes('1 book only') ||
+    q.includes('single guide') ||
+    q.includes('one book only') ||
+    q.includes('why moq') ||
+    q.includes('minimum 4') ||
+    q.includes('single book podalama')
+  ) {
+    return {
+      answer: `📦 **Why We Have a 4-Book Minimum Order Quantity (MOQ)**:\n\nTo ensure express ST Courier doorstep delivery directly from our Chennai publication warehouse while keeping textbook prices affordable without middleman markups, our minimum order quantity is **4 books**.\n\n💡 **Best Value Recommendation**:\nMost students purchase the **Complete Class 10 Full Set (5 Books: Tamil, English, Maths, Science, Social)** — which automatically qualifies for **100% Free Doorstep Delivery (₹0 Shipping Fee)**!`,
+      suggestions: ['📚 View 10th Full Set (Free Delivery)', '📦 Shipping Charges', '👨‍💼 Talk to Admin'],
+      shouldEscalate: false,
+    };
+  }
+
+  // ── 19. Invoice, GST Bill & Payment Receipt ──────────────────────────────────
+  if (
+    q.includes('invoice') ||
+    q.includes('bill') ||
+    q.includes('receipt') ||
+    q.includes('gst bill') ||
+    q.includes('tax invoice') ||
+    q.includes('download bill') ||
+    q.includes('bill copy') ||
+    q.includes('receipt venum')
+  ) {
+    return {
+      answer: `🧾 **Order Invoice & Official Receipt**:\n\n• **Instant Digital Receipt**: An order confirmation with full transaction ID and payment breakdown is displayed immediately after checkout and sent via SMS/Email.\n• **Printed Packing Slip**: An official printed invoice and packing slip is included inside your ST Courier parcel.\n• **Download from Profile**: If you ordered through your account, you can view and print your receipt anytime under **My Account > Orders**.\n• **GST / School Tax Invoice**: Need a school or business GST invoice? Click **Talk to Admin** with your Order ID.`,
+      suggestions: ['🚚 Track Order', '👨‍💼 Request GST Invoice from Admin', '📞 Call Office (+91 98404 18228)'],
+      shouldEscalate: false,
+    };
+  }
+
+  // ── 20. Coupons, Discounts & Special Promo Codes ─────────────────────────────
+  if (
+    q.includes('coupon') ||
+    q.includes('promo') ||
+    q.includes('discount code') ||
+    q.includes('voucher') ||
+    q.includes('offer') ||
+    q.includes('special discount') ||
+    q.includes('discount irukka') ||
+    q.includes('any offers')
+  ) {
+    return {
+      answer: `🏷️ **Discounts & Special Offers**:\n\n• **Free Shipping Offer**: Order 5 or more books (or the complete 10th Full Set) to get **100% Free Doorstep Delivery** across Tamil Nadu (Saves ₹150 delivery fee)!\n• **Bulk / School Discount**: Tuition centres, schools, and teachers ordering **20+ books** receive special institutional bulk pricing.\n• **Direct Publisher Pricing**: Our online prices are already discounted below standard retail MRP to support students directly from the publisher.`,
+      suggestions: ['📚 Buy 10th Full Set (Free Delivery)', '🏫 School Bulk Enquiry', '👨‍💼 Talk to Admin'],
+      shouldEscalate: false,
+    };
+  }
+
+  // ── 21. Payment Security, Razorpay & Failed Payments ────────────────────────
+  if (
+    q.includes('payment fail') ||
+    q.includes('money debited') ||
+    q.includes('amount deducted') ||
+    q.includes('money cut') ||
+    q.includes('failed transaction') ||
+    q.includes('is payment safe') ||
+    q.includes('safe to pay') ||
+    q.includes('fraud') ||
+    q.includes('trust') ||
+    q.includes('panam pochu')
+  ) {
+    return {
+      answer: `🛡️ **Payment Security & Failed Transactions**:\n\n• **100% Safe & Encrypted**: All transactions are processed through **Razorpay**, an RBI-authorized payment gateway with 256-bit bank-grade SSL encryption. We never store your card or UPI pin.\n• **Money Deducted but Order Not Confirmed?**:\n  - In rare banking timeout cases, banks automatically reconcile and refund the money within **2 to 4 hours**.\n  - If an order wasn't created, share your Razorpay Payment ID or UPI UTR reference with our admin team below, and we will verify and manually confirm your dispatch!`,
+      suggestions: ['👨‍💼 Report Payment Issue to Admin', '📞 Call Accounts (+91 98404 18228)', '💳 Payment Methods'],
+      shouldEscalate: true,
+    };
+  }
+
+  // ── 22. Serviceability, Villages, Hostels & School Delivery ─────────────────
+  if (
+    q.includes('village') ||
+    q.includes('rural') ||
+    q.includes('hostel') ||
+    q.includes('school address') ||
+    q.includes('deliver to village') ||
+    q.includes('remote') ||
+    q.includes('post office') ||
+    q.includes('serviceable') ||
+    q.includes('enga ooruku varuma')
+  ) {
+    return {
+      answer: `📍 **Statewide Delivery Coverage Across Tamil Nadu**:\n\n• **All 38 Districts**: We deliver across all Tamil Nadu districts via **ST Courier Express** network — covering cities, taluks, rural towns, and accessible village areas.\n• **Hostels & School Addresses**: Yes, we deliver to school hostels, teacher quarters, and educational institutions! Please ensure the student name, room/block number, and active mobile number are clearly mentioned in the address.`,
+      suggestions: ['🚚 Check Delivery Days', '📦 Minimum Order & Delivery Fee', '👨‍💼 Talk to Admin'],
+      shouldEscalate: false,
+    };
+  }
+
+  // ── 23. Packaging Quality & Waterproof Protection ───────────────────────────
+  if (
+    q.includes('packaging') ||
+    q.includes('packing') ||
+    q.includes('rain') ||
+    q.includes('plastic wrap') ||
+    q.includes('waterproof') ||
+    q.includes('damage proof') ||
+    q.includes('parcel cover')
+  ) {
+    return {
+      answer: `📦 **Heavy-Duty Tamper-Proof & Moisture-Proof Packaging**:\n\nEvery Blessing Power Guide order is packed with:\n1. **Moisture-Resistant Inner Sealing**: Books are sealed inside protective poly-wrap to prevent water damage during monsoon transit.\n2. **Tough Outer Courier Bag**: Heavy-duty, tamper-evident outer poly packaging sealed with permanent industrial adhesive.\n3. **Fragile / Urgent Educational Handling**: Priority handling through daily direct ST Courier dispatch.\n\n🛡️ *If a parcel arrives torn or damaged in transit, our 100% Free Replacement Guarantee covers you completely!*`,
+      suggestions: ['🛡️ Replacement Guarantee', '🚚 Track Order', '📚 Browse 10th Guides'],
+      shouldEscalate: false,
+    };
+  }
+
+  // ── 24. Tamil Medium vs English Medium Guides ───────────────────────────────
+  if (
+    q.includes('tamil medium') ||
+    q.includes('english medium') ||
+    q.includes('both mediums') ||
+    q.includes('bilingual') ||
+    q.includes('which medium') ||
+    q.includes('medium difference') ||
+    q.includes('medium')
+  ) {
+    return {
+      answer: `📖 **Medium of Instruction (Tamil Medium & English Medium)**:\n\n• **English Medium**: Complete explanations, definitions, question banks, and book-back solutions formatted in clear, easy-to-understand English.\n• **Tamil Medium**: Available for designated subjects with 100% Tamil terminology matching the official Tamil Nadu State Board Samacheer Kalvi textbooks.\n• **Bilingual Clues**: Key scientific terms and mathematical formulas include standard English references for easy higher secondary transition.`,
+      suggestions: ['📚 View 10th Guides', '📄 Download Sample PDF', '👨‍💼 Ask Admin about Medium'],
+      shouldEscalate: false,
+    };
+  }
+
+  // ── 25. Paper Quality, GSM, Font Size & Binding ─────────────────────────────
+  if (
+    q.includes('paper quality') ||
+    q.includes('gsm') ||
+    q.includes('font size') ||
+    q.includes('binding') ||
+    q.includes('print quality') ||
+    q.includes('print') ||
+    q.includes('pages') ||
+    q.includes('page count') ||
+    q.includes('book quality')
+  ) {
+    return {
+      answer: `✨ **Premium Book Production Quality**:\n\n• **High Brightness Paper (70+ GSM)**: Smooth, high-opacity white paper that prevents ink show-through, ideal for highlighting and pencil notes.\n• **Eye-Comfort Typography**: Clear, large-print fonts with generous line spacing designed to avoid eye strain during long study hours.\n• **Durable Perfect Binding**: Heavy-duty spine binding that stays intact even after months of daily school and exam preparation.\n• **Gloss-Laminated Cover**: Water-resistant, tear-resistant protective cover featuring vibrant subject color coding.`,
+      suggestions: ['📄 Download Sample PDF', '📚 10th Full Set', '👨‍💼 Talk to Admin'],
+      shouldEscalate: false,
+    };
+  }
+
+  // ── 26. Latest 2026–2027 Edition & Samacheer Syllabus Guarantee ──────────────
+  if (
+    q.includes('latest edition') ||
+    q.includes('2026') ||
+    q.includes('2027') ||
+    q.includes('old syllabus') ||
+    q.includes('new syllabus') ||
+    q.includes('reduced syllabus') ||
+    q.includes('samacheer kalvi new') ||
+    q.includes('is it latest')
+  ) {
+    return {
+      answer: `🎓 **Guaranteed Latest 2026–2027 Samacheer Kalvi Edition**:\n\nAll books sold on our website are freshly printed **Latest 2026–2027 Editions**:\n• Updated to include the latest Tamil Nadu Directorate of Government Examinations (DGE) syllabus.\n• Includes the most recent Public Examination question papers and official PTA model papers.\n• Zero outdated content — guaranteed 100% textbook synchronization.`,
+      suggestions: ['📚 Browse 10th Guides', '🛒 Buy 10th Full Set', '👨‍💼 Talk to Admin'],
+      shouldEscalate: false,
+    };
+  }
+
+  // ── 27. Offline Bookstores / Direct Chennai Store / In-Person Buying ─────────
+  if (
+    q.includes('offline') ||
+    q.includes('bookstore') ||
+    q.includes('book shop') ||
+    q.includes('store near me') ||
+    q.includes('can i buy directly') ||
+    q.includes('direct purchase') ||
+    q.includes('chennai shop') ||
+    q.includes('ayanavaram store') ||
+    q.includes('shop address') ||
+    q.includes('nerla vandhu vangalama')
+  ) {
+    return {
+      answer: `🏬 **Direct Purchase & Chennai Head Office**:\n\n• **Head Office**: Blessing Power Guide, Trust Square, Ayanavaram, Chennai - 600012, Tamil Nadu.\n• **Direct Over-the-Counter Purchase**: Parents and teachers in Chennai can purchase copies directly at our Ayanavaram office (Monday to Saturday, 9:00 AM – 8:00 PM).\n• **Doorstep Delivery**: Living outside Chennai? Ordering on our website gets your books delivered right to your doorstep anywhere in Tamil Nadu via ST Courier in **2 to 3 days**!`,
+      suggestions: ['🏢 Office Map & Contact', '📞 Call Office (+91 98404 18228)', '🛒 Buy Online for Home Delivery'],
+      shouldEscalate: false,
+    };
+  }
+
+  // ── 28. Blueprints, Model Question Papers & PTA Solutions ────────────────────
+  if (
+    q.includes('blueprint') ||
+    q.includes('model paper') ||
+    q.includes('pta question') ||
+    q.includes('government question') ||
+    q.includes('previous year papers') ||
+    q.includes('important questions') ||
+    q.includes('question bank')
+  ) {
+    return {
+      answer: `📝 **Class 10 Blueprints & PTA Model Question Papers**:\n\nEvery Blessing Power Guide is built specifically around board exam patterns:\n• **Government PTA Sets**: Complete solutions for all 6 official Parent-Teacher Association (PTA) model question sets.\n• **1-Mark Objective Banks**: 500+ objective questions per subject with complete step-by-step logic.\n• **2-Mark & 5-Mark Question Formats**: Structured point-by-point answers aligned with official Tamil Nadu board mark allocation rubrics.\n• **Compulsory Problems & Grammar**: Special highlighted sections for compulsory math problems and English/Tamil grammar.`,
+      suggestions: ['📚 View 10th Full Set Combo', '📄 Download Sample PDF', '👨‍💼 Talk to Admin'],
+      shouldEscalate: false,
+    };
+  }
+
+  // ── 29. Centum Score Strategy & Study Tips (100/100 Tips) ────────────────────
+  if (
+    q.includes('how to score centum') ||
+    q.includes('study tips') ||
+    q.includes('study plan') ||
+    q.includes('how to get 100') ||
+    q.includes('centum tips') ||
+    q.includes('maths centum') ||
+    q.includes('science centum') ||
+    q.includes('score high marks') ||
+    q.includes('pass mark')
+  ) {
+    return {
+      answer: `🏆 **Top Tips to Score a Centum (100/100) with Blessing Power Guide**:\n\n1. **Master the 1-Mark Questions**: Board toppers lose marks mostly in 1-mark objective sections. Practice our chapter-wise objective question banks daily.\n2. **Memorize Key Formulas & Definitions**: Use the formula summary sheets included at the start of each chapter.\n3. **Follow the Structured Answer Format**: Present 5-mark answers with headings, subheadings, and neatly labeled diagrams as demonstrated in our guides.\n4. **Solve PTA & Previous Year Papers**: At least 3 full practice papers under timed exam conditions before the public exams.`,
+      suggestions: ['📚 10th Mathematics Guide', '📚 10th Science Guide', '🛒 10th Full Set (5 Books)', '👨‍💼 Talk to Admin'],
+      shouldEscalate: false,
+    };
+  }
+
+  // ── 30. ST Courier Docket Tracking, Branch Contact & Delivery Executive ──────
+  if (
+    q.includes('delivery boy') ||
+    q.includes('courier boy') ||
+    q.includes('st courier contact') ||
+    q.includes('courier phone') ||
+    q.includes('branch number') ||
+    q.includes('docket number') ||
+    q.includes('st courier website')
+  ) {
+    return {
+      answer: `🚚 **ST Courier Express Support & Branch Tracking**:\n\n• **Track on ST Courier Website**: Visit [stcourier.com](https://stcourier.com) and enter your AWB docket number.\n• **Delivery Executive Contact**: Once your parcel status changes to **"Out for Delivery"**, the local ST Courier delivery executive will call your mobile number before arrival.\n• **ST Courier Customer Helpline**: If you need local branch assistance, you can locate your nearest ST Courier branch at [stcourier.com/branches](https://stcourier.com/branches) or connect with our admin team.`,
+      suggestions: ['🚚 Track My Order', '👨‍💼 Talk to Admin for Courier Help', '📞 Call Helpline'],
+      shouldEscalate: false,
+    };
+  }
+
+  // ── 31. Order Confirmation SMS & Email Receipt Missing ───────────────────────
+  if (
+    q.includes('sms not received') ||
+    q.includes('confirmation message') ||
+    q.includes('confirmation sms') ||
+    q.includes('no message') ||
+    q.includes('order message') ||
+    q.includes('receipt mail') ||
+    q.includes('sms varala')
+  ) {
+    return {
+      answer: `📱 **Order Confirmation SMS & Updates**:\n\n• **Instant SMS**: As soon as your Razorpay payment completes, an automated SMS confirmation is sent to your mobile number.\n• **Didn't receive SMS?**: Check if DND (Do Not Disturb) is active on your phone number, or check the **Profile > Orders** page on our website.\n• **Docket SMS**: A second SMS with your ST Courier live tracking docket is sent as soon as your parcel is dispatched from Chennai!`,
+      suggestions: ['🚚 Track My Order', '👨‍💼 Confirm Order with Admin', '📞 Call Helpline (+91 98404 18228)'],
+      shouldEscalate: true,
+    };
+  }
+
+  // ── 32. Account, Login, OTP, Password & Profile Help ─────────────────────────
+  if (
+    q.includes('login') ||
+    q.includes('cant login') ||
+    q.includes('otp') ||
+    q.includes('otp not coming') ||
+    q.includes('password') ||
+    q.includes('forgot password') ||
+    q.includes('register') ||
+    q.includes('signup') ||
+    q.includes('profile')
+  ) {
+    return {
+      answer: `👤 **Account & Login Assistance**:\n\n• **Phone OTP Login**: Enter your 10-digit mobile number to receive an instant one-time password.\n• **Didn't get OTP?**: Please wait 30 seconds and click "Resend OTP", or ensure your mobile network has active signal.\n• **Guest Checkout**: You can also order directly by entering your delivery details at checkout without needing a pre-existing account!\n• **Order History**: Logging in with the same mobile number you used during checkout will automatically link all your previous orders.`,
+      suggestions: ['🔐 Go to Login Page', '🛒 View Cart', '👨‍💼 Talk to Admin'],
+      shouldEscalate: false,
+    };
+  }
+
+  // ── 33. Tamil / Tanglish Prompts Support ─────────────────────────────────────
+  if (
+    q.includes('velai') ||
+    q.includes('vilai') ||
+    q.includes('rate enna') ||
+    q.includes('book eppo varum') ||
+    q.includes('delivery charge evvalavu') ||
+    q.includes('free delivery irukka') ||
+    q.includes('enga irukku shop') ||
+    q.includes('order epdi poduradhu') ||
+    q.includes('evvalo naalaagum')
+  ) {
+    return {
+      answer: `வணக்கம்! 🙏 **Blessing Power Guide** பற்றிய முக்கிய விவரங்கள்:\n\n• 📚 **10-ஆம் வகுப்பு சமச்சீர் கல்வி வழிகாட்டிகள்**: தமிழ், ஆங்கிலம், கணிதம், அறிவியல், சமூக அறிவியல்.\n• 🚚 **டெலிவரி விவரங்கள்**: 5 அல்லது அதற்கு மேற்பட்ட புத்தகங்கள் ஆர்டர் செய்தால் **முழுக்க முழுக்க இலவச டோர் டெலிவரி (Free Delivery)**!\n• ⏱️ **வந்து சேரும் காலம்**: ST Courier வழியாக 2 முதல் 3 நாட்களுக்குள் உங்கள் வீட்டிற்கே வந்து சேரும்.\n• 💳 **பணம் செலுத்துதல்**: Razorpay (GPay, PhonePe, Paytm, UPI, Card).\n• 🏢 **முகவரி**: Trust Square, அயனாவரம், சென்னை - 600012.\n• 📞 **உதவிக்கு**: +91 98404 18228.`,
+      suggestions: ['📚 10th Full Set (இலவச டெலிவரி)', '🚚 Track Order', '👨‍💼 Talk to Admin', '📞 Call Office'],
+      shouldEscalate: false,
+    };
+  }
+
+  // ── 34. Dynamic FAQ Table Search in Database ────────────────────────────────
   try {
     const faqSearchWords = q.split(/\s+/).filter((w) => w.length > 3).slice(0, 3);
     if (faqSearchWords.length > 0) {
@@ -626,7 +937,7 @@ export async function generateSupportRagAnswer(
     }
   } catch (_) {}
 
-  // ── 18. Intelligent Fallback with Account Context ────────────────────────
+  // ── 35. Intelligent Fallback with Account Context ────────────────────────
   if (accountOrders.length > 0) {
     const greeting = userAccountName ? `Hello **${userAccountName}**! ` : 'Hello! ';
     const latest = accountOrders[0];

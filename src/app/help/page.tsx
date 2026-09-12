@@ -353,6 +353,28 @@ function HelpCenterContent() {
     };
   }, [conversation?.id]);
 
+  // If user leaves the page or closes window, terminate WAITING_ADMIN or ACTIVE session
+  useEffect(() => {
+    const cleanupSession = () => {
+      if (conversation?.id && (conversation.status === 'WAITING_ADMIN' || conversation.status === 'ACTIVE')) {
+        const payload = JSON.stringify({
+          action: 'leave_chat',
+          conversationId: conversation.id,
+        });
+        if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
+          const blob = new Blob([payload], { type: 'application/json' });
+          navigator.sendBeacon('/api/support/conversation', blob);
+        }
+      }
+    };
+
+    window.addEventListener('beforeunload', cleanupSession);
+    return () => {
+      window.removeEventListener('beforeunload', cleanupSession);
+      cleanupSession();
+    };
+  }, [conversation?.id, conversation?.status]);
+
   // Send Message Handler
   const handleSendMessage = async (textToSend?: string, isEscalate?: boolean) => {
     const text = (textToSend || inputText).trim();
