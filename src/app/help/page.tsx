@@ -356,7 +356,41 @@ function HelpCenterContent() {
 
   // Request Human Escalation (Connect to Admin)
   const handleConnectToAdmin = async () => {
+    if (sending) return;
+    if (conversation?.status === 'WAITING_ADMIN') {
+      showToast('⏳ You have already requested support. An agent will join shortly.');
+      return;
+    }
+    if (conversation?.status === 'ACTIVE') {
+      showToast('🟢 You are already chatting with our support agent.');
+      return;
+    }
     await handleSendMessage('I would like to speak directly with an admin / support agent.', true);
+  };
+
+  // End & Close Chat handler so customer can start fresh
+  const handleCloseChat = async () => {
+    if (sending) return;
+    setSending(true);
+    try {
+      await fetch('/api/support/conversation', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders(user),
+        },
+        body: JSON.stringify({
+          action: 'close_chat',
+          conversationId: conversation?.id,
+        }),
+      });
+    } catch (_) {}
+    setConversation(null);
+    setMessages([]);
+    setFeedbackSubmitted(false);
+    setInputText('');
+    setSending(false);
+    showToast('✓ Chat closed. Starting a fresh conversation.');
   };
 
   // CSAT Feedback Submission
@@ -648,17 +682,44 @@ function HelpCenterContent() {
               </div>
             </div>
 
-            {/* Handoff to Human Button (If in BOT mode) */}
-            {conversation?.status === 'BOT' && (
-              <button
-                onClick={handleConnectToAdmin}
-                className="text-[11px] font-extrabold px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
-              >
-                <Headphones className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Talk to Admin</span>
-                <span className="sm:hidden">Admin</span>
-              </button>
-            )}
+            {/* Header Actions */}
+            <div className="flex items-center gap-2">
+              {/* Talk to Admin Button (only if not already waiting or active) */}
+              {(!conversation || conversation?.status === 'BOT') && (
+                <button
+                  type="button"
+                  onClick={handleConnectToAdmin}
+                  disabled={sending}
+                  className="text-[11px] font-extrabold px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs disabled:opacity-60"
+                >
+                  <Headphones className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Talk to Admin</span>
+                  <span className="sm:hidden">Admin</span>
+                </button>
+              )}
+
+              {/* Waiting Indicator Badge */}
+              {conversation?.status === 'WAITING_ADMIN' && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-amber-50 text-amber-800 border border-amber-200 text-[11px] font-bold">
+                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                  <span>In Queue</span>
+                </span>
+              )}
+
+              {/* Close / End Chat Button */}
+              {conversation && (
+                <button
+                  type="button"
+                  onClick={handleCloseChat}
+                  disabled={sending}
+                  className="text-[11px] font-bold px-2.5 py-1.5 rounded-xl text-slate-500 hover:text-red-600 hover:bg-red-50 border border-slate-200 transition-colors flex items-center gap-1 cursor-pointer"
+                  title="Close conversation and start fresh"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${sending ? 'animate-spin' : ''}`} />
+                  <span className="hidden sm:inline">Close Chat</span>
+                </button>
+              )}
+            </div>
           </div>
 
           {/* ── Waiting on Admin Banner ─────────────────────────────────────── */}
@@ -861,6 +922,19 @@ function HelpCenterContent() {
             {feedbackSubmitted && (
               <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3.5 text-center text-xs font-bold text-emerald-800 animate-fade-slide-up shadow-2xs">
                 ✅ Thank you! Your rating has been recorded.
+              </div>
+            )}
+
+            {conversation?.status === 'RESOLVED' && (
+              <div className="text-center pt-2 pb-1">
+                <button
+                  type="button"
+                  onClick={handleCloseChat}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-[#001B3A] text-white hover:bg-blue-900 transition-all shadow-sm cursor-pointer"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Start New Conversation</span>
+                </button>
               </div>
             )}
           </div>

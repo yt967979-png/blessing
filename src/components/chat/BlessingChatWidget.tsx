@@ -17,6 +17,7 @@ import {
   Sparkles,
   ArrowRight,
   Maximize2,
+  RefreshCw,
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { authHeaders } from '@/lib/clientAuth';
@@ -251,8 +252,36 @@ export const BlessingChatWidget: React.FC = () => {
     }
   };
 
+  // Close / End Chat handler
+  const handleCloseChat = async () => {
+    if (loading) return;
+    setLoading(true);
+    try {
+      await fetch('/api/support/conversation', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders(user),
+        },
+        body: JSON.stringify({
+          action: 'close_chat',
+          conversationId: conversation?.id,
+        }),
+      });
+    } catch (_) {}
+    setConversation(null);
+    setMessages([]);
+    setFeedbackSubmitted(false);
+    setInputText('');
+    setLoading(false);
+  };
+
   // 1-Click Human Escalation
   const handleEscalateToHuman = async () => {
+    if (loading || conversation?.status === 'WAITING_ADMIN' || conversation?.status === 'ACTIVE') {
+      return;
+    }
+
     if (!conversation?.id) {
       await handleSendMessage('I want to talk to an admin.');
       return;
@@ -262,7 +291,10 @@ export const BlessingChatWidget: React.FC = () => {
     try {
       const res = await fetch('/api/support/conversation', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders(user),
+        },
         body: JSON.stringify({
           conversationId: conversation.id,
           action: 'escalate_human',
@@ -379,6 +411,17 @@ export const BlessingChatWidget: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-1">
+              {conversation && (
+                <button
+                  type="button"
+                  onClick={handleCloseChat}
+                  disabled={loading}
+                  className="p-2 text-slate-300 hover:text-amber-400 hover:bg-white/10 rounded-xl transition-colors cursor-pointer"
+                  title="Close and start a fresh conversation"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+                </button>
+              )}
               <Link
                 href="/help"
                 onClick={() => setIsOpen(false)}
@@ -391,7 +434,7 @@ export const BlessingChatWidget: React.FC = () => {
                 type="button"
                 onClick={() => setIsOpen(false)}
                 className="p-2 text-slate-300 hover:text-white hover:bg-white/10 rounded-xl transition-colors cursor-pointer"
-                title="Close chat"
+                title="Minimize chat"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -569,6 +612,19 @@ export const BlessingChatWidget: React.FC = () => {
             {feedbackSubmitted && (
               <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-3 rounded-2xl text-center text-xs font-bold">
                 ✓ Thank you for your feedback! We look forward to serving you again.
+              </div>
+            )}
+
+            {conversation?.status === 'RESOLVED' && (
+              <div className="text-center pt-2 pb-1">
+                <button
+                  type="button"
+                  onClick={handleCloseChat}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-[#001B3A] text-white hover:bg-blue-900 transition-all shadow-sm cursor-pointer"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Start New Conversation</span>
+                </button>
               </div>
             )}
           </div>

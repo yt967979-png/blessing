@@ -108,10 +108,26 @@ export async function GET(req: NextRequest) {
     }
 
     // ── 3. Support Queue Overview View
+    // Automatic self-healing: resolve any older duplicate waiting tickets for the same user/phone/session
+    try {
+      await queryDb(`
+        UPDATE support_conversations
+        SET status = 'RESOLVED', resolved_at = NOW()
+        WHERE status = 'WAITING_ADMIN'
+          AND id NOT IN (
+            SELECT DISTINCT ON (COALESCE(customer_id, customer_phone, session_token)) id
+            FROM support_conversations
+            WHERE status = 'WAITING_ADMIN'
+            ORDER BY COALESCE(customer_id, customer_phone, session_token), updated_at DESC
+          )
+      `);
+    } catch (_) {}
+
     const waitingRes = await queryDb(
-      `SELECT * FROM support_conversations 
+      `SELECT DISTINCT ON (COALESCE(customer_id, customer_phone, session_token)) * 
+       FROM support_conversations 
        WHERE status = 'WAITING_ADMIN' 
-       ORDER BY updated_at ASC`
+       ORDER BY COALESCE(customer_id, customer_phone, session_token), updated_at DESC`
     );
 
     const activeRes = await queryDb(
