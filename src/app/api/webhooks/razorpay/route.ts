@@ -341,6 +341,20 @@ export async function POST(request: Request) {
         /* timeline optional */
       }
 
+      // Alert connected admin dashboards in real time
+      try {
+        const { broadcastOrderChange, notifyOrderChanged } = await import('@/app/api/orders/stream/route');
+        const orderEvent = {
+          type: 'ORDER_CREATED',
+          orderId: order.order_number,
+          status: 'Payment Confirmed',
+          userId: String(order.user_id || ''),
+          timestamp: Date.now(),
+        };
+        broadcastOrderChange(orderEvent);
+        await notifyOrderChanged(orderEvent);
+      } catch (_) {}
+
       return NextResponse.json({
         ok: true,
         orderId: order.order_number,

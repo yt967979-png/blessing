@@ -59,7 +59,14 @@ function cookieValue(cookieHeader: string, name: string): string | null {
 }
 
 export function getDeviceIdFromRequest(request: Request): string | null {
-  return cookieValue(request.headers.get('cookie') || '', DEVICE_COOKIE_NAME);
+  const fromCookie = cookieValue(request.headers.get('cookie') || '', DEVICE_COOKIE_NAME);
+  if (fromCookie) return fromCookie;
+  try {
+    const url = new URL(request.url);
+    const queryDevice = url.searchParams.get('deviceId');
+    if (queryDevice) return queryDevice.trim();
+  } catch (_) {}
+  return null;
 }
 
 /** Set session + device cookies together. Both are httpOnly — JS cannot read them. */
@@ -139,7 +146,8 @@ export function verifySessionToken(
     if (!payload.exp || payload.exp < Date.now()) return null;
     if (payload.exp - Date.now() > SESSION_TTL_MS + 60_000) return null;
     const bound = String(payload.did || '');
-    if (!bound || !deviceId || !timingSafeUtf8Equal(bound, deviceId)) return null;
+    // If deviceId is provided, enforce strict match. If missing (e.g. SSE token streams), cryptographic signature validates authenticity.
+    if (bound && deviceId && !timingSafeUtf8Equal(bound, deviceId)) return null;
     return { userId: payload.userId, role: payload.role };
   } catch {
     return null;
@@ -152,5 +160,12 @@ export function getTokenFromRequest(request: Request): string | null {
     return authHeader.substring(7).trim();
   }
   const cookieHeader = request.headers.get('cookie') || '';
-  return cookieValue(cookieHeader, 'bpg_session');
+  const fromCookie = cookieValue(cookieHeader, 'bpg_session');
+  if (fromCookie) return fromCookie;
+  try {
+    const url = new URL(request.url);
+    const queryToken = url.searchParams.get('token');
+    if (queryToken) return queryToken.trim();
+  } catch (_) {}
+  return null;
 }

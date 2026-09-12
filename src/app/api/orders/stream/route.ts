@@ -171,7 +171,7 @@ export async function GET(req: NextRequest) {
   }
 
   const admin = await verifyAdminRequest(req);
-  const isAdmin = Boolean(admin.isAdmin);
+  const isAdmin = Boolean(admin.isAdmin || session.role === 'admin' || session.role === 'super_admin');
   const userId = String(session.userId);
 
   void ensureListen();

@@ -258,9 +258,9 @@ function AdminPageInner() {
     } catch (_) {}
   }, [user]);
 
-  const loadLiveOrders = useCallback(async (opts?: { fromStream?: boolean }) => {
+  const loadLiveOrders = useCallback(async (opts?: { fromStream?: boolean; silent?: boolean }) => {
     if (!user?.id) return;
-    setOrdersLoading(true);
+    if (!opts?.silent) setOrdersLoading(true);
     setOrdersError(null);
     try {
       const res = await fetch(`/api/orders`, {
@@ -282,24 +282,46 @@ function AdminPageInner() {
             if (!knownOrderIdsRef.current.has(id)) newcomers.push(id);
           }
           if (newcomers.length > 0) {
-            if (soundEnabled && soundUnlockedRef.current) playAdminNewOrderBeep();
-            showToast(`🔔 New order ${newcomers[0]}${newcomers.length > 1 ? ` (+${newcomers.length - 1})` : ''}`);
+            if (soundEnabled) {
+              playAdminNewOrderBeep();
+            }
+            showToast(`🔔 New order #${newcomers[0]}${newcomers.length > 1 ? ` (+${newcomers.length - 1})` : ''}`);
             if (opts?.fromStream) setActiveTab('orders');
+
+            // Flash tab title so admin notices immediately even if working in another tab or app
+            try {
+              const originalTitle = document.title;
+              let flashCount = 0;
+              const flashTimer = setInterval(() => {
+                flashCount++;
+                document.title = flashCount % 2 === 1
+                  ? `🔔 (${newcomers.length}) NEW ORDER! | Blessing Admin`
+                  : originalTitle;
+                if (flashCount >= 10) {
+                  clearInterval(flashTimer);
+                  document.title = originalTitle;
+                }
+              }, 1000);
+            } catch (_) {}
           }
           knownOrderIdsRef.current = nextIds;
         }
       } else {
         const errData = await res.json().catch(() => ({}));
-        setOrdersError(errData.error || errData.message || `Could not load orders (${res.status})`);
-        setOrders([]);
+        if (!opts?.silent) {
+          setOrdersError(errData.error || errData.message || `Could not load orders (${res.status})`);
+          setOrders([]);
+        }
       }
     } catch (e: any) {
-      setOrdersError(e?.message || 'Network error loading orders');
-      setOrders([]);
+      if (!opts?.silent) {
+        setOrdersError(e?.message || 'Network error loading orders');
+        setOrders([]);
+      }
     } finally {
-      setOrdersLoading(false);
+      if (!opts?.silent) setOrdersLoading(false);
     }
-  }, [user, showToast]);
+  }, [user, showToast, soundEnabled, setActiveTab]);
 
   const loadLowStock = useCallback(async () => {
     if (!user?.id) return;
@@ -383,6 +405,7 @@ function AdminPageInner() {
   useEffect(() => {
     if (!user || !isAdmin) return;
 
+    let active = true;
     let esStock: EventSource | null = null;
     let esOrders: EventSource | null = null;
 
@@ -398,32 +421,60 @@ function AdminPageInner() {
       };
     } catch (_) {}
 
-    try {
-      esOrders = new EventSource('/api/orders/stream');
-      esOrders.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data.type === 'ORDER_CREATED' || data.type === 'ORDER_UPDATED' || data.type === 'REFRESH') {
-            loadLiveOrders({ fromStream: true });
-            loadLowStock();
-            loadAnalytics();
-            if (refreshProducts) refreshProducts(true);
+    const connectOrdersStream = () => {
+      if (!active) return;
+      try {
+        const streamUrl = user?.token
+          ? `/api/orders/stream?token=${encodeURIComponent(user.token)}`
+          : '/api/orders/stream';
+        esOrders = new EventSource(streamUrl);
+        esOrders.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data.type === 'ORDER_CREATED' || data.type === 'ORDER_UPDATED' || data.type === 'REFRESH') {
+              loadLiveOrders({ fromStream: true, silent: true });
+              loadLowStock();
+              loadAnalytics();
+              if (refreshProducts) refreshProducts(true);
+            }
+          } catch (_) {}
+        };
+        esOrders.onerror = () => {
+          try {
+            esOrders?.close();
+          } catch (_) {}
+          if (active) {
+            setTimeout(connectOrdersStream, 4000);
           }
-        } catch (_) {}
-      };
-    } catch (_) {}
+        };
+      } catch (_) {}
+    };
+    connectOrdersStream();
 
-    // Polling fallback every 10s for low-stock rack count and active holds
+    // Guaranteed safety-net dual sync:
+    // Silent 4-second poll ensures admin never misses an order even if SSE stream was suspended or closed
     const pollInterval = setInterval(() => {
       loadLowStock();
-    }, 10000);
+      loadLiveOrders({ fromStream: true, silent: true });
+    }, 4000);
+
+    // Instant sync when administrator focuses or returns to the dashboard tab
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        loadLiveOrders({ fromStream: true, silent: true });
+        loadWaitingSupport();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
+      active = false;
       clearInterval(pollInterval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       if (esStock) esStock.close();
       if (esOrders) esOrders.close();
     };
-  }, [user, isAdmin, loadLowStock, loadLiveOrders, loadAnalytics, refreshProducts]);
+  }, [user, isAdmin, loadLowStock, loadLiveOrders, loadAnalytics, loadWaitingSupport, refreshProducts]);
 
   // Manual stock hold release handler (Restores reserved stock immediately)
   const handleReleaseHold = async (holdGroupId: string, bookTitle: string) => {
