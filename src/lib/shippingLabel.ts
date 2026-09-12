@@ -434,7 +434,8 @@ export async function generateShippingLabelsHtml(
   const siteUrl = publicSiteOrigin();
 
   const labelsHtmlPromises = orderList.map(async (o) => {
-    const trackToken = generateTrackingToken(o.orderId, o.customerPhone || '');
+    const phone = o.customerPhone || (o as any).phone || (o as any).customer_phone || '';
+    const trackToken = generateTrackingToken(o.orderId, phone);
     const trackTargetUrl = `${siteUrl}/track?orderId=${encodeURIComponent(o.orderId)}${trackToken ? `&t=${encodeURIComponent(trackToken)}` : ''}`;
     const qrSvg = await generateQrSvg(trackTargetUrl, { size: 120, margin: 0 });
     return generateSingleThermalLabelHtml(o, qrSvg);

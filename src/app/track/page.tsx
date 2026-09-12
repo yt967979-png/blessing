@@ -102,13 +102,13 @@ function TrackForm() {
     const st = String(order.status || '').toLowerCase();
     if (isParcelDelivered(st) || st.includes('rto')) return;
     const mobile = phone || user?.phone || '';
-    if (!mobile) return;
+    if (!mobile && !trackToken) return;
     const t = window.setInterval(() => {
-      void runTrack(order.orderId, mobile, { soft: true });
+      void runTrack(order.orderId, mobile, { soft: true, token: trackToken });
     }, 45_000);
     return () => clearInterval(t);
      
-  }, [order?.orderId, order?.cancelled, order?.status, phone, user?.phone]);
+  }, [order?.orderId, order?.cancelled, order?.status, phone, user?.phone, trackToken]);
 
   // Instant soft re-track when admin updates this order
   useOrderLiveSync(Boolean(user?.id && orderId.trim()), (evt) => {
@@ -116,8 +116,8 @@ function TrackForm() {
     if (!oid) return;
     if (evt.orderId && String(evt.orderId) !== oid) return;
     const mobile = (phone || user?.phone || '').trim();
-    if (!mobile) return;
-    void runTrack(oid, mobile, { soft: true });
+    if (!mobile && !trackToken) return;
+    void runTrack(oid, mobile, { soft: true, token: trackToken });
   });
 
   return (

@@ -295,6 +295,12 @@ export default function CheckoutPage() {
         showToast('Select a delivery address to continue.');
         return;
       }
+      const pinCheck = pincodeDeliveryMessage(String(chosen.pincode || ''));
+      if (!pinCheck.ok) {
+        showToast(pinCheck.message);
+        setEditDraft({ ...chosen });
+        return;
+      }
       if (!addressHasRequiredAlternate(chosen)) {
         showToast('Add a different 10-digit alternate mobile on this address before paying.');
         setEditDraft({ ...chosen });

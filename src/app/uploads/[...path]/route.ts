@@ -26,8 +26,10 @@ export async function GET(
     const safeSubPath = path.join(...pathSegments);
     const targetFilePath = path.resolve(baseUploadDir, safeSubPath);
 
-    // Guard against directory traversal attacks
-    if (!targetFilePath.startsWith(baseUploadDir)) {
+    // Guard against directory traversal attacks (strict boundary check)
+    const isUnderBaseDir =
+      targetFilePath === baseUploadDir || targetFilePath.startsWith(baseUploadDir + path.sep);
+    if (!isUnderBaseDir) {
       return new NextResponse('Forbidden', { status: 403 });
     }
 

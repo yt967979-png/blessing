@@ -113,19 +113,20 @@ export async function POST(request: Request) {
 
     await client.query(
       `INSERT INTO orders (
-        id, order_number, user_id, subtotal, discount, total_amount, payment_method,
+        id, order_number, user_id, subtotal, discount, shipping_charge, total_amount, payment_method,
         payment_status, order_status, courier_name, shipment_id, awb_number,
         shipping_address, idempotency_key, invoice_number, created_at, ordered_at
       ) VALUES (
-        $1, $2, $3, $4, 0, $5, $6,
-        $7, $8, 'ST Courier Express', $9, NULL,
-        $10, $11, $12, NOW(), NOW()
+        $1, $2, $3, $4, 0, $5, $6, $7,
+        $8, $9, 'ST Courier Express', $10, NULL,
+        $11, $12, $13, NOW(), NOW()
       )`,
       [
         id,
         orderNumber,
         `wa_${cleanPhone}`,
         calculatedSubtotal,
+        shippingFee,
         totalAmount,
         payMethod,
         paymentStatus,
@@ -215,13 +216,32 @@ export async function POST(request: Request) {
     ].join('\n');
     const whatsappUrl = `https://wa.me/91${cleanPhone}?text=${encodeURIComponent(whatsappMessage)}`;
 
+    const event = {
+      type: 'ORDER_CREATED',
+      orderId: orderNumber,
+      status: 'Confirmed',
+      userId: `wa_${cleanPhone}`,
+      timestamp: Date.now(),
+    };
     try {
-      const { notifyOrderChanged } = await import('@/app/api/orders/stream/route');
-      void notifyOrderChanged(orderNumber);
+      const { broadcastOrderChange, notifyOrderChanged } = await import('@/app/api/orders/stream/route');
+      broadcastOrderChange(event);
+      await notifyOrderChanged(event);
     } catch (_) {}
     try {
       const { notifyStockChanged } = await import('@/app/api/stock/stream/route');
       void notifyStockChanged(verifiedItems.map((i: any) => i.id));
+    } catch (_) {}
+    try {
+      const { logOrderStateTransition } = await import('@/lib/orderStatus');
+      logOrderStateTransition({
+        orderNumber,
+        fromStatus: null,
+        toStatus: 'Confirmed',
+        actor: 'admin',
+        amount: totalAmount,
+        details: { itemsCount: verifiedItems.length, paymentMethod: payMethod, channel: 'whatsapp_custom' },
+      });
     } catch (_) {}
 
     return NextResponse.json({

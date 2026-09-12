@@ -27,6 +27,7 @@ async function getBookMeta(slug: string) {
                 ELSE b.cover_image
               END AS cover_image,
               b.discount_price, b.price, b.status, b.stock, b.in_stock,
+              b.sample_pdf_url,
               b.updated_at,
               COALESCE(COUNT(r.id), 0)::int as review_count,
               COALESCE(AVG(r.rating), 0)::numeric(3,1) as avg_rating

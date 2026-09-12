@@ -288,6 +288,7 @@ export async function POST(request: Request) {
     const {
       subtotal: calculatedSubtotal,
       discountAmount,
+      shippingFee,
       totalAmount,
       verifiedItems,
       appliedCoupon,
@@ -386,15 +387,16 @@ export async function POST(request: Request) {
     const invoiceNumber = await generateNextGstInvoiceNumber(client);
 
     await client.query(
-      `INSERT INTO orders (id, order_number, user_id, subtotal, discount, total_amount, payment_method, payment_status, order_status,
+      `INSERT INTO orders (id, order_number, user_id, subtotal, discount, shipping_charge, total_amount, payment_method, payment_status, order_status,
         courier_name, shipment_id, awb_number, shipping_address, razorpay_order_id, razorpay_payment_id, razorpay_signature, coupon_code, coupon_id, idempotency_key, invoice_number)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'ST Courier Express', $10, NULL, $11, $12, $13, $14, $15, $16, $17, $18)`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'ST Courier Express', $11, NULL, $12, $13, $14, $15, $16, $17, $18, $19)`,
       [
         id,
         orderNumber,
         userId,
         calculatedSubtotal,
         discountAmount,
+        shippingFee,
         totalAmount,
         paymentMethod || 'Razorpay UPI',
         payStat,

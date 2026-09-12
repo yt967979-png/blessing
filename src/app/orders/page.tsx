@@ -2,6 +2,7 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
@@ -27,7 +28,6 @@ import {
   Sparkles,
   RefreshCw,
 } from 'lucide-react';
-import { downloadTaxInvoice } from '@/lib/invoiceGenerator';
 import { customerRefundStage, isOrderCancelled, isRecordCancelled, isParcelDelivered, isDeliveryAttempted } from '@/lib/orderStatus';
 import { getSTCourierDeliveryEstimate } from '@/lib/deliveryEstimator';
 import { imageNeedsUnoptimized } from '@/lib/productImage';
@@ -39,7 +39,12 @@ function OrdersContent() {
   const { user, showToast, setIsAuthOpen, addToCart, setIsCheckoutOpen, products } = useStore();
   const searchParams = useSearchParams();
   const queryOrderId = searchParams.get('orderId');
+  const invoiceToken = searchParams.get('t') || searchParams.get('token') || '';
   const router = useRouter();
+  const invoiceHref = (orderId: string) => {
+    const base = `/api/orders/${encodeURIComponent(orderId)}/invoice`;
+    return invoiceToken ? `${base}?t=${encodeURIComponent(invoiceToken)}` : base;
+  };
 
   const [orderSearchInput, setOrderSearchInput] = useState('');
   const [searchedOrderData, setSearchedOrderData] = useState<any>(null);
@@ -359,8 +364,37 @@ function OrdersContent() {
           >
             Sign In / Register
           </button>
-        <p className="text-[11px] text-slate-400">
-          Need AWB tracking without login? Use the Track page with your docket number.
+        {queryOrderId && (
+          <div className="bg-amber-50/90 border border-amber-200/90 rounded-2xl p-4 text-left space-y-2">
+            <p className="text-xs font-black text-[#001B3A]">Looking for Order #{queryOrderId}?</p>
+            <p className="text-[11px] text-amber-900">Track delivery status with ST Courier or view your official invoice without signing in:</p>
+            <div className="flex flex-wrap gap-2 pt-1">
+              <Link
+                href={`/track?orderId=${encodeURIComponent(queryOrderId)}${invoiceToken ? `&t=${encodeURIComponent(invoiceToken)}` : ''}`}
+                className="bg-[#001B3A] hover:bg-blue-900 text-white font-black text-xs px-4 py-2.5 rounded-xl shadow-xs transition-colors"
+              >
+                Track Order Live →
+              </Link>
+              {invoiceToken && (
+                <a
+                  href={`/api/orders/${encodeURIComponent(queryOrderId)}/invoice?t=${encodeURIComponent(invoiceToken)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="bg-white hover:bg-slate-50 border border-slate-300 text-slate-800 font-black text-xs px-4 py-2.5 rounded-xl shadow-xs transition-colors"
+                >
+                  Download Tax Invoice
+                </a>
+              )}
+            </div>
+          </div>
+        )}
+
+        <p className="text-[11px] text-slate-500">
+          Need tracking without login? Use the{' '}
+          <Link href="/track" className="text-blue-600 font-bold underline hover:text-blue-800">
+            Live Track page
+          </Link>{' '}
+          with your Order ID or ST Courier docket number.
         </p>
       </div>
     );
@@ -482,13 +516,15 @@ function OrdersContent() {
                 <span className="font-black text-slate-900 text-base">₹{searchedOrderData.totalAmount}</span>
               </div>
 
-              <button
-                onClick={() => downloadTaxInvoice(searchedOrderData)}
-                className="bg-slate-900 hover:bg-blue-600 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+              <a
+                href={invoiceHref(searchedOrderData.orderId || searchedOrderData.id)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="bg-slate-900 hover:bg-blue-600 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl flex items-center gap-1.5 transition-all shadow-xs"
               >
                 <Download className="w-4 h-4 text-amber-400" />
                 <span>TAX INVOICE PDF</span>
-              </button>
+              </a>
             </div>
 
             {/* Amazon / Flipkart Horizontal Connected Stepper Line */}
@@ -1079,16 +1115,17 @@ function OrdersContent() {
                   </div>
 
                   <div className="flex flex-wrap gap-2">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        downloadTaxInvoice(ord);
-                      }}
+                    <a
+                      href={invoiceHref(ord.orderId || ord.id)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
                       className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs px-4 py-2.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+                      title="Download or Print GST Bill of Supply"
                     >
                       <Download className="w-3.5 h-3.5 text-slate-600" />
                       <span>INVOICE</span>
-                    </button>
+                    </a>
 
                     <button
                       onClick={(e) => {

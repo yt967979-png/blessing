@@ -677,29 +677,21 @@ export async function resolveDbConnectionConfig() {
 }
 
 function wrapPoolClient(client: any) {
-  if (client._hasEndAlias) return client;
-    client._hasEndAlias = true;
   client._released = false;
-  const safeRelease = () => {
-    if (client._released) return;
-    client._released = true;
-    try {
-      client.release();
-    } catch (_) {
-      /* already returned to pool */
-    }
-  };
-  client.end = safeRelease;
+  if (client._hasEndAlias) return client;
+  client._hasEndAlias = true;
   const originalRelease = client.release.bind(client);
-  client.release = (err?: Error | boolean) => {
+  const safeRelease = (err?: Error | boolean) => {
     if (client._released) return;
     client._released = true;
     try {
       originalRelease(err);
     } catch (_) {
-      /* ignore */
+      /* already returned to pool */
     }
   };
+  client.end = safeRelease;
+  client.release = safeRelease;
   return client;
 }
 

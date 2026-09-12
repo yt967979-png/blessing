@@ -2,7 +2,17 @@ import { NextResponse } from 'next/server';
 import { getDbClient, releaseDbClient } from '@/lib/db';
 import { verifyAdminRequest, unauthorizedResponse, forbiddenResponse } from '@/lib/serverSecurity';
 
+const ALLOWED_TABLES = new Set([
+  'books',
+  'categories',
+  'users',
+  'orders',
+  'reviews',
+  'addresses',
+]);
+
 async function countTable(client: any, table: string): Promise<number | null> {
+  if (!ALLOWED_TABLES.has(table)) return null;
   try {
     const res = await client.query(`SELECT COUNT(*)::int AS count FROM ${table}`);
     return Number(res.rows[0]?.count ?? 0);

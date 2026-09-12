@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getDbClient, releaseDbClient } from '@/lib/db';
 import { generateTaxInvoiceHtml } from '@/lib/invoiceGenerator';
 import { getAuthenticatedUser, verifyAdminRequest } from '@/lib/serverSecurity';
+import { verifyTrackingToken } from '@/lib/trackToken';
 
 export async function GET(
   request: Request,
@@ -42,9 +43,6 @@ export async function GET(
     }
 
     const o = res.rows[0];
-    if (!admin?.isAdmin && (!session || o.user_id !== session.userId)) {
-      return NextResponse.json({ error: 'Login required to download this invoice.' }, { status: 401 });
-    }
 
     let addrObj: any = {};
     if (o.shipping_address) {
@@ -57,6 +55,25 @@ export async function GET(
           addrObj = { address: o.shipping_address };
         }
       }
+    }
+
+    const { searchParams } = new URL(request.url);
+    const token = searchParams.get('t') || searchParams.get('token') || '';
+
+    const isTokenAuthorized = Boolean(
+      token &&
+      (verifyTrackingToken(token, o.order_number || o.id, addrObj.phone || '') ||
+       verifyTrackingToken(token, o.order_number || o.id, addrObj.alternatePhone || addrObj.alternate_phone || '') ||
+       verifyTrackingToken(token, o.order_number || o.id, String(o.user_id || '').replace(/^wa_/, '')) ||
+       verifyTrackingToken(token, o.id, addrObj.phone || '') ||
+       verifyTrackingToken(token, o.id, String(o.user_id || '').replace(/^wa_/, '')))
+    );
+
+    const isOwner = Boolean(session && o.user_id && session.userId === o.user_id);
+    const isAdmin = Boolean(admin?.isAdmin);
+
+    if (!isAdmin && !isOwner && !isTokenAuthorized) {
+      return NextResponse.json({ error: 'Login required to download this invoice.' }, { status: 401 });
     }
 
     const itemsList =
@@ -81,6 +98,7 @@ export async function GET(
       courierName: o.courier_name || 'ST Courier Express',
       trackingNumber: o.awb_number || 'Pending AWB Assignment',
       items: itemsList,
+      shippingCharge: Number(o.shipping_charge || 0),
       createdAt: new Date(o.ordered_at || Date.now()).toLocaleDateString('en-IN', {
         day: 'numeric',
         month: 'long',

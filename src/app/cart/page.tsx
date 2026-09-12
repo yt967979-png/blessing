@@ -335,7 +335,7 @@ export default function CartPage() {
                     </p>
                   )}
                   {!user && (
-                    <p className="text-[10px] text-center text-slate-500 font-medium">Sign in with Google to place an order</p>
+                    <p className="text-[10px] text-center text-slate-500 font-medium">Sign in to place an order (Google, Phone OTP, or Email)</p>
                   )}
                   {!pincodeOk && (
                     <p className="text-[10px] text-center text-red-600 font-medium">Check a serviceable pincode first</p>

@@ -129,7 +129,9 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string, tokenRaw?: stri
         (verifyTrackingToken(token, o.order_number || o.id, addr.phone || '') ||
           verifyTrackingToken(token, o.order_number || o.id, addr.alternatePhone || addr.alternate_phone || '') ||
           verifyTrackingToken(token, o.order_number || o.id, o.user_phone || '') ||
-          verifyTrackingToken(token, o.id, addr.phone || ''))
+          verifyTrackingToken(token, o.order_number || o.id, String(o.user_id || '').replace(/^wa_/, '')) ||
+          verifyTrackingToken(token, o.id, addr.phone || '') ||
+          verifyTrackingToken(token, o.id, String(o.user_id || '').replace(/^wa_/, '')))
       ) {
         // Token lifecycle: active while in transit + 60 days post delivery/order
         const baseDate = o.delivered_at ? new Date(o.delivered_at) : o.ordered_at ? new Date(o.ordered_at) : null;

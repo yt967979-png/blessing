@@ -12,6 +12,8 @@ import {
   Share2,
   CheckCircle,
   ChevronRight,
+  FileText,
+  Download,
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { Header } from '@/components/layout/Header';
@@ -566,6 +568,37 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
             </div>
 
 
+
+            {/* Sample PDF Preview / Free Download */}
+            {product.samplePdfUrl && (
+              <div className="mb-4">
+                <a
+                  href={product.samplePdfUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full py-3 px-4 bg-[#001B3A]/5 hover:bg-[#001B3A]/10 text-[#001B3A] border border-[#001B3A]/15 rounded-xl text-xs sm:text-sm font-black flex items-center justify-between gap-2.5 transition-all cursor-pointer shadow-2xs hover:shadow-xs group"
+                  title="Preview or download sample pages before buying"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-lg bg-[#001B3A] text-amber-400 flex items-center justify-center shrink-0 shadow-xs">
+                      <FileText className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="font-extrabold text-[#001B3A]">
+                        Preview sample pages
+                      </div>
+                      <div className="text-[11px] font-semibold text-slate-600">
+                        Free PDF — check chapters before buying
+                      </div>
+                    </div>
+                  </div>
+                  <span className="inline-flex items-center gap-1 text-[11px] font-extrabold text-[#001B3A] bg-white border border-[#001B3A]/20 px-3 py-1.5 rounded-lg shrink-0">
+                    <Download className="w-3.5 h-3.5 text-amber-600" />
+                    <span>View PDF</span>
+                  </span>
+                </a>
+              </div>
+            )}
 
             {/* Actions — desktop/tablet; mobile uses sticky bar below */}
             <div className="hidden sm:flex gap-3 mt-auto">
