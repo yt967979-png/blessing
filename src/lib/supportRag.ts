@@ -57,14 +57,10 @@ function extractOrderRef(prompt: string): string | null {
   if (pureDigits && !prompt.match(/\b([6-9]\d{9})\b/)) {
     return `BPG-${pureDigits[1]}`;
   }
-  const tokenMatch = prompt.match(/\b([A-Z0-9]{7,12})\b/i);
-  if (
-    tokenMatch &&
-    !prompt.match(
-      /\b(delivery|shipping|customer|tracking|standard|question|feedback|chennai|courier|replace|package|orders?)\b/i
-    )
-  ) {
-    return tokenMatch[1].toUpperCase();
+  // Standalone alphanumeric tokens must contain both digits and letters (e.g. WHTB22KK), never matching regular English words
+  const alphanumericMatch = prompt.match(/\b(?=[A-Za-z]*\d)(?=\d*[A-Za-z])[A-Za-z0-9]{6,16}\b/);
+  if (alphanumericMatch) {
+    return alphanumericMatch[0].toUpperCase();
   }
   return null;
 }
@@ -213,26 +209,32 @@ export async function generateSupportRagAnswer(
   const awbRef = extractAwb(userPrompt);
 
   // Only trigger order query for genuine order-related intents, not casual mentions
-  const isExplicitOrderRef = Boolean(orderRef) || Boolean(awbRef);
-  const isOrderKeyword =
-    q.includes('order') ||
-    q.includes('track') ||
-    q.includes('shipped') ||
-    q.includes('where is') ||
-    q.includes('dispatch') ||
-    q.includes('awb') ||
-    q.includes('docket') ||
-    (q.includes('status') && !q.includes('stock')) ||
-    (q.includes('delivery') && !q.includes('charge') && !q.includes('fee') && !q.includes('free')) ||
-    q.includes('courier') ||
-    q.includes('reach') ||
-    q.includes('arrive') ||
-    q.includes('when will i get') ||
-    q.includes('st courier') ||
-    q.includes('ennoda order') ||
-    q.includes('order eppo varum') ||
-    q.includes('parcel');
+  const isOfficeLocationQuery =
+    (q.includes('office') || q.includes('shop') || q.includes('store') || q.includes('where are you') || q.includes('address')) &&
+    !q.includes('change address') &&
+    !q.includes('wrong address') &&
+    !q.includes('update address');
 
+  const isOrderKeyword =
+    !isOfficeLocationQuery &&
+    (
+      q.includes('order') ||
+      q.includes('track') ||
+      q.includes('shipped') ||
+      (q.includes('where is') && (q.includes('my') || q.includes('order') || q.includes('parcel') || q.includes('book'))) ||
+      q.includes('dispatch') ||
+      q.includes('awb') ||
+      q.includes('docket') ||
+      (q.includes('status') && !q.includes('stock')) ||
+      (q.includes('delivery') && !q.includes('charge') && !q.includes('fee') && !q.includes('free')) ||
+      (q.includes('courier') && !q.includes('st courier contact')) ||
+      q.includes('when will i get') ||
+      q.includes('ennoda order') ||
+      q.includes('order eppo varum') ||
+      q.includes('parcel')
+    );
+
+  const isExplicitOrderRef = Boolean(orderRef) || Boolean(awbRef);
   const isOrderQuery = isExplicitOrderRef || isOrderKeyword;
 
   if (isOrderQuery) {
