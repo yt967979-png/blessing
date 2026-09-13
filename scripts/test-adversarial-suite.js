@@ -40,19 +40,21 @@ class PostgresEngine {
     this.conversations.set(conv.id, { ...conv });
   }
 
-  // Exact SQL: UPDATE support_conversations SET status = 'ACTIVE', assigned_admin_id = $1, assigned_admin_name = $2, accepted_at = NOW(), updated_at = NOW() WHERE id = $3 AND (status = 'WAITING_ADMIN' OR (status = 'ACTIVE' AND last_message_at < NOW() - INTERVAL '10 minutes' AND assigned_admin_id != $1)) RETURNING *
+  // Exact SQL: UPDATE support_conversations SET status = 'ACTIVE', assigned_admin_id = $1, assigned_admin_name = $2, accepted_at = NOW(), last_admin_activity_at = NOW(), updated_at = NOW() WHERE id = $3 AND (status = 'WAITING_ADMIN' OR (status = 'ACTIVE' AND COALESCE(last_admin_activity_at, accepted_at) < NOW() - INTERVAL '10 minutes' AND assigned_admin_id != $1)) RETURNING *
   atomicClaim(conversationId, adminId, adminName, currentTime = Date.now()) {
     const row = this.conversations.get(conversationId);
     if (!row) return { rowCount: 0, rows: [] };
 
     const tenMinsAgo = currentTime - 10 * 60 * 1000;
-    const isStaleActive = row.status === 'ACTIVE' && row.last_message_at < tenMinsAgo && row.assigned_admin_id !== adminId;
+    const adminActivity = row.last_admin_activity_at || row.accepted_at || 0;
+    const isStaleActive = row.status === 'ACTIVE' && adminActivity < tenMinsAgo && row.assigned_admin_id !== adminId;
 
     if (row.status === 'WAITING_ADMIN' || isStaleActive) {
       row.status = 'ACTIVE';
       row.assigned_admin_id = adminId;
       row.assigned_admin_name = adminName;
       row.accepted_at = new Date(currentTime).toISOString();
+      row.last_admin_activity_at = new Date(currentTime).toISOString();
       row.updated_at = new Date(currentTime).toISOString();
       return { rowCount: 1, rows: [{ ...row }] };
     }
@@ -369,6 +371,7 @@ async function runAdversarialTestSuite() {
 
   // ─────────────────────────────────────────────────────────────
   // TEST H: Admin disconnects while conversation is ACTIVE (> 10m idle takeover)
+  // Customer sending messages does NOT reset admin inactivity timer!
   // ─────────────────────────────────────────────────────────────
   test('Test H: Inactive admin conversation allows takeover by available staff after 10m', () => {
     const elevenMinutesAgo = Date.now() - 11 * 60 * 1000;
@@ -378,12 +381,14 @@ async function runAdversarialTestSuite() {
       status: 'ACTIVE',
       assigned_admin_id: 'admin_offline',
       assigned_admin_name: 'Offline Admin',
-      last_message_at: elevenMinutesAgo
+      accepted_at: new Date(elevenMinutesAgo).toISOString(),
+      last_admin_activity_at: elevenMinutesAgo,
+      last_message_at: Date.now() // Customer sent a message 1 second ago!
     });
 
-    // Another admin claims the stale active ticket
+    // Another admin claims the stale active ticket (customer message does NOT block takeover)
     const claimRes = db.atomicClaim('conv_abandoned_001', 'admin_active', 'Active Staff (Chennai)', Date.now());
-    assert.strictEqual(claimRes.rowCount, 1, 'Available admin successfully claimed abandoned ticket');
+    assert.strictEqual(claimRes.rowCount, 1, 'Available admin successfully claimed abandoned ticket despite customer activity');
     assert.strictEqual(db.conversations.get('conv_abandoned_001').assigned_admin_name, 'Active Staff (Chennai)');
   });
 

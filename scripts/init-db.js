@@ -459,6 +459,8 @@ async function migrateDatabase(connStr, dbName) {
       CREATE UNIQUE INDEX IF NOT EXISTS idx_support_msg_client_id 
         ON support_messages (conversation_id, client_message_id) 
         WHERE client_message_id IS NOT NULL;
+      ALTER TABLE support_conversations ADD COLUMN IF NOT EXISTS last_admin_activity_at TIMESTAMP;
+      CREATE INDEX IF NOT EXISTS idx_support_conv_admin_act ON support_conversations (last_admin_activity_at DESC);
       ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_address TEXT;
       ALTER TABLE orders ADD COLUMN IF NOT EXISTS packed_at TIMESTAMP;
       ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipped_at TIMESTAMP;

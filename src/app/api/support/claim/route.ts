@@ -37,11 +37,12 @@ export async function POST(req: NextRequest) {
            assigned_admin_id = $1,
            assigned_admin_name = $2,
            accepted_at = NOW(),
+           last_admin_activity_at = NOW(),
            updated_at = NOW()
        WHERE id = $3 
          AND (
            status = 'WAITING_ADMIN' 
-           OR (status = 'ACTIVE' AND last_message_at < NOW() - INTERVAL '10 minutes' AND assigned_admin_id != $1)
+           OR (status = 'ACTIVE' AND COALESCE(last_admin_activity_at, accepted_at) < NOW() - INTERVAL '10 minutes' AND assigned_admin_id != $1)
          )
        RETURNING *`,
       [adminId, adminName, conversationId]

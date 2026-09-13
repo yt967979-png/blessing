@@ -174,22 +174,29 @@ export async function GET(req: NextRequest) {
         WHERE status = 'WAITING_ADMIN'
           AND updated_at < NOW() - INTERVAL '15 minutes'
       `);
-      // Auto-requeue abandoned ACTIVE chats where admin became inactive (>15m)
+      // Auto-requeue abandoned ACTIVE chats where admin became inactive (>15m without admin activity)
       const requeuedRes = await queryDb(`
         UPDATE support_conversations
         SET status = 'WAITING_ADMIN', assigned_admin_id = NULL, assigned_admin_name = NULL, updated_at = NOW()
         WHERE status = 'ACTIVE'
-          AND last_message_at < NOW() - INTERVAL '15 minutes'
+          AND COALESCE(last_admin_activity_at, accepted_at) < NOW() - INTERVAL '15 minutes'
         RETURNING id, customer_name
       `);
       if (requeuedRes.rowCount && requeuedRes.rowCount > 0) {
         for (const row of requeuedRes.rows) {
+          const sysMsgId = `msg_${Date.now()}_sys_requeue_${Math.random().toString(36).substring(2, 6)}`;
+          await queryDb(
+            `INSERT INTO support_messages (id, conversation_id, sender_type, sender_name, text)
+             VALUES ($1, $2, 'SYSTEM', 'System', $3)`,
+            [sysMsgId, row.id, 'Re-routing to available team members']
+          ).catch(() => {});
+
           notifySupportEvent({
             type: 'SUPPORT_REQUESTED',
             conversationId: row.id,
             senderType: 'SYSTEM',
             senderName: row.customer_name || 'Customer',
-            text: 'Ticket re-queued due to staff inactivity',
+            text: 'Re-routing to available team members',
             status: 'WAITING_ADMIN',
             timestamp: new Date().toISOString(),
           }).catch(() => {});

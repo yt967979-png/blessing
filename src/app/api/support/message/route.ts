@@ -125,7 +125,17 @@ export async function POST(req: NextRequest) {
       throw insertErr;
     }
 
-    await queryDb(`UPDATE support_conversations SET last_message_at = NOW(), updated_at = NOW() WHERE id = $1`, [conversationId]);
+    if (senderType === 'ADMIN') {
+      await queryDb(
+        `UPDATE support_conversations SET last_message_at = NOW(), last_admin_activity_at = NOW(), updated_at = NOW() WHERE id = $1`,
+        [conversationId]
+      );
+    } else {
+      await queryDb(
+        `UPDATE support_conversations SET last_message_at = NOW(), updated_at = NOW() WHERE id = $1`,
+        [conversationId]
+      );
+    }
 
     const ev = {
       type: 'NEW_MESSAGE' as const,
