@@ -32,28 +32,23 @@ export async function startLeaderBackgroundServices() {
     confirmExpireTimer = setInterval(() => void expire(), 30 * 60 * 1000);
   }
 
-  // Money-safety net: refund Razorpay captures that never got an order
-  // (lost stock race, crash mid-checkout, etc.) once they're stale enough
-  // that a legitimate in-flight order can no longer still be forming.
+  // Dead-letter and webhook replay sweeper (without automated orphan refunds)
   if (!orphanRefundTimer) {
     const sweep = async () => {
       const t0 = Date.now();
       try {
-        const { refundStaleOrphanCaptures, reconcileUnfinalizedRefunds, retryFailedWebhookEvents } = await import('@/lib/orphanRefundSweep');
-        const n = await refundStaleOrphanCaptures(10);
-        if (n > 0) console.log(`[orphan-refund] auto-refunded ${n} stale orphan capture(s)`);
+        const { reconcileUnfinalizedRefunds, retryFailedWebhookEvents } = await import('@/lib/orphanRefundSweep');
         const rec = await reconcileUnfinalizedRefunds();
-        if (rec > 0) console.log(`[orphan-refund] auto-reconciled ${rec} unfinalized refund order(s)`);
+        if (rec > 0) console.log(`[refund-reconcile] auto-reconciled ${rec} unfinalized refund order(s)`);
         const dl = await retryFailedWebhookEvents();
         if (dl.resolved > 0) console.log(`[dead-letter-replay] replayed ${dl.replayed}, resolved ${dl.resolved} webhook event(s)`);
         
         const { recordJobHeartbeat } = await import('@/lib/jobHeartbeat');
-        await recordJobHeartbeat({ jobName: 'orphanRefundSweep', durationMs: Date.now() - t0, status: 'ok', details: { refundedOrphans: n, deadLetterResolved: dl.resolved } });
-        await recordJobHeartbeat({ jobName: 'reconcileUnfinalizedRefunds', durationMs: Date.now() - t0, status: 'ok', details: { reconciledOrders: rec } });
+        await recordJobHeartbeat({ jobName: 'reconcileUnfinalizedRefunds', durationMs: Date.now() - t0, status: 'ok', details: { reconciledOrders: rec, deadLetterResolved: dl.resolved } });
       } catch (e: any) {
-        console.warn('[orphan-refund]', e?.message || e);
+        console.warn('[refund-reconcile]', e?.message || e);
         const { recordJobHeartbeat } = await import('@/lib/jobHeartbeat');
-        await recordJobHeartbeat({ jobName: 'orphanRefundSweep', durationMs: Date.now() - t0, status: 'error', error: e?.message || String(e) });
+        await recordJobHeartbeat({ jobName: 'reconcileUnfinalizedRefunds', durationMs: Date.now() - t0, status: 'error', error: e?.message || String(e) });
       }
     };
     setTimeout(() => void sweep(), 5 * 60 * 1000);

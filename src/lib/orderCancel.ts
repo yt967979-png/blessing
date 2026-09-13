@@ -69,24 +69,70 @@ export async function executeOrderCancel(opts: {
     let refundId: string | undefined;
     let razorpayRefundStatus: string | undefined;
     if (needsRazorpayRefund(row)) {
+      // ── ATOMIC CAS CLAIM: Transition to REFUNDING to lock against concurrent double-refund clicks
+      const claimRefund = await queryDb(
+        `UPDATE orders 
+         SET payment_status = 'REFUNDING', updated_at = NOW()
+         WHERE id = $1 AND payment_status != 'REFUNDING' AND payment_status NOT ILIKE '%refund%'
+         RETURNING id`,
+        [row.id]
+      );
+
+      if (claimRefund.rowCount === 0) {
+        const checkCurrent = await queryDb(
+          `SELECT payment_status, razorpay_refund_id FROM orders WHERE id = $1`,
+          [row.id]
+        );
+        const currentPs = String(checkCurrent.rows[0]?.payment_status || '');
+        if (currentPs === 'REFUNDING') {
+          return {
+            ok: false,
+            error: 'A refund operation for this order is already in progress. Please wait.',
+            status: 409,
+          };
+        }
+        if (currentPs.toLowerCase().includes('refund')) {
+          return {
+            ok: true,
+            orderNumber: row.order_number,
+            duplicate: true,
+            refunded: true,
+            refundId: checkCurrent.rows[0]?.razorpay_refund_id || undefined,
+          };
+        }
+      }
+
       const refund = await refundRazorpayPayment({
         paymentId: String(row.razorpay_payment_id || '').trim(),
         orderNumber: row.order_number,
         existingRefundId: row.razorpay_refund_id,
       });
+
       if (!refund.ok) {
+        // Mark as REFUND_FAILED so admin can see the failure and retry
+        await queryDb(
+          `UPDATE orders SET payment_status = 'REFUND_FAILED', updated_at = NOW() WHERE id = $1`,
+          [row.id]
+        ).catch(() => {});
+        await queryDb(
+          `UPDATE payments SET status = 'REFUND_FAILED' WHERE order_id = $1 OR payment_id = $2`,
+          [row.id, String(row.razorpay_payment_id || '').trim()]
+        ).catch(() => {});
+
         return {
           ok: false,
           error: refund.error || 'Razorpay refund failed. Cancel aborted — fix payment then retry.',
           status: 502,
         };
       }
+
       refunded = true;
       refundId = refund.refundId;
       razorpayRefundStatus = refund.razorpayStatus || (refund.alreadyRefunded ? 'processed' : 'processed');
+
       try {
         await queryDb(
-          `UPDATE orders SET razorpay_refund_id = $2, updated_at = NOW() WHERE id = $1`,
+          `UPDATE orders SET payment_status = 'Refunded', razorpay_refund_id = $2, updated_at = NOW() WHERE id = $1`,
           [row.id, refundId]
         );
       } catch (e: any) {

@@ -401,48 +401,12 @@ export async function POST(request: Request) {
         return NextResponse.json({ ok: true, action: 'noop_already_refunded', paymentId: effectivePaymentId });
       }
 
-      const ageMs = Date.now() - new Date(existingPay.rows[0]?.paid_at || Date.now()).getTime();
-      if (existingStatus === 'ORPHAN_CAPTURED' && ageMs >= ORPHAN_REFUND_GRACE_MS) {
-        // Re-delivered/duplicate event landed after the grace window and it's
-        // still unmatched — safe to refund now (idempotent via Razorpay's own
-        // refunded-payment check inside refundRazorpayPayment).
-        const refund = await refundRazorpayPayment({
-          paymentId: effectivePaymentId,
-          orderNumber: effectiveOrderId || undefined,
-        });
-        if (refund.ok) {
-          await client.query(`UPDATE payments SET status = 'REFUNDED' WHERE payment_id = $1`, [
-            effectivePaymentId,
-          ]);
-          // Free reserved inventory — otherwise books stay locked forever after orphan refund
-          if (effectiveOrderId) {
-            try {
-              await releaseStockHolds(
-                { razorpayOrderId: effectiveOrderId, includeConfirmed: true },
-                'orphan_capture_refunded'
-              );
-            } catch (err: any) {
-              console.warn('[razorpay-webhook] releaseStockHolds after orphan refund failed:', err?.message || err);
-            }
-          }
-          console.warn(
-            `[razorpay-webhook] Auto-refunded orphan capture ${effectivePaymentId}. refundId=${refund.refundId}`
-          );
-          return NextResponse.json({
-            ok: true,
-            action: 'orphan_refunded',
-            paymentId: effectivePaymentId,
-            refundId: refund.refundId,
-          });
-        }
-        console.error(
-          `[razorpay-webhook] CRITICAL: could not auto-refund orphan capture ${effectivePaymentId}: ${refund.error}`
-        );
+      if (existingStatus === 'ORPHAN_CAPTURED') {
         return NextResponse.json({
           ok: true,
-          action: 'orphan_refund_failed',
+          action: 'orphan_pending_reconciliation',
           paymentId: effectivePaymentId,
-          error: refund.error,
+          note: 'Payment captured without local order — retained in database for admin reconciliation or manual refund.',
         });
       }
     }
@@ -452,7 +416,7 @@ export async function POST(request: Request) {
       action: 'orphan_logged',
       paymentId: effectivePaymentId || null,
       razorpayOrderId: effectiveOrderId || null,
-      note: 'No matching order — admin should reconcile. Customer place-order remains idempotent by payment_id. Background sweep auto-refunds once stale.',
+      note: 'No matching order — admin can reconcile or refund manually.',
     });
   } catch (err: any) {
     console.error('[razorpay-webhook]', err?.message || err);
