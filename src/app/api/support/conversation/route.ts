@@ -26,35 +26,64 @@ export async function GET(req: NextRequest) {
     const convIdParam = req.nextUrl.searchParams.get('id');
 
     let conv: any = null;
+    let feedbackSubmitted = false;
 
     if (convIdParam) {
       const res = await queryDb(`SELECT * FROM support_conversations WHERE id = $1 LIMIT 1`, [convIdParam]);
       const candidate = res.rows[0];
-      if (candidate && candidate.status !== 'RESOLVED') {
-        conv = candidate;
+      if (candidate) {
+        const fbRes = await queryDb(`SELECT id, rating FROM support_feedback WHERE conversation_id = $1 LIMIT 1`, [candidate.id]);
+        feedbackSubmitted = fbRes.rows.length > 0;
+        if (candidate.status !== 'RESOLVED' || !feedbackSubmitted) {
+          conv = candidate;
+        }
       }
     } else if (user?.userId) {
       const res = await queryDb(
-        `SELECT * FROM support_conversations 
-         WHERE (customer_id = $1 OR session_token = $2)
-           AND status != 'RESOLVED'
-         ORDER BY updated_at DESC LIMIT 1`,
+        `SELECT c.*, 
+           (SELECT COUNT(*) FROM support_feedback f WHERE f.conversation_id = c.id) as fb_count
+         FROM support_conversations c
+         WHERE (c.customer_id = $1 OR c.session_token = $2)
+           AND (
+             c.status != 'RESOLVED' 
+             OR (c.status = 'RESOLVED' AND c.updated_at > NOW() - INTERVAL '2 hours')
+           )
+         ORDER BY c.updated_at DESC LIMIT 1`,
         [user.userId, sessionToken]
       );
-      conv = res.rows[0];
+      if (res.rows.length > 0) {
+        const candidate = res.rows[0];
+        const isRated = parseInt(candidate.fb_count || '0', 10) > 0;
+        feedbackSubmitted = isRated;
+        if (candidate.status !== 'RESOLVED' || !isRated) {
+          conv = candidate;
+        }
+      }
     } else {
       const res = await queryDb(
-        `SELECT * FROM support_conversations 
-         WHERE session_token = $1
-           AND status != 'RESOLVED'
-         ORDER BY updated_at DESC LIMIT 1`,
+        `SELECT c.*, 
+           (SELECT COUNT(*) FROM support_feedback f WHERE f.conversation_id = c.id) as fb_count
+         FROM support_conversations c
+         WHERE c.session_token = $1
+           AND (
+             c.status != 'RESOLVED' 
+             OR (c.status = 'RESOLVED' AND c.updated_at > NOW() - INTERVAL '2 hours')
+           )
+         ORDER BY c.updated_at DESC LIMIT 1`,
         [sessionToken]
       );
-      conv = res.rows[0];
+      if (res.rows.length > 0) {
+        const candidate = res.rows[0];
+        const isRated = parseInt(candidate.fb_count || '0', 10) > 0;
+        feedbackSubmitted = isRated;
+        if (candidate.status !== 'RESOLVED' || !isRated) {
+          conv = candidate;
+        }
+      }
     }
 
     if (!conv) {
-      return NextResponse.json({ conversation: null, messages: [] });
+      return NextResponse.json({ conversation: null, messages: [], feedbackSubmitted: false });
     }
 
     const msgsRes = await queryDb(
@@ -83,6 +112,7 @@ export async function GET(req: NextRequest) {
     const res = NextResponse.json({
       conversation: conv,
       messages: formattedMessages,
+      feedbackSubmitted,
     });
     if (isNew) {
       res.cookies.set('bpg_support_session', sessionToken, { httpOnly: true, sameSite: 'lax', maxAge: 60 * 60 * 24 * 30 });
@@ -134,6 +164,34 @@ export async function POST(req: NextRequest) {
 
     let conversationId = body.conversationId;
     let conv: any = null;
+
+    // ── Handle Resolving for In-Chat CSAT Feedback Prompt
+    if (action === 'resolve_for_feedback') {
+      if (conversationId) {
+        const cRes = await queryDb(`SELECT * FROM support_conversations WHERE id = $1 LIMIT 1`, [conversationId]);
+        conv = cRes.rows[0];
+      }
+      if (conv) {
+        await queryDb(
+          `UPDATE support_conversations 
+           SET status = 'RESOLVED', resolved_at = NOW(), updated_at = NOW() 
+           WHERE id = $1`,
+          [conv.id]
+        );
+        await notifySupportEvent({
+          type: 'CHAT_RESOLVED',
+          conversationId: conv.id,
+          status: 'RESOLVED',
+          timestamp: new Date().toISOString(),
+        });
+        return NextResponse.json({
+          success: true,
+          status: 'RESOLVED',
+          conversation: { ...conv, status: 'RESOLVED' },
+        });
+      }
+      return NextResponse.json({ success: true, status: 'RESOLVED' });
+    }
 
     // ── Handle Customer Ending, Leaving, or Closing Chat to Start Fresh
     if (

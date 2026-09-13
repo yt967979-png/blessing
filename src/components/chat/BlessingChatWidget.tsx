@@ -69,6 +69,7 @@ export const BlessingChatWidget: React.FC = () => {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [feedbackComment, setFeedbackComment] = useState('');
   const [unreadCount, setUnreadCount] = useState(0);
+  const [showFeedbackPrompt, setShowFeedbackPrompt] = useState(false);
 
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -119,6 +120,9 @@ export const BlessingChatWidget: React.FC = () => {
         if (data.conversation) {
           setConversation(data.conversation);
           setMessages(data.messages || []);
+          if (data.feedbackSubmitted) {
+            setFeedbackSubmitted(true);
+          }
           if (typeof window !== 'undefined' && data.conversation.id) {
             localStorage.setItem('bpg_support_conv_id', data.conversation.id);
           }
@@ -283,7 +287,28 @@ export const BlessingChatWidget: React.FC = () => {
   };
 
   // Close / End Chat handler
-  const handleCloseChat = async () => {
+  const handleCloseChat = async (forceClose: boolean = false) => {
+    // If user chatted (messages.length >= 2) and hasn't submitted feedback, prompt CSAT first!
+    if (!forceClose && !feedbackSubmitted && messages.length >= 2 && !showFeedbackPrompt) {
+      setShowFeedbackPrompt(true);
+      if (conversation?.id) {
+        fetch('/api/support/conversation', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...authHeaders(user),
+          },
+          body: JSON.stringify({
+            action: 'resolve_for_feedback',
+            conversationId: conversation.id,
+          }),
+        }).catch(() => {});
+        setConversation((prev) => prev ? { ...prev, status: 'RESOLVED' } : null);
+      }
+      setTimeout(() => scrollToBottom('smooth'), 100);
+      return;
+    }
+
     if (loading) return;
     setLoading(true);
     try {
@@ -304,6 +329,7 @@ export const BlessingChatWidget: React.FC = () => {
     }
     setConversation(null);
     setMessages([]);
+    setShowFeedbackPrompt(false);
     setFeedbackSubmitted(false);
     setInputText('');
     setLoading(false);
@@ -375,6 +401,7 @@ export const BlessingChatWidget: React.FC = () => {
       });
       if (res.ok) {
         setFeedbackSubmitted(true);
+        setShowFeedbackPrompt(false);
       }
     } catch (_) {}
   };
@@ -449,10 +476,24 @@ export const BlessingChatWidget: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-1">
+              {conversation && messages.length >= 2 && !feedbackSubmitted && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowFeedbackPrompt(true);
+                    setTimeout(() => scrollToBottom('smooth'), 100);
+                  }}
+                  className="px-2 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-[10px] font-extrabold rounded-lg flex items-center gap-1 border border-amber-400/30 transition-colors"
+                  title="Rate support experience"
+                >
+                  <Star className="w-3 h-3 fill-amber-300 text-amber-300" />
+                  <span>Rate</span>
+                </button>
+              )}
               {conversation && (
                 <button
                   type="button"
-                  onClick={handleCloseChat}
+                  onClick={() => handleCloseChat(false)}
                   disabled={loading}
                   className="p-2 text-slate-300 hover:text-amber-400 hover:bg-white/10 rounded-xl transition-colors cursor-pointer"
                   title="Close and start a fresh conversation"
@@ -576,12 +617,15 @@ export const BlessingChatWidget: React.FC = () => {
               </div>
             )}
 
-            {/* ─── In-Chat 1-Tap CSAT Feedback Card (When Resolved) ───────────── */}
-            {conversation?.status === 'RESOLVED' && !feedbackSubmitted && (
-              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 space-y-3 mt-4 animate-fade-slide-up">
+            {/* ─── In-Chat 1-Tap CSAT Feedback Card (When Resolved or Prompted) ───────────── */}
+            {(conversation?.status === 'RESOLVED' || showFeedbackPrompt) && !feedbackSubmitted && (
+              <div className="bg-amber-50 border border-amber-300/80 rounded-2xl p-4 space-y-3 mt-4 animate-fade-slide-up shadow-sm">
                 <div className="text-center space-y-1">
-                  <h4 className="font-extrabold text-xs text-amber-900">How was your support experience?</h4>
-                  <p className="text-[10.5px] text-amber-700">
+                  <span className="inline-flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-wider text-amber-800 bg-amber-200/60 px-2.5 py-0.5 rounded-full">
+                    ⭐ Support Feedback
+                  </span>
+                  <h4 className="font-extrabold text-xs text-amber-950">How was your support experience?</h4>
+                  <p className="text-[10.5px] text-amber-800/90">
                     Your rating helps us keep delivery and customer care top-notch.
                   </p>
                 </div>
@@ -619,7 +663,7 @@ export const BlessingChatWidget: React.FC = () => {
                         }
                         className={`text-[10px] px-2.5 py-1 rounded-full font-bold border transition-colors cursor-pointer ${
                           active
-                            ? 'bg-amber-500 text-white border-amber-600'
+                            ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
                             : 'bg-white text-amber-900 border-amber-200 hover:bg-amber-100'
                         }`}
                       >
@@ -631,7 +675,7 @@ export const BlessingChatWidget: React.FC = () => {
 
                 <input
                   type="text"
-                  placeholder="Optional comment..."
+                  placeholder="Optional comment or praise..."
                   value={feedbackComment}
                   onChange={(e) => setFeedbackComment(e.target.value)}
                   className="w-full text-xs p-2 bg-white border border-amber-200 rounded-xl outline-none text-slate-800"
@@ -644,20 +688,37 @@ export const BlessingChatWidget: React.FC = () => {
                 >
                   Submit Feedback ⭐
                 </button>
+
+                <div className="text-center pt-1">
+                  <button
+                    type="button"
+                    onClick={() => handleCloseChat(true)}
+                    className="text-[10px] font-bold text-slate-400 hover:text-slate-600 underline cursor-pointer"
+                  >
+                    Skip & Close Session
+                  </button>
+                </div>
               </div>
             )}
 
             {feedbackSubmitted && (
-              <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-3 rounded-2xl text-center text-xs font-bold">
-                ✓ Thank you for your feedback! We look forward to serving you again.
+              <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-3 rounded-2xl text-center text-xs font-bold space-y-2">
+                <div>✓ Thank you for your feedback! We look forward to serving you again.</div>
+                <button
+                  type="button"
+                  onClick={() => handleCloseChat(true)}
+                  className="px-3 py-1 bg-emerald-700 hover:bg-emerald-800 text-white text-[10.5px] font-extrabold rounded-lg cursor-pointer"
+                >
+                  Start New Conversation
+                </button>
               </div>
             )}
 
-            {conversation?.status === 'RESOLVED' && (
+            {conversation?.status === 'RESOLVED' && !showFeedbackPrompt && !feedbackSubmitted && (
               <div className="text-center pt-2 pb-1">
                 <button
                   type="button"
-                  onClick={handleCloseChat}
+                  onClick={() => handleCloseChat(true)}
                   className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-[#001B3A] text-white hover:bg-blue-900 transition-all shadow-sm cursor-pointer"
                 >
                   <Sparkles className="w-3.5 h-3.5 text-amber-400" />

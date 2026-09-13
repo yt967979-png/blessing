@@ -39,8 +39,8 @@ export async function POST(req: NextRequest) {
         feedbackId,
         conversationId,
         conv.customer_name || 'Customer',
-        conv.assigned_admin_id || null,
-        conv.assigned_admin_name || null,
+        conv.assigned_admin_id || (conv.status === 'BOT' ? 'ai_bot' : null),
+        conv.assigned_admin_name || (conv.status === 'BOT' ? 'Blessing AI Assistant' : 'Chennai Support Team'),
         rating,
         tags,
         comment,
@@ -70,11 +70,18 @@ export async function POST(req: NextRequest) {
       timestamp: new Date().toISOString(),
     });
 
-    return NextResponse.json({
+    const freshSession = crypto.randomBytes(16).toString('hex');
+    const res = NextResponse.json({
       success: true,
       rating,
       status: 'RESOLVED',
     });
+    res.cookies.set('bpg_support_session', freshSession, {
+      httpOnly: true,
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 30,
+    });
+    return res;
   } catch (err: any) {
     return NextResponse.json({ error: err?.message || 'Failed to submit feedback' }, { status: 500 });
   }

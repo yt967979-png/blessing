@@ -93,6 +93,7 @@ function HelpCenterContent() {
   const [feedbackComment, setFeedbackComment] = useState('');
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
   const [submittingFeedback, setSubmittingFeedback] = useState(false);
+  const [showFeedbackPrompt, setShowFeedbackPrompt] = useState(false);
 
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -188,12 +189,12 @@ function HelpCenterContent() {
       } else if (!localMatch) {
         setOrderData(null);
       }
-    } catch {
+    } catch (_) {
       if (!localMatch) setOrderData(null);
     } finally {
       setLoadingOrder(false);
     }
-  }, [user, userOrders, queryPhone]);
+  }, [user, queryPhone, userOrders]);
 
   useEffect(() => {
     if (selectedOrderId) {
@@ -201,7 +202,7 @@ function HelpCenterContent() {
     }
   }, [selectedOrderId, fetchOrderDetails]);
 
-  // Load or Initialize Support Conversation
+  // Load active or recent conversation and history
   const loadConversation = useCallback(async () => {
     try {
       const savedConvId = typeof window !== 'undefined' ? localStorage.getItem('bpg_support_conv_id') : null;
@@ -217,6 +218,9 @@ function HelpCenterContent() {
         if (data.conversation) {
           setConversation(data.conversation);
           setMessages(data.messages || []);
+          if (data.feedbackSubmitted) {
+            setFeedbackSubmitted(true);
+          }
           if (typeof window !== 'undefined' && data.conversation.id) {
             localStorage.setItem('bpg_support_conv_id', data.conversation.id);
           }
@@ -432,7 +436,28 @@ function HelpCenterContent() {
   };
 
   // End & Close Chat handler so customer can start fresh
-  const handleCloseChat = async () => {
+  const handleCloseChat = async (forceClose: boolean = false) => {
+    // If user has engaged in conversation (messages.length >= 2) and hasn't rated yet, prompt CSAT first!
+    if (!forceClose && !feedbackSubmitted && messages.length >= 2 && !showFeedbackPrompt) {
+      setShowFeedbackPrompt(true);
+      if (conversation?.id) {
+        fetch('/api/support/conversation', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...authHeaders(user),
+          },
+          body: JSON.stringify({
+            action: 'resolve_for_feedback',
+            conversationId: conversation.id,
+          }),
+        }).catch(() => {});
+        setConversation((prev) => prev ? { ...prev, status: 'RESOLVED' } : null);
+      }
+      setTimeout(() => scrollToBottom('smooth'), 100);
+      return;
+    }
+
     if (sending) return;
     setSending(true);
     try {
@@ -453,6 +478,7 @@ function HelpCenterContent() {
     }
     setConversation(null);
     setMessages([]);
+    setShowFeedbackPrompt(false);
     setFeedbackSubmitted(false);
     setInputText('');
     setSending(false);
@@ -482,6 +508,7 @@ function HelpCenterContent() {
 
       if (res.ok) {
         setFeedbackSubmitted(true);
+        setShowFeedbackPrompt(false);
         showToast('⭐ Thank you for your feedback!');
       }
     } catch {
@@ -772,11 +799,27 @@ function HelpCenterContent() {
                 </span>
               )}
 
+              {/* Rate Support Button */}
+              {conversation && messages.length >= 2 && !feedbackSubmitted && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowFeedbackPrompt(true);
+                    setTimeout(() => scrollToBottom('smooth'), 100);
+                  }}
+                  className="text-[11px] font-bold px-2.5 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
+                  title="Rate support experience"
+                >
+                  <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-500" />
+                  <span className="hidden sm:inline">Rate</span>
+                </button>
+              )}
+
               {/* Close / End Chat Button */}
               {conversation && (
                 <button
                   type="button"
-                  onClick={handleCloseChat}
+                  onClick={() => handleCloseChat(false)}
                   disabled={sending}
                   className="text-[11px] font-bold px-2.5 py-1.5 rounded-xl text-slate-500 hover:text-red-600 hover:bg-red-50 border border-slate-200 transition-colors flex items-center gap-1 cursor-pointer"
                   title="Close conversation and start fresh"
@@ -917,12 +960,15 @@ function HelpCenterContent() {
               </div>
             )}
 
-            {/* ── In-Chat 1-Tap CSAT Feedback Card (When Resolved) ──────────── */}
-            {conversation?.status === 'RESOLVED' && !feedbackSubmitted && (
-              <div className="bg-amber-50/80 border border-amber-200 rounded-2xl p-4 sm:p-5 space-y-3 mt-4 animate-fade-slide-up shadow-xs">
+            {/* ── In-Chat 1-Tap CSAT Feedback Card (When Resolved or Prompted) ──────────── */}
+            {(conversation?.status === 'RESOLVED' || showFeedbackPrompt) && !feedbackSubmitted && (
+              <div className="bg-amber-50/90 border border-amber-300/80 rounded-2xl p-4 sm:p-5 space-y-3 mt-4 animate-fade-slide-up shadow-sm">
                 <div className="text-center space-y-1">
-                  <h4 className="font-black text-sm text-amber-900">How was your support experience?</h4>
-                  <p className="text-xs text-amber-700">
+                  <span className="inline-flex items-center gap-1 text-[10.5px] font-extrabold uppercase tracking-wider text-amber-800 bg-amber-200/60 px-2.5 py-0.5 rounded-full">
+                    ⭐ Support Feedback
+                  </span>
+                  <h4 className="font-black text-sm text-amber-950">How was your support experience?</h4>
+                  <p className="text-xs text-amber-800/90">
                     Your quick rating helps us maintain top-tier service across Tamil Nadu.
                   </p>
                 </div>
@@ -956,7 +1002,7 @@ function HelpCenterContent() {
                         onClick={() => toggleTag(tag)}
                         className={`text-[11px] font-bold px-3 py-1 rounded-full border transition-all cursor-pointer ${
                           active
-                            ? 'bg-amber-600 text-white border-amber-600'
+                            ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
                             : 'bg-white text-slate-600 border-slate-300 hover:border-slate-400'
                         }`}
                       >
@@ -977,25 +1023,44 @@ function HelpCenterContent() {
                   <button
                     onClick={handleFeedbackSubmit}
                     disabled={submittingFeedback}
-                    className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs rounded-xl transition-all disabled:opacity-60 cursor-pointer shadow-2xs"
+                    className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs rounded-xl transition-all disabled:opacity-60 cursor-pointer shadow-xs"
                   >
-                    {submittingFeedback ? 'Saving…' : 'Submit'}
+                    {submittingFeedback ? 'Saving…' : 'Submit ⭐'}
+                  </button>
+                </div>
+
+                <div className="flex justify-center pt-1">
+                  <button
+                    type="button"
+                    onClick={() => handleCloseChat(true)}
+                    className="text-[11px] font-bold text-slate-400 hover:text-slate-600 underline cursor-pointer"
+                  >
+                    Skip & Close Session
                   </button>
                 </div>
               </div>
             )}
 
             {feedbackSubmitted && (
-              <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3.5 text-center text-xs font-bold text-emerald-800 animate-fade-slide-up shadow-2xs">
-                ✅ Thank you! Your rating has been recorded.
+              <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 text-center space-y-2.5 animate-fade-slide-up shadow-xs">
+                <div className="text-xs font-bold text-emerald-800">
+                  ✅ Thank you! Your rating has been recorded to our Chennai quality team.
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleCloseChat(true)}
+                  className="px-4 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-xs rounded-xl cursor-pointer transition-all shadow-2xs"
+                >
+                  Start Fresh Chat
+                </button>
               </div>
             )}
 
-            {conversation?.status === 'RESOLVED' && (
+            {conversation?.status === 'RESOLVED' && !showFeedbackPrompt && !feedbackSubmitted && (
               <div className="text-center pt-2 pb-1">
                 <button
                   type="button"
-                  onClick={handleCloseChat}
+                  onClick={() => handleCloseChat(true)}
                   className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-[#001B3A] text-white hover:bg-blue-900 transition-all shadow-sm cursor-pointer"
                 >
                   <Sparkles className="w-3.5 h-3.5 text-amber-400" />
