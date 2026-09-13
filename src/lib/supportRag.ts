@@ -503,27 +503,51 @@ export async function generateSupportRagAnswer(
     };
   }
 
-  // ── 6. Delivery Timelines & Coverage Districts ──────────────────────────────
-  if (
+  // ── 5b. Head Office Location, Timings & Phone Helpline ─────────────────────
+  const isOfficeOrHelpline =
+    q.includes('office') ||
+    q.includes('helpline') ||
+    q.includes('working hours') ||
+    q.includes('office hours') ||
+    q.includes('opening hours') ||
+    q.includes('office time') ||
+    q.includes('office timing') ||
+    q.includes('ayanavaram') ||
+    q.includes('where is your office') ||
+    q.includes('where are you located') ||
+    q.includes('head office') ||
+    q.includes('call office') ||
+    q.includes('phone helpline') ||
+    q.includes('store location') ||
+    (q.includes('hours') && (q.includes('working') || q.includes('open') || q.includes('timing') || q.includes('office'))) ||
+    (q.includes('chennai') && (q.includes('office') || q.includes('address') || q.includes('hours') || q.includes('location') || q.includes('shop') || q.includes('store') || q.includes('center') || q.includes('centre')));
+
+  if (isOfficeOrHelpline) {
+    return {
+      answer: `🏢 **Blessing Power Guide Head Office & Helpline**:\n\n• **Publication & Dispatch Office**: ${STORE_POLICIES.office}\n• **Direct Phone Helpline**: **${STORE_POLICIES.helpline}**\n• **Working Hours**: **${STORE_POLICIES.hours}**\n• **Official WhatsApp Help**: [Chat on WhatsApp](https://wa.me/919840418228) (+91 98404 18228)\n• **Courier Dispatch**: We are an official publishing house based in Chennai. All guides are packaged directly here and dispatched via ST Courier Express daily across South India.`,
+      suggestions: ['📞 Call Helpline (+91 98404 18228)', '💬 WhatsApp Support', '🚚 Track My Order', '👨‍💼 Talk to Admin'],
+      shouldEscalate: false,
+      cardType: 'contact',
+    };
+  }
+
+  // ── 6. Delivery Timelines & Coverage Districts (ST Courier Express) ─────────
+  const isDeliveryTimelines =
     q.includes('how many days') ||
     q.includes('when will it come') ||
     q.includes('delivery time') ||
     q.includes('transit time') ||
     q.includes('timelines') ||
     q.includes('how long') ||
-    q.includes('chennai') ||
-    q.includes('madurai') ||
-    q.includes('coimbatore') ||
-    q.includes('trichy') ||
-    q.includes('salem') ||
-    q.includes('tirunelveli') ||
-    q.includes('erode') ||
-    q.includes('vellore') ||
-    q.includes('thanjavur') ||
-    q.includes('bangalore') ||
-    q.includes('kerala') ||
-    q.includes('eppo varum')
-  ) {
+    q.includes('delivery days') ||
+    q.includes('when will i receive') ||
+    q.includes('when will i get') ||
+    q.includes('courier speed') ||
+    q.includes('eppo varum') ||
+    ((q.includes('chennai') || q.includes('madurai') || q.includes('coimbatore') || q.includes('trichy') || q.includes('salem') || q.includes('tirunelveli') || q.includes('erode') || q.includes('vellore') || q.includes('thanjavur') || q.includes('bangalore') || q.includes('kerala')) &&
+      (q.includes('delivery') || q.includes('courier') || q.includes('reach') || q.includes('arrive') || q.includes('days') || q.includes('time') || q.includes('ship')));
+
+  if (isDeliveryTimelines) {
     return {
       answer: `⏱️ **ST Courier Delivery Timelines**:\n\n• **Chennai, Chengalpattu & Tiruvallur**: ${STORE_POLICIES.turnaroundChennai}.\n• **All Other Tamil Nadu Districts**: ${STORE_POLICIES.turnaroundTN}.\n• **Other South Indian States**: ${STORE_POLICIES.turnaroundOther}.\n\nAll parcels are packed in tamper-evident, water-resistant packaging and scanned onto daily express ST Courier vans. Live SMS updates are sent with your official tracking docket.`,
       suggestions: ['🚚 Track My Order', '📦 Minimum Order & Delivery Fee', '👨‍💼 Talk to Admin'],
@@ -684,28 +708,6 @@ export async function generateSupportRagAnswer(
       shouldEscalate: false,
       cardType: 'books',
       cardData: sampleBooks,
-    };
-  }
-
-  // ── 13. Office Location, Timings & Contact Info ─────────────────────────────
-  if (
-    q.includes('office') ||
-    q.includes('contact') ||
-    q.includes('phone') ||
-    q.includes('location') ||
-    q.includes('address') ||
-    q.includes('store') ||
-    q.includes('where are you') ||
-    q.includes('ayanavaram') ||
-    q.includes('email') ||
-    q.includes('helpline') ||
-    q.includes('hours')
-  ) {
-    return {
-      answer: `🏢 **Blessing Power Guide Head Office**:\n\n• **Address**: ${STORE_POLICIES.office}\n• **Phone / WhatsApp**: ${STORE_POLICIES.helpline}\n• **Working Hours**: ${STORE_POLICIES.hours}\n• **Courier Dispatch Hub**: Central Chennai (Direct daily ST Courier pickup for statewide express delivery).`,
-      suggestions: ['📞 Call Helpline', '💬 WhatsApp Support', '🚚 Track Order', '👨‍💼 Talk to Admin'],
-      shouldEscalate: false,
-      cardType: 'contact',
     };
   }
 

@@ -54,6 +54,7 @@ export const ChatSuggestionButtons: React.FC<ChatSuggestionButtonsProps> = ({
       {suggestions.map((sug, idx) => {
         const isEscalate = sug.includes('Connect to Admin') || sug.includes('Talk to Admin');
         const isInvoice = sug.includes('Tax Invoice') || sug.includes('Download Invoice');
+        const isCatalog = sug.toLowerCase().includes('catalog') || sug.toLowerCase().includes('browse');
 
         return (
           <button
@@ -64,6 +65,8 @@ export const ChatSuggestionButtons: React.FC<ChatSuggestionButtonsProps> = ({
                 onEscalateAdmin();
               } else if (isInvoice && orderId) {
                 window.open(`/api/orders/${encodeURIComponent(orderId)}/invoice`, '_blank');
+              } else if (isCatalog) {
+                window.location.href = '/search';
               } else {
                 onSendMessage(sug);
               }
@@ -71,6 +74,8 @@ export const ChatSuggestionButtons: React.FC<ChatSuggestionButtonsProps> = ({
             className={`px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs hover:scale-102 ${
               isEscalate
                 ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-500/20'
+                : isCatalog
+                ? 'bg-blue-50 hover:bg-blue-100 text-blue-900 border border-blue-200'
                 : 'bg-white hover:bg-blue-50/80 text-slate-700 hover:text-[#2874f0] border border-slate-200 hover:border-blue-300'
             }`}
           >

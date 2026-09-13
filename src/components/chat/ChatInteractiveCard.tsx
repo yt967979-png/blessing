@@ -207,34 +207,26 @@ export const ChatInteractiveCard: React.FC<ChatInteractiveCardProps> = ({
                     <span className="text-[9.5px] font-bold text-emerald-600">✓ In Stock</span>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => onSendMessage(`Tell me more about ${b.title}`)}
+                <Link
+                  href={`/products/${b.slug || b.id}`}
                   className="mt-2 text-[10.5px] font-extrabold text-blue-600 hover:text-blue-800 text-left cursor-pointer flex items-center gap-1"
                 >
                   <span>View Details</span>
                   <ExternalLink className="w-2.5 h-2.5" />
-                </button>
+                </Link>
               </div>
             );
           })}
         </div>
 
-        {/* 10th Full Set Promotion Card */}
-        <div className="p-3 bg-gradient-to-r from-blue-600 to-indigo-700 text-white rounded-xl flex items-center justify-between gap-2 shadow-sm">
-          <div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-blue-200 block">
-              Best Value · Unlocks 100% Free Delivery
-            </span>
-            <span className="font-extrabold text-xs sm:text-sm">🌟 Complete 10th Set (All 5 Books)</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => onSendMessage('How do I buy the 10th Complete Full Set of 5 books?')}
-            className="px-3 py-1.5 rounded-lg text-xs font-black bg-white text-blue-900 hover:bg-blue-50 transition-all shrink-0 cursor-pointer shadow-xs"
+        <div className="pt-1">
+          <Link
+            href="/search"
+            className="w-full py-2.5 px-3 bg-[#001B3A] hover:bg-blue-900 text-white rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all shadow-xs text-center"
           >
-            Buy Full Set
-          </button>
+            <BookOpen className="w-3.5 h-3.5 text-amber-400" />
+            <span>Browse Full Bookstore Catalog →</span>
+          </Link>
         </div>
       </div>
     );
