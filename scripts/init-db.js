@@ -455,6 +455,10 @@ async function migrateDatabase(connStr, dbName) {
       DROP TABLE IF EXISTS whatsapp_otps CASCADE;
 
       ALTER TABLE support_messages ADD COLUMN IF NOT EXISTS metadata JSONB;
+      ALTER TABLE support_messages ADD COLUMN IF NOT EXISTS client_message_id VARCHAR(255);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_support_msg_client_id 
+        ON support_messages (conversation_id, client_message_id) 
+        WHERE client_message_id IS NOT NULL;
       ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_address TEXT;
       ALTER TABLE orders ADD COLUMN IF NOT EXISTS packed_at TIMESTAMP;
       ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipped_at TIMESTAMP;

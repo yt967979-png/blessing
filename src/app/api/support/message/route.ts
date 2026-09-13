@@ -36,6 +36,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, typing: true });
     }
 
+    if (!isAdmin) {
+      const { applyRateLimitAsync, clientIp } = await import('@/lib/serverSecurity');
+      const rl = await applyRateLimitAsync(`support-msg:${clientIp(req)}`, 40, 60000);
+      if (!rl.allowed) {
+        return NextResponse.json({ error: 'Too many messages. Please slow down.' }, { status: 429 });
+      }
+    }
+
     if (!text) {
       return NextResponse.json({ error: 'Message text is required' }, { status: 400 });
     }
@@ -54,19 +62,25 @@ export async function POST(req: NextRequest) {
 
     // ── IDOR & RBAC Check
     const sessionToken = req.cookies.get('bpg_support_session')?.value;
-    const isOwner = (conv.session_token && sessionToken && conv.session_token === sessionToken) ||
-                    (user?.userId && conv.customer_id === String(user.userId));
+    const isOwner = (user?.userId && conv.customer_id === String(user.userId)) ||
+                    (!user?.userId && conv.session_token && sessionToken && conv.session_token === sessionToken);
     if (!isAdmin && !isOwner) {
       return NextResponse.json({ error: 'Unauthorized to post messages to this conversation' }, { status: 403 });
     }
 
     const clientMessageId = body.clientMessageId ? String(body.clientMessageId).trim() : null;
     if (clientMessageId) {
-      const existing = await queryDb(`SELECT id, conversation_id, sender_type, sender_name, text, created_at FROM support_messages WHERE id = $1 LIMIT 1`, [clientMessageId]);
+      const existing = await queryDb(
+        `SELECT id, conversation_id, sender_type, sender_name, text, created_at 
+         FROM support_messages 
+         WHERE conversation_id = $1 AND (client_message_id = $2 OR id = $2) 
+         LIMIT 1`,
+        [conversationId, clientMessageId]
+      );
       if (existing.rows.length > 0) {
         return NextResponse.json({
           success: true,
-          messageId: clientMessageId,
+          messageId: existing.rows[0].id,
           senderType: existing.rows[0].sender_type,
           senderName: existing.rows[0].sender_name,
           text: existing.rows[0].text,
@@ -78,13 +92,38 @@ export async function POST(req: NextRequest) {
 
     const senderType: 'ADMIN' | 'CUSTOMER' = isAdmin ? 'ADMIN' : 'CUSTOMER';
     const senderName = isAdmin ? (conv.assigned_admin_name || 'Support Admin') : (conv.customer_name || 'Customer');
-    const msgId = clientMessageId || `msg_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
+    const msgId = `msg_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
 
-    await queryDb(
-      `INSERT INTO support_messages (id, conversation_id, sender_type, sender_name, sender_id, text)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [msgId, conversationId, senderType, senderName, user?.userId || null, sanitizedText]
-    );
+    try {
+      await queryDb(
+        `INSERT INTO support_messages (id, conversation_id, sender_type, sender_name, sender_id, text, client_message_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [msgId, conversationId, senderType, senderName, user?.userId || null, sanitizedText, clientMessageId]
+      );
+    } catch (insertErr: any) {
+      // If unique constraint violation on (conversation_id, client_message_id)
+      if (insertErr?.code === '23505' && clientMessageId) {
+        const existing = await queryDb(
+          `SELECT id, conversation_id, sender_type, sender_name, text, created_at 
+           FROM support_messages 
+           WHERE conversation_id = $1 AND client_message_id = $2 
+           LIMIT 1`,
+          [conversationId, clientMessageId]
+        );
+        if (existing.rows.length > 0) {
+          return NextResponse.json({
+            success: true,
+            messageId: existing.rows[0].id,
+            senderType: existing.rows[0].sender_type,
+            senderName: existing.rows[0].sender_name,
+            text: existing.rows[0].text,
+            createdAt: existing.rows[0].created_at,
+            duplicateIgnored: true,
+          });
+        }
+      }
+      throw insertErr;
+    }
 
     await queryDb(`UPDATE support_conversations SET last_message_at = NOW(), updated_at = NOW() WHERE id = $1`, [conversationId]);
 

@@ -60,12 +60,14 @@ class PostgresEngine {
     return { rowCount: 0, rows: [] };
   }
 
-  // Exact SQL: INSERT INTO support_messages (id, conversation_id, sender_type, sender_name, sender_id, text) VALUES ($1, $2, $3, $4, $5, $6)
-  insertMessage({ id, conversationId, senderType, senderName, senderId, text }) {
-    // Idempotency check: if message with this id already exists, return duplicate
-    const existing = this.messages.find(m => m.id === id);
-    if (existing) {
-      return { duplicate: true, message: existing };
+  // Exact SQL: INSERT INTO support_messages (id, conversation_id, sender_type, sender_name, sender_id, text, client_message_id) VALUES ($1, $2, $3, $4, $5, $6, $7)
+  insertMessage({ id, conversationId, senderType, senderName, senderId, text, clientMessageId }) {
+    // Database unique constraint: UNIQUE(conversation_id, client_message_id)
+    if (clientMessageId) {
+      const existing = this.messages.find(m => m.conversation_id === conversationId && m.client_message_id === clientMessageId);
+      if (existing) {
+        return { duplicate: true, message: existing };
+      }
     }
 
     const newMsg = {
@@ -75,6 +77,7 @@ class PostgresEngine {
       sender_name: senderName,
       sender_id: senderId,
       text,
+      client_message_id: clientMessageId || null,
       created_at: new Date().toISOString()
     };
     this.messages.push(newMsg);
@@ -152,19 +155,20 @@ class PostgresEngine {
       return { status: 403, error: 'Unauthorized to post messages to this conversation' };
     }
 
-    const msgId = clientMessageId || `msg_${Date.now()}`;
+    const msgId = `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const result = this.insertMessage({
       id: msgId,
       conversationId,
       senderType: isAdmin ? 'ADMIN' : 'CUSTOMER',
       senderName: isAdmin ? 'Admin' : conv.customer_name || 'Customer',
       senderId: user?.userId || null,
-      text: sanitizedText
+      text: sanitizedText,
+      clientMessageId
     });
 
     return {
       status: 200,
-      messageId: msgId,
+      messageId: result.duplicate ? result.message.id : msgId,
       duplicateIgnored: result.duplicate,
       text: sanitizedText
     };
@@ -241,9 +245,10 @@ async function runAdversarialTestSuite() {
     assert.strictEqual(post1.duplicateIgnored, false);
     assert.strictEqual(post2.status, 200);
     assert.strictEqual(post2.duplicateIgnored, true, 'Second submission must be flagged as duplicate ignored');
+    assert.strictEqual(post1.messageId, post2.messageId, 'Both calls return the exact same server-generated message identity');
 
-    const totalInConv = db.messages.filter(m => m.id === clientMsgId);
-    assert.strictEqual(totalInConv.length, 1, 'Exactly ONE message persisted in database');
+    const totalInConv = db.messages.filter(m => m.client_message_id === clientMsgId || m.id === post1.messageId);
+    assert.strictEqual(totalInConv.length, 1, 'Exactly ONE message persisted in database with unique constraint');
   });
 
   // ─────────────────────────────────────────────────────────────

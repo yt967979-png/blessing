@@ -13,12 +13,48 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
     const conversationId = String(body.conversationId || '').trim();
-    const rating = Math.min(5, Math.max(1, parseInt(body.rating, 10) || 5));
-    const comment = String(body.comment || '').slice(0, 1000).trim();
-    const tags = (Array.isArray(body.tags) ? body.tags.join(', ') : String(body.tags || '')).slice(0, 500).trim();
+    const rawRating = parseInt(body.rating, 10);
+    if (isNaN(rawRating) || rawRating < 1 || rawRating > 5) {
+      return NextResponse.json({ error: 'Rating must be an integer between 1 and 5' }, { status: 400 });
+    }
+    const rating = rawRating;
+
+    // Allowed tags whitelist
+    const ALLOWED_FEEDBACK_TAGS = new Set([
+      'Quick Solution',
+      'Friendly Staff',
+      'Order Tracked',
+      'Helpful Details',
+      'Accurate Tracking',
+      'Fast Dispatch',
+      'Could Be Better',
+      'Slow Response',
+      'Pricing Query'
+    ]);
+
+    const inputTags: string[] = Array.isArray(body.tags)
+      ? body.tags
+      : typeof body.tags === 'string'
+        ? body.tags.split(',').map((t: string) => t.trim())
+        : [];
+
+    const validatedTags = inputTags
+      .map((t: string) => t.replace(/^[^\w\s]+/, '').trim()) // strip decorative emojis
+      .filter((t: string) => t && Array.from(ALLOWED_FEEDBACK_TAGS).some(a => a.toLowerCase() === t.toLowerCase()))
+      .slice(0, 5)
+      .join(', ');
+
+    const comment = String(body.comment || '').replace(/\0/g, '').slice(0, 1000).trim();
 
     if (!conversationId) {
       return NextResponse.json({ error: 'conversationId is required' }, { status: 400 });
+    }
+
+    // Rate limiting: 10 feedback attempts per minute per IP
+    const { applyRateLimitAsync, clientIp } = await import('@/lib/serverSecurity');
+    const rl = await applyRateLimitAsync(`feedback:${clientIp(req)}`, 10, 60000);
+    if (!rl.allowed) {
+      return NextResponse.json({ error: 'Too many feedback requests. Please wait a moment.' }, { status: 429 });
     }
 
     const cRes = await queryDb(`SELECT * FROM support_conversations WHERE id = $1 LIMIT 1`, [conversationId]);
@@ -53,7 +89,7 @@ export async function POST(req: NextRequest) {
         conv.assigned_admin_id || (conv.status === 'BOT' ? 'ai_bot' : null),
         conv.assigned_admin_name || (conv.status === 'BOT' ? 'Blessing AI Assistant' : 'Chennai Support Team'),
         rating,
-        tags,
+        validatedTags,
         comment,
       ]
     );
@@ -83,7 +119,7 @@ export async function POST(req: NextRequest) {
       type: 'CHAT_RESOLVED',
       conversationId,
       status: 'RESOLVED',
-      data: { rating, tags, comment },
+      data: { rating, tags: validatedTags, comment },
       timestamp: new Date().toISOString(),
     });
 

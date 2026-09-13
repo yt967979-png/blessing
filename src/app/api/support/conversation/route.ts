@@ -93,13 +93,26 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ conversation: null, messages: [], feedbackSubmitted: false });
     }
 
-    const msgsRes = await queryDb(
-      `SELECT id, conversation_id, sender_type, sender_name, sender_id, text, metadata, is_read, read_at, created_at 
-       FROM support_messages 
-       WHERE conversation_id = $1 
-       ORDER BY created_at ASC`,
-      [conv.id]
-    );
+    const afterId = req.nextUrl.searchParams.get('afterId');
+    let msgsRes: any;
+    if (afterId) {
+      msgsRes = await queryDb(
+        `SELECT id, conversation_id, sender_type, sender_name, sender_id, text, metadata, is_read, read_at, created_at 
+         FROM support_messages 
+         WHERE conversation_id = $1 
+           AND created_at > COALESCE((SELECT created_at FROM support_messages WHERE id = $2), '1970-01-01'::timestamp)
+         ORDER BY created_at ASC`,
+        [conv.id, afterId]
+      );
+    } else {
+      msgsRes = await queryDb(
+        `SELECT id, conversation_id, sender_type, sender_name, sender_id, text, metadata, is_read, read_at, created_at 
+         FROM support_messages 
+         WHERE conversation_id = $1 
+         ORDER BY created_at ASC`,
+        [conv.id]
+      );
+    }
 
     const formattedMessages = msgsRes.rows.map((r: any) => ({
       id: r.id,
@@ -145,7 +158,19 @@ export async function POST(req: NextRequest) {
 
     const { sessionToken, isNew } = getOrCreateSessionToken(req);
     const user = await getAuthenticatedUser(req).catch(() => null);
-    const customerId = user?.userId || String(body.customerId || '').trim() || null;
+    const isAdmin = Boolean(user && (user.role === 'admin' || user.role === 'super_admin'));
+
+    // Rate limiting: 40 requests/min per IP for support conversation interactions
+    if (!isAdmin) {
+      const { applyRateLimitAsync, clientIp } = await import('@/lib/serverSecurity');
+      const rl = await applyRateLimitAsync(`support-conv:${clientIp(req)}`, 40, 60000);
+      if (!rl.allowed) {
+        return NextResponse.json({ error: 'Too many requests. Please slow down.' }, { status: 429 });
+      }
+    }
+
+    // Authenticated user ID is strictly taken from verified session, never client payload
+    const customerId = user?.userId ? String(user.userId) : null;
 
     let customerName = String(body.name || '').trim();
     let customerPhone = String(body.phone || '').trim();
@@ -156,12 +181,8 @@ export async function POST(req: NextRequest) {
         const uRes = await queryDb(`SELECT id, name, phone, email FROM users WHERE id = $1 LIMIT 1`, [customerId]);
         if (uRes.rows.length > 0) {
           const uRow = uRes.rows[0];
-          if (!customerName || customerName === 'Student/Parent' || customerName === 'Customer' || customerName === 'You') {
-            customerName = uRow.name || customerName;
-          }
-          if (!customerPhone) {
-            customerPhone = uRow.phone || customerPhone;
-          }
+          customerName = uRow.name || customerName;
+          customerPhone = uRow.phone || customerPhone;
           customerEmail = uRow.email || '';
         }
       } catch (_) {}
@@ -535,26 +556,55 @@ export async function POST(req: NextRequest) {
     const clientMessageId = body.clientMessageId ? String(body.clientMessageId).trim() : null;
 
     if (clientMessageId) {
-      const existing = await queryDb(`SELECT id, conversation_id, text, created_at FROM support_messages WHERE id = $1 LIMIT 1`, [clientMessageId]);
+      const existing = await queryDb(
+        `SELECT id, conversation_id, text, created_at 
+         FROM support_messages 
+         WHERE conversation_id = $1 AND (client_message_id = $2 OR id = $2) 
+         LIMIT 1`,
+        [conv.id, clientMessageId]
+      );
       if (existing.rows.length > 0) {
         return NextResponse.json({
           success: true,
           conversationId: conv.id,
           conversation: conv,
-          messageId: clientMessageId,
+          messageId: existing.rows[0].id,
           status: conv.status,
           duplicateIgnored: true,
         });
       }
     }
 
-    // Insert Customer Message
-    const custMsgId = clientMessageId || `msg_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
-    await queryDb(
-      `INSERT INTO support_messages (id, conversation_id, sender_type, sender_name, sender_id, text)
-       VALUES ($1, $2, 'CUSTOMER', $3, $4, $5)`,
-      [custMsgId, conv.id, customerName, user?.userId || null, sanitizedText]
-    );
+    // Insert Customer Message with Server-Generated ID and client_message_id for database-enforced idempotency
+    const custMsgId = `msg_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+    try {
+      await queryDb(
+        `INSERT INTO support_messages (id, conversation_id, sender_type, sender_name, sender_id, text, client_message_id)
+         VALUES ($1, $2, 'CUSTOMER', $3, $4, $5, $6)`,
+        [custMsgId, conv.id, customerName, user?.userId || null, sanitizedText, clientMessageId]
+      );
+    } catch (insertErr: any) {
+      if (insertErr?.code === '23505' && clientMessageId) {
+        const existing = await queryDb(
+          `SELECT id, conversation_id, text, created_at 
+           FROM support_messages 
+           WHERE conversation_id = $1 AND client_message_id = $2 
+           LIMIT 1`,
+          [conv.id, clientMessageId]
+        );
+        if (existing.rows.length > 0) {
+          return NextResponse.json({
+            success: true,
+            conversationId: conv.id,
+            conversation: conv,
+            messageId: existing.rows[0].id,
+            status: conv.status,
+            duplicateIgnored: true,
+          });
+        }
+      }
+      throw insertErr;
+    }
 
     await queryDb(`UPDATE support_conversations SET last_message_at = NOW(), updated_at = NOW() WHERE id = $1`, [conv.id]);
 

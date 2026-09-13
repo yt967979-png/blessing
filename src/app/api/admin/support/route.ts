@@ -26,16 +26,40 @@ export async function GET(req: NextRequest) {
       let pastTicketsCount = 0;
       let pastFeedback: any[] = [];
 
-      if (orderIdParam) {
-        const oRes = await queryDb(
-          `SELECT * FROM orders WHERE id = $1 OR order_number = $1 LIMIT 1`,
-          [orderIdParam]
-        );
-        order = oRes.rows[0];
+      // If conversationId is provided, verify against the verified conversation record
+      let verifiedConv: any = null;
+      if (conversationId) {
+        const cCheck = await queryDb(`SELECT * FROM support_conversations WHERE id = $1 LIMIT 1`, [conversationId]);
+        verifiedConv = cCheck.rows[0] || null;
       }
 
-      if (!order && phoneParam) {
-        const cleanPhone = phoneParam.replace(/\D/g, '').slice(-10);
+      // If conversation specifies an order_id, that takes strict precedence
+      const targetOrderId = verifiedConv?.order_id || orderIdParam;
+      const targetPhone = verifiedConv?.customer_phone || phoneParam;
+
+      if (targetOrderId) {
+        const oRes = await queryDb(
+          `SELECT * FROM orders WHERE id = $1 OR order_number = $1 LIMIT 1`,
+          [targetOrderId]
+        );
+        const candidateOrder = oRes.rows[0];
+        // Ensure candidate order belongs to the customer phone or user id
+        if (candidateOrder) {
+          if (verifiedConv) {
+            const matchesUser = verifiedConv.customer_id && candidateOrder.user_id === verifiedConv.customer_id;
+            const cleanConvPhone = (verifiedConv.customer_phone || '').replace(/\D/g, '').slice(-10);
+            const matchesPhone = cleanConvPhone && candidateOrder.shipping_address && candidateOrder.shipping_address.includes(cleanConvPhone);
+            if (matchesUser || matchesPhone || verifiedConv.order_id === targetOrderId) {
+              order = candidateOrder;
+            }
+          } else {
+            order = candidateOrder;
+          }
+        }
+      }
+
+      if (!order && targetPhone) {
+        const cleanPhone = targetPhone.replace(/\D/g, '').slice(-10);
         if (cleanPhone.length >= 10) {
           const oRes = await queryDb(
             `SELECT o.* FROM orders o
@@ -150,13 +174,27 @@ export async function GET(req: NextRequest) {
         WHERE status = 'WAITING_ADMIN'
           AND updated_at < NOW() - INTERVAL '15 minutes'
       `);
-      // Auto-requeue abandoned ACTIVE chats where admin became inactive
-      await queryDb(`
+      // Auto-requeue abandoned ACTIVE chats where admin became inactive (>15m)
+      const requeuedRes = await queryDb(`
         UPDATE support_conversations
-        SET status = 'WAITING_ADMIN', updated_at = NOW()
+        SET status = 'WAITING_ADMIN', assigned_admin_id = NULL, assigned_admin_name = NULL, updated_at = NOW()
         WHERE status = 'ACTIVE'
           AND last_message_at < NOW() - INTERVAL '15 minutes'
+        RETURNING id, customer_name
       `);
+      if (requeuedRes.rowCount && requeuedRes.rowCount > 0) {
+        for (const row of requeuedRes.rows) {
+          notifySupportEvent({
+            type: 'SUPPORT_REQUESTED',
+            conversationId: row.id,
+            senderType: 'SYSTEM',
+            senderName: row.customer_name || 'Customer',
+            text: 'Ticket re-queued due to staff inactivity',
+            status: 'WAITING_ADMIN',
+            timestamp: new Date().toISOString(),
+          }).catch(() => {});
+        }
+      }
     } catch (_) {}
 
     const waitingRes = await queryDb(

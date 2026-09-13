@@ -310,14 +310,16 @@ export const LiveSupportSection: React.FC<LiveSupportSectionProps> = ({
     setSendingReply(true);
 
     try {
-      const res = await fetch('/api/support/message', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders(user) },
-        body: JSON.stringify({
-          conversationId: selectedConv.id,
-          text,
-        }),
-      });
+        const clientMessageId = `admin_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+        const res = await fetch('/api/support/message', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authHeaders(user) },
+          body: JSON.stringify({
+            conversationId: selectedConv.id,
+            text,
+            clientMessageId,
+          }),
+        });
 
       if (res.ok) {
         const data = await res.json();

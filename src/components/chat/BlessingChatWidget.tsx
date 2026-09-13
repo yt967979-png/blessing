@@ -189,11 +189,43 @@ export const BlessingChatWidget: React.FC = () => {
       } catch (_) {}
     };
 
+    let reconnectTimer: NodeJS.Timeout | null = null;
+    let reconnectDelay = 1000;
+
+    es.onerror = () => {
+      es.close();
+      // Incremental catch-up after disconnection
+      if (!reconnectTimer) {
+        reconnectTimer = setTimeout(async () => {
+          try {
+            const lastMsg = messages[messages.length - 1];
+            const afterParam = lastMsg?.id ? `&afterId=${encodeURIComponent(lastMsg.id)}` : '';
+            const res = await fetch(`/api/support/conversation?id=${encodeURIComponent(conversation.id)}${afterParam}`, {
+              headers: authHeaders(user),
+            });
+            if (res.ok) {
+              const data = await res.json();
+              if (Array.isArray(data.messages) && data.messages.length > 0) {
+                setMessages((prev) => {
+                  const existingIds = new Set(prev.map((m) => m.id));
+                  const newItems = data.messages.filter((m: any) => !existingIds.has(m.id));
+                  return newItems.length > 0 ? [...prev, ...newItems] : prev;
+                });
+              }
+            }
+          } catch (_) {}
+          reconnectDelay = Math.min(reconnectDelay * 1.5, 10000);
+          reconnectTimer = null;
+        }, reconnectDelay);
+      }
+    };
+
     return () => {
+      if (reconnectTimer) clearTimeout(reconnectTimer);
       es.close();
       eventSourceRef.current = null;
     };
-  }, [isStorefront, conversation?.id, isOpen]);
+  }, [isStorefront, conversation?.id, isOpen, messages, user]);
 
   // Send message handler
   const handleSendMessage = async (textToSend?: string) => {
