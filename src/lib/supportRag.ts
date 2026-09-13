@@ -117,6 +117,16 @@ export async function generateSupportRagAnswer(
 ): Promise<RagResponse> {
   const q = userPrompt.trim().toLowerCase();
 
+  // ── 0. Prompt Injection & Internal Data Exfiltration Defense ─────────────────
+  const injectionPattern = /\b(ignore\s*(previous|all|above)\s*instructions|system\s*prompt|database\s*(password|url|secret|credentials)|admin\s*password|drop\s*table|select\s+\*\s+from|(other|another)\s*customers?|all\s*orders|previous\s*customers?|secret\s*key|api\s*key)\b/i;
+  if (injectionPattern.test(q)) {
+    return {
+      answer: 'I am the Blessing Power Guide Customer Support assistant. I can only assist with verified bookstore inquiries, order tracking for your verified account, and store policies.',
+      suggestions: ['🚚 Track My Order', '📚 Browse Books Catalog', '👨‍💼 Talk to Admin'],
+      shouldEscalate: false,
+    };
+  }
+
   // ── Pre-fetch logged-in user's account orders ───────────────────────────────
   let accountOrders: any[] = [];
   let userAccountName = customerContext?.userName || '';
@@ -346,6 +356,35 @@ export async function generateSupportRagAnswer(
     }
 
     if (orderRow) {
+      // ── Strict Ownership Verification ──
+      const isAuthUserOrder = Boolean(customerId && orderRow.user_id && String(orderRow.user_id) === String(customerId));
+      const cleanPhone = (phoneRef || '').replace(/\D/g, '').slice(-10);
+      const orderPhone = (orderRow.customer_phone || '').replace(/\D/g, '').slice(-10);
+      const isPhoneMatch = Boolean(
+        cleanPhone && (
+          (orderPhone && orderPhone === cleanPhone) ||
+          (orderRow.shipping_address && String(orderRow.shipping_address).includes(cleanPhone))
+        )
+      );
+
+      // If user is logged in and order belongs to someone else: strictly block!
+      if (customerId && orderRow.user_id && String(orderRow.user_id) !== String(customerId) && !isPhoneMatch) {
+        return {
+          answer: `🔒 **Privacy Protection Notice**:\n\nOrder **#${orderRef}** is linked to a different customer account. To protect customer privacy, details can only be viewed by the verified account that placed it.\n\nPlease log in with the correct account or verify the order with our support team.`,
+          suggestions: ['🚚 Track My Own Order', '👨‍💼 Talk to Admin', '📞 Call Helpline (+91 98404 18228)'],
+          shouldEscalate: false,
+        };
+      }
+
+      // If anonymous / guest user provides an order ID without matching phone verification: strictly require verification!
+      if (!isAuthUserOrder && !isPhoneMatch) {
+        return {
+          answer: `🔒 **Verification Required**:\n\nTo view live delivery and tracking details for order **#${orderRef}**, please provide the **10-digit mobile number** used during checkout to verify ownership.\n\n*(Example: "Where is order #${orderRef} phone 9840418228")*`,
+          suggestions: ['👨‍💼 Talk to Admin', '📞 Call Office (+91 98404 18228)'],
+          shouldEscalate: false,
+        };
+      }
+
       const orderCode = orderRow.order_number || orderRow.id;
       const statusLabel = fulfillmentStatus(orderRow);
       const isCancelled = isRecordCancelled(orderRow);
