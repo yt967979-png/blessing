@@ -176,8 +176,8 @@ export async function generateSupportRagAnswer(
       };
     }
     return {
-      answer: `${greeting}Welcome to **Blessing Power Guide Support**! 🤖\n\nI can help you with:\n1. 🚚 **Live Order Tracking** (ST Courier docket & delivery status)\n2. 📚 **10th Class Guides & Prices** (Tamil, English, Maths, Science & Social)\n3. 📦 **Shipping & Free Delivery** (5+ books = free shipping!)\n4. 🛡️ **100% Free Replacement** for damaged or misprinted books\n5. 👨‍💼 **Connect with Admin** for personal assistance\n\nHow can I help you today?`,
-      suggestions: ['🚚 Track My Order', '📚 10th Guides & Prices', '📦 Shipping & Free Delivery', '🔄 Damaged Book Replacement', '👨‍💼 Talk to Admin'],
+      answer: `${greeting}Welcome to **Blessing Power Guide Support**! 🤖\n\nI can help you with:\n1. 🚚 **Live Order Tracking** (ST Courier docket & delivery status)\n2. 📚 **Official Guides & Prices** (Check live editions & stock)\n3. 📦 **Shipping & Free Delivery** (5+ books = free shipping!)\n4. 🛡️ **100% Free Replacement** for damaged or misprinted books\n5. 👨‍💼 **Connect with Admin** for personal assistance\n\nHow can I help you today?`,
+      suggestions: ['🚚 Track My Order', '📚 Guides & Live Prices', '📦 Shipping & Free Delivery', '🔄 Damaged Book Replacement', '👨‍💼 Talk to Admin'],
       shouldEscalate: false,
     };
   }
@@ -612,28 +612,36 @@ export async function generateSupportRagAnswer(
     let sampleBooks: any[] = [];
     try {
       const res = await queryDb(
-        `SELECT id, title, standard, subject, price, discount_price, stock, badge, sample_pdf_url 
+        `SELECT id, title, slug, subject, price, discount_price, stock, badge, sample_pdf_url 
          FROM books 
          WHERE status = 'published' 
          ORDER BY id ASC 
-         LIMIT 8`
+         LIMIT 10`
       );
-      sampleBooks = res.rows;
-    } catch (_) {}
+      sampleBooks = res.rows || [];
+    } catch (err) {
+      console.error('[supportRag] Failed to query live books:', err);
+    }
 
-    const bookListText = sampleBooks.length > 0
-      ? sampleBooks.map((b) => {
-          const mrp = Number(b.price || 0);
-          const sale = Number(b.discount_price || 0);
-          const effective = sale > 0 && sale < mrp ? sale : mrp;
-          const stockLabel = b.stock > 0 ? '✓ Available in Stock' : '⚠️ Low Stock';
-          return `• **${b.title}**: ₹${effective} (${stockLabel})`;
-        }).join('\n')
-      : '• **10th Tamil Guide** — ₹260\n• **10th English Guide** — ₹260\n• **10th Mathematics Guide** — ₹280\n• **10th Science Guide** — ₹280\n• **10th Social Science Guide** — ₹280\n• **🌟 10th All-in-One Full Set Combo (5 Books)** — Unlocks Free Delivery!';
+    let bookListText = '';
+    if (sampleBooks.length > 0) {
+      bookListText = sampleBooks.map((b) => {
+        const mrp = Number(b.price || 0);
+        const sale = Number(b.discount_price || 0);
+        const effective = sale > 0 && sale < mrp ? sale : mrp;
+        const stockLabel = b.stock > 0 ? `✓ In Stock (${b.stock} copies)` : '⚠️ Out of Stock';
+        const priceDisplay = sale > 0 && sale < mrp
+          ? `**₹${effective}** ~₹${mrp}~ (${Math.round(((mrp - sale) / mrp) * 100)}% OFF)`
+          : `**₹${effective}**`;
+        return `• **${b.title}** — ${priceDisplay} — ${stockLabel}`;
+      }).join('\n');
+    } else {
+      bookListText = '• Guides currently being updated. Visit our [Store Catalog](/products) to view all published editions!';
+    }
 
     return {
-      answer: `📚 **Class 10 Guides & Prices**:\n\n${bookListText}\n\n• **Minimum Order**: 4 books (flat ₹150 courier fee)\n• **Free Delivery**: 5 or more books qualify for **100% Free Doorstep Delivery** across Tamil Nadu!\n• **Sample PDFs**: Free sample PDFs can be previewed directly on each book's page.`,
-      suggestions: ['🛒 View 10th Full Set (5 Books - Free Delivery)', '🚚 Check Delivery Timelines', '👨‍💼 Talk to Admin'],
+      answer: `📚 **Official Guides Available in Store**:\n\n${bookListText}\n\n• **Minimum Order**: 4 books (flat ₹150 courier fee)\n• **Free Delivery**: 5 or more books qualify for **100% Free Doorstep Delivery** across Tamil Nadu!\n• **Sample PDFs**: Free sample PDFs can be previewed directly on each book's page.`,
+      suggestions: ['📚 Browse Books Catalog', '🚚 Check Delivery Timelines', '👨‍💼 Talk to Admin'],
       shouldEscalate: false,
       cardType: 'books',
       cardData: sampleBooks,
@@ -691,8 +699,8 @@ export async function generateSupportRagAnswer(
     q.includes('guide details')
   ) {
     return {
-      answer: `📚 **Tamil Nadu Class 10 Samacheer Kalvi Guides**:\n\nBlessing Power Guide offers comprehensive guides for Class 10 SSLC subjects (Tamil, English, Mathematics, Science, and Social Science).\n\nYou can preview and download sample chapter PDFs directly on each book page before ordering.`,
-      suggestions: ['📚 View 10th Full Set (5 Books - Free Delivery)', '📄 Download Sample PDF', '👨‍💼 Talk to Admin'],
+      answer: `📚 **Tamil Nadu Samacheer Kalvi Guides**:\n\nBlessing Power Guide publishes high-scoring guides with step-by-step solutions and model question papers.\n\nYou can preview and download sample chapter PDFs directly on each book page before ordering.`,
+      suggestions: ['📚 Browse Books Catalog', '📄 Download Sample PDF', '👨‍💼 Talk to Admin'],
       shouldEscalate: false,
     };
   }
