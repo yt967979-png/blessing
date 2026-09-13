@@ -193,11 +193,34 @@ export async function generateSupportRagAnswer(
   }
 
   // ── 2. Explicit Human Escalation Request ────────────────────────────────────
-  const humanEscalatePattern = /\b(admin|human|agent|person|manager|representative|customer care|call me|speak with someone|connect admin|talk to an? admin|talk to support|need real person|pesa mudiyuma|staff)\b/i;
-  if (humanEscalatePattern.test(q)) {
+  const isExplicitAdminRequest =
+    q === 'talk to admin' ||
+    q === 'connect to admin' ||
+    q === 'connect to admin now' ||
+    q === 'connect with admin' ||
+    q === 'chat with admin' ||
+    q === 'speak to admin' ||
+    q === 'speak with admin' ||
+    q === 'call admin' ||
+    q === 'human agent' ||
+    q === 'talk to human' ||
+    q === 'connect to human' ||
+    q === 'live agent' ||
+    q === 'real person' ||
+    q === 'speak with representative' ||
+    q === 'talk to support' ||
+    q === 'i want to talk to admin' ||
+    q === 'i want to speak to admin' ||
+    q === 'can i talk to admin' ||
+    q === 'can i talk to an admin' ||
+    q === 'admin' ||
+    q === 'admin please' ||
+    /\b(connect\s*(to|with)?\s*admin|talk\s*to\s*(an?\s*)?(admin|human|agent|person|staff|representative)|chat\s*with\s*(an?\s*)?(admin|human|agent|staff)|speak\s*(with|to)\s*(an?\s*)?(admin|human|agent|person|staff))\b/i.test(q);
+
+  if (isExplicitAdminRequest) {
     return {
       answer: 'I am connecting you directly with our Chennai head office support team right now. An administrator has been alerted with an audible chime and will accept your chat momentarily.\n\nOur team is available **Monday to Saturday, 9:00 AM – 8:00 PM IST**.',
-      suggestions: ['👨‍💼 Connect to Admin Now', '🚚 Track My Order', '📚 Browse 10th Guides', '📞 Call Office (+91 98404 18228)'],
+      suggestions: ['🚚 Track My Order', '📚 Browse 10th Guides', '📞 Call Office (+91 98404 18228)'],
       shouldEscalate: true,
       cardType: 'contact',
     };
@@ -484,8 +507,8 @@ export async function generateSupportRagAnswer(
   ) {
     return {
       answer: `🛡️ **100% Free Replacement Guarantee**:\n\n${STORE_POLICIES.returnPolicy}\n\nIf your parcel arrived damaged in transit or has any printing defect, please click **Connect to Admin Now** below or send a photo of the parcel/book to our WhatsApp helpline at **+91 98404 18228**. Our Chennai dispatch office will send a fresh copy immediately.`,
-      suggestions: ['👨‍💼 Connect to Admin Now', '📞 Call Helpline (+91 98404 18228)', '💬 WhatsApp Support', '🚚 Track Order'],
-      shouldEscalate: true,
+      suggestions: ['👨‍💼 Talk to Admin', '📞 Call Helpline (+91 98404 18228)', '💬 WhatsApp Support', '🚚 Track Order'],
+      shouldEscalate: false,
       cardType: 'contact',
     };
   }
@@ -506,8 +529,8 @@ export async function generateSupportRagAnswer(
   ) {
     return {
       answer: `✏️ **Update Delivery Address or Mobile Number**:\n\nIf your parcel has not yet been scanned and picked up by ST Courier Express, our team can update your shipping label immediately.\n\nClick **Connect to Admin Now** so our warehouse staff can update your delivery phone number or address before dispatch.`,
-      suggestions: ['👨‍💼 Connect to Admin Now', '📞 Call Office Directly (+91 98404 18228)', '💬 WhatsApp Helpline', '🚚 Track Order'],
-      shouldEscalate: true,
+      suggestions: ['👨‍💼 Talk to Admin', '📞 Call Office Directly (+91 98404 18228)', '💬 WhatsApp Helpline', '🚚 Track Order'],
+      shouldEscalate: false,
       cardType: 'contact',
     };
   }
@@ -522,8 +545,8 @@ export async function generateSupportRagAnswer(
   ) {
     return {
       answer: `❌ **Order Cancellation & Refund Process**:\n\n• **Before Dispatch**: You can cancel an order before it has been dispatched from our Chennai packaging hub.\n• **Refund Processing**: Once cancelled, 100% of your pre-paid amount is automatically refunded via Razorpay back to your original payment method (Bank Account, UPI, or Card) within **5 to 7 business days**.\n• **After Dispatch**: Once an official ST Courier AWB docket has been scanned, the package is in transit with the courier and cannot be cancelled, but is fully covered under our Free Replacement Guarantee.`,
-      suggestions: ['👨‍💼 Request Cancellation with Admin', '🚚 Track Order', '📞 Call Office'],
-      shouldEscalate: true,
+      suggestions: ['👨‍💼 Talk to Admin', '🚚 Track Order', '📞 Call Office'],
+      shouldEscalate: false,
     };
   }
 
@@ -655,8 +678,8 @@ export async function generateSupportRagAnswer(
   ) {
     return {
       answer: `🏫 **School & Institutional Bulk Orders**:\n\nWe provide special institutional pricing, teacher evaluation copies, and custom courier logistics for schools, tuition centers, and educators ordering **20 or more books**.\n\nPlease connect with our administration team directly to receive an official school quotation and invoice.`,
-      suggestions: ['👨‍💼 Request School Bulk Quote', '📞 Call Office (+91 98404 18228)', '💬 WhatsApp Admin'],
-      shouldEscalate: true,
+      suggestions: ['👨‍💼 Talk to Admin', '📞 Call Office (+91 98404 18228)', '💬 WhatsApp Admin'],
+      shouldEscalate: false,
     };
   }
 
@@ -784,8 +807,8 @@ export async function generateSupportRagAnswer(
   ) {
     return {
       answer: `📱 **Order Confirmation SMS & Updates**:\n\n• **Instant SMS**: As soon as your Razorpay payment completes, an automated SMS confirmation is sent to your mobile number.\n• **Didn't receive SMS?**: Check if DND (Do Not Disturb) is active on your phone number, or check the **Profile > Orders** page on our website.\n• **Docket SMS**: A second SMS with your ST Courier live tracking docket is sent as soon as your parcel is dispatched from Chennai!`,
-      suggestions: ['🚚 Track My Order', '👨‍💼 Confirm Order with Admin', '📞 Call Helpline (+91 98404 18228)'],
-      shouldEscalate: true,
+      suggestions: ['🚚 Track My Order', '👨‍💼 Talk to Admin', '📞 Call Helpline (+91 98404 18228)'],
+      shouldEscalate: false,
     };
   }
 
