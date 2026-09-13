@@ -337,9 +337,9 @@ function HelpCenterContent() {
     setInputText('');
     setSending(true);
 
-    const tempId = `temp-${Date.now()}`;
+    const clientMessageId = `msg_c_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
     const optimisticMsg: Message = {
-      id: tempId,
+      id: clientMessageId,
       sender_type: 'CUSTOMER',
       sender_name: user?.name || 'You',
       text,
@@ -357,6 +357,7 @@ function HelpCenterContent() {
         },
         body: JSON.stringify({
           conversationId: conversation?.id || undefined,
+          clientMessageId,
           action: isEscalate ? 'escalate_human' : undefined,
           text,
           name: user?.name || 'Customer',

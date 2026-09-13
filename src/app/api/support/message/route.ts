@@ -40,20 +40,50 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Message text is required' }, { status: 400 });
     }
 
+    if (text.length > 2000) {
+      return NextResponse.json({ error: 'Message text exceeds maximum limit of 2000 characters' }, { status: 400 });
+    }
+
+    const sanitizedText = text.replace(/\0/g, '');
+
     const cRes = await queryDb(`SELECT * FROM support_conversations WHERE id = $1 LIMIT 1`, [conversationId]);
     const conv = cRes.rows[0];
     if (!conv) {
       return NextResponse.json({ error: 'Conversation not found' }, { status: 404 });
     }
 
+    // ── IDOR & RBAC Check
+    const sessionToken = req.cookies.get('bpg_support_session')?.value;
+    const isOwner = (conv.session_token && sessionToken && conv.session_token === sessionToken) ||
+                    (user?.userId && conv.customer_id === String(user.userId));
+    if (!isAdmin && !isOwner) {
+      return NextResponse.json({ error: 'Unauthorized to post messages to this conversation' }, { status: 403 });
+    }
+
+    const clientMessageId = body.clientMessageId ? String(body.clientMessageId).trim() : null;
+    if (clientMessageId) {
+      const existing = await queryDb(`SELECT id, conversation_id, sender_type, sender_name, text, created_at FROM support_messages WHERE id = $1 LIMIT 1`, [clientMessageId]);
+      if (existing.rows.length > 0) {
+        return NextResponse.json({
+          success: true,
+          messageId: clientMessageId,
+          senderType: existing.rows[0].sender_type,
+          senderName: existing.rows[0].sender_name,
+          text: existing.rows[0].text,
+          createdAt: existing.rows[0].created_at,
+          duplicateIgnored: true,
+        });
+      }
+    }
+
     const senderType: 'ADMIN' | 'CUSTOMER' = isAdmin ? 'ADMIN' : 'CUSTOMER';
     const senderName = isAdmin ? (conv.assigned_admin_name || 'Support Admin') : (conv.customer_name || 'Customer');
-    const msgId = `msg_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
+    const msgId = clientMessageId || `msg_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
 
     await queryDb(
       `INSERT INTO support_messages (id, conversation_id, sender_type, sender_name, sender_id, text)
        VALUES ($1, $2, $3, $4, $5, $6)`,
-      [msgId, conversationId, senderType, senderName, user?.userId || null, text]
+      [msgId, conversationId, senderType, senderName, user?.userId || null, sanitizedText]
     );
 
     await queryDb(`UPDATE support_conversations SET last_message_at = NOW(), updated_at = NOW() WHERE id = $1`, [conversationId]);
@@ -63,7 +93,7 @@ export async function POST(req: NextRequest) {
       conversationId,
       senderType,
       senderName,
-      text,
+      text: sanitizedText,
       timestamp: new Date().toISOString(),
     };
 

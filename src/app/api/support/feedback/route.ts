@@ -14,8 +14,8 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const conversationId = String(body.conversationId || '').trim();
     const rating = Math.min(5, Math.max(1, parseInt(body.rating, 10) || 5));
-    const tags = Array.isArray(body.tags) ? body.tags.join(', ') : String(body.tags || '').trim();
-    const comment = String(body.comment || '').trim();
+    const comment = String(body.comment || '').slice(0, 1000).trim();
+    const tags = (Array.isArray(body.tags) ? body.tags.join(', ') : String(body.tags || '')).slice(0, 500).trim();
 
     if (!conversationId) {
       return NextResponse.json({ error: 'conversationId is required' }, { status: 400 });
@@ -25,6 +25,17 @@ export async function POST(req: NextRequest) {
     const conv = cRes.rows[0];
     if (!conv) {
       return NextResponse.json({ error: 'Conversation not found' }, { status: 404 });
+    }
+
+    // ── IDOR & Ownership Check
+    const { getAuthenticatedUser } = await import('@/lib/serverSecurity');
+    const user = await getAuthenticatedUser(req).catch(() => null);
+    const sessionToken = req.cookies.get('bpg_support_session')?.value;
+    const isAdmin = Boolean(user && (user.role === 'admin' || user.role === 'super_admin'));
+    const isOwner = (conv.session_token && sessionToken && conv.session_token === sessionToken) ||
+                    (user?.userId && conv.customer_id === String(user.userId));
+    if (!isAdmin && !isOwner) {
+      return NextResponse.json({ error: 'Unauthorized to submit feedback for this conversation' }, { status: 403 });
     }
 
     const feedbackId = `fb_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
@@ -54,13 +65,19 @@ export async function POST(req: NextRequest) {
       [conversationId]
     );
 
-    // Insert system notice into chat
-    const sysMsgId = `msg_${Date.now()}_sys`;
-    await queryDb(
-      `INSERT INTO support_messages (id, conversation_id, sender_type, sender_name, text)
-       VALUES ($1, $2, 'SYSTEM', 'System', $3)`,
-      [sysMsgId, conversationId, `⭐ Customer submitted feedback (${rating}/5 stars). Ticket resolved.`]
+    // Insert system notice into chat only if not already present
+    const existingSys = await queryDb(
+      `SELECT id FROM support_messages WHERE conversation_id = $1 AND sender_type = 'SYSTEM' AND text LIKE '⭐ Customer submitted feedback%' LIMIT 1`,
+      [conversationId]
     );
+    if (existingSys.rows.length === 0) {
+      const sysMsgId = `msg_${Date.now()}_sys`;
+      await queryDb(
+        `INSERT INTO support_messages (id, conversation_id, sender_type, sender_name, text)
+         VALUES ($1, $2, 'SYSTEM', 'System', $3)`,
+        [sysMsgId, conversationId, `⭐ Customer submitted feedback (${rating}/5 stars). Ticket resolved.`]
+      );
+    }
 
     await notifySupportEvent({
       type: 'CHAT_RESOLVED',

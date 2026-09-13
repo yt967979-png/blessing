@@ -45,6 +45,7 @@ interface SupportConv {
   created_at: string;
   rating?: number;
   feedback_tags?: string;
+  feedback_comment?: string;
 }
 
 interface SupportMessage {
@@ -573,6 +574,18 @@ export const LiveSupportSection: React.FC<LiveSupportSectionProps> = ({
                           <span className="text-[10px] text-slate-400">Resolved</span>
                         )}
                       </div>
+                      {conv.feedback_tags && (
+                        <div className="pt-0.5">
+                          <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                            {conv.feedback_tags}
+                          </span>
+                        </div>
+                      )}
+                      {conv.feedback_comment && (
+                        <p className="text-[10.5px] text-slate-500 italic line-clamp-2">
+                          &quot;{conv.feedback_comment}&quot;
+                        </p>
+                      )}
                       <p className="text-[10.5px] text-slate-400">
                         {conv.resolved_at
                           ? new Date(conv.resolved_at).toLocaleDateString('en-IN', {

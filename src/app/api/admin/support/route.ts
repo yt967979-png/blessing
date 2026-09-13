@@ -150,6 +150,13 @@ export async function GET(req: NextRequest) {
         WHERE status = 'WAITING_ADMIN'
           AND updated_at < NOW() - INTERVAL '15 minutes'
       `);
+      // Auto-requeue abandoned ACTIVE chats where admin became inactive
+      await queryDb(`
+        UPDATE support_conversations
+        SET status = 'WAITING_ADMIN', updated_at = NOW()
+        WHERE status = 'ACTIVE'
+          AND last_message_at < NOW() - INTERVAL '15 minutes'
+      `);
     } catch (_) {}
 
     const waitingRes = await queryDb(
@@ -173,7 +180,7 @@ export async function GET(req: NextRequest) {
     );
 
     const resolvedRes = await queryDb(
-      `SELECT c.*, f.rating, f.tags as feedback_tags 
+      `SELECT c.*, f.rating, f.tags as feedback_tags, f.comment as feedback_comment 
        FROM support_conversations c
        LEFT JOIN support_feedback f ON f.conversation_id = c.id
        WHERE c.status = 'RESOLVED' 

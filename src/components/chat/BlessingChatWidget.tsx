@@ -205,10 +205,10 @@ export const BlessingChatWidget: React.FC = () => {
 
     const isEscalation = text.toLowerCase().includes('talk to admin') || text.toLowerCase().includes('human');
 
-    // Optimistic UI for customer message
-    const tempId = `temp_${Date.now()}`;
+    // Client-side unique message ID for idempotency and de-duplication
+    const clientMessageId = `msg_c_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
     const optimisticMsg: Message = {
-      id: tempId,
+      id: clientMessageId,
       sender_type: 'CUSTOMER',
       sender_name: user?.name || 'Me',
       text,
@@ -225,6 +225,7 @@ export const BlessingChatWidget: React.FC = () => {
         },
         body: JSON.stringify({
           conversationId: conversation?.id,
+          clientMessageId,
           text,
           action: isEscalation ? 'escalate_human' : undefined,
           name: user?.name || 'Customer',

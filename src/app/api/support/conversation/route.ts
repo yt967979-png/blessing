@@ -32,6 +32,13 @@ export async function GET(req: NextRequest) {
       const res = await queryDb(`SELECT * FROM support_conversations WHERE id = $1 LIMIT 1`, [convIdParam]);
       const candidate = res.rows[0];
       if (candidate) {
+        const isAdmin = Boolean(user && (user.role === 'admin' || user.role === 'super_admin'));
+        const isOwner = (candidate.session_token && candidate.session_token === sessionToken) ||
+                        (user?.userId && candidate.customer_id === String(user.userId));
+        if (!isAdmin && !isOwner) {
+          return NextResponse.json({ error: 'Unauthorized. Conversation does not belong to you.' }, { status: 403 });
+        }
+
         const fbRes = await queryDb(`SELECT id, rating FROM support_feedback WHERE conversation_id = $1 LIMIT 1`, [candidate.id]);
         feedbackSubmitted = fbRes.rows.length > 0;
         if (candidate.status !== 'RESOLVED' || !feedbackSubmitted) {
@@ -172,6 +179,13 @@ export async function POST(req: NextRequest) {
         conv = cRes.rows[0];
       }
       if (conv) {
+        const isAdmin = Boolean(user && (user.role === 'admin' || user.role === 'super_admin'));
+        const isOwner = (conv.session_token && conv.session_token === sessionToken) ||
+                        (user?.userId && conv.customer_id === String(user.userId));
+        if (!isAdmin && !isOwner) {
+          return NextResponse.json({ error: 'Unauthorized to resolve this conversation.' }, { status: 403 });
+        }
+
         await queryDb(
           `UPDATE support_conversations 
            SET status = 'RESOLVED', resolved_at = NOW(), updated_at = NOW() 
@@ -283,7 +297,16 @@ export async function POST(req: NextRequest) {
     ) {
       if (conversationId) {
         const cRes = await queryDb(`SELECT * FROM support_conversations WHERE id = $1 LIMIT 1`, [conversationId]);
-        conv = cRes.rows[0];
+        const candidate = cRes.rows[0];
+        if (candidate) {
+          const isAdmin = Boolean(user && (user.role === 'admin' || user.role === 'super_admin'));
+          const isOwner = (candidate.session_token && candidate.session_token === sessionToken) ||
+                          (user?.userId && candidate.customer_id === String(user.userId));
+          if (!isAdmin && !isOwner) {
+            return NextResponse.json({ error: 'Unauthorized to close this conversation.' }, { status: 403 });
+          }
+          conv = candidate;
+        }
       }
       if (!conv && (customerId || sessionToken || customerPhone)) {
         const cRes = await queryDb(
@@ -361,7 +384,16 @@ export async function POST(req: NextRequest) {
     // ── Locate or Create Conversation
     if (conversationId) {
       const cRes = await queryDb(`SELECT * FROM support_conversations WHERE id = $1 LIMIT 1`, [conversationId]);
-      conv = cRes.rows[0];
+      const candidate = cRes.rows[0];
+      if (candidate) {
+        const isAdmin = Boolean(user && (user.role === 'admin' || user.role === 'super_admin'));
+        const isOwner = (candidate.session_token && candidate.session_token === sessionToken) ||
+                        (user?.userId && candidate.customer_id === String(user.userId));
+        if (!isAdmin && !isOwner) {
+          return NextResponse.json({ error: 'Unauthorized access to this conversation.' }, { status: 403 });
+        }
+        conv = candidate;
+      }
     }
 
     // Check if customer ALREADY has an active or waiting conversation to NEVER duplicate tickets
@@ -495,12 +527,33 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Message text is required' }, { status: 400 });
     }
 
+    if (text.length > 2000) {
+      return NextResponse.json({ error: 'Message text exceeds maximum limit of 2000 characters' }, { status: 400 });
+    }
+
+    const sanitizedText = text.replace(/\0/g, '');
+    const clientMessageId = body.clientMessageId ? String(body.clientMessageId).trim() : null;
+
+    if (clientMessageId) {
+      const existing = await queryDb(`SELECT id, conversation_id, text, created_at FROM support_messages WHERE id = $1 LIMIT 1`, [clientMessageId]);
+      if (existing.rows.length > 0) {
+        return NextResponse.json({
+          success: true,
+          conversationId: conv.id,
+          conversation: conv,
+          messageId: clientMessageId,
+          status: conv.status,
+          duplicateIgnored: true,
+        });
+      }
+    }
+
     // Insert Customer Message
-    const custMsgId = `msg_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
+    const custMsgId = clientMessageId || `msg_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
     await queryDb(
       `INSERT INTO support_messages (id, conversation_id, sender_type, sender_name, sender_id, text)
        VALUES ($1, $2, 'CUSTOMER', $3, $4, $5)`,
-      [custMsgId, conv.id, customerName, user?.userId || null, text]
+      [custMsgId, conv.id, customerName, user?.userId || null, sanitizedText]
     );
 
     await queryDb(`UPDATE support_conversations SET last_message_at = NOW(), updated_at = NOW() WHERE id = $1`, [conv.id]);
@@ -510,7 +563,7 @@ export async function POST(req: NextRequest) {
       conversationId: conv.id,
       senderType: 'CUSTOMER',
       senderName: customerName,
-      text,
+      text: sanitizedText,
       status: conv.status,
       timestamp: new Date().toISOString(),
     });

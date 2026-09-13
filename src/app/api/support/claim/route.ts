@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
     const adminName = uRes.rows[0]?.name || uRes.rows[0]?.email?.split('@')[0] || 'Support Staff';
 
     // ── ATOMIC COMPARE-AND-SWAP (CAS) QUERY
-    // Only transitions status if it is currently 'WAITING_ADMIN'
+    // Only transitions status if it is currently 'WAITING_ADMIN' OR idle active (>10 mins without admin message)
     const casResult = await queryDb(
       `UPDATE support_conversations 
        SET status = 'ACTIVE',
@@ -38,7 +38,11 @@ export async function POST(req: NextRequest) {
            assigned_admin_name = $2,
            accepted_at = NOW(),
            updated_at = NOW()
-       WHERE id = $3 AND status = 'WAITING_ADMIN'
+       WHERE id = $3 
+         AND (
+           status = 'WAITING_ADMIN' 
+           OR (status = 'ACTIVE' AND last_message_at < NOW() - INTERVAL '10 minutes' AND assigned_admin_id != $1)
+         )
        RETURNING *`,
       [adminId, adminName, conversationId]
     );
