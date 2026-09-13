@@ -218,10 +218,14 @@ export async function GET(req: NextRequest) {
        ORDER BY COALESCE(NULLIF(order_id, ''), NULLIF(customer_id, ''), NULLIF(customer_phone, ''), session_token), updated_at DESC`
     );
 
+    const currentAdminId = String(check.user.userId);
+
     const activeRes = await queryDb(
       `SELECT * FROM support_conversations 
        WHERE status = 'ACTIVE' 
-       ORDER BY last_message_at DESC LIMIT 50`
+         AND assigned_admin_id = $1
+       ORDER BY last_message_at DESC LIMIT 50`,
+      [currentAdminId]
     );
 
     const resolvedRes = await queryDb(
@@ -229,7 +233,7 @@ export async function GET(req: NextRequest) {
        FROM support_conversations c
        LEFT JOIN support_feedback f ON f.conversation_id = c.id
        WHERE c.status = 'RESOLVED' 
-       ORDER BY c.resolved_at DESC LIMIT 30`
+       ORDER BY c.resolved_at DESC LIMIT 50`
     );
 
     const statsRes = await queryDb(
@@ -273,8 +277,15 @@ export async function PATCH(req: NextRequest) {
     if (!conversationId) return NextResponse.json({ error: 'conversationId required' }, { status: 400 });
 
     if (action === 'resolve') {
-      const cRes = await queryDb(`SELECT order_id FROM support_conversations WHERE id = $1`, [conversationId]);
-      const oid = cRes.rows[0]?.order_id;
+      const cRes = await queryDb(`SELECT order_id, assigned_admin_id, assigned_admin_name FROM support_conversations WHERE id = $1`, [conversationId]);
+      const conv = cRes.rows[0];
+      if (conv?.assigned_admin_id && conv.assigned_admin_id !== String(check.user.userId)) {
+        return NextResponse.json(
+          { error: `Only ${conv.assigned_admin_name || 'the assigned admin'} can resolve this chat.` },
+          { status: 403 }
+        );
+      }
+      const oid = conv?.order_id;
 
       await queryDb(
         `UPDATE support_conversations 

@@ -116,6 +116,7 @@ export const LiveSupportSection: React.FC<LiveSupportSectionProps> = ({
 
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const adminName = user?.name || user?.email?.split('@')[0] || 'Admin';
+  const currentAdminId = String(user?.userId || user?.id || '');
 
   // Auto-scroll message feed within its container only (NEVER scroll the browser window)
   useEffect(() => {
@@ -652,13 +653,19 @@ export const LiveSupportSection: React.FC<LiveSupportSectionProps> = ({
                 </div>
 
                 {selectedConv.status === 'ACTIVE' && (
-                  <button
-                    type="button"
-                    onClick={handleResolveChat}
-                    className="px-3 py-1.5 bg-slate-200 hover:bg-red-50 hover:text-red-700 text-slate-700 rounded-lg text-xs font-bold transition-colors cursor-pointer"
-                  >
-                    End Chat
-                  </button>
+                  (!selectedConv.assigned_admin_id || selectedConv.assigned_admin_id === currentAdminId) ? (
+                    <button
+                      type="button"
+                      onClick={handleResolveChat}
+                      className="px-3 py-1.5 bg-slate-200 hover:bg-red-50 hover:text-red-700 text-slate-700 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                    >
+                      End Chat
+                    </button>
+                  ) : (
+                    <span className="text-[10px] font-bold text-slate-500 bg-slate-100 border border-slate-200 px-2 py-1 rounded-md">
+                      🔒 Handled by {selectedConv.assigned_admin_name || 'Staff'}
+                    </span>
+                  )
                 )}
               </div>
 
@@ -732,32 +739,41 @@ export const LiveSupportSection: React.FC<LiveSupportSectionProps> = ({
 
               {/* Reply Input Bar */}
               <div className="p-3 bg-white border-t border-slate-200 flex items-center gap-2">
-                <input
-                  type="text"
-                  placeholder={
-                    selectedConv.status === 'ACTIVE'
-                      ? 'Reply to customer...'
-                      : 'Chat is resolved'
-                  }
-                  disabled={selectedConv.status !== 'ACTIVE' || sendingReply}
-                  value={replyText}
-                  onChange={(e) => setReplyText(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSendAdminReply();
-                    }
-                  }}
-                  className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs outline-none focus:bg-white focus:border-[#2874f0] text-slate-800"
-                />
-                <button
-                  type="button"
-                  disabled={selectedConv.status !== 'ACTIVE' || sendingReply || !replyText.trim()}
-                  onClick={() => handleSendAdminReply()}
-                  className="p-2.5 bg-[#2874f0] hover:bg-blue-700 disabled:opacity-40 text-white rounded-xl transition-all shadow-xs cursor-pointer flex items-center justify-center shrink-0"
-                >
-                  <Send className="w-4 h-4" />
-                </button>
+                {(() => {
+                  const isAssignedToMe = !selectedConv.assigned_admin_id || selectedConv.assigned_admin_id === currentAdminId;
+                  return (
+                    <>
+                      <input
+                        type="text"
+                        placeholder={
+                          selectedConv.status !== 'ACTIVE'
+                            ? 'Chat is resolved'
+                            : !isAssignedToMe
+                              ? `🔒 Handled by ${selectedConv.assigned_admin_name || 'Staff'} (View Only)`
+                              : 'Reply to customer...'
+                        }
+                        disabled={selectedConv.status !== 'ACTIVE' || !isAssignedToMe || sendingReply}
+                        value={replyText}
+                        onChange={(e) => setReplyText(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey && isAssignedToMe) {
+                            e.preventDefault();
+                            handleSendAdminReply();
+                          }
+                        }}
+                        className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs outline-none focus:bg-white focus:border-[#2874f0] text-slate-800 disabled:opacity-60 disabled:cursor-not-allowed"
+                      />
+                      <button
+                        type="button"
+                        disabled={selectedConv.status !== 'ACTIVE' || !isAssignedToMe || sendingReply || !replyText.trim()}
+                        onClick={() => handleSendAdminReply()}
+                        className="p-2.5 bg-[#2874f0] hover:bg-blue-700 disabled:opacity-40 text-white rounded-xl transition-all shadow-xs cursor-pointer flex items-center justify-center shrink-0"
+                      >
+                        <Send className="w-4 h-4" />
+                      </button>
+                    </>
+                  );
+                })()}
               </div>
             </>
           )}

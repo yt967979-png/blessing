@@ -68,6 +68,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized to post messages to this conversation' }, { status: 403 });
     }
 
+    // If an admin is posting to an ACTIVE conversation, they MUST be the assigned admin
+    if (isAdmin && conv.status === 'ACTIVE' && conv.assigned_admin_id && conv.assigned_admin_id !== String(user?.userId)) {
+      return NextResponse.json(
+        {
+          error: `This conversation is assigned to ${conv.assigned_admin_name || 'another staff member'}. Only the assigned admin can reply.`,
+        },
+        { status: 403 }
+      );
+    }
+
     const clientMessageId = body.clientMessageId ? String(body.clientMessageId).trim() : null;
     if (clientMessageId) {
       const existing = await queryDb(
