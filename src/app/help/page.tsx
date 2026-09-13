@@ -435,6 +435,44 @@ function HelpCenterContent() {
     await handleSendMessage('I would like to speak directly with an admin / support agent.', true);
   };
 
+  // Start a Clean, Brand-New Help Session with a Fresh Unique ID
+  const handleStartFreshSession = async () => {
+    setSending(true);
+    try {
+      const res = await fetch('/api/support/conversation', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders(user),
+        },
+        body: JSON.stringify({
+          action: 'start_fresh',
+          name: user?.name || 'Customer',
+          phone: user?.phone || queryPhone || '',
+          customerId: user?.id,
+          orderId: selectedOrderId || undefined,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.conversation) {
+          setConversation(data.conversation);
+          setMessages(data.messages || []);
+          if (typeof window !== 'undefined' && data.conversation.id) {
+            localStorage.setItem('bpg_support_conv_id', data.conversation.id);
+          }
+        }
+      }
+    } catch (_) {
+    } finally {
+      setShowFeedbackPrompt(false);
+      setFeedbackSubmitted(false);
+      setInputText('');
+      setSending(false);
+      showToast('✨ Started a new help session!');
+    }
+  };
+
   // End & Close Chat handler so customer can start fresh
   const handleCloseChat = async (forceClose: boolean = false) => {
     // If user has engaged in conversation (messages.length >= 2) and hasn't rated yet, prompt CSAT first!
@@ -458,31 +496,7 @@ function HelpCenterContent() {
       return;
     }
 
-    if (sending) return;
-    setSending(true);
-    try {
-      await fetch('/api/support/conversation', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...authHeaders(user),
-        },
-        body: JSON.stringify({
-          action: 'close_chat',
-          conversationId: conversation?.id,
-        }),
-      });
-    } catch (_) {}
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('bpg_support_conv_id');
-    }
-    setConversation(null);
-    setMessages([]);
-    setShowFeedbackPrompt(false);
-    setFeedbackSubmitted(false);
-    setInputText('');
-    setSending(false);
-    showToast('✓ Chat closed. Starting a fresh conversation.');
+    await handleStartFreshSession();
   };
 
   // CSAT Feedback Submission
@@ -510,6 +524,11 @@ function HelpCenterContent() {
         setFeedbackSubmitted(true);
         setShowFeedbackPrompt(false);
         showToast('⭐ Thank you for your feedback!');
+
+        // Automatically transition into a brand-new help session after 1.2s
+        setTimeout(() => {
+          handleStartFreshSession();
+        }, 1200);
       }
     } catch {
       showToast('❌ Failed to record feedback');
@@ -1032,10 +1051,10 @@ function HelpCenterContent() {
                 <div className="flex justify-center pt-1">
                   <button
                     type="button"
-                    onClick={() => handleCloseChat(true)}
+                    onClick={handleStartFreshSession}
                     className="text-[11px] font-bold text-slate-400 hover:text-slate-600 underline cursor-pointer"
                   >
-                    Skip & Close Session
+                    Skip & Start Fresh Session
                   </button>
                 </div>
               </div>
@@ -1046,12 +1065,15 @@ function HelpCenterContent() {
                 <div className="text-xs font-bold text-emerald-800">
                   ✅ Thank you! Your rating has been recorded to our Chennai quality team.
                 </div>
+                <div className="text-[11px] text-emerald-600 font-medium">
+                  Starting your new help session...
+                </div>
                 <button
                   type="button"
-                  onClick={() => handleCloseChat(true)}
+                  onClick={handleStartFreshSession}
                   className="px-4 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-xs rounded-xl cursor-pointer transition-all shadow-2xs"
                 >
-                  Start Fresh Chat
+                  Start Fresh Session Now
                 </button>
               </div>
             )}
@@ -1060,7 +1082,7 @@ function HelpCenterContent() {
               <div className="text-center pt-2 pb-1">
                 <button
                   type="button"
-                  onClick={() => handleCloseChat(true)}
+                  onClick={handleStartFreshSession}
                   className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-[#001B3A] text-white hover:bg-blue-900 transition-all shadow-sm cursor-pointer"
                 >
                   <Sparkles className="w-3.5 h-3.5 text-amber-400" />

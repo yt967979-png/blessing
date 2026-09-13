@@ -286,6 +286,42 @@ export const BlessingChatWidget: React.FC = () => {
     }
   };
 
+  // Start a Clean, Brand-New Help Session with a Fresh Unique ID
+  const handleStartFreshSession = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/support/conversation', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders(user),
+        },
+        body: JSON.stringify({
+          action: 'start_fresh',
+          name: user?.name || 'Customer',
+          phone: user?.phone || '',
+          customerId: user?.id,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.conversation) {
+          setConversation(data.conversation);
+          setMessages(data.messages || []);
+          if (typeof window !== 'undefined' && data.conversation.id) {
+            localStorage.setItem('bpg_support_conv_id', data.conversation.id);
+          }
+        }
+      }
+    } catch (_) {
+    } finally {
+      setShowFeedbackPrompt(false);
+      setFeedbackSubmitted(false);
+      setInputText('');
+      setLoading(false);
+    }
+  };
+
   // Close / End Chat handler
   const handleCloseChat = async (forceClose: boolean = false) => {
     // If user chatted (messages.length >= 2) and hasn't submitted feedback, prompt CSAT first!
@@ -309,30 +345,7 @@ export const BlessingChatWidget: React.FC = () => {
       return;
     }
 
-    if (loading) return;
-    setLoading(true);
-    try {
-      await fetch('/api/support/conversation', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...authHeaders(user),
-        },
-        body: JSON.stringify({
-          action: 'close_chat',
-          conversationId: conversation?.id,
-        }),
-      });
-    } catch (_) {}
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('bpg_support_conv_id');
-    }
-    setConversation(null);
-    setMessages([]);
-    setShowFeedbackPrompt(false);
-    setFeedbackSubmitted(false);
-    setInputText('');
-    setLoading(false);
+    await handleStartFreshSession();
   };
 
   // Minimize or close widget window without destroying session
@@ -402,6 +415,11 @@ export const BlessingChatWidget: React.FC = () => {
       if (res.ok) {
         setFeedbackSubmitted(true);
         setShowFeedbackPrompt(false);
+
+        // Automatically start fresh session with brand-new unique ID after 1.2s
+        setTimeout(() => {
+          handleStartFreshSession();
+        }, 1200);
       }
     } catch (_) {}
   };
@@ -692,10 +710,10 @@ export const BlessingChatWidget: React.FC = () => {
                 <div className="text-center pt-1">
                   <button
                     type="button"
-                    onClick={() => handleCloseChat(true)}
+                    onClick={handleStartFreshSession}
                     className="text-[10px] font-bold text-slate-400 hover:text-slate-600 underline cursor-pointer"
                   >
-                    Skip & Close Session
+                    Skip & Start Fresh Session
                   </button>
                 </div>
               </div>
@@ -704,12 +722,15 @@ export const BlessingChatWidget: React.FC = () => {
             {feedbackSubmitted && (
               <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-3 rounded-2xl text-center text-xs font-bold space-y-2">
                 <div>✓ Thank you for your feedback! We look forward to serving you again.</div>
+                <div className="text-[10.5px] text-emerald-600 font-medium">
+                  Starting your new help session...
+                </div>
                 <button
                   type="button"
-                  onClick={() => handleCloseChat(true)}
-                  className="px-3 py-1 bg-emerald-700 hover:bg-emerald-800 text-white text-[10.5px] font-extrabold rounded-lg cursor-pointer"
+                  onClick={handleStartFreshSession}
+                  className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-[10.5px] font-extrabold rounded-lg cursor-pointer transition-all shadow-2xs"
                 >
-                  Start New Conversation
+                  Start Fresh Session Now
                 </button>
               </div>
             )}
@@ -718,7 +739,7 @@ export const BlessingChatWidget: React.FC = () => {
               <div className="text-center pt-2 pb-1">
                 <button
                   type="button"
-                  onClick={() => handleCloseChat(true)}
+                  onClick={handleStartFreshSession}
                   className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-[#001B3A] text-white hover:bg-blue-900 transition-all shadow-sm cursor-pointer"
                 >
                   <Sparkles className="w-3.5 h-3.5 text-amber-400" />

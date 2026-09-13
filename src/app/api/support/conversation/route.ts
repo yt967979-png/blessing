@@ -193,6 +193,86 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, status: 'RESOLVED' });
     }
 
+    // ── Handle Starting a Clean, Brand-New Help Session (Distinct Unique Conversation ID for Every User)
+    if (action === 'start_fresh' || action === 'new_session') {
+      if (conversationId) {
+        await queryDb(
+          `UPDATE support_conversations SET status = 'RESOLVED', resolved_at = NOW(), updated_at = NOW() WHERE id = $1`,
+          [conversationId]
+        );
+      }
+      if (customerId || sessionToken || customerPhone) {
+        await queryDb(
+          `UPDATE support_conversations 
+           SET status = 'RESOLVED', resolved_at = NOW(), updated_at = NOW() 
+           WHERE (
+             (customer_id IS NOT NULL AND customer_id = $1)
+             OR session_token = $2
+             OR ($3 <> '' AND customer_phone IS NOT NULL AND customer_phone = $3)
+           )
+           AND status != 'RESOLVED'`,
+          [customerId || 'NONE', sessionToken, customerPhone || '']
+        );
+      }
+
+      const newConvId = `conv_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+      const freshSession = crypto.randomBytes(16).toString('hex');
+
+      const insRes = await queryDb(
+        `INSERT INTO support_conversations 
+           (id, customer_id, session_token, customer_name, customer_phone, order_id, status)
+         VALUES ($1, $2, $3, $4, $5, $6, 'BOT')
+         RETURNING *`,
+        [newConvId, customerId, freshSession, customerName, customerPhone || null, linkedOrderId || null]
+      );
+      const newConv = insRes.rows[0];
+
+      const welcomeMsgId = `msg_${Date.now()}_welcome`;
+      const greetingName = customerName && customerName !== 'Student/Parent' && customerName !== 'Customer' ? customerName.split(' ')[0] : '';
+      const welcomeText = greetingName 
+        ? `Hello **${greetingName}**! Welcome to your new Blessing Support session.\n\nHow can I help you today? You can check live ST Courier tracking, ask about 10th standard guides, delivery rules, or speak with an admin.`
+        : `Welcome to your new Blessing Support session!\n\nHow can I help you today? You can check live ST Courier tracking, ask about 10th standard guides, delivery rules, or speak with an admin.`;
+
+      const initialSuggestions = ['🚚 Where is my order right now?', '📚 10th Class Guides & Prices', '📦 Minimum Order & Delivery Fee', '👨‍💼 Talk to Admin'];
+
+      await queryDb(
+        `INSERT INTO support_messages (id, conversation_id, sender_type, sender_name, text, metadata)
+         VALUES ($1, $2, 'AI', 'Blessing AI Assistant', $3, $4)`,
+        [
+          welcomeMsgId,
+          newConvId,
+          welcomeText,
+          JSON.stringify({ suggestions: initialSuggestions })
+        ]
+      );
+
+      const res = NextResponse.json({
+        success: true,
+        isNewSession: true,
+        conversation: newConv,
+        messages: [
+          {
+            id: welcomeMsgId,
+            conversation_id: newConvId,
+            sender_type: 'AI',
+            sender_name: 'Blessing AI Assistant',
+            text: welcomeText,
+            suggestions: initialSuggestions,
+            created_at: new Date().toISOString(),
+          }
+        ],
+        feedbackSubmitted: false,
+      });
+
+      res.cookies.set('bpg_support_session', freshSession, {
+        httpOnly: true,
+        sameSite: 'lax',
+        maxAge: 60 * 60 * 24 * 30,
+      });
+
+      return res;
+    }
+
     // ── Handle Customer Ending, Leaving, or Closing Chat to Start Fresh
     if (
       action === 'close_chat' ||
