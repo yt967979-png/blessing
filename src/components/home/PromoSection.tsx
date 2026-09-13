@@ -52,7 +52,7 @@ export const PromoSection = () => {
   return (
     <section className="py-12 bg-white border-t border-slate-200">
       <div className="max-w-4xl mx-auto px-4">
-        <div className="bg-amber-50/80 border border-amber-200/80 rounded-2xl p-8 text-[#001B3A] shadow-xs relative overflow-hidden">
+        <div className="bg-amber-50/80 border border-amber-200/80 rounded-2xl p-4 sm:p-8 text-[#001B3A] shadow-xs relative overflow-hidden">
           <div className="text-center mb-4">
             <h3 className="font-heading font-black text-sm text-amber-900 uppercase tracking-widest flex items-center justify-center gap-2">
               <Quote className="w-4 h-4 text-amber-600 rotate-180" />

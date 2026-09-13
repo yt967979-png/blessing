@@ -598,7 +598,7 @@ export default function CheckoutPage() {
           </div>
         )}
 
-        <div className="max-w-2xl mx-auto bg-white rounded-3xl p-6 border border-slate-200 shadow-xl">
+        <div className="max-w-2xl mx-auto bg-white rounded-3xl p-4 sm:p-6 md:p-8 border border-slate-200 shadow-xl">
           {step === 1 && (
             <div className="space-y-4 text-xs">
               <h2 className="font-heading font-black text-lg text-[#001B3A]">Shipping Address</h2>

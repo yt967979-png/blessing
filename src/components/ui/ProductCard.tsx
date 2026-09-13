@@ -171,11 +171,12 @@ export const ProductCard = ({ product }: { product: Product }) => {
           target="_blank"
           rel="noopener noreferrer"
           onClick={(e) => e.stopPropagation()}
-          className="w-full mb-1.5 py-1.5 px-2 bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200/80 rounded-xl text-[10px] sm:text-[11px] font-extrabold flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-2xs hover:shadow-xs touch-manipulation min-h-8"
+          className="w-full mb-1.5 py-1.5 px-1.5 sm:px-2 bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200/80 rounded-xl text-[10px] sm:text-[11px] font-extrabold flex items-center justify-center gap-1 sm:gap-1.5 transition-all cursor-pointer shadow-2xs hover:shadow-xs touch-manipulation min-h-8"
           title="Download or view sample pages before buying"
         >
-          <FileText className="w-3.5 h-3.5 text-purple-600" />
-          <span>Preview Sample PDF</span>
+          <FileText className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+          <span className="hidden min-[420px]:inline">Preview Sample PDF</span>
+          <span className="min-[420px]:hidden">Sample PDF</span>
         </a>
       )}
 

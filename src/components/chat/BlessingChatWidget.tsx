@@ -459,19 +459,27 @@ export const BlessingChatWidget: React.FC = () => {
 
   if (!isStorefront) return null;
 
+  const isPDP = pathname?.startsWith('/products/');
+
   return (
     <>
       {/* ─── Floating Chat Trigger Button ──────────────────────────────────── */}
       {!isOpen && (
-        <div className="fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom))] left-3.5 md:bottom-6 md:left-6 z-40">
+        <div
+          className={`fixed ${
+            isPDP
+              ? 'bottom-[calc(9.5rem+env(safe-area-inset-bottom))]'
+              : 'bottom-[calc(4.75rem+env(safe-area-inset-bottom))]'
+          } left-3.5 md:bottom-6 md:left-6 z-40`}
+        >
           <button
             type="button"
             onClick={() => setIsOpen(true)}
-            className="group relative flex items-center gap-2.5 px-4 py-3 rounded-full bg-[#001b3a] text-white shadow-[0_8px_25px_rgba(0,27,58,0.35)] hover:bg-[#002855] hover:scale-105 active:scale-95 transition-all duration-200 border border-white/20 cursor-pointer"
+            className="group relative flex items-center gap-2 sm:gap-2.5 px-3 py-2.5 sm:px-4 sm:py-3 rounded-full bg-[#001b3a] text-white shadow-[0_8px_25px_rgba(0,27,58,0.35)] hover:bg-[#002855] hover:scale-105 active:scale-95 transition-all duration-200 border border-white/20 cursor-pointer"
             aria-label="Open Live Support Chat"
           >
             <span className="relative flex items-center justify-center">
-              <MessageSquare className="w-5 h-5 text-[#fbbf24] fill-current" />
+              <MessageSquare className="w-4 h-4 sm:w-5 sm:h-5 text-[#fbbf24] fill-current" />
               {/* Online indicator */}
               <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -479,10 +487,10 @@ export const BlessingChatWidget: React.FC = () => {
               </span>
             </span>
             <div className="flex flex-col items-start leading-tight">
-              <span className="text-[10px] uppercase font-black tracking-wider text-amber-400">
+              <span className="text-[9px] sm:text-[10px] uppercase font-black tracking-wider text-amber-400">
                 Live Support
               </span>
-              <span className="text-xs font-bold text-white flex items-center gap-1">
+              <span className="text-[11px] sm:text-xs font-bold text-white flex items-center gap-1">
                 Chat with Us
                 {unreadCount > 0 && (
                   <span className="bg-red-500 text-white text-[9px] font-black px-1.5 py-0.2 rounded-full ml-1">
@@ -497,11 +505,11 @@ export const BlessingChatWidget: React.FC = () => {
 
       {/* ─── Live Chat Window / Drawer ─────────────────────────────────────── */}
       {isOpen && (
-        <div className="fixed inset-0 sm:inset-auto sm:bottom-6 sm:left-6 z-50 sm:w-[390px] sm:h-[580px] flex flex-col bg-white sm:rounded-3xl shadow-2xl border border-slate-200 overflow-hidden animate-fade-slide-up">
+        <div className="fixed inset-0 sm:inset-auto sm:bottom-6 sm:left-6 z-50 sm:w-[400px] sm:h-[600px] flex flex-col bg-white sm:rounded-3xl shadow-2xl border border-slate-200 overflow-hidden animate-fade-slide-up">
           {/* Header */}
-          <div className="bg-[#001b3a] text-white p-4 flex items-center justify-between border-b border-white/10 shrink-0">
-            <div className="flex items-center gap-3">
-              <div className="relative w-10 h-10 rounded-full bg-white/10 flex items-center justify-center border border-white/20 text-[#fbbf24]">
+          <div className="bg-[#001b3a] text-white p-3.5 sm:p-4 pt-[max(0.875rem,env(safe-area-inset-top))] flex items-center justify-between border-b border-white/10 shrink-0">
+            <div className="flex items-center gap-2.5 sm:gap-3">
+              <div className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white/10 flex items-center justify-center border border-white/20 text-[#fbbf24] shrink-0">
                 {conversation?.status === 'ACTIVE' ? (
                   <User className="w-5 h-5 text-emerald-400" />
                 ) : (
@@ -793,7 +801,7 @@ export const BlessingChatWidget: React.FC = () => {
           )}
 
           {/* Input Footer */}
-          <div className="p-3 bg-white border-t border-slate-200 flex items-center gap-2 shrink-0">
+          <div className="p-2.5 sm:p-3 bg-white border-t border-slate-200 flex items-center gap-2 shrink-0 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
             <input
               type="text"
               placeholder={
@@ -810,13 +818,13 @@ export const BlessingChatWidget: React.FC = () => {
                 }
               }}
               disabled={loading}
-              className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs outline-none focus:bg-white focus:border-[#2874f0] text-slate-800 placeholder:text-slate-400"
+              className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-base sm:text-xs outline-none focus:bg-white focus:border-[#2874f0] text-slate-800 placeholder:text-slate-400 min-h-[42px]"
             />
             <button
               type="button"
               onClick={() => handleSendMessage()}
               disabled={loading || !inputText.trim()}
-              className="p-2.5 bg-[#2874f0] hover:bg-blue-700 disabled:opacity-40 text-white rounded-xl transition-all shadow-xs cursor-pointer flex items-center justify-center shrink-0"
+              className="p-2.5 bg-[#2874f0] hover:bg-blue-700 disabled:opacity-40 text-white rounded-xl transition-all shadow-xs cursor-pointer flex items-center justify-center shrink-0 min-h-[42px] min-w-[42px]"
               title="Send message"
             >
               <Send className="w-4 h-4" />

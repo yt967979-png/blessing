@@ -177,7 +177,7 @@ export const Footer = () => {
       </div>
 
       {/* Bottom Legal & Payment Badges Bar */}
-      <div className="border-t border-white/10 bg-[#000812] py-5">
+      <div className="border-t border-white/10 bg-[#000812] pt-5 pb-[calc(5.5rem+env(safe-area-inset-bottom))] md:py-5">
         <div className="max-w-7xl mx-auto px-4 flex flex-col md:flex-row justify-between items-center gap-3 text-slate-400 text-xs font-semibold text-center md:text-left">
           <div>
             <span>© 2026 Blessing Power Guide. All Rights Reserved.</span>

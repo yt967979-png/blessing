@@ -403,20 +403,20 @@ function OrdersContent() {
   return (
     <div className="space-y-8 pb-16">
       {/* Page Title & Order Search Bar */}
-      <div className="bg-gradient-to-br from-[#001B3A] via-[#002B5B] to-[#0044AA] rounded-3xl p-6 sm:p-10 text-white shadow-xl">
+      <div className="bg-gradient-to-br from-[#001B3A] via-[#002B5B] to-[#0044AA] rounded-3xl p-4 sm:p-8 md:p-10 text-white shadow-xl">
         <div className="max-w-2xl">
           <span className="text-[10px] font-extrabold text-amber-300 uppercase tracking-widest bg-amber-400/10 border border-amber-400/30 px-3 py-1 rounded-full flex items-center gap-1.5 w-fit">
             <Sparkles className="w-3 h-3 text-amber-400" />
             <span>SHIPMENT TRACKING POWERED BY ST COURIER</span>
           </span>
-          <h1 className="font-heading font-black text-2xl sm:text-4xl text-white mt-3 mb-2">
+          <h1 className="font-heading font-black text-xl sm:text-3xl md:text-4xl text-white mt-3 mb-2">
             My Orders &amp; Tracking
           </h1>
-          <p className="text-xs sm:text-sm text-slate-300 mb-6">
+          <p className="text-xs sm:text-sm text-slate-300 mb-5 sm:mb-6">
             Hub-scan status from ST Courier, AWB timeline, shop delivery estimate, and tax invoice.
           </p>
 
-          <form onSubmit={handleSearchOrder} className="flex gap-2">
+          <form onSubmit={handleSearchOrder} className="flex flex-col sm:flex-row gap-2">
             <div className="relative flex-1">
               <Search className="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
               <input
@@ -424,12 +424,12 @@ function OrdersContent() {
                 placeholder="Enter Order ID (e.g. BPG-1082)..."
                 value={orderSearchInput}
                 onChange={(e) => setOrderSearchInput(e.target.value)}
-                className="w-full pl-11 pr-4 py-3.5 bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl text-white placeholder-slate-400 text-xs sm:text-sm outline-none focus:border-amber-400 transition-all font-bold"
+                className="w-full pl-11 pr-4 py-3.5 bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl text-white placeholder-slate-400 text-xs sm:text-sm outline-none focus:border-amber-400 transition-all font-bold min-h-12"
               />
             </div>
             <button
               type="submit"
-              className="bg-amber-400 hover:bg-amber-500 text-[#001B3A] font-extrabold text-xs sm:text-sm px-6 py-3.5 rounded-2xl shadow-lg transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap"
+              className="bg-amber-400 hover:bg-amber-500 text-[#001B3A] font-extrabold text-xs sm:text-sm px-6 py-3.5 rounded-2xl shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap min-h-12"
             >
               <span>TRACK ORDER</span>
             </button>

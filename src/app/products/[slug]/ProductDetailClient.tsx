@@ -387,8 +387,8 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 py-8 flex-1">
-        <div className="bg-white border border-slate-200 rounded-2xl p-6 md:p-8 shadow-xs grid grid-cols-1 lg:grid-cols-12 gap-8 mb-12">
+      <div className="max-w-7xl mx-auto px-4 py-5 sm:py-8 flex-1">
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 md:p-8 shadow-xs grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-8 mb-12">
           {/* Gallery */}
           <div className="lg:col-span-5 flex flex-col items-center">
             <div className="w-full h-80 bg-slate-50 border border-slate-200 rounded-xl p-4 flex items-center justify-center relative overflow-hidden mb-4">

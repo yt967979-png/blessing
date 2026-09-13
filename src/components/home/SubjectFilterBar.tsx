@@ -85,7 +85,7 @@ export const SubjectFilterBar = () => {
   }).length;
 
   return (
-    <div className="bg-white/95 backdrop-blur-md border-y border-slate-200/90 py-2 sm:py-2.5 sticky top-14 sm:top-16 z-30 shadow-xs transition-all w-full overflow-hidden select-none">
+    <div className="bg-white/95 backdrop-blur-md border-y border-slate-200/90 py-2 sm:py-2.5 sticky top-[104px] sm:top-16 z-30 shadow-xs transition-all w-full overflow-hidden select-none">
       <div className="max-w-7xl mx-auto px-2 sm:px-4 relative flex items-center gap-1.5 sm:gap-2">
         
         {/* Quick Class Selector Pills */}

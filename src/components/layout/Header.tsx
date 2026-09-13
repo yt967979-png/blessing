@@ -192,7 +192,7 @@ export const Header = () => {
             className="w-9 h-9 sm:w-11 sm:h-11 shadow-md"
           />
           <div className="min-w-0">
-            <h1 className="font-heading font-bold text-sm sm:text-lg text-[#001B3A] tracking-tight leading-tight truncate">
+            <h1 className="font-heading font-bold text-xs min-[360px]:text-sm sm:text-lg text-[#001B3A] tracking-tight leading-tight truncate">
               BLESSING POWER GUIDE
             </h1>
             <p className="text-[9px] text-blue-600 font-semibold tracking-wider uppercase hidden sm:block truncate">
@@ -264,7 +264,7 @@ export const Header = () => {
               </button>
 
               {showNotifDropdown && (
-                <div className="absolute top-full right-0 mt-2 w-80 sm:w-96 bg-white border border-slate-200 rounded-2xl shadow-2xl z-50 overflow-hidden text-xs">
+                <div className="absolute top-full right-0 mt-2 w-[calc(100vw-1.5rem)] max-w-sm sm:w-96 bg-white border border-slate-200 rounded-2xl shadow-2xl z-50 overflow-hidden text-xs">
                   <div className="p-3 bg-slate-900 text-white flex items-center justify-between">
                     <div className="flex items-center gap-2 font-bold">
                       <Bell className="w-4 h-4 text-amber-400" />

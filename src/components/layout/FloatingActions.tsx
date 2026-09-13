@@ -10,9 +10,15 @@ export const FloatingActions = () => {
   const pathname = usePathname();
   if (pathname?.startsWith('/admin')) return null;
 
+  const isPDP = pathname?.startsWith('/products/');
+
   return (
     <div
-      className="fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom))] right-3.5 md:bottom-6 md:right-6 z-40 flex flex-col items-end gap-2 pointer-events-auto select-none"
+      className={`fixed ${
+        isPDP
+          ? 'bottom-[calc(9.5rem+env(safe-area-inset-bottom))]'
+          : 'bottom-[calc(4.75rem+env(safe-area-inset-bottom))]'
+      } right-3.5 md:bottom-6 md:right-6 z-40 flex flex-col items-end gap-2 pointer-events-auto select-none`}
     >
       <a
         href={shopWhatsAppChatUrl('Hello Blessing Power Guide Support, I need help with ordering books')}

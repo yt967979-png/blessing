@@ -327,7 +327,7 @@ export function GoogleAuthModal({
         animate={{ y: 0, opacity: 1 }}
         exit={{ y: 48, opacity: 0 }}
         onClick={(e) => e.stopPropagation()}
-        className="bg-white rounded-t-3xl sm:rounded-3xl max-w-md w-full relative shadow-2xl border border-slate-100 overflow-hidden"
+        className="bg-white rounded-t-3xl sm:rounded-3xl max-w-md w-full relative shadow-2xl border border-slate-100 overflow-hidden max-h-[92vh] overflow-y-auto"
         style={{ paddingBottom: 'max(0px, env(safe-area-inset-bottom))' }}
       >
         <div className="sm:hidden w-12 h-1 rounded-full bg-slate-200 mx-auto mt-3" />
