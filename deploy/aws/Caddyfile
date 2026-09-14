@@ -1,7 +1,11 @@
 # Normal production proxy — DuckDNS + Let's Encrypt HTTPS.
 # Install: sudo cp deploy/aws/Caddyfile /etc/caddy/Caddyfile && sudo systemctl reload caddy
 
-blessingpowerguide.duckdns.org, blessingpowerguide.in, www.blessingpowerguide.in {
+www.blessingpowerguide.in {
+	redir https://blessingpowerguide.in{uri} permanent
+}
+
+blessingpowerguide.duckdns.org, blessingpowerguide.in {
 	encode gzip
 
 	@uploads path /uploads/*
