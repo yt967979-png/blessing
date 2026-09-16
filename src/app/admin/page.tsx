@@ -24,6 +24,7 @@ import OrdersSection from '@/components/admin/OrdersSection';
 import CourierSection from '@/components/admin/CourierSection';
 import CatalogSection from '@/components/admin/CatalogSection';
 import CouponsSection from '@/components/admin/CouponsSection';
+import AnalyticsSection from '@/components/admin/AnalyticsSection';
 import SystemHealthSection from '@/components/admin/SystemHealthSection';
 import { LiveSupportSection } from '@/components/admin/LiveSupportSection';
 
@@ -62,46 +63,6 @@ interface Analytics {
 }
 
 const fmt = (n: number) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
-
-// Simple SVG bar chart for revenue analytics
-function SimpleBarChart({ data, height = 140 }: { data: DailyPoint[]; height?: number }) {
-  if (!data || !data.length) return <div className="flex items-center justify-center h-32 text-xs text-slate-400">No sales recorded in this period</div>;
-  const maxRev = Math.max(...data.map((d) => d.revenue), 1);
-  const barW = Math.max(6, Math.min(32, Math.floor(580 / data.length) - 4));
-  const gap = Math.max(3, Math.floor(580 / data.length) - barW);
-  return (
-    <div className="w-full overflow-x-auto pb-1">
-      <svg width={Math.max(data.length * (barW + gap), 320)} height={height + 28} className="block">
-        {data.map((d, i) => {
-          const barH = Math.max(3, Math.round((d.revenue / maxRev) * height));
-          const x = i * (barW + gap);
-          const y = height - barH;
-          const isToday = i === data.length - 1;
-          return (
-            <g key={d.day}>
-              <rect
-                x={x}
-                y={y}
-                width={barW}
-                height={barH}
-                rx={4}
-                fill={isToday ? '#2874f0' : '#93c5fd'}
-                className="transition-all hover:fill-[#0044aa]"
-              />
-              <title>{d.day}: {fmt(d.revenue)} ({d.orders} orders)</title>
-              {i % Math.max(1, Math.floor(data.length / 7)) === 0 && (
-                <text x={x + barW / 2} y={height + 18} textAnchor="middle"
-                  fontSize={10} fill="#64748b" fontWeight="500">
-                  {new Date(d.day).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-                </text>
-              )}
-            </g>
-          );
-        })}
-      </svg>
-    </div>
-  );
-}
 
 /**
  * Synthesizes a crisp, celebratory cash-register / payment chime via Web Audio API.
@@ -338,11 +299,15 @@ function AdminPageInner() {
     } catch {}
   }, [user]);
 
-  const loadAnalytics = useCallback(async () => {
+  const loadAnalytics = useCallback(async (opts?: { fresh?: boolean }) => {
     if (!user?.id) return;
     setAnalyticsLoading(true);
     try {
-      const res = await fetch(`/api/admin/analytics?days=${analyticsRange}`, {
+      const q = new URLSearchParams({
+        range: String(analyticsRange),
+        ...(opts?.fresh ? { fresh: 'true' } : {}),
+      });
+      const res = await fetch(`/api/admin/analytics?${q.toString()}`, {
         headers: authHeaders(user),
         signal: AbortSignal.timeout(15000),
       });
@@ -850,79 +815,14 @@ function AdminPageInner() {
 
           {/* SECTION G: REVENUE & GST REPORTS */}
           {activeTab === 'analytics' && (
-            <div className="space-y-6">
-              <div className="bg-white rounded-2xl border border-slate-200 p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
-                <div>
-                  <h2 className="font-bold text-base text-slate-900">Revenue Analytics & GST Tax Ledger</h2>
-                  <p className="text-xs text-slate-500 mt-0.5">Sales breakdown, payment trends, and 1-click accountant tax export</p>
-                </div>
-                <div className="flex items-center gap-2.5">
-                  <button
-                    type="button"
-                    onClick={handleExportCsv}
-                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-colors"
-                  >
-                    <Download className="w-4 h-4" />
-                    <span>Download GST Ledger CSV</span>
-                  </button>
-                  <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
-                    {[7, 14, 30, 90].map((d) => (
-                      <button
-                        key={d}
-                        type="button"
-                        onClick={() => setAnalyticsRange(d)}
-                        className={`px-3 py-1 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
-                          analyticsRange === d ? 'bg-[#2874f0] text-white shadow-xs' : 'text-slate-600 hover:bg-slate-200'
-                        }`}
-                      >
-                        {d}d
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {analytics && (
-                <>
-                  <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs">
-                    <h3 className="font-bold text-xs text-slate-500 uppercase tracking-wider mb-4">
-                      Daily Sales Volume ({analytics.range} Days)
-                    </h3>
-                    <SimpleBarChart data={analytics.daily} height={140} />
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                    <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs">
-                      <h3 className="font-bold text-xs text-slate-500 uppercase tracking-wider mb-4">
-                        Top Selling Guide Books
-                      </h3>
-                      <div className="space-y-3">
-                        {analytics.topProducts.slice(0, 5).map((tp, idx) => (
-                          <div key={idx} className="flex justify-between items-center text-xs pb-2 border-b border-slate-100 last:border-0 last:pb-0">
-                            <span className="font-bold text-slate-900 truncate max-w-[220px]">{tp.title}</span>
-                            <span className="font-medium text-slate-500">{tp.totalQty} sold ({fmt(tp.totalRevenue)})</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs">
-                      <h3 className="font-bold text-xs text-slate-500 uppercase tracking-wider mb-4">
-                        Payment Methods
-                      </h3>
-                      <div className="space-y-3">
-                        {analytics.paymentMethods.map((pm, idx) => (
-                          <div key={idx} className="flex justify-between items-center text-xs pb-2 border-b border-slate-100 last:border-0 last:pb-0">
-                            <span className="font-bold text-slate-900">{pm.method}</span>
-                            <span className="font-medium text-slate-500">{pm.count} orders ({fmt(pm.revenue)})</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
+            <AnalyticsSection
+              analytics={analytics}
+              analyticsLoading={analyticsLoading}
+              analyticsRange={analyticsRange}
+              onSetRange={setAnalyticsRange}
+              onRefresh={() => void loadAnalytics({ fresh: true })}
+              onExportCsv={handleExportCsv}
+            />
           )}
 
           {/* SECTION H: SYSTEM HEALTH & TELEMETRY */}

@@ -29,14 +29,38 @@ export async function GET(request: NextRequest) {
     await ensureReviewSchema(queryDb as any);
 
     if (adminList) {
-      const res = await queryDb(
-        `SELECT r.*, b.title AS book_title, u.name AS user_name, u.email AS user_email
-         FROM reviews r
-         LEFT JOIN books b ON b.id = r.book_id
-         LEFT JOIN users u ON u.id = r.user_id
-         ORDER BY r.created_at DESC
-         LIMIT 200`
-      );
+      const search = (searchParams.get('q') || '').trim().toLowerCase();
+      const ratingFilter = Number(searchParams.get('rating')) || 0;
+
+      let adminSql = `
+        SELECT r.*, b.title AS book_title, u.name AS user_name, u.email AS user_email
+        FROM reviews r
+        LEFT JOIN books b ON b.id = r.book_id
+        LEFT JOIN users u ON u.id = r.user_id
+        WHERE 1=1
+      `;
+      const adminParams: any[] = [];
+
+      if (ratingFilter >= 1 && ratingFilter <= 5) {
+        adminParams.push(ratingFilter);
+        adminSql += ` AND r.rating = $${adminParams.length}`;
+      }
+
+      if (search) {
+        adminParams.push(`%${search}%`);
+        const pIdx = adminParams.length;
+        adminSql += ` AND (
+          LOWER(COALESCE(b.title, '')) LIKE $${pIdx} OR
+          LOWER(COALESCE(r.user_name, '')) LIKE $${pIdx} OR
+          LOWER(COALESCE(u.name, '')) LIKE $${pIdx} OR
+          LOWER(COALESCE(u.email, '')) LIKE $${pIdx} OR
+          LOWER(COALESCE(r.review, '')) LIKE $${pIdx}
+        )`;
+      }
+
+      adminSql += ` ORDER BY r.created_at DESC LIMIT 200`;
+
+      const res = await queryDb(adminSql, adminParams);
       return NextResponse.json(
         res.rows.map((r: any) => ({
           ...mapPublicReview(r),
@@ -61,10 +85,34 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      const res = await queryDb(
-        `SELECT * FROM reviews WHERE book_id = $1 ORDER BY created_at DESC LIMIT 100`,
-        [bookId]
-      );
+      const sortParam = searchParams.get('sort') || 'newest';
+      let orderBy = 'created_at DESC';
+      if (sortParam === 'highest') {
+        orderBy = 'rating DESC, created_at DESC';
+      } else if (sortParam === 'lowest') {
+        orderBy = 'rating ASC, created_at DESC';
+      } else if (sortParam === 'helpful') {
+        orderBy = 'COALESCE(helpful_count, 0) DESC, created_at DESC';
+      }
+
+      const filterRating = Number(searchParams.get('rating'));
+      const photosOnly = searchParams.get('photos') === '1';
+
+      let sql = `SELECT * FROM reviews WHERE book_id = $1`;
+      const params: any[] = [bookId];
+
+      if (filterRating >= 1 && filterRating <= 5) {
+        params.push(filterRating);
+        sql += ` AND rating = $${params.length}`;
+      }
+
+      if (photosOnly) {
+        sql += ` AND images IS NOT NULL AND jsonb_array_length(CASE WHEN jsonb_typeof(images) = 'array' THEN images ELSE '[]'::jsonb END) > 0`;
+      }
+
+      sql += ` ORDER BY ${orderBy} LIMIT 100`;
+
+      const res = await queryDb(sql, params);
       const reviews = res.rows.map((r: any) => ({
         ...mapPublicReview(r),
         isOwn: session?.userId != null && r.user_id === session.userId,
@@ -74,6 +122,7 @@ export async function GET(request: NextRequest) {
         stats: {
           count: stats.count,
           avgRating: stats.count > 0 ? stats.avgRating : 0,
+          breakdown: stats.breakdown || { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 },
         },
         reviews,
         canReview,
@@ -98,11 +147,32 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const session = await getAuthenticatedUser(request);
-  if (!session) return unauthorizedResponse('Login required to submit a review.');
-
   try {
     const body = await request.json().catch(() => ({}));
+
+    // Action: Helpful vote
+    if (body.action === 'vote_helpful') {
+      const reviewId = String(body.reviewId || '').trim();
+      if (!reviewId) {
+        return NextResponse.json({ error: 'Review id is required.' }, { status: 400 });
+      }
+      await ensureReviewSchema(queryDb as any);
+      const res = await queryDb(
+        `UPDATE reviews SET helpful_count = COALESCE(helpful_count, 0) + 1 WHERE id = $1 RETURNING helpful_count`,
+        [reviewId]
+      );
+      if (!res.rows.length) {
+        return NextResponse.json({ error: 'Review not found.' }, { status: 404 });
+      }
+      return NextResponse.json({
+        success: true,
+        helpfulCount: Number(res.rows[0].helpful_count || 1),
+      });
+    }
+
+    const session = await getAuthenticatedUser(request);
+    if (!session) return unauthorizedResponse('Login required to submit a review.');
+
     const bookId = String(body.bookId || '').trim();
     const rating = Math.min(5, Math.max(1, Number(body.rating) || 0));
     const comment = String(body.comment || body.review || '').trim();

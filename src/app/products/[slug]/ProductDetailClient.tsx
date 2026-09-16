@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
@@ -14,6 +14,10 @@ import {
   ChevronRight,
   FileText,
   Download,
+  ThumbsUp,
+  X,
+  Camera,
+  ArrowUpDown,
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { Header } from '@/components/layout/Header';
@@ -29,7 +33,7 @@ import { MIN_BOOKS_PER_ORDER, booksUntilMinOrder, minOrderCheckoutMessage } from
 function applyReviewsPayload(
   data: any,
   setters: {
-    setReviewStats: (v: { count: number; avgRating: number }) => void;
+    setReviewStats: (v: any) => void;
     setDbReviews: (v: any[]) => void;
     setCanReview: (v: boolean) => void;
     setUserReview: (v: any) => void;
@@ -72,6 +76,11 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewText, setReviewText] = useState('');
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+  const [selectedRatingFilter, setSelectedRatingFilter] = useState<number | null>(null);
+  const [reviewSort, setReviewSort] = useState<'newest' | 'highest' | 'lowest' | 'helpful'>('newest');
+  const [photosOnlyFilter, setPhotosOnlyFilter] = useState(false);
+  const [helpfulVoted, setHelpfulVoted] = useState<Record<string, boolean>>({});
+  const [lightboxImg, setLightboxImg] = useState<string | null>(null);
 
   const storeProduct = products.find((p: any) => p.slug === slug || p.id === slug) || null;
   // dbProduct is fetched once; storeProduct is kept live by the catalog poll in
@@ -195,6 +204,59 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
       : dbReviews.length > 0
         ? (dbReviews.reduce((sum, r) => sum + Number(r.rating || 5), 0) / dbReviews.length).toFixed(1)
         : '0.0';
+
+  const ratingBreakdown = useMemo(() => {
+    const counts: Record<number, number> = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+    const rawBreakdown = (reviewStats as any)?.breakdown;
+    if (rawBreakdown && typeof rawBreakdown === 'object') {
+      for (let s = 1; s <= 5; s++) {
+        counts[s] = Number(rawBreakdown[s] || 0);
+      }
+    } else {
+      dbReviews.forEach((r) => {
+        const star = Math.round(Number(r.rating || 5));
+        if (star >= 1 && star <= 5) counts[star] = (counts[star] || 0) + 1;
+      });
+    }
+    const total = Object.values(counts).reduce((a, b) => a + b, 0);
+    return { counts, total };
+  }, [reviewStats, dbReviews]);
+
+  const handleHelpfulVote = async (revId: string) => {
+    if (helpfulVoted[revId]) return;
+    setHelpfulVoted((prev) => ({ ...prev, [revId]: true }));
+    setDbReviews((prev) =>
+      prev.map((r) =>
+        r.id === revId ? { ...r, helpfulCount: (Number(r.helpfulCount) || 0) + 1 } : r
+      )
+    );
+    try {
+      await fetch('/api/reviews', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'vote_helpful', reviewId: revId }),
+      });
+    } catch (_) {}
+  };
+
+  const displayedReviews = useMemo(() => {
+    let list = [...dbReviews];
+    if (selectedRatingFilter !== null) {
+      list = list.filter((r) => Math.round(Number(r.rating || 5)) === selectedRatingFilter);
+    }
+    if (photosOnlyFilter) {
+      list = list.filter((r) => Array.isArray(r.images) && r.images.length > 0);
+    }
+    list.sort((a, b) => {
+      if (reviewSort === 'highest') return (Number(b.rating) || 0) - (Number(a.rating) || 0);
+      if (reviewSort === 'lowest') return (Number(a.rating) || 0) - (Number(b.rating) || 0);
+      if (reviewSort === 'helpful') return (Number(b.helpfulCount) || 0) - (Number(a.helpfulCount) || 0);
+      const dateA = new Date(a.createdAt || 0).getTime();
+      const dateB = new Date(b.createdAt || 0).getTime();
+      return dateB - dateA;
+    });
+    return list;
+  }, [dbReviews, selectedRatingFilter, photosOnlyFilter, reviewSort]);
 
   const handleReviewImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -650,29 +712,15 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
         </div>
 
         <section className="bg-white border border-slate-200 rounded-2xl p-6 md:p-8 shadow-xs mb-12">
+          {/* Section Heading & Review CTA */}
           <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-200 pb-6 mb-6 gap-4">
             <div>
               <h3 className="font-heading font-black text-2xl text-[#001B3A]">
-                Verified Student Reviews
+                Customer & Student Reviews
               </h3>
-              <div className="flex items-center gap-2 mt-1">
-                {displayCount > 0 ? (
-                  <>
-                    <div className="flex text-amber-400">
-                      {[...Array(5)].map((_, i) => (
-                        <Star
-                          key={i}
-                          className={`w-4 h-4 ${i < Math.round(Number(calculatedAvg)) ? 'fill-amber-400 text-amber-400' : 'text-slate-300'}`}
-                        />
-                      ))}
-                    </div>
-                    <span className="font-extrabold text-slate-900 text-sm">{calculatedAvg} / 5</span>
-                    <span className="text-slate-400 text-xs">• {displayCount} verified reviews</span>
-                  </>
-                ) : (
-                  <span className="text-slate-400 text-xs">Real ratings from delivered orders only</span>
-                )}
-              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                Authentic feedback from verified students who received this textbook
+              </p>
             </div>
             {userReview ? (
               <button
@@ -759,14 +807,14 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
                       <button
                         type="button"
                         onClick={() => setReviewImages((p) => p.filter((_, j) => j !== i))}
-                        className="absolute top-0 right-0 bg-red-500 text-white text-[8px] px-1"
+                        className="absolute top-0 right-0 bg-red-500 text-white text-[8px] px-1 cursor-pointer"
                       >
                         ×
                       </button>
                     </div>
                   ))}
                   {reviewImages.length < 5 && (
-                    <label className="w-16 h-16 border-2 border-dashed border-slate-300 rounded-lg flex items-center justify-center cursor-pointer text-[10px] font-bold text-slate-500">
+                    <label className="w-16 h-16 border-2 border-dashed border-slate-300 rounded-lg flex items-center justify-center cursor-pointer text-[10px] font-bold text-slate-500 hover:border-blue-500 transition-colors">
                       {uploadingImage ? '…' : '+ Photo'}
                       <input type="file" accept="image/*" className="hidden" onChange={handleReviewImageUpload} />
                     </label>
@@ -784,50 +832,250 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
             </div>
           )}
 
-          {dbReviews.length === 0 ? (
+          {/* Rating Summary & Star Distribution Breakdown */}
+          {displayCount > 0 && (
+            <div className="bg-slate-50/80 border border-slate-200 rounded-2xl p-5 md:p-6 mb-6">
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
+                {/* Score Column */}
+                <div className="md:col-span-4 flex flex-col items-center justify-center text-center md:border-r md:border-slate-200 md:pr-6">
+                  <div className="text-4xl md:text-5xl font-black text-[#001B3A] tracking-tight">
+                    {calculatedAvg}
+                  </div>
+                  <div className="flex text-amber-400 my-2">
+                    {[...Array(5)].map((_, i) => (
+                      <Star
+                        key={i}
+                        className={`w-5 h-5 ${i < Math.round(Number(calculatedAvg)) ? 'fill-amber-400 text-amber-400' : 'text-slate-200'}`}
+                      />
+                    ))}
+                  </div>
+                  <span className="text-xs font-bold text-slate-700">
+                    {displayCount} Verified Student {displayCount === 1 ? 'Review' : 'Reviews'}
+                  </span>
+                  <span className="text-[11px] text-slate-400 mt-0.5">
+                    100% genuine delivered purchases
+                  </span>
+                </div>
+
+                {/* Rating Distribution Bar Chart */}
+                <div className="md:col-span-8 space-y-2">
+                  {[5, 4, 3, 2, 1].map((star) => {
+                    const count = ratingBreakdown.counts[star] || 0;
+                    const percent = ratingBreakdown.total > 0 ? Math.round((count / ratingBreakdown.total) * 100) : 0;
+                    const isSelected = selectedRatingFilter === star;
+
+                    return (
+                      <button
+                        key={star}
+                        type="button"
+                        onClick={() => setSelectedRatingFilter(isSelected ? null : star)}
+                        className={`w-full flex items-center gap-3 p-1.5 rounded-lg transition-colors text-left group cursor-pointer ${
+                          isSelected ? 'bg-amber-100/70 ring-1 ring-amber-300' : 'hover:bg-slate-100'
+                        }`}
+                      >
+                        <span className="text-xs font-bold text-slate-700 w-12 shrink-0 flex items-center gap-1">
+                          <span>{star}</span>
+                          <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                        </span>
+
+                        {/* Progress bar track */}
+                        <div className="flex-1 h-3 bg-slate-200 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-500 ${
+                              isSelected ? 'bg-amber-500' : 'bg-amber-400 group-hover:bg-amber-500'
+                            }`}
+                            style={{ width: `${percent}%` }}
+                          />
+                        </div>
+
+                        <span className="text-xs font-semibold text-slate-500 w-12 text-right shrink-0">
+                          {percent}%
+                        </span>
+                        <span className="text-[11px] text-slate-400 w-8 text-right shrink-0">
+                          ({count})
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Active Filter Pill indicator if filtered */}
+              {selectedRatingFilter !== null && (
+                <div className="mt-4 pt-3 border-t border-slate-200/60 flex items-center justify-between text-xs">
+                  <span className="font-semibold text-slate-600">
+                    Showing only <strong className="text-amber-600">{selectedRatingFilter}-Star</strong> reviews ({displayedReviews.length})
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedRatingFilter(null)}
+                    className="text-xs font-bold text-blue-600 hover:underline cursor-pointer"
+                  >
+                    Reset Filter (Show All)
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Sort & Filter Controls Bar */}
+          {dbReviews.length > 0 && (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 pb-4 border-b border-slate-100">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-xs font-bold text-slate-500 mr-1 flex items-center gap-1">
+                  <ArrowUpDown className="w-3.5 h-3.5" />
+                  Sort:
+                </span>
+                {(
+                  [
+                    { key: 'newest', label: 'Most Recent' },
+                    { key: 'highest', label: 'Highest Rated' },
+                    { key: 'lowest', label: 'Lowest Rated' },
+                    { key: 'helpful', label: 'Most Helpful' },
+                  ] as const
+                ).map((s) => (
+                  <button
+                    key={s.key}
+                    type="button"
+                    onClick={() => setReviewSort(s.key)}
+                    className={`px-3 py-1 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
+                      reviewSort === s.key
+                        ? 'bg-[#2874f0] text-white shadow-xs'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setPhotosOnlyFilter(!photosOnlyFilter)}
+                className={`self-start sm:self-auto px-3 py-1 text-xs font-bold rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer ${
+                  photosOnlyFilter
+                    ? 'bg-purple-600 text-white shadow-xs'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                <Camera className="w-3.5 h-3.5" />
+                <span>Photos Only ({dbReviews.filter((r) => r.images?.length > 0).length})</span>
+              </button>
+            </div>
+          )}
+
+          {/* Reviews Grid */}
+          {displayedReviews.length === 0 ? (
             <div className="py-10 text-center text-slate-400 border border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
               <Star className="w-8 h-8 mx-auto mb-2 text-amber-400 opacity-60" />
-              <p className="text-xs font-bold text-slate-700">No verified reviews yet.</p>
-              <p className="text-[11px] text-slate-500 mt-0.5">Only students who bought & received this book can review.</p>
+              <p className="text-xs font-bold text-slate-700">
+                {selectedRatingFilter !== null || photosOnlyFilter
+                  ? 'No reviews match your selected filter.'
+                  : 'No verified reviews yet.'}
+              </p>
+              {(selectedRatingFilter !== null || photosOnlyFilter) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedRatingFilter(null);
+                    setPhotosOnlyFilter(false);
+                  }}
+                  className="text-xs font-bold text-blue-600 hover:underline mt-2 cursor-pointer"
+                >
+                  Clear all filters
+                </button>
+              )}
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {dbReviews.map((rev: any) => (
-                <div key={rev.id || rev.studentName + rev.comment} className="bg-slate-50 border border-slate-200 rounded-xl p-5">
-                  <div className="flex justify-between items-start mb-2">
-                    <div>
-                      <div className="font-extrabold text-slate-900 text-sm">{rev.studentName}</div>
-                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded border border-emerald-200 uppercase">
-                        Verified Purchase
-                      </span>
+              {displayedReviews.map((rev: any) => (
+                <div key={rev.id || rev.studentName + rev.comment} className="bg-slate-50 border border-slate-200 rounded-xl p-5 flex flex-col justify-between hover:border-slate-300 transition-colors">
+                  <div>
+                    <div className="flex justify-between items-start mb-2">
+                      <div>
+                        <div className="font-extrabold text-slate-900 text-sm">{rev.studentName}</div>
+                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded border border-emerald-200 uppercase">
+                          Verified Purchase
+                        </span>
+                      </div>
+                      <div className="flex gap-0.5">
+                        {Array.from({ length: rev.rating || 5 }).map((_, i) => (
+                          <Star key={i} className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                        ))}
+                      </div>
                     </div>
-                    <div className="flex gap-0.5">
-                      {Array.from({ length: rev.rating || 5 }).map((_, i) => (
-                        <Star key={i} className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                      ))}
-                    </div>
+                    <p className="text-slate-600 text-xs leading-relaxed font-medium">&ldquo;{rev.comment}&rdquo;</p>
+                    {rev.images?.length > 0 && (
+                      <div className="flex gap-2 mt-3 flex-wrap">
+                        {rev.images.map((url: string, i: number) => (
+                          <button
+                            key={i}
+                            type="button"
+                            onClick={() => setLightboxImg(url)}
+                            className="w-14 h-14 rounded-lg overflow-hidden border border-slate-200 hover:opacity-90 hover:scale-105 transition-transform cursor-pointer"
+                          >
+                            <Image
+                              src={url}
+                              alt="Review image"
+                              width={56}
+                              height={56}
+                              className="w-full h-full object-cover"
+                              unoptimized={imageNeedsUnoptimized(url)}
+                            />
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <p className="text-slate-600 text-xs leading-relaxed font-medium">&ldquo;{rev.comment}&rdquo;</p>
-                  {rev.images?.length > 0 && (
-                    <div className="flex gap-2 mt-3 flex-wrap">
-                      {rev.images.map((url: string, i: number) => (
-                        <Image
-                          key={i}
-                          src={url}
-                          alt=""
-                          width={56}
-                          height={56}
-                          className="w-14 h-14 rounded-lg object-cover border"
-                          unoptimized={imageNeedsUnoptimized(url)}
-                        />
-                      ))}
-                    </div>
-                  )}
-                  {rev.createdAt && (
-                    <p className="text-[10px] text-slate-400 mt-2">{rev.createdAt}</p>
-                  )}
+
+                  <div className="flex items-center justify-between border-t border-slate-200/60 pt-3 mt-3 text-[11px] text-slate-400">
+                    <span>{rev.createdAt || 'Delivered order'}</span>
+
+                    <button
+                      type="button"
+                      onClick={() => handleHelpfulVote(rev.id)}
+                      disabled={helpfulVoted[rev.id]}
+                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg font-bold text-[11px] transition-colors cursor-pointer ${
+                        helpfulVoted[rev.id]
+                          ? 'bg-emerald-100 text-emerald-700'
+                          : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
+                      }`}
+                    >
+                      <ThumbsUp className="w-3 h-3" />
+                      <span>
+                        {helpfulVoted[rev.id] ? 'Helpful ✓' : 'Helpful'}
+                        {Number(rev.helpfulCount || 0) > 0 ? ` (${rev.helpfulCount})` : ''}
+                      </span>
+                    </button>
+                  </div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* Lightbox Photo Preview Modal */}
+          {lightboxImg && (
+            <div
+              className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm"
+              onClick={() => setLightboxImg(null)}
+            >
+              <div
+                className="relative max-w-2xl max-h-[85vh] bg-white rounded-2xl p-2 overflow-hidden shadow-2xl"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <button
+                  type="button"
+                  onClick={() => setLightboxImg(null)}
+                  className="absolute top-4 right-4 bg-slate-900/80 hover:bg-slate-900 text-white rounded-full p-1.5 z-10 cursor-pointer transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+                <img
+                  src={lightboxImg}
+                  alt="Student review photo"
+                  className="max-h-[80vh] w-auto object-contain rounded-xl"
+                />
+              </div>
             </div>
           )}
         </section>

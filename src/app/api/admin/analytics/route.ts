@@ -47,7 +47,7 @@ export async function GET(request: Request) {
   if (!session) return forbiddenResponse('Unauthorized: Missing session');
 
   const { searchParams } = new URL(request.url);
-  const range = searchParams.get('range') || '30';
+  const range = searchParams.get('range') || searchParams.get('days') || '30';
   const days = Math.min(Math.max(Number(range) || 30, 1), 365);
   const bypassCache = searchParams.get('fresh') === 'true';
 
@@ -224,6 +224,11 @@ export async function GET(request: Request) {
           hourly: hourlyRes.rows.map((r: any) => ({
             hour: Number(r.hour),
             orders: Number(r.orders),
+          })),
+          monthlyTrend: momRes.rows.map((r: any) => ({
+            month: r.month,
+            orders: Number(r.orders),
+            revenue: Number(r.revenue),
           })),
           range: days,
         };

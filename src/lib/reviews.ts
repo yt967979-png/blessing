@@ -9,6 +9,7 @@ export interface ReviewRow {
   rating: number;
   review: string;
   images: string[] | null;
+  helpful_count?: number;
   verified_purchase: boolean;
   created_at: string | Date;
   updated_at: string | Date | null;
@@ -29,6 +30,7 @@ export async function ensureReviewSchema(client: any) {
     ALTER TABLE reviews ADD COLUMN IF NOT EXISTS user_id VARCHAR(255);
     ALTER TABLE reviews ADD COLUMN IF NOT EXISTS order_id VARCHAR(255);
     ALTER TABLE reviews ADD COLUMN IF NOT EXISTS images JSONB DEFAULT '[]'::jsonb;
+    ALTER TABLE reviews ADD COLUMN IF NOT EXISTS helpful_count INT DEFAULT 0;
     ALTER TABLE reviews ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
     ALTER TABLE reviews ADD COLUMN IF NOT EXISTS verified_purchase BOOLEAN DEFAULT TRUE;
     CREATE UNIQUE INDEX IF NOT EXISTS idx_reviews_user_book
@@ -57,6 +59,7 @@ export function mapPublicReview(r: ReviewRow) {
     rating: Number(r.rating || 5),
     comment: r.review,
     images: parseImages(r.images),
+    helpfulCount: Number(r.helpful_count || 0),
     verifiedPurchase: r.verified_purchase !== false,
     createdAt: new Date(r.created_at).toLocaleDateString('en-IN', {
       day: 'numeric',
@@ -119,8 +122,26 @@ export async function getBookReviewStats(client: any, bookId: string) {
      FROM reviews WHERE book_id = $1`,
     [bookId]
   );
+
+  const distRes = await execQuery(
+    client,
+    `SELECT rating, COUNT(*)::int AS cnt
+     FROM reviews WHERE book_id = $1
+     GROUP BY rating`,
+    [bookId]
+  );
+
+  const breakdown: Record<number, number> = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+  (distRes.rows || []).forEach((row: any) => {
+    const star = Math.round(Number(row.rating));
+    if (star >= 1 && star <= 5) {
+      breakdown[star] = Number(row.cnt);
+    }
+  });
+
   return {
     count: Number(res.rows[0]?.count || 0),
     avgRating: Number(res.rows[0]?.avg_rating || 0),
+    breakdown,
   };
 }
