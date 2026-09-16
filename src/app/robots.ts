@@ -2,7 +2,7 @@ import { MetadataRoute } from 'next';
 
 export default function robots(): MetadataRoute.Robots {
   const baseUrl = (
-    process.env.NEXT_PUBLIC_SITE_URL || 'https://blessingpowerguide.duckdns.org'
+    process.env.NEXT_PUBLIC_SITE_URL || 'https://blessingpowerguide.in'
   ).replace(/\/+$/, '');
 
   return {

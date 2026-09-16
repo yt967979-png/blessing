@@ -4,7 +4,7 @@ import './globals.css';
 import { StoreProvider } from '@/context/StoreContext';
 import { ClientChrome } from '@/components/layout/ClientChrome';
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://blessingpowerguide.duckdns.org';
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://blessingpowerguide.in';
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),

@@ -6,7 +6,7 @@ import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
 import { Footer } from '@/components/layout/Footer';
 import { ShieldCheck, FileText, Lock, RefreshCw, Mail, Phone, MapPin } from 'lucide-react';
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://blessingpowerguide.duckdns.org';
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://blessingpowerguide.in';
 
 export const metadata: Metadata = {
   title: 'Privacy Policy | Blessing Power Guide',

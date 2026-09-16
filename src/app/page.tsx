@@ -39,7 +39,7 @@ export default function Home() {
     return () => clearTimeout(t);
   }, []);
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://blessingpowerguide.duckdns.org';
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://blessingpowerguide.in';
 
   const organizationSchema = {
     '@context': 'https://schema.org',

@@ -3,7 +3,7 @@ import { queryDb } from '@/lib/db';
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl = (
-    process.env.NEXT_PUBLIC_SITE_URL || 'https://blessingpowerguide.duckdns.org'
+    process.env.NEXT_PUBLIC_SITE_URL || 'https://blessingpowerguide.in'
   ).replace(/\/+$/, '');
 
   let productUrls: MetadataRoute.Sitemap = [];

@@ -5,7 +5,7 @@ import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
 import { Footer } from '@/components/layout/Footer';
 import { FileText, CheckCircle2, Shield, AlertTriangle } from 'lucide-react';
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://blessingpowerguide.duckdns.org';
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://blessingpowerguide.in';
 
 export const metadata: Metadata = {
   title: 'Terms of Service | Blessing Power Guide',

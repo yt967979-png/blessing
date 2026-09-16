@@ -6,7 +6,7 @@ import { Footer } from '@/components/layout/Footer';
 import { Truck, CheckCircle, Clock } from 'lucide-react';
 import { getShopPhoneDisplay } from '@/lib/shopContact';
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://blessingpowerguide.duckdns.org';
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://blessingpowerguide.in';
 
 export const metadata: Metadata = {
   title: 'Shipping & Delivery Policy | Blessing Power Guide',
