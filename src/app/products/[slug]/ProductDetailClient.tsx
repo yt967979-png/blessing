@@ -179,6 +179,13 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
     }
   }, [product?.image]);
 
+  useEffect(() => {
+    if (product?.title) {
+      const cls = product.cls ? ` | ${product.cls} Standard` : '';
+      document.title = `${product.title}${cls} | Blessing Power Guide`;
+    }
+  }, [product?.title, product?.cls]);
+
   const stillLoading = !product && (!productFetchDone || productsLoading);
 
   const displayCount = reviewStats.count > 0 ? reviewStats.count : dbReviews.length;

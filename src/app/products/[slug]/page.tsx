@@ -18,7 +18,7 @@ async function getBookMeta(slug: string) {
   try {
     const res = await queryDb(
       `SELECT b.id, b.slug, b.title, b.description,
-              COALESCE(b.class, b.cls, '') as class_standard,
+              b.category_id,
               b.subject,
               CASE
                 WHEN b.cover_image IS NULL OR b.cover_image = '' THEN NULL
@@ -26,19 +26,32 @@ async function getBookMeta(slug: string) {
                 WHEN length(b.cover_image) > 2048 THEN NULL
                 ELSE b.cover_image
               END AS cover_image,
-              b.discount_price, b.price, b.status, b.stock, b.in_stock,
+              b.discount_price, b.price, b.status, b.stock,
               b.sample_pdf_url,
               b.updated_at,
               COALESCE(COUNT(r.id), 0)::int as review_count,
               COALESCE(AVG(r.rating), 0)::numeric(3,1) as avg_rating
        FROM books b
        LEFT JOIN reviews r ON b.id = r.book_id
-       WHERE b.slug = $1 OR b.id = $1
+       WHERE b.slug = $1 OR b.id = $1 OR b.slug ILIKE $1
        GROUP BY b.id LIMIT 1`,
       [slug]
     );
-    return res.rows[0] || null;
-  } catch {
+    if (!res.rows || res.rows.length === 0) return null;
+    const row = res.rows[0];
+    const safeTitle = String(row.title || '');
+    const classMatch = safeTitle.match(/(6th|7th|8th|9th|10th|11th|12th)/i);
+    const extractedClass = classMatch
+      ? classMatch[0]
+      : row.category_id
+        ? String(row.category_id).replace(/^cat-/, '')
+        : '10th';
+    return {
+      ...row,
+      class_standard: extractedClass,
+    };
+  } catch (err) {
+    console.error('getBookMeta error for slug', slug, err);
     return null;
   }
 }
