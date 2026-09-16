@@ -12,11 +12,6 @@ export const JOB_THRESHOLDS: Record<string, HeartbeatThreshold> = {
     expectedIntervalMs: 2 * 60 * 1000,
     maxSilenceMs: 6 * 60 * 1000, // 6 min max
   },
-  orphanRefundSweep: {
-    jobName: 'orphanRefundSweep',
-    expectedIntervalMs: 10 * 60 * 1000,
-    maxSilenceMs: 25 * 60 * 1000, // 25 min max
-  },
   reconcileUnfinalizedRefunds: {
     jobName: 'reconcileUnfinalizedRefunds',
     expectedIntervalMs: 10 * 60 * 1000,
