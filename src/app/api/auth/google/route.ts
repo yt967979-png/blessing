@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import { createSessionToken, hashPassword, applySessionCookies, createDeviceId } from '@/lib/auth';
 import { isConfiguredSuperAdminEmail } from '@/lib/superAdmins';
 import { applyRateLimitAsync, clientIp } from '@/lib/serverSecurity';
-import { verifyGoogleIdToken } from '@/lib/googleAuth';
+import { verifyGoogleIdToken, getGoogleClientId } from '@/lib/googleAuth';
 import { userNeedsProfile } from '@/lib/userProfile';
 import { isBookInStock } from '@/lib/stock';
 
