@@ -209,3 +209,9 @@ export async function POST(request: Request) {
     );
   }
 }
+
+export async function GET() {
+  const clientId = getGoogleClientId();
+  return NextResponse.json({ clientId });
+}
+

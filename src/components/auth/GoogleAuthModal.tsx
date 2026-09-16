@@ -48,7 +48,18 @@ export function GoogleAuthModal({
   const router = useRouter();
   const { loginUser, showToast, user } = useStore();
   const googleBtnRef = useRef<HTMLDivElement>(null);
-  const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '';
+  const [clientId, setClientId] = useState(process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '');
+
+  useEffect(() => {
+    fetch('/api/auth/google')
+      .then((r) => r.json())
+      .then((d) => {
+        if (d?.clientId && typeof d.clientId === 'string' && d.clientId.trim()) {
+          setClientId(d.clientId.trim());
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const [step, setStep] = useState<Step>(forceProfileStep ? 'profile' : 'auth');
   const [authError, setAuthError] = useState<string | null>(null);
