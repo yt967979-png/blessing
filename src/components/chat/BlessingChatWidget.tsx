@@ -468,32 +468,33 @@ export const BlessingChatWidget: React.FC = () => {
         <div
           className={`fixed ${
             isPDP
-              ? 'bottom-[calc(9.5rem+env(safe-area-inset-bottom))]'
-              : 'bottom-[calc(4.75rem+env(safe-area-inset-bottom))]'
-          } left-3.5 md:bottom-6 md:left-6 z-40`}
+              ? 'bottom-[calc(8.5rem+env(safe-area-inset-bottom))]'
+              : 'bottom-[calc(4.5rem+env(safe-area-inset-bottom))]'
+          } left-3 sm:bottom-6 sm:left-6 z-40`}
         >
           <button
             type="button"
             onClick={() => setIsOpen(true)}
-            className="group relative flex items-center gap-2 sm:gap-2.5 px-3 py-2.5 sm:px-4 sm:py-3 rounded-full bg-[#001b3a] text-white shadow-[0_8px_25px_rgba(0,27,58,0.35)] hover:bg-[#002855] hover:scale-105 active:scale-95 transition-all duration-200 border border-white/20 cursor-pointer"
+            className="group relative flex items-center gap-2 sm:gap-2.5 px-3.5 py-2.5 sm:px-4.5 sm:py-3 rounded-full bg-gradient-to-r from-[#001b3a] via-[#002855] to-[#001b3a] text-white shadow-[0_8px_30px_rgba(0,27,58,0.4)] hover:shadow-[0_12px_35px_rgba(0,27,58,0.5)] hover:scale-105 active:scale-95 transition-all duration-200 border border-amber-400/30 cursor-pointer"
             aria-label="Open Live Support Chat"
           >
             <span className="relative flex items-center justify-center">
-              <MessageSquare className="w-4 h-4 sm:w-5 sm:h-5 text-[#fbbf24] fill-current" />
-              {/* Online indicator */}
+              <MessageSquare className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400 fill-amber-400/20" />
+              {/* Online pulse indicator */}
               <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500 ring-2 ring-[#001b3a]"></span>
               </span>
             </span>
             <div className="flex flex-col items-start leading-tight">
-              <span className="text-[9px] sm:text-[10px] uppercase font-black tracking-wider text-amber-400">
+              <span className="text-[9px] sm:text-[10px] uppercase font-black tracking-wider text-amber-300 flex items-center gap-1">
+                <Sparkles className="w-2.5 h-2.5 text-amber-300" />
                 Live Support
               </span>
-              <span className="text-[11px] sm:text-xs font-bold text-white flex items-center gap-1">
+              <span className="text-[11px] sm:text-xs font-extrabold text-white flex items-center gap-1">
                 Chat with Us
                 {unreadCount > 0 && (
-                  <span className="bg-red-500 text-white text-[9px] font-black px-1.5 py-0.2 rounded-full ml-1">
+                  <span className="bg-red-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full ml-1 animate-pulse">
                     {unreadCount}
                   </span>
                 )}
@@ -503,334 +504,438 @@ export const BlessingChatWidget: React.FC = () => {
         </div>
       )}
 
-      {/* ─── Live Chat Window / Drawer ─────────────────────────────────────── */}
+      {/* ─── Live Chat Window / Mobile Drawer ───────────────────────────────── */}
       {isOpen && (
-        <div className="fixed inset-0 sm:inset-auto sm:bottom-6 sm:left-6 z-50 sm:w-[400px] sm:h-[600px] flex flex-col bg-white sm:rounded-3xl shadow-2xl border border-slate-200 overflow-hidden animate-fade-slide-up">
-          {/* Header */}
-          <div className="bg-[#001b3a] text-white p-3.5 sm:p-4 pt-[max(0.875rem,env(safe-area-inset-top))] flex items-center justify-between border-b border-white/10 shrink-0">
-            <div className="flex items-center gap-2.5 sm:gap-3">
-              <div className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white/10 flex items-center justify-center border border-white/20 text-[#fbbf24] shrink-0">
-                {conversation?.status === 'ACTIVE' ? (
-                  <User className="w-5 h-5 text-emerald-400" />
-                ) : (
-                  <Bot className="w-5 h-5" />
-                )}
-                <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-500 border-2 border-[#001b3a]"></span>
-              </div>
-              <div>
-                <h3 className="font-extrabold text-sm flex items-center gap-1.5 text-white">
-                  {conversation?.status === 'ACTIVE'
-                    ? `${conversation.assigned_admin_name || 'Staff'} (Blessing Support)`
-                    : 'Blessing AI Assistant'}
-                </h3>
-                <p className="text-[11px] text-slate-300 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block animate-pulse"></span>
-                  {conversation?.status === 'ACTIVE'
-                    ? '🟢 Active with support agent'
-                    : conversation?.status === 'WAITING_ADMIN'
-                    ? '⏳ Connecting you to an agent...'
-                    : '⚡ Instant AI answers · 24/7'}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-1">
-              {conversation && messages.length >= 2 && !feedbackSubmitted && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowFeedbackPrompt(true);
-                    setTimeout(() => scrollToBottom('smooth'), 100);
-                  }}
-                  className="px-2 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-[10px] font-extrabold rounded-lg flex items-center gap-1 border border-amber-400/30 transition-colors"
-                  title="Rate support experience"
-                >
-                  <Star className="w-3 h-3 fill-amber-300 text-amber-300" />
-                  <span>Rate</span>
-                </button>
-              )}
-              {conversation && (
-                <button
-                  type="button"
-                  onClick={() => handleCloseChat(false)}
-                  disabled={loading}
-                  className="p-2 text-slate-300 hover:text-amber-400 hover:bg-white/10 rounded-xl transition-colors cursor-pointer"
-                  title="Close and start a fresh conversation"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-                </button>
-              )}
-              <Link
-                href="/help"
-                onClick={() => setIsOpen(false)}
-                className="p-2 text-slate-300 hover:text-white hover:bg-white/10 rounded-xl transition-colors cursor-pointer"
-                title="Open in full screen"
-              >
-                <Maximize2 className="w-4 h-4" />
-              </Link>
-              <button
-                type="button"
-                onClick={handleMinimize}
-                className="p-2 text-slate-300 hover:text-white hover:bg-white/10 rounded-xl transition-colors cursor-pointer"
-                title="Minimize chat"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
-
-          {/* Messages Stream */}
+        <>
+          {/* Mobile Backdrop overlay (tap to minimize) */}
           <div
-            ref={chatContainerRef}
-            className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/50 text-xs custom-scrollbar"
-          >
-            {/* Greeting card */}
-            <div className="bg-blue-50/80 border border-blue-100 rounded-2xl p-3 text-slate-700 space-y-1">
-              <p className="font-bold text-xs text-[#2874f0] flex items-center gap-1">
-                <Sparkles className="w-3.5 h-3.5" /> Welcome to Blessing Power Guide!
-              </p>
-              <p className="text-[11px] text-slate-600 leading-relaxed">
-                Ask anything about 10th guides, real-time tracking, or click below to speak directly with an admin.
-              </p>
-            </div>
+            onClick={handleMinimize}
+            className="fixed inset-0 bg-slate-950/40 backdrop-blur-[2px] z-50 sm:hidden transition-opacity"
+            aria-hidden="true"
+          />
 
-            {/* Render conversation messages */}
-            {messages.map((msg, index) => {
-              const isCust = msg.sender_type === 'CUSTOMER';
-              const isSys = msg.sender_type === 'SYSTEM';
+          <div className="fixed inset-x-0 bottom-0 top-10 sm:top-auto sm:right-auto sm:bottom-6 sm:left-6 sm:w-[420px] sm:h-[640px] sm:max-h-[calc(100vh-2.5rem)] z-50 flex flex-col bg-white rounded-t-[28px] sm:rounded-3xl shadow-[0_25px_70px_-15px_rgba(0,27,58,0.4)] border border-slate-200/80 overflow-hidden transition-all duration-300">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-[#001b3a] via-[#002855] to-[#001b3a] text-white p-3 sm:p-4 pt-[max(0.75rem,env(safe-area-inset-top))] flex flex-col border-b border-white/10 shrink-0">
+              {/* Mobile pull handle */}
+              <div
+                onClick={handleMinimize}
+                className="w-12 h-1 rounded-full bg-white/30 hover:bg-white/50 mx-auto mb-2.5 sm:hidden cursor-pointer"
+                title="Swipe down or tap to close"
+              />
 
-              if (isSys) {
-                return (
-                  <div key={msg.id || index} className="text-center my-2">
-                    <span className="inline-block px-3 py-1 bg-amber-50 border border-amber-200 text-amber-800 text-[10px] font-bold rounded-full shadow-2xs">
-                      {msg.text}
-                    </span>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5 sm:gap-3">
+                  <div className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white/10 flex items-center justify-center border border-white/20 text-amber-300 shrink-0 shadow-inner">
+                    {conversation?.status === 'ACTIVE' ? (
+                      <User className="w-5 h-5 text-emerald-400" />
+                    ) : (
+                      <Bot className="w-5 h-5 text-amber-300" />
+                    )}
+                    <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-500 border-2 border-[#001b3a] shadow-xs"></span>
                   </div>
-                );
-              }
-
-              return (
-                <div
-                  key={msg.id || index}
-                  className={`flex flex-col ${isCust ? 'items-end' : 'items-start'} space-y-1`}
-                >
-                  <span className="text-[9.5px] font-bold text-slate-400 px-1">
-                    {msg.sender_name}
-                  </span>
-                  <div
-                    className={`max-w-[85%] px-3.5 py-2.5 rounded-2xl text-xs leading-relaxed ${
-                      isCust
-                        ? 'bg-[#2874f0] text-white rounded-br-xs shadow-xs'
-                        : 'bg-white text-slate-800 border border-slate-200 rounded-bl-xs shadow-xs'
-                    }`}
-                  >
-                    <ChatMarkdown content={msg.text} isCustomer={isCust} />
-
-                    {/* Interactive Action Card (e.g. Order Tracking Card, Books Showcase, Contact) */}
-                    {!isCust && (msg.linkedOrderData || msg.cardType) && (
-                      <ChatInteractiveCard
-                        cardType={msg.cardType}
-                        linkedOrderData={msg.linkedOrderData}
-                        cardData={msg.cardData}
-                        onSendMessage={handleSendMessage}
-                        onEscalateAdmin={handleEscalateToHuman}
-                      />
-                    )}
-
-                    {/* Interactive Action Buttons attached to this message */}
-                    {!isCust && Array.isArray(msg.suggestions) && msg.suggestions.length > 0 && (
-                      <ChatSuggestionButtons
-                        suggestions={msg.suggestions}
-                        orderId={msg.linkedOrderData?.orderId}
-                        onSendMessage={handleSendMessage}
-                        onEscalateAdmin={handleEscalateToHuman}
-                      />
-                    )}
-
-                    <div
-                      className={`flex items-center justify-end gap-1 mt-1 text-[9px] ${
-                        isCust ? 'text-blue-200' : 'text-slate-400'
-                      }`}
-                    >
-                      <Clock className="w-2.5 h-2.5" />
-                      <span>
-                        {new Date(msg.created_at).toLocaleTimeString('en-IN', {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </span>
-                      {isCust && <CheckCheck className="w-3 h-3 text-emerald-300" />}
-                    </div>
+                  <div>
+                    <h3 className="font-extrabold text-sm sm:text-[15px] flex items-center gap-1.5 text-white tracking-tight">
+                      {conversation?.status === 'ACTIVE'
+                        ? `${conversation.assigned_admin_name || 'Staff'} (Blessing Support)`
+                        : 'Blessing Help Desk'}
+                    </h3>
+                    <p className="text-[10.5px] sm:text-[11px] text-slate-300 flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block animate-pulse"></span>
+                      {conversation?.status === 'ACTIVE'
+                        ? '🟢 Staff Online (Direct Support)'
+                        : conversation?.status === 'WAITING_ADMIN'
+                        ? '⏳ Connecting you to Staff...'
+                        : '⚡ Instant AI · 24/7 Support'}
+                    </p>
                   </div>
                 </div>
-              );
-            })}
 
-            {/* Typing indicator */}
-            {isTyping && (
-              <div className="flex items-center gap-1.5 text-slate-400 text-[11px] font-bold p-1 animate-pulse">
-                <span className="w-2 h-2 rounded-full bg-slate-400 animate-bounce"></span>
-                <span className="w-2 h-2 rounded-full bg-slate-400 animate-bounce [animation-delay:0.2s]"></span>
-                <span className="w-2 h-2 rounded-full bg-slate-400 animate-bounce [animation-delay:0.4s]"></span>
-                <span className="ml-1 text-[10px]">Staff is typing...</span>
-              </div>
-            )}
-
-            {/* ─── In-Chat 1-Tap CSAT Feedback Card (When Resolved or Prompted) ───────────── */}
-            {(conversation?.status === 'RESOLVED' || showFeedbackPrompt) && !feedbackSubmitted && (
-              <div className="bg-amber-50 border border-amber-300/80 rounded-2xl p-4 space-y-3 mt-4 animate-fade-slide-up shadow-sm">
-                <div className="text-center space-y-1">
-                  <span className="inline-flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-wider text-amber-800 bg-amber-200/60 px-2.5 py-0.5 rounded-full">
-                    ⭐ Support Feedback
-                  </span>
-                  <h4 className="font-extrabold text-xs text-amber-950">How was your support experience?</h4>
-                  <p className="text-[10.5px] text-amber-800/90">
-                    Your rating helps us keep delivery and customer care top-notch.
-                  </p>
-                </div>
-
-                <div className="flex justify-center gap-1.5 py-1">
-                  {[1, 2, 3, 4, 5].map((star) => (
+                <div className="flex items-center gap-1">
+                  {conversation && messages.length >= 2 && !feedbackSubmitted && (
                     <button
-                      key={star}
                       type="button"
-                      onClick={() => setRating(star)}
-                      className="p-1 hover:scale-115 transition-transform cursor-pointer"
+                      onClick={() => {
+                        setShowFeedbackPrompt(true);
+                        setTimeout(() => scrollToBottom('smooth'), 100);
+                      }}
+                      className="px-2 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-[10px] font-extrabold rounded-lg flex items-center gap-1 border border-amber-400/30 transition-colors"
+                      title="Rate support experience"
                     >
-                      <Star
-                        className={`w-6 h-6 ${
-                          star <= rating
-                            ? 'text-amber-500 fill-amber-400'
-                            : 'text-slate-300'
-                        }`}
-                      />
+                      <Star className="w-3 h-3 fill-amber-300 text-amber-300" />
+                      <span className="hidden xs:inline">Rate</span>
                     </button>
-                  ))}
-                </div>
-
-                <div className="flex flex-wrap gap-1.5 justify-center">
-                  {FEEDBACK_TAGS.map((tag) => {
-                    const active = selectedTags.includes(tag);
-                    return (
-                      <button
-                        key={tag}
-                        type="button"
-                        onClick={() =>
-                          setSelectedTags((prev) =>
-                            active ? prev.filter((t) => t !== tag) : [...prev, tag]
-                          )
-                        }
-                        className={`text-[10px] px-2.5 py-1 rounded-full font-bold border transition-colors cursor-pointer ${
-                          active
-                            ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
-                            : 'bg-white text-amber-900 border-amber-200 hover:bg-amber-100'
-                        }`}
-                      >
-                        {tag}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <input
-                  type="text"
-                  placeholder="Optional comment or praise..."
-                  value={feedbackComment}
-                  onChange={(e) => setFeedbackComment(e.target.value)}
-                  className="w-full text-xs p-2 bg-white border border-amber-200 rounded-xl outline-none text-slate-800"
-                />
-
-                <button
-                  type="button"
-                  onClick={handleSubmitFeedback}
-                  className="w-full py-2 bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
-                >
-                  Submit Feedback ⭐
-                </button>
-
-                <div className="text-center pt-1">
+                  )}
+                  {conversation && (
+                    <button
+                      type="button"
+                      onClick={() => handleCloseChat(false)}
+                      disabled={loading}
+                      className="p-2 text-slate-300 hover:text-amber-300 hover:bg-white/10 rounded-xl transition-colors cursor-pointer"
+                      title="Start fresh conversation"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+                    </button>
+                  )}
+                  <Link
+                    href="/help"
+                    onClick={() => setIsOpen(false)}
+                    className="p-2 text-slate-300 hover:text-white hover:bg-white/10 rounded-xl transition-colors cursor-pointer hidden xs:flex items-center justify-center"
+                    title="Open in full screen"
+                  >
+                    <Maximize2 className="w-3.5 h-3.5" />
+                  </Link>
                   <button
                     type="button"
-                    onClick={handleStartFreshSession}
-                    className="text-[10px] font-bold text-slate-400 hover:text-slate-600 underline cursor-pointer"
+                    onClick={handleMinimize}
+                    className="p-2 text-slate-300 hover:text-white hover:bg-white/10 rounded-xl transition-colors cursor-pointer"
+                    title="Minimize chat"
                   >
-                    Skip & Start Fresh Session
+                    <ChevronDown className="w-5 h-5 sm:hidden" />
+                    <X className="w-5 h-5 hidden sm:block" />
                   </button>
                 </div>
               </div>
-            )}
-
-            {feedbackSubmitted && (
-              <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-3 rounded-2xl text-center text-xs font-bold space-y-2">
-                <div>✓ Thank you for your feedback! We look forward to serving you again.</div>
-                <div className="text-[10.5px] text-emerald-600 font-medium">
-                  Starting your new help session...
-                </div>
-                <button
-                  type="button"
-                  onClick={handleStartFreshSession}
-                  className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-[10.5px] font-extrabold rounded-lg cursor-pointer transition-all shadow-2xs"
-                >
-                  Start Fresh Session Now
-                </button>
-              </div>
-            )}
-
-            {conversation?.status === 'RESOLVED' && !showFeedbackPrompt && !feedbackSubmitted && (
-              <div className="text-center pt-2 pb-1">
-                <button
-                  type="button"
-                  onClick={handleStartFreshSession}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-[#001B3A] text-white hover:bg-blue-900 transition-all shadow-sm cursor-pointer"
-                >
-                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Start New Conversation</span>
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Quick Suggestions Bar */}
-          {conversation?.status !== 'RESOLVED' && (
-            <div className="px-2.5 py-2 bg-slate-50 border-t border-slate-100 shrink-0">
-              <ChatQuickMenu
-                onSendMessage={handleSendMessage}
-                onEscalateAdmin={handleEscalateToHuman}
-              />
             </div>
-          )}
 
-          {/* Input Footer */}
-          <div className="p-2.5 sm:p-3 bg-white border-t border-slate-200 flex items-center gap-2 shrink-0 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-            <input
-              type="text"
-              placeholder={
-                conversation?.status === 'ACTIVE'
-                  ? 'Type your message to support...'
-                  : 'Ask question or type order #...'
-              }
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSendMessage();
-                }
-              }}
-              disabled={loading}
-              className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-base sm:text-xs outline-none focus:bg-white focus:border-[#2874f0] text-slate-800 placeholder:text-slate-400 min-h-[42px]"
-            />
-            <button
-              type="button"
-              onClick={() => handleSendMessage()}
-              disabled={loading || !inputText.trim()}
-              className="p-2.5 bg-[#2874f0] hover:bg-blue-700 disabled:opacity-40 text-white rounded-xl transition-all shadow-xs cursor-pointer flex items-center justify-center shrink-0 min-h-[42px] min-w-[42px]"
-              title="Send message"
+            {/* Messages Stream */}
+            <div
+              ref={chatContainerRef}
+              className="flex-1 overflow-y-auto p-3.5 sm:p-4 space-y-3 bg-slate-50/60 text-xs custom-scrollbar"
             >
-              <Send className="w-4 h-4" />
-            </button>
+              {/* Warm Welcome Greeting Card */}
+              <div className="bg-gradient-to-br from-blue-50/90 to-indigo-50/80 border border-blue-100/90 rounded-2xl p-3.5 sm:p-4 text-slate-700 space-y-2.5 shadow-xs">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-6 h-6 rounded-lg bg-[#001b3a] text-amber-400 flex items-center justify-center text-xs font-black">
+                      👑
+                    </span>
+                    <span className="font-extrabold text-xs text-[#001b3a]">
+                      Blessing Power Guide
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-full">
+                    ⚡ Online 24/7
+                  </span>
+                </div>
+
+                <p className="text-[11.5px] sm:text-xs text-slate-600 leading-relaxed">
+                  Vanakkam! 🙏 How can we help you today? Ask about 10th guides, real-time ST Courier tracking, or click below for instant help:
+                </p>
+
+                {/* Instant 1-Tap Quick Action Cards */}
+                <div className="grid grid-cols-2 gap-1.5 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => handleSendMessage('Where is my order?')}
+                    className="flex items-center gap-1.5 p-2 rounded-xl bg-white hover:bg-blue-50 border border-slate-200/90 hover:border-blue-300 text-left transition-all group cursor-pointer shadow-2xs"
+                  >
+                    <span className="text-sm">🚚</span>
+                    <div className="leading-tight">
+                      <span className="text-[11px] font-extrabold text-slate-800 group-hover:text-blue-700 block">
+                        Track Order
+                      </span>
+                      <span className="text-[9.5px] text-slate-400 block">Live status</span>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSendMessage('What guides are available for 10th standard?')}
+                    className="flex items-center gap-1.5 p-2 rounded-xl bg-white hover:bg-blue-50 border border-slate-200/90 hover:border-blue-300 text-left transition-all group cursor-pointer shadow-2xs"
+                  >
+                    <span className="text-sm">📚</span>
+                    <div className="leading-tight">
+                      <span className="text-[11px] font-extrabold text-slate-800 group-hover:text-blue-700 block">
+                        10th Guides
+                      </span>
+                      <span className="text-[9.5px] text-slate-400 block">Books & prices</span>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSendMessage('What are the payment options and discounts?')}
+                    className="flex items-center gap-1.5 p-2 rounded-xl bg-white hover:bg-blue-50 border border-slate-200/90 hover:border-blue-300 text-left transition-all group cursor-pointer shadow-2xs"
+                  >
+                    <span className="text-sm">💳</span>
+                    <div className="leading-tight">
+                      <span className="text-[11px] font-extrabold text-slate-800 group-hover:text-blue-700 block">
+                        Payments
+                      </span>
+                      <span className="text-[9.5px] text-slate-400 block">UPI / Offers</span>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleEscalateToHuman}
+                    className="flex items-center gap-1.5 p-2 rounded-xl bg-white hover:bg-blue-50 border border-slate-200/90 hover:border-blue-300 text-left transition-all group cursor-pointer shadow-2xs"
+                  >
+                    <span className="text-sm">👨‍💼</span>
+                    <div className="leading-tight">
+                      <span className="text-[11px] font-extrabold text-slate-800 group-hover:text-blue-700 block">
+                        Talk to Staff
+                      </span>
+                      <span className="text-[9.5px] text-slate-400 block">Direct help</span>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Render conversation messages */}
+              {messages.map((msg, index) => {
+                const isCust = msg.sender_type === 'CUSTOMER';
+                const isSys = msg.sender_type === 'SYSTEM';
+
+                if (isSys) {
+                  return (
+                    <div key={msg.id || index} className="text-center my-2">
+                      <span className="inline-block px-3 py-1 bg-amber-50 border border-amber-200 text-amber-800 text-[10px] font-bold rounded-full shadow-2xs">
+                        {msg.text}
+                      </span>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div
+                    key={msg.id || index}
+                    className={`flex flex-col ${isCust ? 'items-end' : 'items-start'} space-y-1`}
+                  >
+                    <span className="text-[9.5px] font-bold text-slate-400 px-1">
+                      {msg.sender_name}
+                    </span>
+                    <div
+                      className={`max-w-[88%] sm:max-w-[85%] px-3.5 py-2.5 rounded-2xl text-xs leading-relaxed ${
+                        isCust
+                          ? 'bg-[#1a5dc7] text-white rounded-br-xs shadow-xs'
+                          : 'bg-white text-slate-800 border border-slate-200/90 rounded-bl-xs shadow-[0_2px_8px_rgba(0,0,0,0.04)]'
+                      }`}
+                    >
+                      <ChatMarkdown content={msg.text} isCustomer={isCust} />
+
+                      {/* Interactive Action Card */}
+                      {!isCust && (msg.linkedOrderData || msg.cardType) && (
+                        <ChatInteractiveCard
+                          cardType={msg.cardType}
+                          linkedOrderData={msg.linkedOrderData}
+                          cardData={msg.cardData}
+                          onSendMessage={handleSendMessage}
+                          onEscalateAdmin={handleEscalateToHuman}
+                        />
+                      )}
+
+                      {/* Interactive Action Buttons */}
+                      {!isCust && Array.isArray(msg.suggestions) && msg.suggestions.length > 0 && (
+                        <ChatSuggestionButtons
+                          suggestions={msg.suggestions}
+                          orderId={msg.linkedOrderData?.orderId}
+                          onSendMessage={handleSendMessage}
+                          onEscalateAdmin={handleEscalateToHuman}
+                        />
+                      )}
+
+                      <div
+                        className={`flex items-center justify-end gap-1 mt-1 text-[9px] ${
+                          isCust ? 'text-blue-200' : 'text-slate-400'
+                        }`}
+                      >
+                        <Clock className="w-2.5 h-2.5" />
+                        <span>
+                          {new Date(msg.created_at).toLocaleTimeString('en-IN', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </span>
+                        {isCust && <CheckCheck className="w-3 h-3 text-emerald-300" />}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* Typing indicator */}
+              {isTyping && (
+                <div className="flex items-center gap-1.5 text-slate-400 text-[11px] font-bold p-1 animate-pulse">
+                  <span className="w-2 h-2 rounded-full bg-slate-400 animate-bounce"></span>
+                  <span className="w-2 h-2 rounded-full bg-slate-400 animate-bounce [animation-delay:0.2s]"></span>
+                  <span className="w-2 h-2 rounded-full bg-slate-400 animate-bounce [animation-delay:0.4s]"></span>
+                  <span className="ml-1 text-[10px]">Staff is typing...</span>
+                </div>
+              )}
+
+              {/* ─── In-Chat 1-Tap CSAT Feedback Card ─────────────────────────── */}
+              {(conversation?.status === 'RESOLVED' || showFeedbackPrompt) && !feedbackSubmitted && (
+                <div className="bg-amber-50 border border-amber-300/80 rounded-2xl p-4 space-y-3 mt-4 animate-fade-slide-up shadow-sm">
+                  <div className="text-center space-y-1">
+                    <span className="inline-flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-wider text-amber-800 bg-amber-200/60 px-2.5 py-0.5 rounded-full">
+                      ⭐ Support Feedback
+                    </span>
+                    <h4 className="font-extrabold text-xs text-amber-950">How was your support experience?</h4>
+                    <p className="text-[10.5px] text-amber-800/90">
+                      Your rating helps us keep delivery and customer care top-notch.
+                    </p>
+                  </div>
+
+                  <div className="flex justify-center gap-1.5 py-1">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <button
+                        key={star}
+                        type="button"
+                        onClick={() => setRating(star)}
+                        className="p-1 hover:scale-115 transition-transform cursor-pointer"
+                      >
+                        <Star
+                          className={`w-6 h-6 ${
+                            star <= rating
+                              ? 'text-amber-500 fill-amber-400'
+                              : 'text-slate-300'
+                          }`}
+                        />
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="flex flex-wrap gap-1.5 justify-center">
+                    {FEEDBACK_TAGS.map((tag) => {
+                      const active = selectedTags.includes(tag);
+                      return (
+                        <button
+                          key={tag}
+                          type="button"
+                          onClick={() =>
+                            setSelectedTags((prev) =>
+                              active ? prev.filter((t) => t !== tag) : [...prev, tag]
+                            )
+                          }
+                          className={`text-[10px] px-2.5 py-1 rounded-full font-bold border transition-colors cursor-pointer ${
+                            active
+                              ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
+                              : 'bg-white text-amber-900 border-amber-200 hover:bg-amber-100'
+                          }`}
+                        >
+                          {tag}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <input
+                    type="text"
+                    placeholder="Optional comment or praise..."
+                    value={feedbackComment}
+                    onChange={(e) => setFeedbackComment(e.target.value)}
+                    className="w-full text-xs p-2 bg-white border border-amber-200 rounded-xl outline-none text-slate-800"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={handleSubmitFeedback}
+                    className="w-full py-2 bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
+                  >
+                    Submit Feedback ⭐
+                  </button>
+
+                  <div className="text-center pt-1">
+                    <button
+                      type="button"
+                      onClick={handleStartFreshSession}
+                      className="text-[10px] font-bold text-slate-400 hover:text-slate-600 underline cursor-pointer"
+                    >
+                      Skip & Start Fresh Session
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {feedbackSubmitted && (
+                <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-3 rounded-2xl text-center text-xs font-bold space-y-2">
+                  <div>✓ Thank you for your feedback! We look forward to serving you again.</div>
+                  <div className="text-[10.5px] text-emerald-600 font-medium">
+                    Starting your new help session...
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleStartFreshSession}
+                    className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-[10.5px] font-extrabold rounded-lg cursor-pointer transition-all shadow-2xs"
+                  >
+                    Start Fresh Session Now
+                  </button>
+                </div>
+              )}
+
+              {conversation?.status === 'RESOLVED' && !showFeedbackPrompt && !feedbackSubmitted && (
+                <div className="text-center pt-2 pb-1">
+                  <button
+                    type="button"
+                    onClick={handleStartFreshSession}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-[#001B3A] text-white hover:bg-blue-900 transition-all shadow-sm cursor-pointer"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Start New Conversation</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Quick Suggestions Bar */}
+            {conversation?.status !== 'RESOLVED' && (
+              <div className="px-2 sm:px-2.5 py-1.5 bg-slate-50 border-t border-slate-100 shrink-0">
+                <ChatQuickMenu
+                  onSendMessage={handleSendMessage}
+                  onEscalateAdmin={handleEscalateToHuman}
+                />
+              </div>
+            )}
+
+            {/* Input Footer */}
+            <div className="p-2.5 sm:p-3 bg-white border-t border-slate-200 flex items-center gap-2 shrink-0 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+              <div className="flex-1 flex items-center bg-slate-100/90 hover:bg-slate-100 focus-within:bg-white focus-within:ring-2 focus-within:ring-[#2874f0]/30 border border-slate-200 rounded-full pl-3.5 pr-1.5 py-1 transition-all">
+                <input
+                  type="text"
+                  placeholder={
+                    conversation?.status === 'ACTIVE'
+                      ? 'Type your message to support...'
+                      : 'Ask question or type order #...'
+                  }
+                  value={inputText}
+                  onChange={(e) => setInputText(e.target.value)}
+                  onFocus={() => {
+                    setTimeout(() => scrollToBottom('smooth'), 200);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSendMessage();
+                    }
+                  }}
+                  disabled={loading}
+                  className="flex-1 bg-transparent border-0 outline-none text-[16px] sm:text-xs text-slate-800 placeholder:text-slate-400 py-1"
+                />
+                {inputText.trim() && (
+                  <button
+                    type="button"
+                    onClick={() => setInputText('')}
+                    className="p-1 text-slate-400 hover:text-slate-600 rounded-full cursor-pointer mr-1"
+                    title="Clear"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => handleSendMessage()}
+                  disabled={loading || !inputText.trim()}
+                  className="w-8 h-8 rounded-full bg-[#1a5dc7] hover:bg-blue-700 active:scale-95 disabled:opacity-35 text-white transition-all shadow-xs cursor-pointer flex items-center justify-center shrink-0"
+                  title="Send message"
+                >
+                  <Send className="w-3.5 h-3.5 ml-0.5" />
+                </button>
+              </div>
+            </div>
           </div>
-        </div>
+        </>
       )}
     </>
   );

@@ -181,6 +181,11 @@ export const ChatQuickMenu: React.FC<ChatQuickMenuProps> = ({
         </button>
       )}
 
+      {/* Left Edge Fade */}
+      {canScrollLeft && (
+        <div className="absolute left-0 top-0 bottom-0 w-4 bg-gradient-to-r from-slate-50 to-transparent pointer-events-none z-5" />
+      )}
+
       {/* Horizontal Pills Scroll Container */}
       <div
         ref={scrollRef}
@@ -189,7 +194,7 @@ export const ChatQuickMenu: React.FC<ChatQuickMenuProps> = ({
         onMouseUp={handleMouseUpOrLeave}
         onMouseLeave={handleMouseUpOrLeave}
         className="flex items-center gap-1.5 overflow-x-auto scroll-chips pb-1 w-full select-none cursor-grab active:cursor-grabbing px-1"
-        style={{ scrollBehavior: 'auto' }}
+        style={{ scrollBehavior: 'smooth', WebkitOverflowScrolling: 'touch' }}
       >
         {QUICK_ACTIONS.map((item) => (
           <button
@@ -214,6 +219,11 @@ export const ChatQuickMenu: React.FC<ChatQuickMenuProps> = ({
           </button>
         ))}
       </div>
+
+      {/* Right Edge Fade */}
+      {canScrollRight && (
+        <div className="absolute right-0 top-0 bottom-0 w-4 bg-gradient-to-l from-slate-50 to-transparent pointer-events-none z-5" />
+      )}
 
       {/* Right Chevron Button */}
       {canScrollRight && (
