@@ -80,6 +80,9 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
   const product = dbProduct
     ? {
         ...dbProduct,
+        price: storeProduct && typeof storeProduct.price === 'number' ? storeProduct.price : dbProduct.price,
+        mrp: storeProduct && typeof storeProduct.mrp === 'number' ? storeProduct.mrp : dbProduct.mrp,
+        discount: storeProduct && typeof storeProduct.discount === 'number' ? storeProduct.discount : dbProduct.discount,
         inStock: storeProduct ? storeProduct.inStock : dbProduct.inStock,
         stock: storeProduct ? storeProduct.stock : dbProduct.stock,
       }

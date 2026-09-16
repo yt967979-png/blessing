@@ -21,6 +21,9 @@ export interface StockChangeEntry {
   stock: number;
   status: string;
   inStock: boolean;
+  price?: number;
+  mrp?: number;
+  discount?: number;
 }
 
 const clients = new Set<ReadableStreamDefaultController>();
@@ -46,7 +49,7 @@ export function broadcastStockChange(data: any) {
 }
 
 /**
- * Call this right after committing any change to `books.stock` / `books.status`.
+ * Call this right after committing any change to `books.stock` / `books.status` / `books.price`.
  * Re-reads the affected rows (authoritative post-commit snapshot) and pushes
  * them to every replica's SSE clients via Postgres NOTIFY — cheap, batched,
  * and correct even when the writer and the SSE connection are on different
@@ -56,13 +59,27 @@ export async function notifyStockChanged(bookIds: Array<string | number | null |
   const ids = [...new Set(bookIds.map((id) => (id === null || id === undefined ? '' : String(id))).filter(Boolean))];
   if (ids.length === 0) return;
   try {
-    const res = await queryDb(`SELECT id, stock, status FROM books WHERE id = ANY($1::text[])`, [ids]);
-    const books: StockChangeEntry[] = (res.rows || []).map((r: any) => ({
-      id: String(r.id),
-      stock: Number(r.stock ?? 0),
-      status: String(r.status || ''),
-      inStock: isBookInStock(r),
-    }));
+    const res = await queryDb(
+      `SELECT id, price, discount_price, stock, status FROM books WHERE id = ANY($1::text[])`,
+      [ids]
+    );
+    const books: StockChangeEntry[] = (res.rows || []).map((r: any) => {
+      const mrp = Number(r.price) || 0;
+      const rawSale =
+        r.discount_price == null || r.discount_price === '' ? NaN : Number(r.discount_price);
+      const hasSale = Number.isFinite(rawSale) && rawSale > 0 && rawSale < mrp;
+      const price = hasSale ? rawSale : mrp;
+      const discount = hasSale && mrp > 0 ? Math.round(((mrp - price) / mrp) * 100) : 0;
+      return {
+        id: String(r.id),
+        stock: Number(r.stock ?? 0),
+        status: String(r.status || ''),
+        inStock: isBookInStock(r),
+        price,
+        mrp,
+        discount,
+      };
+    });
     if (books.length === 0) return;
     // Server memory cache (GET /api/products) has a long TTL for CDN-friendliness —
     // without this, a plain (non-fresh) refetch after the push would still return

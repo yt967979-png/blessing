@@ -41,6 +41,9 @@ interface StockPushEntry {
   stock: number;
   status: string;
   inStock: boolean;
+  price?: number;
+  mrp?: number;
+  discount?: number;
 }
 
 export interface UserData {
@@ -348,9 +351,28 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const next = prev.map((p) => {
         const upd = byId.get(String(p.id));
         if (!upd) return p;
-        if (p.stock === upd.stock && p.inStock === upd.inStock) return p;
+        const newPrice = typeof upd.price === 'number' && Number.isFinite(upd.price) && upd.price > 0 ? upd.price : p.price;
+        const newMrp = typeof upd.mrp === 'number' && Number.isFinite(upd.mrp) && upd.mrp > 0 ? upd.mrp : p.mrp;
+        const newDiscount = typeof upd.discount === 'number' ? upd.discount : p.discount;
+
+        if (
+          p.stock === upd.stock &&
+          p.inStock === upd.inStock &&
+          p.price === newPrice &&
+          p.mrp === newMrp &&
+          p.discount === newDiscount
+        ) {
+          return p;
+        }
         changed = true;
-        return { ...p, stock: upd.stock, inStock: upd.inStock };
+        return {
+          ...p,
+          stock: upd.stock,
+          inStock: upd.inStock,
+          price: newPrice,
+          mrp: newMrp,
+          discount: newDiscount,
+        };
       });
       if (changed) writeCatalogCache(next);
       return changed ? next : prev;
@@ -361,17 +383,37 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       queueMicrotask(() => refreshProducts(true));
     }
 
-    // Mirror into the live cart too — cross-cutting: a card going OOS while
-    // it's already in someone's cart must disable checkout for it as well.
+    // Mirror into the live cart too — instant update of stock, inStock AND price / mrp / discount
     setCart((prev) => {
       let changed = false;
       const next = prev.map((item) => {
         const upd = byId.get(String(item.id));
         if (!upd) return item;
         const clampedQty = upd.inStock ? Math.min(item.qty, Math.max(1, upd.stock)) : item.qty;
-        if (item.stock === upd.stock && item.inStock === upd.inStock && clampedQty === item.qty) return item;
+        const newPrice = typeof upd.price === 'number' && Number.isFinite(upd.price) && upd.price > 0 ? upd.price : item.price;
+        const newMrp = typeof upd.mrp === 'number' && Number.isFinite(upd.mrp) && upd.mrp > 0 ? upd.mrp : item.mrp;
+        const newDiscount = typeof upd.discount === 'number' ? upd.discount : item.discount;
+
+        if (
+          item.stock === upd.stock &&
+          item.inStock === upd.inStock &&
+          clampedQty === item.qty &&
+          item.price === newPrice &&
+          item.mrp === newMrp &&
+          item.discount === newDiscount
+        ) {
+          return item;
+        }
         changed = true;
-        return { ...item, stock: upd.stock, inStock: upd.inStock, qty: clampedQty };
+        return {
+          ...item,
+          stock: upd.stock,
+          inStock: upd.inStock,
+          qty: clampedQty,
+          price: newPrice,
+          mrp: newMrp,
+          discount: newDiscount,
+        };
       });
       if (changed) {
         try {
@@ -379,6 +421,42 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         } catch {
           /* ignore quota */
         }
+      }
+      return changed ? next : prev;
+    });
+
+    // Also mirror into savedForLater
+    setSavedForLater((prev) => {
+      let changed = false;
+      const next = prev.map((item) => {
+        const upd = byId.get(String(item.id));
+        if (!upd) return item;
+        const newPrice = typeof upd.price === 'number' && Number.isFinite(upd.price) && upd.price > 0 ? upd.price : item.price;
+        const newMrp = typeof upd.mrp === 'number' && Number.isFinite(upd.mrp) && upd.mrp > 0 ? upd.mrp : item.mrp;
+        const newDiscount = typeof upd.discount === 'number' ? upd.discount : item.discount;
+        if (
+          item.stock === upd.stock &&
+          item.inStock === upd.inStock &&
+          item.price === newPrice &&
+          item.mrp === newMrp &&
+          item.discount === newDiscount
+        ) {
+          return item;
+        }
+        changed = true;
+        return {
+          ...item,
+          stock: upd.stock,
+          inStock: upd.inStock,
+          price: newPrice,
+          mrp: newMrp,
+          discount: newDiscount,
+        };
+      });
+      if (changed) {
+        try {
+          localStorage.setItem('bpg_saved_later', JSON.stringify(next));
+        } catch {}
       }
       return changed ? next : prev;
     });
@@ -505,6 +583,131 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, [cart, wishlist, user, hydrated]);
 
+  // Multi-tab storage synchronizer — ensures Cart & Wishlist update instantly across all browser tabs
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'bpg_cart_next' && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (Array.isArray(parsed)) {
+            setCart(parsed);
+          }
+        } catch {
+          /* ignore */
+        }
+      } else if (e.key === 'bpg_saved_later' && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (Array.isArray(parsed)) {
+            setSavedForLater(parsed);
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, []);
+
+  // Realtime Catalog-to-Cart Price Synchronizer:
+  // Whenever the catalog updates (via SSE CATALOG_CHANGED, 20s background poll, or admin edit),
+  // instantly reconcile prices, mrp, discounts and stock for every item in the cart & saved for later.
+  useEffect(() => {
+    if (!products || products.length === 0) return;
+
+    setCart((prevCart) => {
+      if (!prevCart || prevCart.length === 0) return prevCart;
+      let changed = false;
+      const nextCart = prevCart.map((item) => {
+        const live = products.find((p) => String(p.id) === String(item.id));
+        if (!live) return item;
+
+        const livePrice = Number(live.price);
+        const liveMrp = Number(live.mrp || livePrice);
+        const liveDiscount = Number(live.discount || 0);
+
+        const priceDiff = Number.isFinite(livePrice) && livePrice > 0 && item.price !== livePrice;
+        const mrpDiff = Number.isFinite(liveMrp) && liveMrp > 0 && item.mrp !== liveMrp;
+        const discDiff = item.discount !== liveDiscount;
+        const stockDiff = live.stock !== undefined && item.stock !== live.stock;
+        const inStockDiff = live.inStock !== undefined && item.inStock !== live.inStock;
+
+        if (priceDiff || mrpDiff || discDiff || stockDiff || inStockDiff) {
+          changed = true;
+          return {
+            ...item,
+            price: Number.isFinite(livePrice) && livePrice > 0 ? livePrice : item.price,
+            mrp: Number.isFinite(liveMrp) && liveMrp > 0 ? liveMrp : item.mrp,
+            discount: liveDiscount,
+            stock: live.stock !== undefined ? live.stock : item.stock,
+            inStock: live.inStock !== undefined ? live.inStock : item.inStock,
+          };
+        }
+        return item;
+      });
+
+      if (changed) {
+        try {
+          localStorage.setItem('bpg_cart_next', JSON.stringify(nextCart));
+        } catch {
+          /* ignore quota */
+        }
+      }
+      return changed ? nextCart : prevCart;
+    });
+
+    setSavedForLater((prevLater) => {
+      if (!prevLater || prevLater.length === 0) return prevLater;
+      let changed = false;
+      const nextLater = prevLater.map((item) => {
+        const live = products.find((p) => String(p.id) === String(item.id));
+        if (!live) return item;
+
+        const livePrice = Number(live.price);
+        const liveMrp = Number(live.mrp || livePrice);
+        const liveDiscount = Number(live.discount || 0);
+
+        const priceDiff = Number.isFinite(livePrice) && livePrice > 0 && item.price !== livePrice;
+        const mrpDiff = Number.isFinite(liveMrp) && liveMrp > 0 && item.mrp !== liveMrp;
+        const discDiff = item.discount !== liveDiscount;
+
+        if (priceDiff || mrpDiff || discDiff) {
+          changed = true;
+          return {
+            ...item,
+            price: Number.isFinite(livePrice) && livePrice > 0 ? livePrice : item.price,
+            mrp: Number.isFinite(liveMrp) && liveMrp > 0 ? liveMrp : item.mrp,
+            discount: liveDiscount,
+          };
+        }
+        return item;
+      });
+
+      if (changed) {
+        try {
+          localStorage.setItem('bpg_saved_later', JSON.stringify(nextLater));
+        } catch {
+          /* ignore quota */
+        }
+      }
+      return changed ? nextLater : prevLater;
+    });
+
+    if (quickViewProduct) {
+      const live = products.find((p) => String(p.id) === String(quickViewProduct.id));
+      if (
+        live &&
+        (live.price !== quickViewProduct.price ||
+          live.mrp !== quickViewProduct.mrp ||
+          live.inStock !== quickViewProduct.inStock)
+      ) {
+        setQuickViewProduct(live);
+      }
+    }
+  }, [products, quickViewProduct]);
+
   const getAdminHeaders = (): Record<string, string> => {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (user?.token) headers.Authorization = `Bearer ${user.token}`;
@@ -541,7 +744,15 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const updated: CartItem[] = existing
         ? prev.map((item) =>
             item.id === product.id
-              ? { ...item, qty: finalQty, stock: live.stock, inStock: live.inStock }
+              ? {
+                  ...item,
+                  qty: finalQty,
+                  stock: live.stock,
+                  inStock: live.inStock,
+                  price: live.price,
+                  mrp: live.mrp,
+                  discount: live.discount,
+                }
               : item
           )
         : [...prev, { ...live, qty: finalQty }];
@@ -585,7 +796,14 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             toastMsg = `⚠️ Only ${stockLimit} of "${item.title}" available`;
             return stockLimit > item.qty ? { ...item, qty: stockLimit } : item;
           }
-          return newQty > 0 ? { ...item, qty: newQty } : null;
+          if (newQty <= 0) return null;
+          return {
+            ...item,
+            qty: newQty,
+            price: live && typeof live.price === 'number' ? live.price : item.price,
+            mrp: live && typeof live.mrp === 'number' ? live.mrp : item.mrp,
+            discount: live && typeof live.discount === 'number' ? live.discount : item.discount,
+          };
         })
         .filter(Boolean) as CartItem[];
       localStorage.setItem('bpg_cart_next', JSON.stringify(next));
@@ -703,14 +921,42 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             messages.push(r.message || `"${item.title}" is out of stock — removed from cart`);
             continue;
           }
+          const priceUpdated =
+            typeof r.price === 'number' && Number.isFinite(r.price) && r.price > 0 && item.price !== r.price;
+          const mrpUpdated =
+            typeof r.mrp === 'number' && Number.isFinite(r.mrp) && r.mrp > 0 && item.mrp !== r.mrp;
+          const discUpdated =
+            typeof r.discount === 'number' && item.discount !== r.discount;
+
+          const livePrice = priceUpdated ? r.price : item.price;
+          const liveMrp = mrpUpdated ? r.mrp : item.mrp;
+          const liveDiscount = discUpdated ? r.discount : item.discount;
+
+          if (priceUpdated) {
+            messages.push(`Price for "${item.title}" updated: ₹${item.price} → ₹${r.price}`);
+          }
+
           if (r.allowedQty < item.qty) {
             clean = false;
             messages.push(r.message || `Only ${r.allowedQty} of "${item.title}" available — quantity updated`);
-            next.push({ ...item, qty: r.allowedQty, stock: r.availableStock, inStock: true });
-          } else if (item.stock !== r.availableStock || item.inStock !== r.inStock) {
-            next.push({ ...item, stock: r.availableStock, inStock: r.inStock });
+            next.push({
+              ...item,
+              qty: r.allowedQty,
+              stock: r.availableStock,
+              inStock: true,
+              price: livePrice,
+              mrp: liveMrp,
+              discount: liveDiscount,
+            });
           } else {
-            next.push(item);
+            next.push({
+              ...item,
+              stock: r.availableStock,
+              inStock: r.inStock,
+              price: livePrice,
+              mrp: liveMrp,
+              discount: liveDiscount,
+            });
           }
         }
         try {
@@ -856,6 +1102,67 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
     const previousProducts = products;
     setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, ...withDerived } : p)));
+
+    // Immediately mirror price/stock changes into active cart & savedForLater with zero latency
+    setCart((prev) => {
+      let changed = false;
+      const next = prev.map((item) => {
+        if (String(item.id) !== String(id)) return item;
+        const newPrice = withDerived.price !== undefined ? withDerived.price : item.price;
+        const newMrp = withDerived.mrp !== undefined ? withDerived.mrp : item.mrp;
+        const newDiscount = withDerived.discount !== undefined ? withDerived.discount : item.discount;
+        const newStock = withDerived.stock !== undefined ? withDerived.stock : item.stock;
+        const newInStock = withDerived.inStock !== undefined ? withDerived.inStock : item.inStock;
+        if (
+          item.price === newPrice &&
+          item.mrp === newMrp &&
+          item.discount === newDiscount &&
+          item.stock === newStock &&
+          item.inStock === newInStock
+        ) {
+          return item;
+        }
+        changed = true;
+        return {
+          ...item,
+          price: newPrice,
+          mrp: newMrp,
+          discount: newDiscount,
+          stock: newStock,
+          inStock: newInStock,
+        };
+      });
+      if (changed) {
+        try {
+          localStorage.setItem('bpg_cart_next', JSON.stringify(next));
+        } catch {
+          /* ignore quota */
+        }
+      }
+      return changed ? next : prev;
+    });
+
+    setSavedForLater((prev) => {
+      let changed = false;
+      const next = prev.map((item) => {
+        if (String(item.id) !== String(id)) return item;
+        const newPrice = withDerived.price !== undefined ? withDerived.price : item.price;
+        const newMrp = withDerived.mrp !== undefined ? withDerived.mrp : item.mrp;
+        const newDiscount = withDerived.discount !== undefined ? withDerived.discount : item.discount;
+        if (item.price === newPrice && item.mrp === newMrp && item.discount === newDiscount) return item;
+        changed = true;
+        return { ...item, price: newPrice, mrp: newMrp, discount: newDiscount };
+      });
+      if (changed) {
+        try {
+          localStorage.setItem('bpg_saved_later', JSON.stringify(next));
+        } catch {
+          /* ignore */
+        }
+      }
+      return changed ? next : prev;
+    });
+
     try {
       const res = await fetch('/api/products', {
         method: 'PATCH',

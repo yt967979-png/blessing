@@ -429,7 +429,13 @@ export async function PATCH(request: Request) {
       invalidateProductsCache();
       try {
         const { notifyStockChanged, notifyCatalogChanged } = await import('@/app/api/stock/stream/route');
-        if (finalStatus !== undefined || finalStock !== undefined) {
+        if (
+          finalStatus !== undefined ||
+          finalStock !== undefined ||
+          price !== undefined ||
+          mrp !== undefined ||
+          hasDiscount !== undefined
+        ) {
           void notifyStockChanged([id]);
         }
         // Title/price/image edits also need a shop-side catalog refresh

@@ -14,11 +14,13 @@ interface BookStockRow {
   title: string;
   stock: number | null;
   status: string | null;
+  price: number | string | null;
+  discount_price: number | string | null;
 }
 
 /**
  * Live cart stock check — polled by the cart drawer / cart page / checkout so
- * the client can clamp quantities and block out-of-stock items before payment.
+ * the client can clamp quantities, update prices, and block out-of-stock items before payment.
  * This is advisory for the UI; the authoritative guard is still the DB-level
  * stock decrement in POST /api/orders and the pricing check in priceCheckoutOrder.
  */
@@ -45,7 +47,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ items: [], checkedAt: Date.now() });
     }
 
-    const res = await queryDb(`SELECT id, title, stock, status FROM books WHERE id = ANY($1)`, [ids]);
+    const res = await queryDb(
+      `SELECT id, title, price, discount_price, stock, status FROM books WHERE id = ANY($1)`,
+      [ids]
+    );
     const byId = new Map<string, BookStockRow>(
       res.rows.map((r: BookStockRow) => [String(r.id), r])
     );
@@ -66,6 +71,9 @@ export async function POST(request: Request) {
           allowedQty: 0,
           removed: true,
           message: `"${fallbackTitle}" is no longer available`,
+          price: 0,
+          mrp: 0,
+          discount: 0,
         };
       }
 
@@ -79,6 +87,15 @@ export async function POST(request: Request) {
         message = `Only ${avail} of "${book.title}" available`;
       }
 
+      const mrp = Number(book.price) || 0;
+      const rawSale =
+        book.discount_price == null || book.discount_price === ''
+          ? NaN
+          : Number(book.discount_price);
+      const hasSale = Number.isFinite(rawSale) && rawSale > 0 && rawSale < mrp;
+      const livePrice = hasSale ? rawSale : mrp;
+      const liveDiscount = hasSale && mrp > 0 ? Math.round(((mrp - livePrice) / mrp) * 100) : 0;
+
       return {
         id,
         title: book.title,
@@ -88,6 +105,9 @@ export async function POST(request: Request) {
         allowedQty,
         removed: false,
         message,
+        price: livePrice,
+        mrp,
+        discount: liveDiscount,
       };
     });
 
