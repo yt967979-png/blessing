@@ -75,7 +75,11 @@ export const BlessingChatWidget: React.FC = () => {
   const eventSourceRef = useRef<EventSource | null>(null);
   const prevPathnameRef = useRef(pathname);
 
-  const isStorefront = !pathname?.startsWith('/admin') && pathname !== '/help' && pathname !== '/support';
+  const isStorefront =
+    !pathname?.startsWith('/admin') &&
+    pathname !== '/help' &&
+    pathname !== '/support' &&
+    !pathname?.startsWith('/checkout');
 
   // Auto-close chat widget window when user navigates to another page
   // (Window minimizes to not block the new page, but session and conversation history are preserved)

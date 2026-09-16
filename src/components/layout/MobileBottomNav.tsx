@@ -13,7 +13,7 @@ export const MobileBottomNav = () => {
   const { cartCount, user, setIsAuthOpen, isCheckoutOpen, isAuthOpen } = useStore();
   const cartBump = useCartBadgeBump(cartCount);
 
-  if (pathname.startsWith('/admin')) return null;
+  if (pathname.startsWith('/admin') || pathname.startsWith('/checkout')) return null;
   if (isCheckoutOpen || isAuthOpen) return null;
 
   const isHome = pathname === '/';

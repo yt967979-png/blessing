@@ -27,7 +27,7 @@ export const metadata: Metadata = {
 
 export default function PrivacyPolicyPage() {
   return (
-    <div className="min-h-screen bg-[#f8fafc] text-slate-800" style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
+    <div className="min-h-screen bg-[#f8fafc] text-slate-800 page-mobile-nav">
       <AnnouncementBar />
       <Header />
 

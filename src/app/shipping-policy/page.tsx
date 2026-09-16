@@ -29,7 +29,7 @@ export default function ShippingPolicyPage() {
   const shopPhone = getShopPhoneDisplay();
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] text-slate-800">
+    <div className="min-h-screen bg-[#f8fafc] text-slate-800 page-mobile-nav">
       <AnnouncementBar />
       <Header />
 

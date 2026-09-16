@@ -81,7 +81,7 @@ export default function CartPage() {
       <AnnouncementBar />
       <Header />
 
-      <div className="max-w-7xl mx-auto px-4 py-8 flex-1 w-full pb-28 lg:pb-8">
+      <div className="max-w-7xl mx-auto px-4 py-8 flex-1 w-full pb-36 lg:pb-8">
         <div className="flex items-center gap-2 mb-6">
           <Link href="/" className="text-xs font-bold text-slate-500 hover:text-blue-600 flex items-center gap-1 min-h-11">
             <ArrowLeft className="w-4 h-4" />
@@ -383,17 +383,19 @@ export default function CartPage() {
                   setIsAuthOpen(true);
                   return;
                 }
-                if (!pincodeOk || hasBlockingItem) return;
+                if (!pincodeOk || hasBlockingItem || booksNeeded > 0) return;
                 const clean = await validateCartStock();
                 if (!clean) return;
                 setCheckoutTotal(cartGrandTotal);
                 setIsCheckoutOpen(true);
                 router.push('/checkout');
               }}
-              disabled={!pincodeOk || hasBlockingItem}
+              disabled={!pincodeOk || hasBlockingItem || booksNeeded > 0}
               className="flex-1 bg-gradient-to-r from-amber-400 to-amber-500 disabled:opacity-50 text-[#001B3A] font-extrabold text-xs py-3.5 rounded-xl uppercase tracking-wider min-h-12 touch-manipulation"
             >
-              PLACE ORDER
+              {booksNeeded > 0
+                ? `Add ${booksNeeded} more guide${booksNeeded === 1 ? '' : 's'}`
+                : 'PLACE ORDER'}
             </button>
           </div>
         </div>

@@ -44,7 +44,7 @@ export const WhyChoose = () => {
             ].map((item, idx) => (
               <div
                 key={idx}
-                className="bg-white/10 hover:bg-white/15 border border-white/15 p-4 rounded-2xl text-center transition-all duration-300 backdrop-blur-md hover:-translate-y-1 hover:shadow-xl group"
+                className="bg-white/10 hover:bg-white/15 border border-white/15 p-3.5 sm:p-4 rounded-2xl text-center transition-all duration-300 backdrop-blur-md hover:-translate-y-1 hover:shadow-xl group last:col-span-2 sm:last:col-span-1"
               >
                 <div className="w-10 h-10 rounded-xl bg-amber-400/20 border border-amber-400/40 text-amber-300 flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
                   <item.icon className="w-5 h-5" />

@@ -552,29 +552,29 @@ export default function CheckoutPage() {
   };
 
   return (
-    <main className="min-h-screen bg-slate-50 flex flex-col page-mobile-nav">
+    <main className="min-h-screen bg-slate-50 flex flex-col pb-24 sm:pb-0">
       <AnnouncementBar />
       <Header />
 
-      <div className="max-w-4xl mx-auto px-4 py-8 w-full flex-1">
+      <div className="max-w-4xl mx-auto px-3 sm:px-4 py-5 sm:py-8 w-full flex-1">
         {/* Step Indicator */}
-        <div className="flex items-center justify-between max-w-md mx-auto mb-8 text-xs font-bold">
-          <div className={`flex items-center gap-1.5 ${step >= 1 ? 'text-[#0044AA]' : 'text-slate-400'}`}>
-            <span className="w-6 h-6 rounded-full bg-current text-white flex items-center justify-center text-[10px]">
+        <div className="flex items-center justify-between max-w-md mx-auto mb-6 sm:mb-8 text-[11px] sm:text-xs font-bold px-1 sm:px-0">
+          <div className={`flex items-center gap-1 sm:gap-1.5 ${step >= 1 ? 'text-[#0044AA]' : 'text-slate-400'}`}>
+            <span className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-current text-white flex items-center justify-center text-[10px] shrink-0 font-black">
               1
             </span>
             <span>Address</span>
           </div>
-          <ChevronRight className="w-4 h-4 text-slate-300" />
-          <div className={`flex items-center gap-1.5 ${step >= 2 ? 'text-[#0044AA]' : 'text-slate-400'}`}>
-            <span className="w-6 h-6 rounded-full bg-current text-white flex items-center justify-center text-[10px]">
+          <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-300 shrink-0" />
+          <div className={`flex items-center gap-1 sm:gap-1.5 ${step >= 2 ? 'text-[#0044AA]' : 'text-slate-400'}`}>
+            <span className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-current text-white flex items-center justify-center text-[10px] shrink-0 font-black">
               2
             </span>
             <span>Summary</span>
           </div>
-          <ChevronRight className="w-4 h-4 text-slate-300" />
-          <div className={`flex items-center gap-1.5 ${step >= 3 ? 'text-[#0044AA]' : 'text-slate-400'}`}>
-            <span className="w-6 h-6 rounded-full bg-current text-white flex items-center justify-center text-[10px]">
+          <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-300 shrink-0" />
+          <div className={`flex items-center gap-1 sm:gap-1.5 ${step >= 3 ? 'text-[#0044AA]' : 'text-slate-400'}`}>
+            <span className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-current text-white flex items-center justify-center text-[10px] shrink-0 font-black">
               3
             </span>
             <span>Confirm</span>
@@ -944,7 +944,7 @@ export default function CheckoutPage() {
                   if (!clean) return;
                   setStep(3);
                 }}
-                className="w-full bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-[#001B3A] font-extrabold text-sm py-3.5 rounded-xl uppercase tracking-wider disabled:opacity-50 transition-all"
+                className="hidden sm:flex w-full items-center justify-center bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-[#001B3A] font-extrabold text-sm py-3.5 rounded-xl uppercase tracking-wider disabled:opacity-50 transition-all min-h-12"
               >
                 Review & Confirm →
               </button>
@@ -1163,39 +1163,51 @@ export default function CheckoutPage() {
 
       <Footer />
 
-      {/* Mobile sticky primary CTA — mirrors cart bar */}
-      {(step === 1 || step === 3) && (
-        <div
-          className="fixed inset-x-0 z-40 sm:hidden border-t border-slate-200 bg-white/95 backdrop-blur-md p-3 shadow-2xl"
-          style={{ bottom: 'calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px))' }}
-        >
-          {step === 1 ? (
+      {/* Mobile sticky primary CTA — anchored to screen bottom */}
+      <div className="fixed inset-x-0 bottom-0 z-40 sm:hidden border-t border-slate-200 bg-white/95 backdrop-blur-md p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-2xl">
+        {step === 1 && (
+          <button
+            type="button"
+            disabled={cartCount < 4}
+            onClick={() => void goToReview()}
+            className="w-full bg-gradient-to-r from-amber-400 to-amber-500 disabled:opacity-50 text-[#001B3A] font-extrabold text-xs py-3.5 rounded-xl uppercase tracking-wider min-h-12 touch-manipulation"
+          >
+            Deliver Here →
+          </button>
+        )}
+
+        {step === 2 && (
+          <button
+            type="button"
+            disabled={cartCount < 4 || hasBlockingItem}
+            onClick={async () => {
+              const clean = await validateCartStock();
+              if (!clean) return;
+              setStep(3);
+            }}
+            className="w-full bg-gradient-to-r from-amber-400 to-amber-500 disabled:opacity-50 text-[#001B3A] font-extrabold text-xs py-3.5 rounded-xl uppercase tracking-wider min-h-12 touch-manipulation"
+          >
+            Review & Confirm →
+          </button>
+        )}
+
+        {step === 3 && (
+          <div className="flex items-center gap-3 max-w-7xl mx-auto">
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold text-slate-500 uppercase">Pay</p>
+              <p className="font-black text-lg text-[#001B3A] leading-none">₹{finalPayable}</p>
+            </div>
             <button
               type="button"
-              disabled={cartCount < 4}
-              onClick={() => void goToReview()}
-              className="w-full bg-gradient-to-r from-amber-400 to-amber-500 disabled:opacity-50 text-[#001B3A] font-extrabold text-xs py-3.5 rounded-xl uppercase tracking-wider min-h-12 touch-manipulation"
+              disabled={isPlacingOrder || cart.length === 0 || cartCount < 4 || hasBlockingItem}
+              onClick={() => void handlePlaceOrder()}
+              className="flex-1 bg-gradient-to-r from-amber-400 to-amber-500 disabled:opacity-50 text-[#001B3A] font-extrabold text-xs py-3.5 rounded-xl uppercase tracking-wider min-h-12 touch-manipulation"
             >
-              Deliver Here →
+              {isPlacingOrder ? 'Opening Razorpay…' : 'Confirm order'}
             </button>
-          ) : (
-            <div className="flex items-center gap-3 max-w-7xl mx-auto">
-              <div className="min-w-0">
-                <p className="text-[10px] font-bold text-slate-500 uppercase">Pay</p>
-                <p className="font-black text-lg text-[#001B3A] leading-none">₹{finalPayable}</p>
-              </div>
-              <button
-                type="button"
-                disabled={isPlacingOrder || cart.length === 0 || cartCount < 4 || hasBlockingItem}
-                onClick={() => void handlePlaceOrder()}
-                className="flex-1 bg-gradient-to-r from-amber-400 to-amber-500 disabled:opacity-50 text-[#001B3A] font-extrabold text-xs py-3.5 rounded-xl uppercase tracking-wider min-h-12 touch-manipulation"
-              >
-                {isPlacingOrder ? 'Opening Razorpay…' : 'Confirm order'}
-              </button>
-            </div>
-          )}
-        </div>
-      )}
+          </div>
+        )}
+      </div>
     </main>
   );
 }

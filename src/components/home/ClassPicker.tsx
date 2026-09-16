@@ -32,7 +32,7 @@ export const ClassPicker = () => {
           </p>
         </div>
 
-        <div className="grid grid-cols-4 sm:grid-cols-4 lg:grid-cols-7 gap-1.5 sm:gap-4">
+        <div className="flex sm:grid sm:grid-cols-4 lg:grid-cols-7 gap-2 sm:gap-4 overflow-x-auto scroll-chips pb-2 -mx-1 px-1 sm:mx-0 sm:px-0 justify-start sm:justify-center">
           {CLASSES.map((cls) => {
             const isSelected = selectedClass === cls;
             return (
@@ -40,7 +40,7 @@ export const ClassPicker = () => {
                 key={cls}
                 type="button"
                 onClick={() => handleSelectClass(cls)}
-                className={`p-2 min-[360px]:p-3 sm:p-5 rounded-xl sm:rounded-2xl border text-center touch-manipulation active:scale-95 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl ${
+                className={`flex-shrink-0 w-[72px] min-[360px]:w-[78px] sm:w-auto p-2.5 min-[360px]:p-3 sm:p-5 rounded-2xl border text-center touch-manipulation active:scale-95 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl ${
                   CLASS_COLORS[cls]
                 } ${
                   isSelected
@@ -51,7 +51,7 @@ export const ClassPicker = () => {
                 <div className="font-heading font-black text-xl min-[360px]:text-2xl sm:text-3xl md:text-4xl leading-none tracking-tight text-slate-900">
                   {cls}
                 </div>
-                <div className="text-[9px] min-[360px]:text-[10px] sm:text-xs font-extrabold text-slate-500 mt-1 uppercase tracking-wider">
+                <div className="text-[10px] sm:text-xs font-extrabold text-slate-500 mt-1 uppercase tracking-wider">
                   Std
                 </div>
               </button>

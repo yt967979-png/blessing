@@ -180,12 +180,12 @@ export const ProductCard = ({ product }: { product: Product }) => {
         </a>
       )}
 
-      <div className="grid grid-cols-2 gap-1 sm:gap-2">
+      <div className="grid grid-cols-2 gap-1.5 sm:gap-2 mt-auto">
         <button
           type="button"
           disabled={isOutOfStock}
           onClick={handleAddToCart}
-          className={`font-extrabold text-[10px] sm:text-xs py-2 sm:py-2.5 rounded-xl flex items-center justify-center gap-1 uppercase touch-manipulation disabled:cursor-not-allowed min-h-9 sm:min-h-10 transition-all duration-300 cursor-pointer ${
+          className={`font-extrabold text-[11px] sm:text-xs py-2.5 rounded-xl flex items-center justify-center gap-1 uppercase touch-manipulation disabled:cursor-not-allowed min-h-11 transition-all duration-300 cursor-pointer ${
             isAdded
               ? 'bg-emerald-600 text-white animate-success-pop shadow-md shadow-emerald-600/30'
               : 'bg-[#0044AA] hover:bg-[#003388] active:bg-[#001B3A] disabled:bg-slate-300 disabled:text-slate-500 text-white'
@@ -216,7 +216,7 @@ export const ProductCard = ({ product }: { product: Product }) => {
             setIsCheckoutOpen(true);
             router.push('/checkout');
           }}
-          className="bg-amber-400 hover:bg-amber-500 active:bg-amber-600 disabled:bg-slate-200 disabled:text-slate-500 text-[#001B3A] font-extrabold text-[11px] sm:text-xs py-3 rounded-xl uppercase touch-manipulation disabled:cursor-not-allowed min-h-12 shadow-sm hover:shadow-md transition-all"
+          className="bg-amber-400 hover:bg-amber-500 active:bg-amber-600 disabled:bg-slate-200 disabled:text-slate-500 text-[#001B3A] font-extrabold text-[11px] sm:text-xs py-2.5 rounded-xl uppercase touch-manipulation disabled:cursor-not-allowed min-h-11 shadow-sm hover:shadow-md transition-all flex items-center justify-center"
         >
           {isOutOfStock ? 'N/A' : 'BUY'}
         </button>

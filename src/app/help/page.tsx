@@ -723,12 +723,12 @@ function HelpCenterContent() {
             <h4 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
               <Sparkles className="w-3.5 h-3.5 text-blue-600" /> Quick Questions
             </h4>
-            <div className="space-y-1.5">
+            <div className="flex lg:flex-col gap-1.5 overflow-x-auto scroll-chips pb-1 -mx-1 px-1">
               {COMMON_QUERIES.map((q, idx) => (
                 <button
                   key={idx}
                   onClick={() => handleSendMessage(q)}
-                  className="w-full text-left p-2.5 rounded-xl text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-blue-50 hover:text-blue-700 border border-slate-200/80 transition-all flex items-center justify-between group cursor-pointer"
+                  className="shrink-0 max-w-[280px] lg:max-w-none text-left p-2.5 rounded-xl text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-blue-50 hover:text-blue-700 border border-slate-200/80 transition-all flex items-center justify-between group cursor-pointer"
                 >
                   <span className="truncate">{q}</span>
                   <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-600 shrink-0 ml-1" />
@@ -737,8 +737,8 @@ function HelpCenterContent() {
             </div>
           </div>
 
-          {/* Store Guarantees Card */}
-          <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 space-y-2 text-xs text-slate-600">
+          {/* Store Guarantees Card — desktop only to prevent mobile clutter */}
+          <div className="hidden lg:block bg-slate-50 border border-slate-200/80 rounded-2xl p-4 space-y-2 text-xs text-slate-600">
             <div className="flex items-center gap-2 font-bold text-slate-800">
               <ShieldCheck className="w-4 h-4 text-emerald-600" />
               <span>Blessing Guarantee</span>
