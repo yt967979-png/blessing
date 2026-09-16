@@ -1,7 +1,7 @@
-# Normal production proxy — DuckDNS + Let's Encrypt HTTPS.
+# Production proxy — Let's Encrypt HTTPS via Cloudflare.
 # Install: sudo cp deploy/aws/Caddyfile /etc/caddy/Caddyfile && sudo systemctl reload caddy
 
-blessingpowerguide.duckdns.org, www.blessingpowerguide.in {
+www.blessingpowerguide.in {
 	redir https://blessingpowerguide.in{uri} permanent
 }
 
