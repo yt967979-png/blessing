@@ -8,6 +8,14 @@ www.blessingpowerguide.in {
 blessingpowerguide.in {
 	encode gzip
 
+	log {
+		output file /var/log/caddy/access.log {
+			roll_size 10mb
+			roll_keep 3
+		}
+	}
+
+
 	@uploads path /uploads/*
 	handle @uploads {
 		root * /opt/blessing/public
@@ -20,6 +28,7 @@ blessingpowerguide.in {
 			lb_policy round_robin
 			lb_try_duration 2s
 			flush_interval -1
+			header_down X-Proxy-Upstream {upstream_hostport}
 		}
 	}
 
@@ -30,8 +39,10 @@ blessingpowerguide.in {
 			health_uri /api/health
 			health_interval 5s
 			health_timeout 2s
+			header_down X-Proxy-Upstream {upstream_hostport}
 		}
 	}
+
 
 	# If Node is restarting → friendly Updating page (not raw 502)
 	handle_errors {
