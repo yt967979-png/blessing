@@ -48,32 +48,54 @@ export function checkRateLimit(
   return { success: true, remaining: limit - existing.count };
 }
 
-/** Postgres-backed limiter so a Lightsail restart does not reset abuse counters. Falls back to memory. */
+/** High-throughput rate limiter — checks in-memory fast-path, Redis atomic pipeline, then falls back safely. */
 async function checkRateLimitPersistent(
   key: string,
   limit: number,
   windowMs: number
 ): Promise<{ success: boolean; remaining: number }> {
   const safeKey = String(key || 'anon').slice(0, 180);
-  try {
-    const { queryDb } = await import('@/lib/db');
-    const resetAt = new Date(Date.now() + windowMs).toISOString();
-    const res = await queryDb(
-      `INSERT INTO rate_limits (key, count, reset_at)
-       VALUES ($1, 1, $2::timestamptz)
-       ON CONFLICT (key) DO UPDATE SET
-         count = CASE WHEN rate_limits.reset_at < NOW() THEN 1 ELSE rate_limits.count + 1 END,
-         reset_at = CASE WHEN rate_limits.reset_at < NOW() THEN EXCLUDED.reset_at ELSE rate_limits.reset_at END
-       RETURNING count`,
-      [safeKey, resetAt]
-    );
-    const count = Number(res.rows?.[0]?.count || 1);
-    if (count > limit) return { success: false, remaining: 0 };
-    return { success: true, remaining: Math.max(0, limit - count) };
-  } catch {
-    return checkRateLimit(safeKey, limit, windowMs);
+
+  // 1. In-memory fast-rejection: If local instance has already seen limit exceeded, reject in 0ms without network overhead
+  const localCheck = checkRateLimit(safeKey, limit, windowMs);
+  if (!localCheck.success) {
+    return localCheck;
   }
+
+  // 2. Redis atomic rate limiter (when Redis is available on 127.0.0.1:6379 or REDIS_URL)
+  try {
+    const { redisRateLimit } = await import('@/lib/redis');
+    const redisResult = await redisRateLimit(safeKey, limit, windowMs);
+    if (redisResult) {
+      return redisResult;
+    }
+  } catch (_) {}
+
+  // 3. If DB persistent rate limit is explicitly requested (e.g. multi-server without Redis)
+  if (process.env.ENABLE_DB_RATE_LIMIT === 'true') {
+    try {
+      const { queryDb } = await import('@/lib/db');
+      const resetAt = new Date(Date.now() + windowMs).toISOString();
+      const res = await queryDb(
+        `INSERT INTO rate_limits (key, count, reset_at)
+         VALUES ($1, 1, $2::timestamptz)
+         ON CONFLICT (key) DO UPDATE SET
+           count = CASE WHEN rate_limits.reset_at < NOW() THEN 1 ELSE rate_limits.count + 1 END,
+           reset_at = CASE WHEN rate_limits.reset_at < NOW() THEN EXCLUDED.reset_at ELSE rate_limits.reset_at END
+         RETURNING count`,
+        [safeKey, resetAt]
+      );
+      const count = Number(res.rows?.[0]?.count || 1);
+      if (count > limit) return { success: false, remaining: 0 };
+      return { success: true, remaining: Math.max(0, limit - count) };
+    } catch {
+      return localCheck;
+    }
+  }
+
+  return localCheck;
 }
+
 
 export function applyRateLimit(
   keyOrReq: string | Request,

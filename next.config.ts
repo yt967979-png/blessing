@@ -165,6 +165,55 @@ const nextConfig: NextConfig = {
           },
         ],
       },
+      // Private Customer & Admin Routes — Strictly NEVER Cached Publicly
+      ...[
+        "/api/orders/:path*",
+        "/api/admin/:path*",
+        "/api/razorpay/:path*",
+        "/api/support/:path*",
+        "/api/cart/:path*",
+        "/api/auth/:path*",
+        "/admin",
+        "/admin/:path*",
+        "/checkout",
+        "/cart",
+        "/profile",
+        "/profile/:path*",
+      ].map((pattern) => ({
+        source: pattern,
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "private, no-cache, no-store, max-age=0, must-revalidate",
+          },
+          {
+            key: "Pragma",
+            value: "no-cache",
+          },
+        ],
+      })),
+      // Real-Time SSE Streams — Prevent Proxy Buffering & Stale Sockets
+      ...[
+        "/api/stock/stream",
+        "/api/orders/stream",
+        "/api/support/stream",
+      ].map((ssePattern) => ({
+        source: ssePattern,
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "no-cache, no-transform",
+          },
+          {
+            key: "X-Accel-Buffering",
+            value: "no",
+          },
+          {
+            key: "Connection",
+            value: "keep-alive",
+          },
+        ],
+      })),
     ];
   },
 };

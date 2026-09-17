@@ -1308,6 +1308,17 @@ async function runSchemaInit(client: any) {
 
         CREATE UNIQUE INDEX IF NOT EXISTS uq_orders_razorpay_payment_id
           ON orders (razorpay_payment_id) WHERE razorpay_payment_id IS NOT NULL AND razorpay_payment_id <> '';
+
+        CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders (user_id);
+        CREATE INDEX IF NOT EXISTS idx_orders_status ON orders (order_status);
+        CREATE INDEX IF NOT EXISTS idx_orders_created ON orders (ordered_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_orders_awb ON orders (awb_number);
+        CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items (order_id);
+        CREATE INDEX IF NOT EXISTS idx_payments_payment_id ON payments (payment_id);
+        CREATE INDEX IF NOT EXISTS idx_payments_status ON payments (status);
+        CREATE INDEX IF NOT EXISTS idx_books_department_status ON books (department, status);
+        CREATE INDEX IF NOT EXISTS idx_books_status_stock ON books (status, stock);
+        CREATE INDEX IF NOT EXISTS idx_books_subject ON books (subject);
       `);
     } catch (e) {
       /* schema already exists or partial — safe to continue */
