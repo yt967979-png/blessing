@@ -56,8 +56,6 @@ const nextConfig: NextConfig = {
         headers: [
           { key: "X-Frame-Options", value: "DENY" },
           { key: "X-Content-Type-Options", value: "nosniff" },
-          // MUST be explicit unsafe-none — omitting it lets Chrome enforce default COOP
-          // which blocks Google Sign-In FedCM postMessage calls
           {
             key: "Cross-Origin-Opener-Policy",
             value: "unsafe-none",
@@ -133,6 +131,24 @@ const nextConfig: NextConfig = {
       },
       {
         source: "/",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=0, s-maxage=60, stale-while-revalidate=300",
+          },
+        ],
+      },
+      {
+        source: "/products",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=0, s-maxage=60, stale-while-revalidate=300",
+          },
+        ],
+      },
+      {
+        source: "/products/:path*",
         headers: [
           {
             key: "Cache-Control",

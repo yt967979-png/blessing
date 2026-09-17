@@ -464,12 +464,44 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   useEffect(() => {
     if (typeof window === 'undefined' || typeof EventSource === 'undefined') return;
+
+    // Only connect real-time stock SSE when the customer has items in cart,
+    // is on cart/checkout routes, or is an admin. Passive browsers consume 0 sockets.
+    const isCartActive = cart.length > 0;
+    const isCartRoute = typeof window !== 'undefined' && (
+      window.location.pathname.startsWith('/cart') ||
+      window.location.pathname.startsWith('/checkout') ||
+      window.location.pathname.startsWith('/admin')
+    );
+    const isAdmin = user?.role === 'admin';
+    const shouldStream = isCartActive || isCartRoute || isAdmin;
+
+    if (!shouldStream) {
+      sseConnectedRef.current = false;
+      return;
+    }
+
     let es: EventSource | null = null;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
     let stopped = false;
 
+    const disconnect = () => {
+      sseConnectedRef.current = false;
+      if (retryTimer) {
+        clearTimeout(retryTimer);
+        retryTimer = null;
+      }
+      if (es) {
+        es.close();
+        es = null;
+      }
+    };
+
     const connect = () => {
       if (stopped) return;
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+
+      disconnect();
       es = new EventSource('/api/stock/stream');
 
       es.onopen = () => {
@@ -484,7 +516,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             return;
           }
           if (data?.type === 'CATALOG_CHANGED') {
-            // Admin added/edited/deleted a book — soft-refresh full catalog
             refreshProducts(true);
             return;
           }
@@ -498,26 +529,32 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
       es.onerror = () => {
         sseConnectedRef.current = false;
-        // Browser EventSource auto-retries on transient errors; only take over
-        // reconnection once it gives up and the connection is fully closed
-        // (e.g. server rate-limited us or dropped the stream).
         if (es && es.readyState === EventSource.CLOSED && !stopped) {
           es.close();
+          es = null;
           retryTimer = setTimeout(connect, 5000);
         }
       };
     };
 
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        refreshProducts();
+        connect();
+      } else {
+        disconnect();
+      }
+    };
+
     connect();
+    document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
       stopped = true;
-      sseConnectedRef.current = false;
-      if (retryTimer) clearTimeout(retryTimer);
-      if (es) es.close();
+      document.removeEventListener('visibilitychange', handleVisibility);
+      disconnect();
     };
-     
-  }, []);
+  }, [cart.length, user?.role]);
 
   // Slow catalog poll always — catches missed SSE (new books / price edits).
   // Faster 15s poll only while SSE is down.
