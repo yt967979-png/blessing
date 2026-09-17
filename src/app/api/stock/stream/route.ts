@@ -204,9 +204,13 @@ function ensureListen() {
       listenClient = client;
       listenBackoffMs = 1000;
 
-      client.on('notification', (msg: { channel: string; payload?: string }) => {
+      client.on('notification', async (msg: { channel: string; payload?: string }) => {
         if (msg.channel !== 'stock_changed' || !msg.payload) return;
         try {
+          try {
+            const { invalidateProductsCache } = await import('@/app/api/products/route');
+            invalidateProductsCache();
+          } catch (_) {}
           broadcastStockChange(JSON.parse(msg.payload));
         } catch {
           /* malformed payload — skip rather than broadcast noise */

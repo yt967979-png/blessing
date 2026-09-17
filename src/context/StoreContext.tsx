@@ -223,9 +223,10 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (productsRef.current.length === 0) {
       setProductsLoading(true);
     }
-    const url = forceFresh ? '/api/products?fresh=1' : '/api/products';
+    const ts = Date.now();
+    const url = forceFresh ? `/api/products?fresh=1&_t=${ts}` : `/api/products?_t=${ts}`;
     const opts: RequestInit = {
-      ...(forceFresh ? { cache: 'no-store' as RequestCache } : {}),
+      cache: 'no-store' as RequestCache,
       // Fail fast — never leave the shop on a blank skeleton when Neon/pool stalls.
       signal: AbortSignal.timeout(10_000),
     };
@@ -465,21 +466,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   useEffect(() => {
     if (typeof window === 'undefined' || typeof EventSource === 'undefined') return;
 
-    // Only connect real-time stock SSE when the customer has items in cart,
-    // is on cart/checkout routes, or is an admin. Passive browsers consume 0 sockets.
-    const isCartActive = cart.length > 0;
-    const isCartRoute = typeof window !== 'undefined' && (
-      window.location.pathname.startsWith('/cart') ||
-      window.location.pathname.startsWith('/checkout') ||
-      window.location.pathname.startsWith('/admin')
-    );
-    const isAdmin = user?.role === 'admin';
-    const shouldStream = isCartActive || isCartRoute || isAdmin;
 
-    if (!shouldStream) {
-      sseConnectedRef.current = false;
-      return;
-    }
 
     let es: EventSource | null = null;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -554,7 +541,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       document.removeEventListener('visibilitychange', handleVisibility);
       disconnect();
     };
-  }, [cart.length, user?.role]);
+  }, []);
 
   // Slow catalog poll always — catches missed SSE (new books / price edits).
   // Faster 15s poll only while SSE is down.

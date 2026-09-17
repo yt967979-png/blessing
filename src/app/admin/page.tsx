@@ -381,6 +381,7 @@ function AdminPageInner() {
           const data = JSON.parse(event.data);
           if (data.type === 'STOCK_CHANGED' || data.type === 'CATALOG_CHANGED') {
             loadLowStock();
+            if (refreshProducts) refreshProducts(true);
           }
         } catch (_) {}
       };

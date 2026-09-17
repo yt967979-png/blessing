@@ -93,24 +93,7 @@ const nextConfig: NextConfig = {
           },
         ],
       },
-      {
-        source: "/api/products",
-        headers: [
-          {
-            key: "Cache-Control",
-            value: "public, max-age=10, s-maxage=30, stale-while-revalidate=60",
-          },
-        ],
-      },
-      {
-        source: "/api/products/:path*",
-        headers: [
-          {
-            key: "Cache-Control",
-            value: "public, max-age=10, s-maxage=30, stale-while-revalidate=60",
-          },
-        ],
-      },
+
       {
         source: "/track",
         headers: [
