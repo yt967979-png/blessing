@@ -152,8 +152,18 @@ sed -i "s/^Group=.*/Group=$APP_USER/" /etc/systemd/system/blessing.service
 sed -i "s|^WorkingDirectory=.*|WorkingDirectory=$APP_DIR|" /etc/systemd/system/blessing.service
 # Keep ExecStartPre path aligned if APP_DIR customized
 sed -i "s|/opt/blessing|$APP_DIR|g" /etc/systemd/system/blessing.service
+
+if [[ -f "$APP_DIR/deploy/aws/blessing@.service" ]]; then
+  cp "$APP_DIR/deploy/aws/blessing@.service" /etc/systemd/system/blessing@.service
+  sed -i "s/^User=.*/User=$APP_USER/" /etc/systemd/system/blessing@.service
+  sed -i "s/^Group=.*/Group=$APP_USER/" /etc/systemd/system/blessing@.service
+  sed -i "s|^WorkingDirectory=.*|WorkingDirectory=$APP_DIR|" /etc/systemd/system/blessing@.service
+  sed -i "s|/opt/blessing|$APP_DIR|g" /etc/systemd/system/blessing@.service
+fi
+
 systemctl daemon-reload
-systemctl start blessing
+systemctl restart blessing || systemctl start blessing
+
 
 # Lightsail default for this shop is Caddy (HTTPS). Skip Nginx unless installed.
 if command -v nginx >/dev/null 2>&1 && [[ -f "$APP_DIR/deploy/aws/nginx-blessing.conf" ]]; then

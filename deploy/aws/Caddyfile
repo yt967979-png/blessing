@@ -16,13 +16,21 @@ blessingpowerguide.in {
 
 	@sse path /api/stock/stream /api/orders/stream /api/support/stream
 	handle @sse {
-		reverse_proxy 127.0.0.1:3000 {
+		reverse_proxy 127.0.0.1:3000 127.0.0.1:3001 {
+			lb_policy round_robin
+			lb_try_duration 2s
 			flush_interval -1
 		}
 	}
 
 	handle {
-		reverse_proxy 127.0.0.1:3000
+		reverse_proxy 127.0.0.1:3000 127.0.0.1:3001 {
+			lb_policy round_robin
+			lb_try_duration 2s
+			health_uri /api/health
+			health_interval 5s
+			health_timeout 2s
+		}
 	}
 
 	# If Node is restarting → friendly Updating page (not raw 502)

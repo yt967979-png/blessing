@@ -1,5 +1,5 @@
 [Unit]
-Description=Blessing Power Guide (Next.js + Baileys)
+Description=Blessing Power Guide (Next.js Production Service)
 After=network-online.target
 Wants=network-online.target
 # Allow more rapid restarts after Neon blips / OOM kill before systemd gives up.
@@ -15,7 +15,6 @@ WorkingDirectory=/opt/blessing
 # File MUST be KEY=value (no "export "), Unix LF line endings (not Windows CRLF).
 EnvironmentFile=-/etc/blessing.env
 Environment=NODE_ENV=production
-Environment=WHATSAPP_SESSION_DIR=/var/lib/blessing/whatsapp_session
 # Prefer direct next binary over `npm start` (avoids npm wrapper / PATH quirks).
 # Fail fast if .next is missing (common after interrupted build / rsync --delete mid-deploy).
 ExecStartPre=/usr/bin/test -d /opt/blessing/.next
@@ -25,8 +24,8 @@ RestartSec=5
 # Fast stop so `systemctl restart` does not sit on the default ~90s stop timeout.
 TimeoutStopSec=15
 KillSignal=SIGTERM
-# Baileys + Next share this process — keep one replica only.
 KillMode=mixed
+
 
 # Soft limits for small Lightsail plans
 LimitNOFILE=65535

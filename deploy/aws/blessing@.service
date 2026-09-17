@@ -1,0 +1,26 @@
+[Unit]
+Description=Blessing Power Guide Worker on Port %i
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=20
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/opt/blessing
+EnvironmentFile=-/etc/blessing.env
+Environment=NODE_ENV=production
+Environment=PORT=%i
+ExecStartPre=/usr/bin/test -d /opt/blessing/.next
+ExecStart=/usr/bin/node /opt/blessing/node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port %i
+Restart=always
+RestartSec=5
+TimeoutStopSec=15
+KillSignal=SIGTERM
+KillMode=mixed
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
