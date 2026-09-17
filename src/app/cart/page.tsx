@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
@@ -17,6 +17,8 @@ import {
   Check,
   Bookmark,
   AlertTriangle,
+  Sparkles,
+  CheckCircle2,
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { pincodeDeliveryMessage } from '@/lib/pincode';
@@ -35,6 +37,7 @@ export default function CartPage() {
     products,
     updateQty,
     removeFromCart,
+    addToCart,
     cartTotal,
     setIsCheckoutOpen,
     user,
@@ -47,6 +50,7 @@ export default function CartPage() {
     shippingFee,
     cartGrandTotal,
     validateCartStock,
+    showToast,
   } = useStore();
   const [pincode, setPincode] = useState('600012');
   const [pincodeMsg, setPincodeMsg] = useState('✓ Deliverable via ST Courier — usually 2–3 days in Tamil Nadu.');
@@ -54,6 +58,31 @@ export default function CartPage() {
   const hasBlockingItem = anyCartItemBlocking(cart, products);
   const booksNeeded = booksUntilMinOrder(cartCount);
   const minOrderMsg = minOrderCheckoutMessage(cartCount);
+
+  // Dynamic detection of academic class for same-standard upsells
+  const detectedClass = useMemo(() => {
+    for (const item of cart) {
+      const cls = item.cls || '';
+      if (cls) return cls;
+      const match = (item.title || '').match(/(6th|7th|8th|9th|10th|11th|12th)/i);
+      if (match) return match[0];
+    }
+    return '10th';
+  }, [cart]);
+
+  const sameClassSuggestions = useMemo(() => {
+    if (!products || products.length === 0) return [];
+    return products
+      .filter((p: any) => {
+        if (cart.some((c) => c.id === p.id)) return false;
+        if (p.inStock === false) return false;
+        const pCls = p.cls || (p.title || '').match(/(6th|7th|8th|9th|10th|11th|12th)/i)?.[0] || '';
+        return pCls.toLowerCase() === detectedClass.toLowerCase();
+      })
+      .slice(0, 3);
+  }, [detectedClass, products, cart]);
+
+  const freeDeliveryProgress = Math.min(100, Math.round((cartCount / 5) * 100));
 
   // Instant stock re-check the moment a customer opens the cart page.
   useEffect(() => {
@@ -118,6 +147,44 @@ export default function CartPage() {
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
             <div className="lg:col-span-8 space-y-4">
+              {/* Dynamic Delivery & MOQ Progress Bar */}
+              <div className="bg-gradient-to-r from-blue-50 via-indigo-50/40 to-amber-50/50 border border-blue-200/80 rounded-2xl p-4 sm:p-5 shadow-xs">
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="p-1.5 bg-[#0044AA] text-white rounded-lg">
+                      <Truck className="w-4 h-4 text-amber-300" />
+                    </span>
+                    <span className="font-heading font-black text-xs sm:text-sm text-[#001B3A]">
+                      {cartCount < 4 ? (
+                        <>Add <span className="text-amber-600 font-extrabold">{booksNeeded}</span> more guide(s) for Minimum Order (4 books)</>
+                      ) : cartCount === 4 ? (
+                        <>Add <span className="text-emerald-600 font-extrabold">1</span> more guide to unlock <span className="text-emerald-700">FREE ST Courier Delivery</span>!</>
+                      ) : (
+                        <span className="text-emerald-700 flex items-center gap-1">
+                          <CheckCircle2 className="w-4 h-4 inline" /> FREE ST Courier Delivery Unlocked Across Tamil Nadu!
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                  <span className="text-[11px] font-black text-slate-600 bg-white/90 border border-slate-200 px-2 py-0.5 rounded-md">
+                    {cartCount}/5 Books
+                  </span>
+                </div>
+
+                <div className="w-full bg-slate-200/80 rounded-full h-2.5 overflow-hidden">
+                  <div
+                    className={`h-full transition-all duration-500 rounded-full ${
+                      cartCount >= 5
+                        ? 'bg-gradient-to-r from-emerald-500 to-teal-500'
+                        : cartCount === 4
+                        ? 'bg-gradient-to-r from-blue-500 to-emerald-500'
+                        : 'bg-gradient-to-r from-amber-400 to-blue-600'
+                    }`}
+                    style={{ width: `${Math.max(10, freeDeliveryProgress)}%` }}
+                  />
+                </div>
+              </div>
+
               <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs">
                 <div className="flex items-center gap-3">
                   <MapPin className="w-5 h-5 text-blue-600 flex-shrink-0" />
@@ -235,6 +302,60 @@ export default function CartPage() {
                   </div>
                 );
               })}
+
+              {/* Same-Standard Quick-Add Recommendations ("Complete Your Class Set") */}
+              {sameClassSuggestions.length > 0 && (
+                <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-amber-500" />
+                      <h3 className="font-heading font-black text-xs sm:text-sm text-[#001B3A] uppercase tracking-wider">
+                        Complete Your Class {detectedClass.toUpperCase()} Set
+                      </h3>
+                    </div>
+                    <span className="text-[10px] font-bold text-slate-400">Add to reach 4+ books</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                    {sameClassSuggestions.map((book: any) => (
+                      <div
+                        key={book.id}
+                        className="flex items-center gap-2.5 p-2.5 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-white hover:border-blue-200 transition-all"
+                      >
+                        <div className="relative w-12 h-14 rounded-lg overflow-hidden bg-white border border-slate-200 flex-shrink-0">
+                          <Image
+                            src={book.image || book.cover_image || '/logo.png'}
+                            alt={book.title}
+                            fill
+                            className="object-cover"
+                            unoptimized={imageNeedsUnoptimized(book.image || book.cover_image || '')}
+                          />
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[11px] font-bold text-slate-800 truncate leading-tight">
+                            {book.title}
+                          </p>
+                          <p className="text-xs font-black text-[#001B3A] mt-0.5">
+                            ₹{book.price || book.discount_price}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              addToCart(book);
+                              showToast(`Added ${book.title} to your cart!`);
+                            }}
+                            className="mt-1 inline-flex items-center gap-1 text-[10px] font-black text-white bg-[#0044AA] hover:bg-[#001B3A] px-2 py-0.5 rounded-md transition-colors cursor-pointer"
+                          >
+                            <Plus className="w-2.5 h-2.5" />
+                            <span>Add</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {savedForLater.length > 0 && (
                 <div className="pt-4 space-y-3">

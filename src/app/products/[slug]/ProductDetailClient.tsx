@@ -24,6 +24,7 @@ import { Header } from '@/components/layout/Header';
 import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
 import { Footer } from '@/components/layout/Footer';
 import { ProductCard } from '@/components/ui/ProductCard';
+import { FrequentlyBoughtTogether } from '@/components/products/FrequentlyBoughtTogether';
 import { getSTCourierDeliveryEstimate } from '@/lib/deliveryEstimator';
 import { pincodeDeliveryMessage } from '@/lib/pincode';
 import { authHeaders } from '@/lib/clientAuth';
@@ -710,6 +711,9 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
             )}
           </div>
         </div>
+
+        {/* Same Standard Frequently Bought Together Bundle */}
+        <FrequentlyBoughtTogether currentProduct={product} />
 
         <section className="bg-white border border-slate-200 rounded-2xl p-6 md:p-8 shadow-xs mb-12">
           {/* Section Heading & Review CTA */}
