@@ -55,7 +55,11 @@ export async function priceCheckoutOrder(
     discountAmount = applied.coupon.discount;
   }
 
-  const finalTotal = Math.max(0, calculatedSubtotal + shippingFee - discountAmount);
+  // Ensure online payment gateways (Razorpay) can create the transaction (requires minimum ₹1 / 100 paise)
+  if (discountAmount >= calculatedSubtotal + shippingFee) {
+    discountAmount = Math.max(0, calculatedSubtotal + shippingFee - 1);
+  }
+  const finalTotal = Math.max(1, calculatedSubtotal + shippingFee - discountAmount);
 
   return {
     ok: true,

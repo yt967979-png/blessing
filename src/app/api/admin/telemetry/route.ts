@@ -1,15 +1,16 @@
 import { NextResponse } from 'next/server';
 import os from 'os';
 import { queryDb } from '@/lib/db';
-import { getAuthenticatedUser, forbiddenResponse } from '@/lib/serverSecurity';
+import { verifyAdminRequest, forbiddenResponse, unauthorizedResponse } from '@/lib/serverSecurity';
 import { getRedisClient } from '@/lib/redis';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
-  const user = await getAuthenticatedUser(request);
-  if (!user || user.role !== 'admin') {
-    return forbiddenResponse('Admin privileges required.');
+  const admin = await verifyAdminRequest(request);
+  if (!admin.isAdmin) {
+    if (!admin.user) return unauthorizedResponse('Admin session required.');
+    return forbiddenResponse(admin.error || 'Admin privileges required.');
   }
 
   const start = Date.now();

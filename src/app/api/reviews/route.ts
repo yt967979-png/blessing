@@ -11,6 +11,8 @@ import {
   getAuthenticatedUser,
   unauthorizedResponse,
   verifyAdminRequest,
+  applyRateLimitAsync,
+  clientIp,
 } from '@/lib/serverSecurity';
 
 export async function GET(request: NextRequest) {
@@ -152,6 +154,11 @@ export async function POST(request: NextRequest) {
 
     // Action: Helpful vote
     if (body.action === 'vote_helpful') {
+      const rlVote = await applyRateLimitAsync(`vote_helpful:${clientIp(request)}`, 30, 60000);
+      if (!rlVote.allowed) {
+        return NextResponse.json({ error: 'Too many votes. Please wait a minute.' }, { status: 429 });
+      }
+
       const reviewId = String(body.reviewId || '').trim();
       if (!reviewId) {
         return NextResponse.json({ error: 'Review id is required.' }, { status: 400 });
@@ -173,9 +180,14 @@ export async function POST(request: NextRequest) {
     const session = await getAuthenticatedUser(request);
     if (!session) return unauthorizedResponse('Login required to submit a review.');
 
+    const rlPost = await applyRateLimitAsync(`review_post:${session.userId}:${clientIp(request)}`, 5, 60000);
+    if (!rlPost.allowed) {
+      return NextResponse.json({ error: 'Too many reviews submitted. Please wait.' }, { status: 429 });
+    }
+
     const bookId = String(body.bookId || '').trim();
     const rating = Math.min(5, Math.max(1, Number(body.rating) || 0));
-    const comment = String(body.comment || body.review || '').trim();
+    const comment = String(body.comment || body.review || '').trim().slice(0, 2000);
     const images = Array.isArray(body.images)
       ? body.images.map(String).filter(Boolean).slice(0, 5)
       : [];
@@ -264,7 +276,7 @@ export async function PATCH(request: NextRequest) {
     const rating =
       body.rating != null ? Math.min(5, Math.max(1, Number(body.rating))) : undefined;
     const comment =
-      body.comment != null ? String(body.comment || body.review || '').trim() : undefined;
+      body.comment != null ? String(body.comment || body.review || '').trim().slice(0, 2000) : undefined;
     const images = Array.isArray(body.images)
       ? body.images.map(String).filter(Boolean).slice(0, 5)
       : undefined;

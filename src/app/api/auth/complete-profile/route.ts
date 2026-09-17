@@ -25,7 +25,7 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => ({}));
     const { name, phone } = body;
     const cleanPhone = normalizeMobileDigits(String(phone || ''));
-    const cleanName = String(name || '').trim();
+    const cleanName = String(name || '').trim().slice(0, 100);
 
     if (!cleanName || cleanName.length < 2) {
       return NextResponse.json({ error: 'Please enter your full name.' }, { status: 400 });

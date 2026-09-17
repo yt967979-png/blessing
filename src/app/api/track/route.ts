@@ -97,7 +97,6 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string, tokenRaw?: stri
       );
 
     if (res.rows.length === 0) {
-      releaseDbClient(client);
       return deny();
     }
 
@@ -143,7 +142,6 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string, tokenRaw?: stri
     }
 
     if (!isAuthorized) {
-      releaseDbClient(client);
       return deny();
     }
 
@@ -158,84 +156,66 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string, tokenRaw?: stri
       timeline = tl.rows.map((r: any) => ({
         label: r.status,
         remarks: r.remarks,
-        hub: r.hub_city,
-        at: r.created_at,
+        city: r.hub_city,
+        awb: r.awb_number,
+        time: r.created_at
+          ? new Date(r.created_at).toLocaleString('en-IN', {
+              day: 'numeric',
+              month: 'short',
+              hour: '2-digit',
+              minute: '2-digit',
+            })
+          : null,
       }));
     } catch (_) {}
 
-    // Courier scan history
-    let scans: any[] = [];
-    try {
-      const ct = await client.query(
-        `SELECT
-           COALESCE(status, current_status) AS status,
-           location,
-           remarks,
-           event_time,
-           created_at
-         FROM courier_tracking
-         WHERE order_id = $1
-            OR awb_number = $2
-            OR docket_number = $2
-         ORDER BY COALESCE(event_time, created_at, updated_at) DESC NULLS LAST
-         LIMIT 30`,
-        [o.id, o.awb_number || '']
-      );
-      scans = ct.rows.map((r: any) => ({
-        activity: r.status || r.remarks || 'Update',
-        location: r.location || '',
-        time: r.event_time || r.created_at || '',
-      }));
-    } catch (_) {}
+    const status = o.order_status || 'Confirmed';
+    const awb = o.awb_number || null;
+    const currentStep = stepIndex(status);
+    const cancelled = isOrderCancelled(status);
+    const delivered = isParcelDelivered(status);
 
-    releaseDbClient(client);
-
-    const cancelled = isOrderCancelled(o.order_status);
-    const awaiting = isAwaitingConfirmation(o.order_status);
-
-    // Live refresh from ST Courier
+    // Live sync from ST Courier if order is in-flight and has an official AWB
     let live: any = null;
-    if (!cancelled && !awaiting && isOfficialAwb(o.awb_number)) {
+    if (!cancelled && !delivered && isOfficialAwb(awb)) {
       try {
-        live = await syncOrderByAwb(o.awb_number);
-        if (live.updated && live.status) {
-          o.order_status = live.status;
-        }
-        if (live.events?.length) {
-          scans = live.events.map((e: any) => ({
-            activity: e.activity || 'Update',
-            location: e.location || '',
-            time: e.time || '',
-          }));
-        }
+        live = await syncOrderByAwb(awb);
       } catch (_) {}
     }
 
-    const rawStatus = o.order_status || 'Confirmed';
-    const status = !cancelled && awaiting ? 'Confirmed' : rawStatus;
-    const currentStep = stepIndex(status);
-    const awb = isOfficialAwb(o.awb_number) ? o.awb_number : null;
     const trackingUrl =
       o.tracking_url ||
-      (awb ? `https://stcourier.com/track/shipment?docket=${encodeURIComponent(awb)}` : null);
+      (isOfficialAwb(awb)
+        ? `https://stcourier.com/track/shipment?docket=${encodeURIComponent(awb)}`
+        : null);
 
-    const delivered = isParcelDelivered(status);
+    const stRawStatus = live?.rawStatus || null;
+    const scans = Array.isArray(live?.events) ? live.events : [];
+    const lastScan = scans.length > 0 ? scans[scans.length - 1] : null;
+
+    const lastUpdatedAt =
+      lastScan?.time ||
+      (o.delivered_at
+        ? new Date(o.delivered_at).toLocaleString('en-IN')
+        : o.shipped_at
+          ? new Date(o.shipped_at).toLocaleString('en-IN')
+          : o.packed_at
+            ? new Date(o.packed_at).toLocaleString('en-IN')
+            : o.ordered_at
+              ? new Date(o.ordered_at).toLocaleString('en-IN')
+              : null);
+
+    // Dynamic Delivery Estimator
     const shopEta = getSTCourierDeliveryEstimate(addr.city || addr.state || 'Tamil Nadu');
     const eta = delivered
       ? 'Delivered'
       : `Usually ${shopEta.daysRemaining <= 2 ? '2–3' : '2–4'} business days (shop estimate)`;
-    const lastScan = !cancelled && scans.length > 0 ? scans[0] : null;
-    const stRawStatus = String(live?.rawStatus || lastScan?.activity || '').trim() || null;
-    const lastUpdatedAt =
-      lastScan?.time ||
-      (live?.updated || live?.verified ? new Date().toISOString() : null) ||
-      o.ordered_at ||
-      null;
 
     return NextResponse.json({
       success: true,
       order: {
         orderId: o.order_number || o.id,
+        orderNumber: o.order_number || o.id,
         status,
         statusHeadline: cancelled ? 'Cancelled' : customerCourierHeadline(status),
         stRawStatus: cancelled ? null : stRawStatus,
@@ -275,8 +255,9 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string, tokenRaw?: stri
       },
     });
   } catch (err: any) {
-    releaseDbClient(client);
     return NextResponse.json({ error: err.message || 'Tracking failed' }, { status: 500 });
+  } finally {
+    releaseDbClient(client);
   }
 }
 

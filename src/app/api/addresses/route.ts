@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { queryDb } from '@/lib/db';
-import { getAuthenticatedUser } from '@/lib/serverSecurity';
+import { getAuthenticatedUser, applyRateLimitAsync, clientIp } from '@/lib/serverSecurity';
 import { isValidMobileNumber, normalizeMobileDigits, normalizeRequiredAlternateMobile } from '@/lib/authValidation';
 
 function mapAddress(row: any) {
@@ -56,13 +56,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Login required to save addresses.' }, { status: 401 });
   }
 
-  const name = String(body.name || '').trim();
+  const rl = await applyRateLimitAsync(`addr-create:${userId}:${clientIp(request)}`, 15, 60000);
+  if (!rl.allowed) {
+    return NextResponse.json({ error: 'Too many address requests. Please wait a minute.' }, { status: 429 });
+  }
+
+  const name = String(body.name || '').trim().slice(0, 100);
   const phoneRaw = String(body.phone || '').trim();
-  const address = String(body.address || '').trim();
+  const address = String(body.address || '').trim().slice(0, 500);
   const nearLandmark = String(body.landmark || '').trim().slice(0, 200);
-  const city = String(body.city || 'Chennai').trim();
+  const city = String(body.city || 'Chennai').trim().slice(0, 100);
   const pincode = String(body.pincode || '').replace(/\D/g, '').slice(0, 6);
-  const type = String(body.type || 'HOME').trim();
+  const type = String(body.type || 'HOME').trim().slice(0, 50);
   const isDefault = !!body.isDefault;
   const alt = normalizeRequiredAlternateMobile(
     String(body.alternatePhone || body.alternate_phone || ''),
@@ -86,6 +91,14 @@ export async function POST(request: Request) {
     const userCheck = await queryDb('SELECT id FROM users WHERE id = $1', [userId]);
     if (userCheck.rows.length === 0) {
       return NextResponse.json({ error: 'User not found.' }, { status: 404 });
+    }
+
+    const countRes = await queryDb('SELECT COUNT(*)::int as count FROM addresses WHERE user_id = $1', [userId]);
+    if (Number(countRes.rows[0]?.count || 0) >= 15) {
+      return NextResponse.json(
+        { error: 'Maximum 15 saved addresses reached. Please delete an older address to save a new one.' },
+        { status: 400 }
+      );
     }
 
     if (isDefault) {
@@ -133,7 +146,7 @@ export async function PATCH(request: Request) {
 
     if (body.name !== undefined) {
       fields.push(`full_name = $${idx++}`);
-      values.push(String(body.name).trim());
+      values.push(String(body.name).trim().slice(0, 100));
     }
     if (body.phone !== undefined) {
       const phoneRaw = String(body.phone).trim();
@@ -162,11 +175,11 @@ export async function PATCH(request: Request) {
     }
     if (body.address !== undefined) {
       fields.push(`address_line1 = $${idx++}`);
-      values.push(String(body.address).trim());
+      values.push(String(body.address).trim().slice(0, 500));
     }
     if (body.city !== undefined) {
       fields.push(`city = $${idx++}`);
-      values.push(String(body.city).trim());
+      values.push(String(body.city).trim().slice(0, 100));
     }
     if (body.pincode !== undefined) {
       fields.push(`pincode = $${idx++}`);

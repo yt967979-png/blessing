@@ -32,9 +32,10 @@ export async function GET(
       return new NextResponse('Forbidden', { status: 403 });
     }
 
-    // SVG files can contain executable scripts — block serving them from public uploads
+    // Only serve explicitly whitelisted safe media extensions (strictly reject SVGs, scripts, executables, etc.)
     const ext = path.extname(targetFilePath).toLowerCase();
-    if (ext === '.svg' || ext === '.svgz' || ext === '.html' || ext === '.htm') {
+    const contentType = MIME_TYPES[ext];
+    if (!contentType) {
       return new NextResponse('Forbidden file type', { status: 403 });
     }
 
@@ -44,7 +45,6 @@ export async function GET(
         return new NextResponse('Not Found', { status: 404 });
       }
 
-      const contentType = MIME_TYPES[ext] || 'application/octet-stream';
       const fileBuffer = await fs.promises.readFile(targetFilePath);
 
       return new NextResponse(fileBuffer, {

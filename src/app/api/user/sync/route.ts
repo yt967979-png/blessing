@@ -36,12 +36,14 @@ export async function POST(request: Request) {
           userId,
         ]);
         await client.query(`DELETE FROM cart_items WHERE cart_id = $1`, [cartId]);
-        for (const item of cart) {
+        for (const item of cart.slice(0, 50)) {
           const itemId = `ci-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+          const safeQty = Math.min(999, Math.max(1, Math.floor(Number(item.qty || 1)) || 1));
+          const safePrice = Math.max(0, Math.round(Number(item.price) || 0));
           try {
             await client.query(
               `INSERT INTO cart_items (id, cart_id, book_id, quantity, price) VALUES ($1, $2, $3, $4, $5)`,
-              [itemId, cartId, String(item.id), Number(item.qty || 1), Number(item.price)]
+              [itemId, cartId, String(item.id), safeQty, safePrice]
             );
           } catch {
             /* skip items referencing deleted books */
@@ -51,7 +53,7 @@ export async function POST(request: Request) {
 
       if (Array.isArray(wishlist)) {
         await client.query(`DELETE FROM wishlist WHERE user_id = $1`, [userId]);
-        for (const bookId of wishlist) {
+        for (const bookId of wishlist.slice(0, 100)) {
           const wishId = `w-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
           await client.query(`INSERT INTO wishlist (id, user_id, book_id) VALUES ($1, $2, $3)`, [
             wishId,
@@ -62,7 +64,7 @@ export async function POST(request: Request) {
       }
 
       if (Array.isArray(addresses)) {
-        for (const addr of addresses) {
+        for (const addr of addresses.slice(0, 15)) {
           const addrId = String(addr.id || `addr-${Date.now()}`);
           await client.query(
             `INSERT INTO addresses (id, user_id, full_name, phone, alternate_phone, address_line1, city, pincode, landmark)

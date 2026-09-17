@@ -161,7 +161,7 @@ export async function PATCH(request: Request) {
   try {
     const body = await request.json().catch(() => ({}));
     const { name, phone } = body;
-    const cleanName = String(name || '').trim();
+    const cleanName = String(name || '').trim().slice(0, 100);
     const cleanPhone = normalizeMobileDigits(String(phone || ''));
 
     if (!cleanName || cleanName.length < 2) {
