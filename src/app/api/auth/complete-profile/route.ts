@@ -56,34 +56,47 @@ export async function POST(request: Request) {
     const cartRes = await queryDb(
       `SELECT ci.book_id as id, ci.quantity as qty, ci.price,
               b.title, b.cover_image as image, b.price as mrp,
-              b.subject, b.slug, b.discount_price, b.status, b.stock
+              b.subject, b.slug, b.discount_price, b.status, b.stock,
+              b.category_id, b.badge
        FROM cart c
        JOIN cart_items ci ON c.id = ci.cart_id
        LEFT JOIN books b ON ci.book_id = b.id
        WHERE c.user_id = $1`,
       [user.id]
     );
-    const cartItems = cartRes.rows.map((row: any) => ({
-      id: row.id,
-      title: row.title || `Book #${row.id}`,
-      price: Number(row.discount_price || row.price),
-      mrp: Number(row.mrp || row.price),
-      qty: Number(row.qty),
-      image: row.image || '',
-      subject: row.subject || 'Guide',
-      slug: row.slug || row.id,
-      cls: '10th',
-      category: 'guide' as const,
-      discount: 20,
-      rating: 5.0,
-      reviews: 0,
-      badge: 'BESTSELLER',
-      badgeColor: 'bg-blue-600',
-      description: 'Official guide book.',
-      features: ['Solved Papers'],
-      inStock: isBookInStock(row),
-      stock: Number(row.stock ?? 0),
-    }));
+    const cartItems = cartRes.rows.map((row: any) => {
+      const safeTitle = String(row.title || '');
+      const catMatch = String(row.category_id || '').match(/^cat-(6th|7th|8th|9th|10th|11th|12th)$/i);
+      const classMatch = safeTitle.match(/(6th|7th|8th|9th|10th|11th|12th)/i);
+      const cls = catMatch ? catMatch[1].toLowerCase() : classMatch ? classMatch[0].toLowerCase() : '10th';
+      const mrp = Number(row.mrp || row.price || 0);
+      const price = Number(row.discount_price || row.price || mrp);
+      const discount = mrp > price ? Math.round(((mrp - price) / mrp) * 100) : 0;
+      const isCombo = String(row.category_id || '').toLowerCase().includes('combo') || safeTitle.toLowerCase().includes('combo');
+
+      return {
+        id: row.id,
+        title: safeTitle || `Book #${row.id}`,
+        subtitle: `${cls} Standard Guide`,
+        price,
+        mrp,
+        qty: Number(row.qty),
+        image: row.image || '',
+        subject: row.subject || 'General',
+        slug: row.slug || row.id,
+        cls,
+        category: isCombo ? ('combo' as const) : ('guide' as const),
+        discount,
+        rating: 5.0,
+        reviews: 0,
+        badge: (row.badge && String(row.badge).trim()) || '',
+        badgeColor: (row.badge && String(row.badge).trim().toUpperCase().includes('COMBO')) ? 'bg-purple-600' : 'bg-blue-600',
+        description: `Official ${cls} Standard guide book.`,
+        features: ['Solved Papers', 'Chapter Notes'],
+        inStock: isBookInStock(row),
+        stock: Number(row.stock ?? 0),
+      };
+    });
     const wishRes = await queryDb('SELECT book_id FROM wishlist WHERE user_id = $1', [user.id]);
 
     const response = NextResponse.json({

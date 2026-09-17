@@ -107,6 +107,11 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
   const [editStock, setEditStock] = useState<number>(0);
   const [editCls, setEditCls] = useState<string>('10th');
   const [editSubject, setEditSubject] = useState<string>('Mathematics');
+  const [editTitle, setEditTitle] = useState<string>('');
+  const [editBadge, setEditBadge] = useState<string>('');
+  const [editImage, setEditImage] = useState<string>('');
+  const [editImageUploading, setEditImageUploading] = useState<boolean>(false);
+  const editImageInputRef = useRef<HTMLInputElement>(null);
 
   // New publication modal states
   const [newTitle, setNewTitle] = useState('');
@@ -197,6 +202,9 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
 
   const handleStartEdit = (p: Product) => {
     setEditingId(p.id);
+    setEditTitle(p.title || '');
+    setEditBadge(p.badge || '');
+    setEditImage(p.image || '');
     setEditPrice(p.price);
     setEditMrp(p.mrp || p.price);
     setEditStock(p.stock ?? 10);
@@ -205,9 +213,47 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
     setEditSubject(p.subject || 'Mathematics');
   };
 
+  const handleEditDeviceImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      onShowToast('❌ File too large. Max allowed is 10MB.');
+      return;
+    }
+
+    setEditImageUploading(true);
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('folder', 'blessing_power_guides');
+
+    try {
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        headers: authFormHeaders(user),
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Image upload failed');
+      }
+
+      setEditImage(data.url);
+      onShowToast('✅ Cover image updated');
+    } catch (err: any) {
+      onShowToast(`❌ Upload failed: ${err.message}`);
+    } finally {
+      setEditImageUploading(false);
+    }
+  };
+
   const handleSaveEdit = async (id: string | number) => {
     try {
       await onUpdateProduct(id, {
+        title: editTitle.trim(),
+        badge: editBadge.trim(),
+        image: editImage.trim() || undefined,
         cls: editCls,
         subject: editSubject,
         price: editPrice,
@@ -553,36 +599,92 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                     <tr key={p.id} className="hover:bg-slate-50/80 transition-colors">
                       {/* Book Cover & Title */}
                       <td className="p-4">
-                        <div className="flex items-center gap-3">
-                          <img
-                            src={p.image}
-                            alt={p.title}
-                            className="w-11 h-11 object-contain bg-slate-50 border border-slate-200 rounded-lg p-0.5 shrink-0"
-                          />
-                          <div className="min-w-0 max-w-sm">
-                            <span className="font-bold text-xs text-slate-900 block truncate">
-                              {p.title}
-                            </span>
-                            <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
-                              {p.badge && (
-                                <span className="inline-block text-[9px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md">
-                                  {p.badge}
+                        <div className="flex items-start gap-3">
+                          <div className="relative group shrink-0">
+                            <img
+                              src={isEditing && editImage ? editImage : p.image}
+                              alt={p.title}
+                              className="w-12 h-12 object-contain bg-slate-50 border border-slate-200 rounded-lg p-0.5"
+                            />
+                            {isEditing && (
+                              <button
+                                type="button"
+                                disabled={editImageUploading}
+                                onClick={() => editImageInputRef.current?.click()}
+                                className="absolute inset-0 bg-slate-900/60 text-white rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-[9px] font-bold"
+                                title="Change cover image"
+                              >
+                                {editImageUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                              </button>
+                            )}
+                          </div>
+                          <div className="min-w-0 max-w-sm flex-1">
+                            {isEditing ? (
+                              <div className="space-y-1.5">
+                                <input
+                                  type="text"
+                                  value={editTitle}
+                                  onChange={(e) => setEditTitle(e.target.value)}
+                                  placeholder="Publication Title"
+                                  className="w-full px-2 py-1 bg-white border border-blue-400 rounded-lg text-xs font-bold outline-none text-slate-900"
+                                />
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <select
+                                    value={editBadge}
+                                    onChange={(e) => setEditBadge(e.target.value)}
+                                    className="px-2 py-0.5 bg-white border border-slate-300 rounded text-[10px] font-bold outline-none cursor-pointer"
+                                  >
+                                    <option value="">No Badge</option>
+                                    <option value="Popular">Popular</option>
+                                    <option value="Bestseller">Bestseller</option>
+                                    <option value="Combo Set">Combo Set</option>
+                                    <option value="New Edition">New Edition</option>
+                                  </select>
+                                  <input
+                                    ref={editImageInputRef}
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={handleEditDeviceImageUpload}
+                                    className="hidden"
+                                  />
+                                  <button
+                                    type="button"
+                                    disabled={editImageUploading}
+                                    onClick={() => editImageInputRef.current?.click()}
+                                    className="text-[10px] text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2 py-0.5 rounded font-bold cursor-pointer flex items-center gap-1"
+                                  >
+                                    <ImageIcon className="w-2.5 h-2.5" />
+                                    <span>{editImageUploading ? 'Uploading...' : 'Change Cover'}</span>
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <>
+                                <span className="font-bold text-xs text-slate-900 block truncate">
+                                  {p.title}
                                 </span>
-                              )}
-                              {p.samplePdfUrl && (
-                                <a
-                                  href={p.samplePdfUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1 text-[9px] font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 px-2 py-0.5 rounded-md"
-                                  title="Click to view sample pages PDF"
-                                >
-                                  <FileText className="w-2.5 h-2.5 text-purple-600" />
-                                  <span>Sample PDF</span>
-                                  <ExternalLink className="w-2 h-2 text-purple-500" />
-                                </a>
-                              )}
-                            </div>
+                                <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                                  {p.badge && (
+                                    <span className="inline-block text-[9px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md">
+                                      {p.badge}
+                                    </span>
+                                  )}
+                                  {p.samplePdfUrl && (
+                                    <a
+                                      href={p.samplePdfUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-1 text-[9px] font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 px-2 py-0.5 rounded-md"
+                                      title="Click to view sample pages PDF"
+                                    >
+                                      <FileText className="w-2.5 h-2.5 text-purple-600" />
+                                      <span>Sample PDF</span>
+                                      <ExternalLink className="w-2 h-2 text-purple-500" />
+                                    </a>
+                                  )}
+                                </div>
+                              </>
+                            )}
                             {isEditing && (
                               <div className="mt-2 pt-1 border-t border-slate-200 flex items-center gap-2">
                                 <input

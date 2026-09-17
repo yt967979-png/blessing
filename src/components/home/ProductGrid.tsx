@@ -6,6 +6,7 @@ import { ArrowRight, BookOpen, Sparkles, Filter } from 'lucide-react';
 import { ProductCard } from '@/components/ui/ProductCard';
 import { ProductCardSkeletonGrid } from '@/components/ui/ProductCardSkeleton';
 import { useStore } from '@/context/StoreContext';
+import { CLASSES } from '@/lib/products';
 
 export const ProductGrid = () => {
   const {
@@ -75,7 +76,7 @@ export const ProductGrid = () => {
               All Books
             </button>
 
-            {['6th', '8th', '10th', '12th'].map((cls) => (
+            {CLASSES.map((cls) => (
               <button
                 key={cls}
                 onClick={() => setSelectedClass(cls)}

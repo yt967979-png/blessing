@@ -586,13 +586,14 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       fetch('/api/user/sync', {
         method: 'POST',
         headers,
+        credentials: 'include',
         body: JSON.stringify({
           cart,
           wishlist,
         }),
       })
         .then((res) => {
-          if (res.status === 404 || res.status === 401) {
+          if (res.status === 404) {
             setUser(null);
             localStorage.removeItem('bpg_user_next');
             localStorage.removeItem('bpg_user_addresses');

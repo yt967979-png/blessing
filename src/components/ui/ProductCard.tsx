@@ -8,6 +8,7 @@ import { Heart, Star, ShoppingBag, Truck, Check, FileText } from 'lucide-react';
 import { Product } from '@/lib/products';
 import { useStore } from '@/context/StoreContext';
 import { imageNeedsUnoptimized } from '@/lib/productImage';
+import { MIN_BOOKS_PER_ORDER, booksUntilMinOrder } from '@/lib/deliveryRules';
 
 export const ProductCard = ({ product }: { product: Product }) => {
   const router = useRouter();
@@ -15,7 +16,10 @@ export const ProductCard = ({ product }: { product: Product }) => {
     wishlist,
     toggleWishlist,
     addToCart,
+    setIsCartOpen,
     setIsCheckoutOpen,
+    cartCount,
+    showToast,
     user,
     setIsAuthOpen,
   } = useStore();
@@ -208,15 +212,22 @@ export const ProductCard = ({ product }: { product: Product }) => {
           disabled={isOutOfStock}
           onClick={() => {
             if (isOutOfStock) return;
+            addToCart(product);
             if (!user) {
               setIsAuthOpen(true);
+              showToast('Book added to cart! Please sign in with Google to proceed.');
               return;
             }
-            addToCart(product);
+            const need = booksUntilMinOrder(cartCount + 1);
+            if (need > 0) {
+              showToast(`Added to cart. Minimum ${MIN_BOOKS_PER_ORDER} books required — add ${need} more to checkout.`);
+              setIsCartOpen(true);
+              return;
+            }
             setIsCheckoutOpen(true);
             router.push('/checkout');
           }}
-          className="bg-amber-400 hover:bg-amber-500 active:bg-amber-600 disabled:bg-slate-200 disabled:text-slate-500 text-[#001B3A] font-extrabold text-[11px] sm:text-xs py-2.5 rounded-xl uppercase touch-manipulation disabled:cursor-not-allowed min-h-11 shadow-sm hover:shadow-md transition-all flex items-center justify-center"
+          className="bg-amber-400 hover:bg-amber-500 active:bg-amber-600 disabled:bg-slate-200 disabled:text-slate-500 text-[#001B3A] font-extrabold text-[11px] sm:text-xs py-2.5 rounded-xl uppercase touch-manipulation disabled:cursor-not-allowed min-h-11 shadow-sm hover:shadow-md transition-all flex items-center justify-center cursor-pointer"
         >
           {isOutOfStock ? 'N/A' : 'BUY'}
         </button>

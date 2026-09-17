@@ -102,11 +102,12 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
 
   const tryBuyNow = () => {
     if (!product) return;
+    addToCart(product);
     if (!user) {
       setIsAuthOpen(true);
+      showToast('Book added to cart! Please sign in with Google to proceed.');
       return;
     }
-    addToCart(product);
     const need = booksUntilMinOrder(cartCount + 1);
     if (need > 0) {
       showToast(`Added to cart. Minimum ${MIN_BOOKS_PER_ORDER} books — add ${need} more to checkout.`);
