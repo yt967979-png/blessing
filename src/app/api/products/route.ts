@@ -95,8 +95,19 @@ function mapCatalogRows(rows: any[]) {
     const { price, mrp, discount } = mapBookPrices(d);
     const safeTitle = String(d.title || '');
     const isCombo = d.category_id === 'cat-combos' || safeTitle.toLowerCase().includes('combo');
-    const classMatch = safeTitle.match(/(6th|7th|8th|9th|10th|11th|12th)/i);
-    const extractedClass = classMatch ? classMatch[0] : '10th';
+
+    // Authoritative class extraction: check category_id first (e.g. cat-7th -> 7th), then fall back to title regex
+    let extractedClass = '10th';
+    const catMatch = String(d.category_id || '').match(/^cat-(6th|7th|8th|9th|10th|11th|12th)$/i);
+    if (catMatch) {
+      extractedClass = catMatch[1];
+    } else {
+      const classMatch = safeTitle.match(/(6th|7th|8th|9th|10th|11th|12th)/i);
+      if (classMatch) {
+        extractedClass = classMatch[0];
+      }
+    }
+    extractedClass = extractedClass.toLowerCase();
     const safeImg = safeCatalogImage(d.cover_image);
 
     return {
@@ -106,7 +117,7 @@ function mapCatalogRows(rows: any[]) {
       subtitle: `${extractedClass} Standard Guide`,
       cls: extractedClass,
       category: isCombo ? 'combo' : 'guide',
-      subject: d.subject || 'State Board',
+      subject: (d.subject && String(d.subject).trim()) || 'General',
       price,
       mrp,
       discount,
@@ -121,7 +132,7 @@ function mapCatalogRows(rows: any[]) {
       image: safeImg,
       hoverImage: safeImg,
       samplePdfUrl: d.sample_pdf_url || null,
-      description: d.description || 'Complete guide book for exam success.',
+      description: d.description || `Complete ${extractedClass} Standard guide book for exam success.`,
       features: ['Solved Papers', 'Chapter Notes'],
       inStock: mapBookInStock(d),
       stock: Number(d.stock ?? 0),
@@ -170,11 +181,13 @@ export async function GET(request: Request) {
         count++;
       }
       if (cls && cls !== 'all' && cls !== 'ALL') {
-        where += ` AND b.title ILIKE $${count++}`;
-        params.push(`%${cls}%`);
+        const cleanCls = cls.toLowerCase().trim();
+        where += ` AND (b.category_id = $${count} OR b.category_id = $${count + 1} OR b.title ILIKE $${count + 2})`;
+        params.push(`cat-${cleanCls}`, cleanCls, `%${cleanCls}%`);
+        count += 3;
       }
       if (search && search.trim()) {
-        where += ` AND (b.title ILIKE $${count} OR COALESCE(b.description, '') ILIKE $${count})`;
+        where += ` AND (b.title ILIKE $${count} OR COALESCE(b.subject, '') ILIKE $${count} OR COALESCE(b.description, '') ILIKE $${count})`;
         params.push(`%${search.trim()}%`);
         count++;
       }
@@ -183,9 +196,8 @@ export async function GET(request: Request) {
 
     const loadPrimary = async () => {
       const { where, params } = buildFilters();
-      // Avoid selecting huge base64 covers; skip subject in filter for older schemas.
       const sql = `
-        SELECT b.id, b.slug, b.title, b.price, b.discount_price, b.stock, b.status,
+        SELECT b.id, b.slug, b.title, b.subject, b.price, b.discount_price, b.stock, b.status,
                b.badge, b.description, b.category_id, b.created_at, b.sample_pdf_url,
                CASE
                  WHEN b.cover_image IS NULL OR b.cover_image = '' THEN NULL
@@ -208,7 +220,7 @@ export async function GET(request: Request) {
     const loadFallback = async () => {
       const { where, params } = buildFilters();
       const sql = `
-        SELECT b.id, b.slug, b.title, b.price, b.discount_price, b.stock, b.status,
+        SELECT b.id, b.slug, b.title, b.subject, b.price, b.discount_price, b.stock, b.status,
                b.badge, b.description, b.category_id, b.created_at, b.sample_pdf_url,
                NULL::text AS cover_image,
                0::int as review_count,
@@ -356,7 +368,7 @@ export async function PATCH(request: Request) {
   if (!auth.isAdmin) return forbiddenResponse(auth.error);
 
   try {
-    const { id, title, price, mrp, inStock, stock, description, image, badge, hasDiscount, samplePdfUrl, sample_pdf_url } = await request.json().catch(() => ({}));
+    const { id, title, cls, category, subject, price, mrp, inStock, stock, description, image, badge, hasDiscount, samplePdfUrl, sample_pdf_url } = await request.json().catch(() => ({}));
     if (!id) return NextResponse.json({ error: 'Product id is required' }, { status: 400 });
 
     const fields: string[] = [];
@@ -364,6 +376,21 @@ export async function PATCH(request: Request) {
     let idx = 1;
 
     if (title !== undefined) { fields.push(`title = $${idx++}`); values.push(title); }
+    if (subject !== undefined) {
+      fields.push(`subject = $${idx++}`);
+      values.push(String(subject || 'General').trim());
+    }
+    if (cls !== undefined || category !== undefined) {
+      const targetCls = cls ? String(cls).trim().toLowerCase() : undefined;
+      const targetCat = category === 'combo' ? 'cat-combos' : (targetCls ? `cat-${targetCls}` : undefined);
+      if (targetCat) {
+        const db = { query: (text: string, params?: any[]) => queryDb(text, params) };
+        await ensureDefaultCategories(db);
+        await ensureCategory(targetCat, targetCls || '10th', category || 'guide');
+        fields.push(`category_id = $${idx++}`);
+        values.push(targetCat);
+      }
+    }
     if (mrp !== undefined) { fields.push(`price = $${idx++}`); values.push(Number(mrp)); }
     if (price !== undefined || hasDiscount === false) {
       const mrpNum = Number(mrp);

@@ -1245,7 +1245,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       subtitle: `${newProdData.cls || '10th'} Standard Guide`,
       cls: newProdData.cls || '10th',
       category: (newProdData.category as any) || 'guide',
-      subject: (newProdData as any).subject || 'State Board',
+      subject: (newProdData as any).subject || 'General',
       price: hasDiscount ? price : mrp,
       mrp,
       discount: hasDiscount && mrp > 0 ? Math.round(((mrp - price) / mrp) * 100) : 0,

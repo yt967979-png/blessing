@@ -12,10 +12,18 @@ interface FrequentlyBoughtTogetherProps {
   currentProduct: any;
 }
 
-function extractClassStandard(title: string, categoryId?: string): string {
+function extractClassStandard(title: string, categoryId?: string, cls?: string): string {
+  if (cls) {
+    const m = String(cls).match(/(6th|7th|8th|9th|10th|11th|12th)/i);
+    if (m) return m[0].toLowerCase();
+  }
+  if (categoryId) {
+    const cat = String(categoryId).replace(/^cat-/, '').toLowerCase();
+    const m = cat.match(/(6th|7th|8th|9th|10th|11th|12th)/i);
+    if (m) return m[0];
+  }
   const match = (title || '').match(/(6th|7th|8th|9th|10th|11th|12th)/i);
   if (match) return match[0].toLowerCase();
-  if (categoryId) return String(categoryId).replace(/^cat-/, '').toLowerCase();
   return '';
 }
 
@@ -26,7 +34,11 @@ export const FrequentlyBoughtTogether: React.FC<FrequentlyBoughtTogetherProps> =
 
   // 1. Identify current book's academic standard (e.g. "10th", "11th", "12th")
   const currentStandard = useMemo(() => {
-    return extractClassStandard(currentProduct?.title || '', currentProduct?.category_id || currentProduct?.category);
+    return extractClassStandard(
+      currentProduct?.title || '',
+      currentProduct?.category_id || currentProduct?.category,
+      currentProduct?.cls
+    );
   }, [currentProduct]);
 
   // 2. Discover in-stock complementary books of the EXACT SAME standard
@@ -41,7 +53,7 @@ export const FrequentlyBoughtTogether: React.FC<FrequentlyBoughtTogetherProps> =
       if (p.id === currentId) return false;
       if (p.inStock === false) return false;
 
-      const pStandard = extractClassStandard(p.title || '', p.category_id || p.category);
+      const pStandard = extractClassStandard(p.title || '', p.category_id || p.category, p.cls);
       if (currentStandard && pStandard && currentStandard === pStandard) {
         return true;
       }

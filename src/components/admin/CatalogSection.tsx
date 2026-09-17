@@ -105,6 +105,8 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
   const [editPrice, setEditPrice] = useState<number>(0);
   const [editMrp, setEditMrp] = useState<number>(0);
   const [editStock, setEditStock] = useState<number>(0);
+  const [editCls, setEditCls] = useState<string>('10th');
+  const [editSubject, setEditSubject] = useState<string>('Mathematics');
 
   // New publication modal states
   const [newTitle, setNewTitle] = useState('');
@@ -199,11 +201,15 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
     setEditMrp(p.mrp || p.price);
     setEditStock(p.stock ?? 10);
     setEditSamplePdf(p.samplePdfUrl || '');
+    setEditCls(p.cls || '10th');
+    setEditSubject(p.subject || 'Mathematics');
   };
 
   const handleSaveEdit = async (id: string | number) => {
     try {
       await onUpdateProduct(id, {
+        cls: editCls,
+        subject: editSubject,
         price: editPrice,
         mrp: editMrp,
         stock: editStock,
@@ -612,13 +618,38 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
 
                       {/* Class & Subject */}
                       <td className="p-4">
-                        <span className="font-bold text-slate-800 bg-slate-100 px-2.5 py-1 rounded-md text-[11px] border border-slate-200">
-                          {p.cls || 'General'}
-                        </span>
-                        {p.subject && (
-                          <span className="text-xs text-slate-500 block mt-1">
-                            {p.subject}
-                          </span>
+                        {isEditing ? (
+                          <div className="space-y-1.5 min-w-[130px]">
+                            <select
+                              value={editCls}
+                              onChange={(e) => setEditCls(e.target.value)}
+                              className="w-full px-2 py-1 bg-white border border-slate-300 rounded-lg text-xs font-bold outline-none focus:border-[#2874f0] cursor-pointer"
+                            >
+                              {['6th', '7th', '8th', '9th', '10th', '11th', '12th'].map((c) => (
+                                <option key={c} value={c}>
+                                  {c} Standard
+                                </option>
+                              ))}
+                            </select>
+                            <input
+                              type="text"
+                              value={editSubject}
+                              onChange={(e) => setEditSubject(e.target.value)}
+                              placeholder="Subject (e.g. Mathematics)"
+                              className="w-full px-2 py-1 bg-white border border-slate-300 rounded-lg text-xs font-medium outline-none focus:border-[#2874f0]"
+                            />
+                          </div>
+                        ) : (
+                          <div>
+                            <span className="font-bold text-slate-800 bg-slate-100 px-2.5 py-1 rounded-md text-[11px] border border-slate-200">
+                              {p.cls || 'General'}
+                            </span>
+                            {p.subject && (
+                              <span className="text-xs text-slate-500 block mt-1 font-medium">
+                                {p.subject}
+                              </span>
+                            )}
+                          </div>
                         )}
                       </td>
 

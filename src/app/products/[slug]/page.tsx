@@ -40,11 +40,12 @@ async function getBookMeta(slug: string) {
     if (!res.rows || res.rows.length === 0) return null;
     const row = res.rows[0];
     const safeTitle = String(row.title || '');
+    const catMatch = String(row.category_id || '').match(/^cat-(6th|7th|8th|9th|10th|11th|12th)$/i);
     const classMatch = safeTitle.match(/(6th|7th|8th|9th|10th|11th|12th)/i);
-    const extractedClass = classMatch
-      ? classMatch[0]
-      : row.category_id
-        ? String(row.category_id).replace(/^cat-/, '')
+    const extractedClass = catMatch
+      ? catMatch[1].toLowerCase()
+      : classMatch
+        ? classMatch[0].toLowerCase()
         : '10th';
     return {
       ...row,
