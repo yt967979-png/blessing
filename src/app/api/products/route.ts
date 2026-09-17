@@ -54,6 +54,17 @@ function catalogHeaders(extra: Record<string, string> = {}) {
   return { ...getCatalogCdnHeaders(), ...extra };
 }
 
+/** CDN-bypass headers for SSE-triggered re-fetches (?fresh=1). */
+function freshHeaders(extra: Record<string, string> = {}) {
+  return {
+    'Cache-Control': 'no-store, no-cache, must-revalidate',
+    'CDN-Cache-Control': 'no-store',
+    'Cloudflare-CDN-Cache-Control': 'no-store',
+    Vary: 'Accept-Encoding',
+    ...extra,
+  };
+}
+
 /** Selling price: use discount_price only when it is a real sale (< MRP). */
 function mapBookPrices(d: { price?: unknown; discount_price?: unknown }) {
   const mrp = Number(d.price) || 0;
@@ -151,10 +162,12 @@ export async function GET(request: Request) {
     const key = cacheKey(cls, search, slug);
     const forceFresh = searchParams.get('fresh') === '1';
 
+    const hdrs = forceFresh ? freshHeaders : catalogHeaders;
+
     const cached = readCache(key);
     if (cached && !forceFresh) {
       return NextResponse.json(cached, {
-        headers: catalogHeaders({ 'X-Cache-Status': 'HIT_MEMORY' }),
+        headers: hdrs({ 'X-Cache-Status': 'HIT_MEMORY' }),
       });
     }
 
@@ -162,12 +175,12 @@ export async function GET(request: Request) {
       const stale = readCache(key, true);
       if (stale && stale.length > 0) {
         return NextResponse.json(stale, {
-          headers: catalogHeaders({ 'X-Cache-Status': 'STALE_MEMORY' }),
+          headers: hdrs({ 'X-Cache-Status': 'STALE_MEMORY' }),
         });
       }
       return NextResponse.json([], {
         status: 200,
-        headers: catalogHeaders({ 'X-Cache-Status': cacheStatus }),
+        headers: hdrs({ 'X-Cache-Status': cacheStatus }),
       });
     };
 
@@ -244,7 +257,7 @@ export async function GET(request: Request) {
       const mapped = mapCatalogRows(res.rows || []);
       if (mapped.length > 0) writeCache(key, mapped);
       return NextResponse.json(mapped, {
-        headers: catalogHeaders({
+        headers: hdrs({
           'X-Cache-Status': mapped.length > 0 ? 'MISS_DB' : 'MISS_DB_EMPTY',
           'X-Catalog-Count': String(mapped.length),
         }),
@@ -270,7 +283,7 @@ export async function GET(request: Request) {
     console.error('[products] GET fatal (returning []):', err?.message || err);
     return NextResponse.json([], {
       status: 200,
-      headers: catalogHeaders({ 'X-Cache-Status': 'FATAL_SOFT' }),
+      headers: freshHeaders({ 'X-Cache-Status': 'FATAL_SOFT' }),
     });
   }
 }
