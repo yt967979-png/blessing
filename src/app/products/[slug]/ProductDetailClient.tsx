@@ -27,7 +27,7 @@ import { ProductCard } from '@/components/ui/ProductCard';
 import { FrequentlyBoughtTogether } from '@/components/products/FrequentlyBoughtTogether';
 import { getSTCourierDeliveryEstimate } from '@/lib/deliveryEstimator';
 import { pincodeDeliveryMessage } from '@/lib/pincode';
-import { authHeaders } from '@/lib/clientAuth';
+import { authHeaders, authFormHeaders } from '@/lib/clientAuth';
 import { imageNeedsUnoptimized } from '@/lib/productImage';
 import { MIN_BOOKS_PER_ORDER, booksUntilMinOrder, minOrderCheckoutMessage } from '@/lib/deliveryRules';
 
@@ -269,7 +269,8 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
       fd.append('folder', 'reviews');
       const res = await fetch('/api/upload', {
         method: 'POST',
-        headers: user?.token ? { Authorization: `Bearer ${user.token}` } : {},
+        headers: authFormHeaders(user),
+        credentials: 'include',
         body: fd,
       });
       const data = await res.json();
@@ -290,6 +291,7 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
       const res = await fetch('/api/reviews', {
         method: isEdit ? 'PATCH' : 'POST',
         headers: authHeaders(user),
+        credentials: 'include',
         body: JSON.stringify({
           id: userReview?.id,
           bookId: product.id,

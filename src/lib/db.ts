@@ -374,9 +374,7 @@ function createPool(connectionString: string): Pool {
     ssl: sslFor(normalized),
   });
 
-  p.on('connect', (client) => {
-    client.query('SET idle_in_transaction_session_timeout = 15000').catch(() => {});
-  });
+
 
   p.on('error', (err) => {
     console.warn('[db] idle pool socket error:', err?.message || err);

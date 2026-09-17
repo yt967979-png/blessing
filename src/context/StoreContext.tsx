@@ -905,13 +905,13 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     } catch {
       /* ignore */
     }
-    if (user?.id && user?.token) {
+    if (user?.id) {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (user.token) headers.Authorization = `Bearer ${user.token}`;
       fetch('/api/user/sync', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${user.token}`,
-        },
+        headers,
+        credentials: 'include',
         body: JSON.stringify({ cart: [], wishlist }),
       }).catch(() => {});
     }

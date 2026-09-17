@@ -41,10 +41,11 @@ function TrackForm() {
   const [loadingUserOrders, setLoadingUserOrders] = useState(false);
 
   useEffect(() => {
-    if (user?.token) {
+    if (user?.id) {
       setLoadingUserOrders(true);
       fetch('/api/orders', {
         headers: authHeaders(user),
+        credentials: 'include',
       })
         .then((r) => (r.ok ? r.json() : []))
         .then((data) => {

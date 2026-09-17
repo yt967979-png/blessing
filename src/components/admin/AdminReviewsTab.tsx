@@ -36,7 +36,7 @@ export default function AdminReviewsTab({
   const [photosOnly, setPhotosOnly] = useState(false);
 
   const load = useCallback(async () => {
-    if (!user?.token) {
+    if (!user) {
       setLoading(false);
       return;
     }
@@ -44,6 +44,7 @@ export default function AdminReviewsTab({
     try {
       const r = await fetch('/api/reviews?admin=1', {
         headers: authHeaders(user),
+        credentials: 'include',
         signal: AbortSignal.timeout(20000),
       });
       if (r.ok) {
@@ -72,6 +73,7 @@ export default function AdminReviewsTab({
       const r = await fetch(`/api/reviews?id=${encodeURIComponent(id)}`, {
         method: 'DELETE',
         headers: authHeaders(user),
+        credentials: 'include',
       });
       if (r.ok) {
         setReviews((prev) => prev.filter((rev) => rev.id !== id));

@@ -131,9 +131,12 @@ function HelpCenterContent() {
   // Load user's recent orders for the selector — runs once when user is known
   const ordersLoadedRef = useRef(false);
   useEffect(() => {
-    if (user?.token && !ordersLoadedRef.current) {
+    if (user?.id && !ordersLoadedRef.current) {
       ordersLoadedRef.current = true;
-      fetch('/api/orders', { headers: authHeaders(user) })
+      fetch('/api/orders', {
+        headers: authHeaders(user),
+        credentials: 'include',
+      })
         .then((r) => {
           if (!r.ok) throw new Error(`Orders API ${r.status}`);
           return r.json();
