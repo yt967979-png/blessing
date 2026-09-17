@@ -36,7 +36,7 @@ import { isRecordCancelled } from '@/lib/orderStatus';
 
 export default function ProfilePage() {
   const router = useRouter();
-  const { user, loginUser, logoutUser, wishlist, products, cart, showToast, setIsAuthOpen } = useStore();
+  const { user, loginUser, logoutUser, wishlist, wishlistCount, products, cart, showToast, setIsAuthOpen } = useStore();
   const [activeTab, setActiveTab] = useState<'profile' | 'orders' | 'addresses' | 'wishlist' | 'coupons'>('orders');
 
   // Dynamic user edit form state
@@ -367,7 +367,7 @@ export default function ProfilePage() {
                     { id: 'coupons' as const, label: 'Coupons', Icon: TicketPercent },
                     { id: 'profile' as const, label: 'Profile', Icon: User },
                     { id: 'addresses' as const, label: `Address (${addresses.length})`, Icon: MapPin },
-                    { id: 'wishlist' as const, label: `Wishlist (${wishlist.length})`, Icon: Heart },
+                    { id: 'wishlist' as const, label: `Wishlist (${wishlistCount})`, Icon: Heart },
                   ] as const
                 ).map(({ id, label, Icon }) => (
                   <button
@@ -477,7 +477,7 @@ export default function ProfilePage() {
               >
                 <div className="flex items-center gap-3">
                   <Heart className="w-4 h-4 text-red-500" />
-                  <span>My Wishlist ({wishlist.length})</span>
+                  <span>My Wishlist ({wishlistCount})</span>
                 </div>
                 <ChevronRight className="w-4 h-4 text-slate-400" />
               </button>

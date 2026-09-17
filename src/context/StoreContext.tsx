@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { userNeedsProfile } from '@/lib/userProfile';
 import { deliveryFeeForQty } from '@/lib/deliveryRules';
 
@@ -97,6 +97,7 @@ interface StoreContextType {
   saveForLater: (id: string | number) => void;
   moveToCartFromSaved: (id: string | number) => void;
   savedForLater: CartItem[];
+  wishlistCount: number;
   toggleWishlist: (id: string | number) => void;
   removeFromWishlist: (id: string | number) => void;
   clearWishlist: () => void;
@@ -312,7 +313,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                   setCart(dbUser.cart);
                   localStorage.setItem('bpg_cart_next', JSON.stringify(dbUser.cart));
                 }
-                if (!localWish.length && Array.isArray(dbUser.wishlist) && dbUser.wishlist.length > 0) {
+                const isExplicitlyCleared = localStorage.getItem('bpg_wishlist_cleared') === 'true';
+                if (!isExplicitlyCleared && !localWish.length && Array.isArray(dbUser.wishlist) && dbUser.wishlist.length > 0) {
                   setWishlist(dbUser.wishlist);
                   localStorage.setItem('bpg_wishlist_next', JSON.stringify(dbUser.wishlist));
                 }
@@ -1063,7 +1065,21 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
       try {
         localStorage.setItem('bpg_wishlist_next', JSON.stringify(next));
+        localStorage.setItem('bpg_wishlist_cleared', next.length === 0 ? 'true' : 'false');
       } catch {}
+      if (user?.id) {
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (user.token) headers.Authorization = `Bearer ${user.token}`;
+        fetch('/api/user/sync', {
+          method: 'POST',
+          headers,
+          credentials: 'include',
+          body: JSON.stringify({
+            cart: cartRef.current,
+            wishlist: next,
+          }),
+        }).catch(() => {});
+      }
       return next;
     });
     showToast(isNowWishlisted ? '❤️ Added to wishlist' : '💔 Removed from wishlist');
@@ -1075,7 +1091,21 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const next = prev.filter((x) => String(x) !== sId);
       try {
         localStorage.setItem('bpg_wishlist_next', JSON.stringify(next));
+        localStorage.setItem('bpg_wishlist_cleared', next.length === 0 ? 'true' : 'false');
       } catch {}
+      if (user?.id) {
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (user.token) headers.Authorization = `Bearer ${user.token}`;
+        fetch('/api/user/sync', {
+          method: 'POST',
+          headers,
+          credentials: 'include',
+          body: JSON.stringify({
+            cart: cartRef.current,
+            wishlist: next,
+          }),
+        }).catch(() => {});
+      }
       return next;
     });
     showToast('💔 Removed from wishlist');
@@ -1085,9 +1115,66 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setWishlist([]);
     try {
       localStorage.setItem('bpg_wishlist_next', '[]');
+      localStorage.setItem('bpg_wishlist_cleared', 'true');
     } catch {}
+    if (user?.id) {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (user.token) headers.Authorization = `Bearer ${user.token}`;
+      fetch('/api/user/sync', {
+        method: 'POST',
+        headers,
+        credentials: 'include',
+        body: JSON.stringify({
+          cart: cartRef.current,
+          wishlist: [],
+        }),
+      }).catch(() => {});
+    }
     showToast('Wishlist cleared');
   };
+
+  const wishlistCount = useMemo(() => {
+    if (!Array.isArray(wishlist) || wishlist.length === 0) return 0;
+    const cleanIds = new Set(
+      wishlist
+        .map((w) => String(w ?? '').trim())
+        .filter((w) => w && w !== 'null' && w !== 'undefined')
+    );
+    if (cleanIds.size === 0) return 0;
+    if (products.length === 0) return cleanIds.size;
+    const productIds = new Set(products.map((p) => String(p.id)));
+    let count = 0;
+    for (const id of cleanIds) {
+      if (productIds.has(id)) count++;
+    }
+    return count;
+  }, [wishlist, products]);
+
+  // Prune any stale / deleted book IDs from wishlist once catalog loads
+  useEffect(() => {
+    if (!hydrated || products.length === 0 || wishlist.length === 0) return;
+    const productIds = new Set(products.map((p) => String(p.id)));
+    const cleaned = wishlist.filter((w) => {
+      const s = String(w ?? '').trim();
+      return s && s !== 'null' && s !== 'undefined' && productIds.has(s);
+    });
+    if (cleaned.length !== wishlist.length) {
+      setWishlist(cleaned);
+      try {
+        localStorage.setItem('bpg_wishlist_next', JSON.stringify(cleaned));
+      } catch {}
+      if (user?.id) {
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (user.token) headers.Authorization = `Bearer ${user.token}`;
+        fetch('/api/user/sync', {
+          method: 'POST',
+          headers,
+          credentials: 'include',
+          body: JSON.stringify({ cart: cartRef.current, wishlist: cleaned }),
+        }).catch(() => {});
+      }
+    }
+  }, [products, hydrated, user?.id, user?.token]);
 
   const loginUser = (
     userData: UserData,
@@ -1460,6 +1547,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         saveForLater,
         moveToCartFromSaved,
         savedForLater,
+        wishlistCount,
         toggleWishlist,
         removeFromWishlist,
         clearWishlist,

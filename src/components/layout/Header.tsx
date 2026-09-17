@@ -17,6 +17,7 @@ export const Header = () => {
   const {
     products,
     wishlist,
+    wishlistCount,
     cartCount,
     searchQuery,
     setSearchQuery,
@@ -343,12 +344,12 @@ export const Header = () => {
           >
             <Heart
               className={`w-5 h-5 ${
-                wishlist.length > 0 ? 'text-red-500 fill-red-500' : 'text-slate-700'
+                wishlistCount > 0 ? 'text-red-500 fill-red-500' : 'text-slate-700'
               }`}
             />
-            {wishlist.length > 0 && (
+            {wishlistCount > 0 && (
               <span className="absolute top-0.5 right-0.5 w-4 h-4 bg-red-500 text-white text-[10px] font-extrabold rounded-full flex items-center justify-center shadow-xs">
-                {wishlist.length}
+                {wishlistCount}
               </span>
             )}
           </Link>
