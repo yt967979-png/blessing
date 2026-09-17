@@ -368,9 +368,9 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
     );
   }
 
-  const isWishlisted = wishlist.includes(product.id);
+  const isWishlisted = Boolean(product?.id && wishlist.some((id) => String(id) === String(product.id)));
   const relatedProducts = (() => {
-    const others = products.filter((p: any) => p.id !== product.id && p.inStock !== false);
+    const others = products.filter((p: any) => String(p.id) !== String(product.id) && p.inStock !== false);
     const sameClass = others.filter((p: any) => p.cls === product.cls);
     const pool = [...sameClass, ...others];
     const seen = new Set<string | number>();

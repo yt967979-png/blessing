@@ -98,6 +98,8 @@ interface StoreContextType {
   moveToCartFromSaved: (id: string | number) => void;
   savedForLater: CartItem[];
   toggleWishlist: (id: string | number) => void;
+  removeFromWishlist: (id: string | number) => void;
+  clearWishlist: () => void;
   loginUser: (
     u: UserData,
     restoredCart?: CartItem[],
@@ -316,11 +318,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 }
               } else {
                 setUser(null);
-                setCart([]);
-                setWishlist([]);
                 localStorage.removeItem('bpg_user_next');
-                localStorage.removeItem('bpg_cart_next');
-                localStorage.removeItem('bpg_wishlist_next');
                 localStorage.removeItem('bpg_user_addresses');
               }
             })
@@ -596,11 +594,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         .then((res) => {
           if (res.status === 404 || res.status === 401) {
             setUser(null);
-            setCart([]);
-            setWishlist([]);
             localStorage.removeItem('bpg_user_next');
-            localStorage.removeItem('bpg_cart_next');
-            localStorage.removeItem('bpg_wishlist_next');
             localStorage.removeItem('bpg_user_addresses');
           }
         })
@@ -614,11 +608,13 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   useEffect(() => {
     if (!hydrated) return;
-    if (user) {
+    try {
       localStorage.setItem('bpg_cart_next', JSON.stringify(cart));
       localStorage.setItem('bpg_wishlist_next', JSON.stringify(wishlist));
+    } catch {
+      /* ignore quota */
     }
-  }, [cart, wishlist, user, hydrated]);
+  }, [cart, wishlist, hydrated]);
 
   // Multi-tab storage synchronizer — ensures Cart & Wishlist update instantly across all browser tabs
   useEffect(() => {
@@ -638,6 +634,15 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           const parsed = JSON.parse(e.newValue);
           if (Array.isArray(parsed)) {
             setSavedForLater(parsed);
+          }
+        } catch {
+          /* ignore */
+        }
+      } else if (e.key === 'bpg_wishlist_next' && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (Array.isArray(parsed)) {
+            setWishlist(parsed);
           }
         } catch {
           /* ignore */
@@ -754,7 +759,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const addToCart = (product: Product, qty: number = 1) => {
     // Prefer the freshest catalog snapshot (kept live by the 15s poll) over
     // whatever stale product object the caller passed in.
-    const live = productsRef.current.find((p) => p.id === product.id) || product;
+    const live = productsRef.current.find((p) => String(p.id) === String(product.id)) || product;
     if (live.inStock === false) {
       showToast(`❌ "${live.title}" is out of stock`);
       return;
@@ -763,7 +768,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     let toastMsg = '';
     setCart((prev) => {
-      const existing = prev.find((item) => item.id === product.id);
+      const existing = prev.find((item) => String(item.id) === String(product.id));
       const currentQty = existing ? existing.qty : 0;
       const desiredQty = currentQty + qty;
       const finalQty = Math.min(desiredQty, stockLimit);
@@ -780,7 +785,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
       const updated: CartItem[] = existing
         ? prev.map((item) =>
-            item.id === product.id
+            String(item.id) === String(product.id)
               ? {
                   ...item,
                   qty: finalQty,
@@ -793,7 +798,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               : item
           )
         : [...prev, { ...live, qty: finalQty }];
-      localStorage.setItem('bpg_cart_next', JSON.stringify(updated));
+      try {
+        localStorage.setItem('bpg_cart_next', JSON.stringify(updated));
+      } catch {}
       return updated;
     });
     showToast(toastMsg);
@@ -818,8 +825,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setCart((prev) => {
       const next = prev
         .map((item) => {
-          if (item.id !== id) return item;
-          const live = productsRef.current.find((p) => p.id === id);
+          if (String(item.id) !== String(id)) return item;
+          const live = productsRef.current.find((p) => String(p.id) === String(id));
           const stockSource = typeof live?.stock === 'number' ? live.stock : item.stock;
           const stockLimit = typeof stockSource === 'number' ? Math.max(0, stockSource) : Infinity;
           const isOos = live ? live.inStock === false : item.inStock === false;
@@ -843,23 +850,31 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           };
         })
         .filter(Boolean) as CartItem[];
-      localStorage.setItem('bpg_cart_next', JSON.stringify(next));
+      try {
+        localStorage.setItem('bpg_cart_next', JSON.stringify(next));
+      } catch {}
       return next;
     });
     if (toastMsg) showToast(toastMsg);
   };
 
   const removeFromCart = (id: string | number) => {
-    setCart((prev) => prev.filter((item) => item.id !== id));
+    setCart((prev) => {
+      const next = prev.filter((item) => String(item.id) !== String(id));
+      try {
+        localStorage.setItem('bpg_cart_next', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
   };
 
   const saveForLater = (id: string | number) => {
     setCart((prev) => {
-      const item = prev.find((i) => i.id === id);
+      const item = prev.find((i) => String(i.id) === String(id));
       if (!item) return prev;
       setSavedForLater((later) => {
-        const next = later.some((l) => l.id === id)
-          ? later.map((l) => (l.id === id ? { ...l, qty: l.qty + item.qty } : l))
+        const next = later.some((l) => String(l.id) === String(id))
+          ? later.map((l) => (String(l.id) === String(id) ? { ...l, qty: l.qty + item.qty } : l))
           : [...later, item];
         try {
           localStorage.setItem('bpg_saved_later', JSON.stringify(next));
@@ -869,15 +884,19 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         return next;
       });
       showToast('Saved for later');
-      return prev.filter((i) => i.id !== id);
+      const updatedCart = prev.filter((i) => String(i.id) !== String(id));
+      try {
+        localStorage.setItem('bpg_cart_next', JSON.stringify(updatedCart));
+      } catch {}
+      return updatedCart;
     });
   };
 
   const moveToCartFromSaved = (id: string | number) => {
-    const item = savedForLater.find((i) => i.id === id);
+    const item = savedForLater.find((i) => String(i.id) === String(id));
     if (!item) return;
     setSavedForLater((later) => {
-      const next = later.filter((i) => i.id !== id);
+      const next = later.filter((i) => String(i.id) !== String(id));
       try {
         localStorage.setItem('bpg_saved_later', JSON.stringify(next));
       } catch {
@@ -1029,19 +1048,44 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, [hydrated, cart.length, validateCartStock]);
 
   const toggleWishlist = (id: string | number) => {
-    if (!user) {
-      setIsAuthOpen(true);
-      showToast('Please sign in with Google to use wishlist');
-      return;
-    }
+    const sId = String(id);
+    let isNowWishlisted = false;
     setWishlist((prev) => {
-      if (prev.includes(id)) {
-        showToast('Item removed from wishlist');
-        return prev.filter((item) => item !== id);
+      const exists = prev.some((x) => String(x) === sId);
+      let next: (string | number)[];
+      if (exists) {
+        next = prev.filter((x) => String(x) !== sId);
+        isNowWishlisted = false;
+      } else {
+        next = [...prev, id];
+        isNowWishlisted = true;
       }
-      showToast('❤️ Added to wishlist');
-      return [...prev, id];
+      try {
+        localStorage.setItem('bpg_wishlist_next', JSON.stringify(next));
+      } catch {}
+      return next;
     });
+    showToast(isNowWishlisted ? '❤️ Added to wishlist' : '💔 Removed from wishlist');
+  };
+
+  const removeFromWishlist = (id: string | number) => {
+    const sId = String(id);
+    setWishlist((prev) => {
+      const next = prev.filter((x) => String(x) !== sId);
+      try {
+        localStorage.setItem('bpg_wishlist_next', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+    showToast('💔 Removed from wishlist');
+  };
+
+  const clearWishlist = () => {
+    setWishlist([]);
+    try {
+      localStorage.setItem('bpg_wishlist_next', '[]');
+    } catch {}
+    showToast('Wishlist cleared');
   };
 
   const loginUser = (
@@ -1062,21 +1106,40 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setIsAuthOpen(true);
     }
 
+    // Merge guest cart with restored DB cart
+    const localCart = readLocalCart();
     if (Array.isArray(restoredCart) && restoredCart.length > 0) {
-      setCart(restoredCart);
-      localStorage.setItem('bpg_cart_next', JSON.stringify(restoredCart));
-    } else {
-      const local = readLocalCart();
-      if (local.length) setCart(local);
+      const cartMap = new Map<string, CartItem>();
+      restoredCart.forEach((item) => cartMap.set(String(item.id), item));
+      localCart.forEach((item) => {
+        const key = String(item.id);
+        if (cartMap.has(key)) {
+          const existing = cartMap.get(key)!;
+          cartMap.set(key, { ...existing, qty: Math.max(existing.qty, item.qty) });
+        } else {
+          cartMap.set(key, item);
+        }
+      });
+      const mergedCart = Array.from(cartMap.values());
+      setCart(mergedCart);
+      try {
+        localStorage.setItem('bpg_cart_next', JSON.stringify(mergedCart));
+      } catch {}
+    } else if (localCart.length > 0) {
+      setCart(localCart);
     }
 
-    if (Array.isArray(restoredWishlist) && restoredWishlist.length > 0) {
-      setWishlist(restoredWishlist);
-      localStorage.setItem('bpg_wishlist_next', JSON.stringify(restoredWishlist));
-    } else {
-      const local = readLocalWishlist();
-      if (local.length) setWishlist(local);
-    }
+    // Merge guest wishlist with restored DB wishlist
+    const localWish = readLocalWishlist();
+    const mergedWishMap = new Map<string, string | number>();
+    (Array.isArray(restoredWishlist) ? restoredWishlist : []).forEach((w) => mergedWishMap.set(String(w), w));
+    (Array.isArray(localWish) ? localWish : []).forEach((w) => mergedWishMap.set(String(w), w));
+    const mergedWishlist = Array.from(mergedWishMap.values());
+
+    setWishlist(mergedWishlist);
+    try {
+      localStorage.setItem('bpg_wishlist_next', JSON.stringify(mergedWishlist));
+    } catch {}
 
     if (Array.isArray(restoredAddresses)) {
       localStorage.removeItem('bpg_user_addresses');
@@ -1397,6 +1460,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         moveToCartFromSaved,
         savedForLater,
         toggleWishlist,
+        removeFromWishlist,
+        clearWishlist,
         loginUser,
         logoutUser,
         updateProductInDb,

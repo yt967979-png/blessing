@@ -22,7 +22,7 @@ export const ProductCard = ({ product }: { product: Product }) => {
 
   const [isAdded, setIsAdded] = useState(false);
 
-  const isWishlisted = wishlist.includes(product.id);
+  const isWishlisted = Boolean(product?.id && wishlist.some((id) => String(id) === String(product.id)));
   const rupeesSaved = product.mrp - product.price;
   const imgSrc = product.image;
   const productHref = `/products/${product.slug}`;
