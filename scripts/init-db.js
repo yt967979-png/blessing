@@ -474,6 +474,128 @@ async function migrateDatabase(connStr, dbName) {
       ALTER TABLE orders ADD COLUMN IF NOT EXISTS coupon_id VARCHAR(255);
       -- Coupons persist across builds. Do not DROP coupons / coupon_redemptions here.
 
+      CREATE TABLE IF NOT EXISTS coupons (
+        id VARCHAR(255) PRIMARY KEY,
+        code VARCHAR(50) UNIQUE NOT NULL,
+        discount_type VARCHAR(20) NOT NULL DEFAULT 'percentage',
+        discount_value NUMERIC(10,2) NOT NULL,
+        min_cart_qty INT DEFAULT 4,
+        min_order_amount NUMERIC(10,2) DEFAULT 0,
+        max_discount_amount NUMERIC(10,2),
+        max_uses INT DEFAULT 10000,
+        used_count INT DEFAULT 0,
+        is_active BOOLEAN DEFAULT TRUE,
+        expires_at TIMESTAMP,
+        title VARCHAR(255),
+        show_on_hero BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_coupons_code ON coupons (code);
+
+      CREATE TABLE IF NOT EXISTS coupon_redemptions (
+        id VARCHAR(255) PRIMARY KEY,
+        coupon_id VARCHAR(255) NOT NULL,
+        user_id VARCHAR(255) NOT NULL,
+        order_id VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_coupon_redemptions_user
+        ON coupon_redemptions (coupon_id, user_id);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_coupon_redemptions_order
+        ON coupon_redemptions (order_id);
+
+      CREATE TABLE IF NOT EXISTS courier_tracking (
+        id VARCHAR(255) PRIMARY KEY,
+        order_id VARCHAR(255),
+        docket_number VARCHAR(255),
+        awb_number VARCHAR(255),
+        status VARCHAR(255),
+        current_status VARCHAR(255),
+        location VARCHAR(255),
+        remarks TEXT,
+        event_time TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_courier_tracking_order ON courier_tracking (order_id);
+      CREATE INDEX IF NOT EXISTS idx_courier_tracking_awb ON courier_tracking (awb_number);
+
+      CREATE TABLE IF NOT EXISTS job_heartbeats (
+        job_name VARCHAR(100) PRIMARY KEY,
+        last_run_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        status VARCHAR(50) DEFAULT 'ok',
+        duration_ms INT DEFAULT 0,
+        last_error TEXT,
+        details JSONB,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS failed_webhook_events (
+        id VARCHAR(255) PRIMARY KEY,
+        event_id VARCHAR(255),
+        event_type VARCHAR(100),
+        payload JSONB,
+        error_message TEXT,
+        retry_count INT DEFAULT 0,
+        status VARCHAR(50) DEFAULT 'pending',
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_failed_webhook_events_status ON failed_webhook_events (status);
+
+      CREATE TABLE IF NOT EXISTS invoice_sequences (
+        financial_year VARCHAR(10) PRIMARY KEY,
+        last_number INT DEFAULT 0,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS abandoned_carts (
+        id VARCHAR(64) PRIMARY KEY,
+        user_id VARCHAR(255),
+        phone VARCHAR(20) NOT NULL,
+        name VARCHAR(255),
+        cart_json TEXT NOT NULL,
+        reminded BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS contact_submissions (
+        id SERIAL PRIMARY KEY,
+        contact_id VARCHAR(100) UNIQUE,
+        name VARCHAR(255) NOT NULL,
+        email VARCHAR(255),
+        phone VARCHAR(50) NOT NULL,
+        subject VARCHAR(255),
+        message TEXT NOT NULL,
+        status VARCHAR(50) DEFAULT 'unread',
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+
+      ALTER TABLE books ADD COLUMN IF NOT EXISTS sample_pdf_url TEXT;
+      ALTER TABLE books ADD COLUMN IF NOT EXISTS discount_price NUMERIC;
+      ALTER TABLE addresses ADD COLUMN IF NOT EXISTS alternate_phone VARCHAR(20);
+      ALTER TABLE reviews ADD COLUMN IF NOT EXISTS order_id VARCHAR(255);
+      ALTER TABLE reviews ADD COLUMN IF NOT EXISTS images JSONB DEFAULT '[]'::jsonb;
+      ALTER TABLE reviews ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+      ALTER TABLE reviews ADD COLUMN IF NOT EXISTS verified_purchase BOOLEAN DEFAULT TRUE;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_reviews_user_book
+        ON reviews (user_id, book_id) WHERE user_id IS NOT NULL AND book_id IS NOT NULL;
+      ALTER TABLE order_timeline ADD COLUMN IF NOT EXISTS hub_city VARCHAR(255);
+      ALTER TABLE order_timeline ADD COLUMN IF NOT EXISTS awb_number VARCHAR(255);
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS idempotency_key VARCHAR(80);
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS razorpay_refund_id VARCHAR(255);
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS invoice_number VARCHAR(50);
+      ALTER TABLE stock_holds ADD COLUMN IF NOT EXISTS razorpay_order_id VARCHAR(255);
+      ALTER TABLE stock_holds ADD COLUMN IF NOT EXISTS release_reason VARCHAR(100);
+      ALTER TABLE stock_holds ADD COLUMN IF NOT EXISTS released_at TIMESTAMP;
+
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_orders_idempotency_key
+        ON orders (idempotency_key) WHERE idempotency_key IS NOT NULL AND idempotency_key <> '';
+
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_orders_razorpay_payment_id
+        ON orders (razorpay_payment_id) WHERE razorpay_payment_id IS NOT NULL AND razorpay_payment_id <> '';
+
       CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders (user_id);
       CREATE INDEX IF NOT EXISTS idx_orders_status ON orders (order_status);
       CREATE INDEX IF NOT EXISTS idx_orders_created ON orders (ordered_at DESC);

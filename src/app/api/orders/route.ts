@@ -610,7 +610,7 @@ export async function PATCH(request: NextRequest) {
     client = await getDbClient();
 
     const existing = await client.query(
-      `SELECT order_status, user_id, order_number FROM orders WHERE order_number = $1 OR id = $1 LIMIT 1`,
+      `SELECT id, order_status, user_id, order_number FROM orders WHERE order_number = $1 OR id = $1 LIMIT 1`,
       [orderId]
     );
     if (!existing.rows.length) {
@@ -660,10 +660,10 @@ export async function PATCH(request: NextRequest) {
     try {
       await client.query(
         `INSERT INTO order_timeline (id, order_id, status, remarks) 
-         VALUES ($1, (SELECT id FROM orders WHERE order_number = $2 OR id::text = $2 LIMIT 1), $3, $4)`,
+         VALUES ($1, $2, $3, $4)`,
         [
           `tl-${Date.now()}`,
-          orderId,
+          existing.rows[0].id,
           newStatus,
           `Admin updated status to [${newStatus}] with AWB: ${awbNumber || 'N/A'}`,
         ]

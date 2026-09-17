@@ -1,12 +1,30 @@
 import { readFileSync } from 'node:fs';
 
 const src = readFileSync(new URL('../next.config.ts', import.meta.url), 'utf8');
-const match = src.match(/key:\s*"Content-Security-Policy",[\s\S]*?value:\s*\[([\s\S]*?)\]\.join/);
-if (!match) {
+
+// Extract scriptSrc, scriptSrcElem, and the CSP value array
+const scriptSrcMatch = src.match(/const\s+scriptSrc\s*=\s*\[([\s\S]*?)\]/);
+const scriptSrcElemMatch = src.match(/const\s+scriptSrcElem\s*=\s*\[([\s\S]*?)\]/);
+const cspArrayMatch = src.match(/key:\s*"Content-Security-Policy",[\s\S]*?value:\s*\[([\s\S]*?)\]\.join/);
+
+if (!cspArrayMatch) {
   console.error('CSP block not found');
   process.exit(1);
 }
-const parts = [...match[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+
+const extractStrings = (raw) => (raw ? [...raw.matchAll(/"([^"]+)"/g)].map((m) => m[1]) : []);
+
+const scriptSrc = extractStrings(scriptSrcMatch ? scriptSrcMatch[1] : '').join(' ');
+const scriptSrcElem = extractStrings(scriptSrcElemMatch ? scriptSrcElemMatch[1] : '').join(' ');
+const arrayItems = extractStrings(cspArrayMatch[1]);
+
+// Assemble full CSP string matching runtime execution
+const parts = [
+  ...arrayItems,
+  scriptSrc,
+  scriptSrcElem,
+].filter(Boolean);
+
 const joined = parts.join('; ');
 console.log(joined);
 console.log('---');
@@ -19,3 +37,4 @@ for (const [label, ok] of Object.entries(checks)) {
   console.log(`${label}: ${ok}`);
 }
 if (Object.values(checks).some((v) => !v)) process.exit(1);
+

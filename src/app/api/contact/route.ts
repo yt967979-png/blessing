@@ -3,6 +3,8 @@ import { tryGetDbClient, releaseDbClient } from '@/lib/db';
 import { applyRateLimitAsync } from '@/lib/serverSecurity';
 import { isValidMobileNumber, normalizeMobileDigits } from '@/lib/authValidation';
 
+let contactTableEnsured = false;
+
 export async function POST(request: Request) {
   const ip = request.headers.get('x-forwarded-for') || 'anonymous';
   const rl = await applyRateLimitAsync(`contact-${ip}`, 5, 600000);
@@ -36,19 +38,22 @@ export async function POST(request: Request) {
 
     client = await tryGetDbClient();
     if (client) {
-      await client.query(`
-        CREATE TABLE IF NOT EXISTS contact_submissions (
-          id SERIAL PRIMARY KEY,
-          contact_id VARCHAR(100) UNIQUE,
-          name VARCHAR(255) NOT NULL,
-          email VARCHAR(255),
-          phone VARCHAR(50) NOT NULL,
-          subject VARCHAR(255),
-          message TEXT NOT NULL,
-          status VARCHAR(50) DEFAULT 'unread',
-          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-        );
-      `);
+      if (!contactTableEnsured) {
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS contact_submissions (
+            id SERIAL PRIMARY KEY,
+            contact_id VARCHAR(100) UNIQUE,
+            name VARCHAR(255) NOT NULL,
+            email VARCHAR(255),
+            phone VARCHAR(50) NOT NULL,
+            subject VARCHAR(255),
+            message TEXT NOT NULL,
+            status VARCHAR(50) DEFAULT 'unread',
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+          );
+        `);
+        contactTableEnsured = true;
+      }
 
       await client.query(
         `INSERT INTO contact_submissions (contact_id, name, email, phone, subject, message)

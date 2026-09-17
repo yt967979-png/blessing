@@ -9,7 +9,6 @@ const MIME_TYPES: Record<string, string> = {
   '.png': 'image/png',
   '.webp': 'image/webp',
   '.gif': 'image/gif',
-  '.svg': 'image/svg+xml',
 };
 
 export async function GET(
@@ -33,13 +32,18 @@ export async function GET(
       return new NextResponse('Forbidden', { status: 403 });
     }
 
+    // SVG files can contain executable scripts — block serving them from public uploads
+    const ext = path.extname(targetFilePath).toLowerCase();
+    if (ext === '.svg' || ext === '.svgz' || ext === '.html' || ext === '.htm') {
+      return new NextResponse('Forbidden file type', { status: 403 });
+    }
+
     try {
       const stats = await fs.promises.stat(targetFilePath);
       if (!stats.isFile()) {
         return new NextResponse('Not Found', { status: 404 });
       }
 
-      const ext = path.extname(targetFilePath).toLowerCase();
       const contentType = MIME_TYPES[ext] || 'application/octet-stream';
       const fileBuffer = await fs.promises.readFile(targetFilePath);
 
@@ -50,6 +54,8 @@ export async function GET(
           'Content-Length': stats.size.toString(),
           'Cache-Control': 'public, max-age=31536000, immutable',
           'Content-Disposition': `inline; filename="${path.basename(targetFilePath)}"`,
+          'X-Content-Type-Options': 'nosniff',
+          'X-Frame-Options': 'DENY',
         },
       });
     } catch {
