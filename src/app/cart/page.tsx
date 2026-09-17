@@ -158,10 +158,10 @@ export default function CartPage() {
                       {cartCount < 4 ? (
                         <>Add <span className="text-amber-600 font-extrabold">{booksNeeded}</span> more guide(s) for Minimum Order (4 books)</>
                       ) : cartCount === 4 ? (
-                        <>Add <span className="text-emerald-600 font-extrabold">1</span> more guide to unlock <span className="text-emerald-700">FREE ST Courier Delivery</span>!</>
+                        <>Add <span className="text-emerald-600 font-extrabold">1</span> more guide to unlock <span className="text-emerald-700">FREE Delivery</span>!</>
                       ) : (
                         <span className="text-emerald-700 flex items-center gap-1">
-                          <CheckCircle2 className="w-4 h-4 inline" /> FREE ST Courier Delivery Unlocked Across Tamil Nadu!
+                          <CheckCircle2 className="w-4 h-4 inline" /> FREE Delivery Unlocked Across Tamil Nadu!
                         </span>
                       )}
                     </span>

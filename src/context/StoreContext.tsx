@@ -105,9 +105,9 @@ interface StoreContextType {
     restoredAddresses?: any[]
   ) => void;
   logoutUser: () => void;
-  updateProductInDb: (id: string | number, updatedData: Partial<Product> & { hasDiscount?: boolean }) => void;
-  addNewProductToDb: (newProdData: Partial<Product>) => void;
-  deleteProductFromDb: (id: string | number) => void;
+  updateProductInDb: (id: string | number, updatedData: Partial<Product> & { hasDiscount?: boolean }) => Promise<any>;
+  addNewProductToDb: (newProdData: Partial<Product> & { status?: string }) => Promise<any>;
+  deleteProductFromDb: (id: string | number) => Promise<any>;
   refreshProducts: (bypassCache?: boolean) => void;
   cartTotal: number;
   cartCount: number;
@@ -1204,6 +1204,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const res = await fetch('/api/products', {
         method: 'PATCH',
         headers: getAdminHeaders(),
+        credentials: 'include',
         body: JSON.stringify({ id, ...withDerived, hasDiscount }),
       });
       if (!res.ok) {
@@ -1220,16 +1221,18 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               ? '✓ Back in stock — visible on shop'
               : '✓ Product saved to database'
       );
+      return true;
     } catch (e: any) {
       setProducts(previousProducts);
       showToast(`❌ ${e?.message || 'Failed to save product'}`);
+      throw e;
     }
   };
 
-  const addNewProductToDb = async (newProdData: Partial<Product>) => {
-    if (!user?.token) {
-      showToast('❌ Please log in again as admin');
-      return;
+  const addNewProductToDb = async (newProdData: Partial<Product> & { status?: string }) => {
+    if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) {
+      showToast('❌ Admin session required — please log in as admin');
+      throw new Error('Admin session required');
     }
     const tempId = `bpg-${Date.now()}`;
     const mrp = Number(newProdData.mrp || newProdData.price || 0);
@@ -1242,7 +1245,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       subtitle: `${newProdData.cls || '10th'} Standard Guide`,
       cls: newProdData.cls || '10th',
       category: (newProdData.category as any) || 'guide',
-      subject: 'State Board',
+      subject: (newProdData as any).subject || 'State Board',
       price: hasDiscount ? price : mrp,
       mrp,
       discount: hasDiscount && mrp > 0 ? Math.round(((mrp - price) / mrp) * 100) : 0,
@@ -1257,6 +1260,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       inStock: Math.max(0, Math.floor(Number(newProdData.stock) || 0)) > 0,
       stock: Math.max(0, Math.floor(Number(newProdData.stock) || 0)),
       isBestSeller: String(newProdData.badge || '').toUpperCase().includes('BEST'),
+      samplePdfUrl: (newProdData as any).samplePdfUrl || null,
     };
 
     setProducts((prev) => [tempProduct, ...prev]);
@@ -1265,16 +1269,20 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const res = await fetch('/api/products', {
         method: 'POST',
         headers: getAdminHeaders(),
+        credentials: 'include',
         body: JSON.stringify({
           title: newProdData.title,
           cls: newProdData.cls,
-          category: newProdData.category,
+          category: newProdData.category || 'guide',
           price: newProdData.price,
           mrp: newProdData.mrp,
           image: newProdData.image,
           description: newProdData.description,
           badge: newProdData.badge || '',
           stock: Math.max(0, Math.floor(Number(newProdData.stock) || 0)),
+          subject: (newProdData as any).subject,
+          status: (newProdData as any).status,
+          samplePdfUrl: (newProdData as any).samplePdfUrl,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -1286,13 +1294,15 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
       // Pull authoritative mapped catalog so every open shop tab (and this one) match DB
       refreshProducts(true);
-      showToast(`🎉 Book "${newProdData.title}" saved to database`);
+      return data;
     } catch (err: any) {
       setProducts((prev) => prev.filter((p) => p.id !== tempId));
       const msg = err?.message || 'Unknown error';
-      showToast(msg.includes('Forbidden') || msg.includes('Unauthorized')
-        ? '❌ Admin login required — log out and log in again'
-        : `❌ Failed to add product: ${msg}`);
+      const formatted = msg.includes('Forbidden') || msg.includes('Unauthorized')
+        ? 'Admin session expired — please refresh or log in again'
+        : `Failed to add product: ${msg}`;
+      showToast(`❌ ${formatted}`);
+      throw new Error(formatted);
     }
   };
 
@@ -1303,13 +1313,19 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const res = await fetch(`/api/products?id=${encodeURIComponent(String(id))}`, {
         method: 'DELETE',
         headers: getAdminHeaders(),
+        credentials: 'include',
       });
-      if (!res.ok) throw new Error('Delete failed');
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Delete failed');
+      }
       refreshProducts(true);
       showToast(`🗑️ Book removed from database`);
-    } catch {
+      return true;
+    } catch (err: any) {
       setProducts(previousProducts);
-      showToast('❌ Failed to delete product');
+      showToast(`❌ ${err?.message || 'Failed to delete product'}`);
+      throw err;
     }
   };
 

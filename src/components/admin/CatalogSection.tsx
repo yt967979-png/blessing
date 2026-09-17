@@ -90,8 +90,9 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
   onCreateProduct,
   onDeleteProduct,
   onShowToast,
+  authHeaders: parentAuthHeaders,
 }) => {
-  const { user } = useStore();
+  const { user, refreshProducts } = useStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [selectedClass, setSelectedClass] = useState<string>('all');
@@ -364,7 +365,26 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
       const creator = onAddNewProduct || onCreateProduct;
       if (creator) {
         await creator(payload);
+      } else {
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+          ...(parentAuthHeaders || {}),
+        };
+        if (user?.token) headers.Authorization = `Bearer ${user.token}`;
+
+        const res = await fetch('/api/products', {
+          method: 'POST',
+          headers,
+          credentials: 'include',
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(data.error || `Failed to create publication (${res.status})`);
+        }
+        if (refreshProducts) refreshProducts(true);
       }
+
       onShowToast(
         targetStatus === 'published'
           ? `🎉 "${newTitle}" published live to bookstore!`
@@ -381,8 +401,8 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
       setNewPrice('280');
       setNewStock('50');
       setNewImage('');
-    } catch {
-      onShowToast('❌ Failed to save publication');
+    } catch (err: any) {
+      onShowToast(`❌ ${err?.message || 'Failed to save publication'}`);
     } finally {
       setIsSubmitting(false);
     }
