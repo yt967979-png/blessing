@@ -253,7 +253,9 @@ async function destroyPool(keepSchema = false) {
 async function invalidatePool(reason: string) {
   if (invalidateInFlight) return invalidateInFlight;
   invalidateInFlight = (async () => {
-    console.warn('[db] pool invalidated:', reason);
+    if (process.env.NEXT_PHASE !== 'phase-production-build') {
+      console.warn('[db] pool invalidated:', reason);
+    }
     poolGeneration++;
     await destroyPool(isSchemaInitialized);
   })().finally(() => {

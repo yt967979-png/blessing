@@ -94,15 +94,6 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        source: "/_next/static/(.*)",
-        headers: [
-          {
-            key: "Cache-Control",
-            value: "public, max-age=31536000, immutable",
-          },
-        ],
-      },
-      {
         source: "/api/products",
         headers: [
           {
@@ -153,15 +144,6 @@ const nextConfig: NextConfig = {
           {
             key: "Cache-Control",
             value: "public, max-age=0, s-maxage=60, stale-while-revalidate=300",
-          },
-        ],
-      },
-      {
-        source: "/_next/image(.*)",
-        headers: [
-          {
-            key: "Cache-Control",
-            value: "public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400",
           },
         ],
       },

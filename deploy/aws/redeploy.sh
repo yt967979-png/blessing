@@ -145,13 +145,10 @@ echo "==> Instant 0.3s Atomic Swap & Systemd Restart"
 if [[ -f "$CLONE_PATH/deploy/aws/optimize-postgres.sh" ]]; then
   bash "$CLONE_PATH/deploy/aws/optimize-postgres.sh" || true
 fi
-systemctl restart blessing || systemctl start blessing
-cp "$APP_DIR/deploy/aws/blessing.service" /etc/systemd/system/blessing.service
-sed -i "s/^User=.*/User=$APP_USER/" /etc/systemd/system/blessing.service
-sed -i "s/^Group=.*/Group=$APP_USER/" /etc/systemd/system/blessing.service
-sed -i "s|^WorkingDirectory=.*|WorkingDirectory=$APP_DIR|" /etc/systemd/system/blessing.service
-# Keep ExecStartPre path aligned if APP_DIR customized
-sed -i "s|/opt/blessing|$APP_DIR|g" /etc/systemd/system/blessing.service
+
+# Stop and disable legacy single-instance worker to prevent port 3000 EADDRINUSE conflict
+systemctl stop blessing 2>/dev/null || true
+systemctl disable blessing 2>/dev/null || true
 
 if [[ -f "$APP_DIR/deploy/aws/blessing@.service" ]]; then
   cp "$APP_DIR/deploy/aws/blessing@.service" /etc/systemd/system/blessing@.service
@@ -159,10 +156,18 @@ if [[ -f "$APP_DIR/deploy/aws/blessing@.service" ]]; then
   sed -i "s/^Group=.*/Group=$APP_USER/" /etc/systemd/system/blessing@.service
   sed -i "s|^WorkingDirectory=.*|WorkingDirectory=$APP_DIR|" /etc/systemd/system/blessing@.service
   sed -i "s|/opt/blessing|$APP_DIR|g" /etc/systemd/system/blessing@.service
+  systemctl daemon-reload
+  systemctl enable blessing@3000 blessing@3001 || true
+  systemctl restart blessing@3000 blessing@3001
+else
+  cp "$APP_DIR/deploy/aws/blessing.service" /etc/systemd/system/blessing.service
+  sed -i "s/^User=.*/User=$APP_USER/" /etc/systemd/system/blessing.service
+  sed -i "s/^Group=.*/Group=$APP_USER/" /etc/systemd/system/blessing.service
+  sed -i "s|^WorkingDirectory=.*|WorkingDirectory=$APP_DIR|" /etc/systemd/system/blessing.service
+  sed -i "s|/opt/blessing|$APP_DIR|g" /etc/systemd/system/blessing.service
+  systemctl daemon-reload
+  systemctl restart blessing || systemctl start blessing
 fi
-
-systemctl daemon-reload
-systemctl restart blessing || systemctl start blessing
 
 
 # Lightsail default for this shop is Caddy (HTTPS). Skip Nginx unless installed.
@@ -209,7 +214,7 @@ if [[ -f "$APP_DIR/deploy/aws/install-redis.sh" ]]; then
   bash "$APP_DIR/deploy/aws/install-redis.sh" || true
 fi
 
-echo "==> Health probes (localhost)"
+echo "==> Health probes (localhost:3000 & 3001)"
 sleep 3
 HEALTH_OK=0
 READY_OK=0
@@ -226,17 +231,22 @@ for i in 1 2 3 4 5 6 7 8 9 10; do
   sleep 2
 done
 
-echo "--- /api/health ---"
+echo "--- Worker :3000 /api/health ---"
 curl -fsS --max-time 8 "http://127.0.0.1:3000/api/health" || {
-  echo "ERROR: /api/health failed — leaving maintenance page ON"
-  journalctl -u blessing -n 40 --no-pager || true
+  echo "ERROR: :3000 /api/health failed — leaving maintenance page ON"
+  journalctl -u blessing@3000 -n 25 --no-pager || true
   exit 1
+}
+echo ""
+echo "--- Worker :3001 /api/health ---"
+curl -fsS --max-time 8 "http://127.0.0.1:3001/api/health" || {
+  echo "WARN: :3001 worker health probe failed (check journalctl -u blessing@3001)"
 }
 echo ""
 echo "--- /api/ready ---"
 curl -fsS --max-time 15 "http://127.0.0.1:3000/api/ready" || {
   echo "ERROR: /api/ready failed — leaving maintenance page ON"
-  journalctl -u blessing -n 40 --no-pager || true
+  journalctl -u blessing@3000 -n 25 --no-pager || true
   exit 1
 }
 echo ""

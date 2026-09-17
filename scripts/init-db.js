@@ -40,7 +40,7 @@ const candidates = getConnectionCandidates();
 const isRailway = !!(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_PROJECT_ID);
 
 if (candidates.length === 0) {
-  console.warn('⚠️ DATABASE_URL missing during build phase — schema initialization will run automatically on live app startup.');
+  console.log('ℹ️  Build phase: static schema init skipped (will verify on live app startup).');
   process.exit(0);
 }
 
