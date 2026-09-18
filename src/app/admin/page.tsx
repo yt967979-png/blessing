@@ -25,7 +25,6 @@ import CourierSection from '@/components/admin/CourierSection';
 import CatalogSection from '@/components/admin/CatalogSection';
 import CouponsSection from '@/components/admin/CouponsSection';
 import AnalyticsSection from '@/components/admin/AnalyticsSection';
-import SystemHealthSection from '@/components/admin/SystemHealthSection';
 import { LiveSupportSection } from '@/components/admin/LiveSupportSection';
 import AbandonedCartsSection from '@/components/admin/AbandonedCartsSection';
 
@@ -832,16 +831,6 @@ function AdminPageInner() {
               onSetRange={setAnalyticsRange}
               onRefresh={() => void loadAnalytics({ fresh: true })}
               onExportCsv={handleExportCsv}
-            />
-          )}
-
-          {/* SECTION H: SYSTEM HEALTH & TELEMETRY */}
-          {activeTab === 'health' && (
-            <SystemHealthSection
-              systemHealth={systemHealth}
-              onRefresh={loadSystemHealth}
-              onShowToast={showToast}
-              authHeaders={authHeaders(user)}
             />
           )}
         </main>

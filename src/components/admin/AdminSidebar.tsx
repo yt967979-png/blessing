@@ -31,8 +31,7 @@ export type AdminTab =
   | 'coupons'
   | 'users'
   | 'reviews'
-  | 'analytics'
-  | 'health';
+  | 'analytics';
 
 export const ADMIN_TAB_KEYS: AdminTab[] = [
   'overview',
@@ -45,7 +44,6 @@ export const ADMIN_TAB_KEYS: AdminTab[] = [
   'users',
   'reviews',
   'analytics',
-  'health',
 ];
 
 interface AdminSidebarProps {
@@ -135,14 +133,6 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
       label: 'GST & Sales Reports',
       subtitle: 'Monthly trends & 1-click tax CSV',
       icon: BarChart3,
-    },
-    {
-      key: 'health' as AdminTab,
-      label: 'Live System Monitor',
-      subtitle: 'Live users, traffic, server & errors',
-      icon: Activity,
-      badge: 'LIVE',
-      badgeColor: 'bg-emerald-500 text-white font-black animate-pulse',
     },
   ];
 
