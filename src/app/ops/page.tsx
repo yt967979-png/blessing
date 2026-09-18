@@ -32,6 +32,9 @@ import {
   KeyRound,
   ArrowRight,
   LogOut,
+  UserCheck,
+  GraduationCap,
+  Sparkles,
 } from 'lucide-react';
 
 interface MonitorPayload {
@@ -52,6 +55,30 @@ interface MonitorPayload {
     allTimePeak: number;
     allTimePeakDate: string;
     hourlyCounts: Record<string, number>;
+  };
+  users: {
+    totalUsers: number;
+    customers: number;
+    admins: number;
+  };
+  lifetime: {
+    totalOrders: number;
+    paidOrders: number;
+    lifetimeRevenue: number;
+  };
+  catalog: {
+    totalBooks: number;
+    totalStockUnits: number;
+    lowStockCount: number;
+    outOfStockCount: number;
+  };
+  process: {
+    pid: number;
+    nodeVersion: string;
+    rssBytes: number;
+    heapUsedBytes: number;
+    heapTotalBytes: number;
+    externalBytes: number;
   };
   server: {
     cpuPercent: number;
@@ -90,10 +117,17 @@ interface MonitorPayload {
     maxConnections: number;
     pingMs: number;
     status: string;
+    version: string;
+    totalCommits: number;
+    totalRollbacks: number;
   };
   redis: {
     status: string;
     pingMs: number;
+    usedMemoryHuman: string;
+    usedMemoryRssHuman: string;
+    connectedClients: number;
+    commandsProcessed: number;
   };
   errors: {
     totalErrors: number;
@@ -164,7 +198,6 @@ export default function OpsPage() {
     setTimeout(() => setToastMsg(null), 3000);
   };
 
-  // Restore saved token on mount
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const saved = localStorage.getItem('bpg_ops_token');
@@ -216,7 +249,6 @@ export default function OpsPage() {
     await fetch('/api/ops/auth', { method: 'DELETE' }).catch(() => {});
   };
 
-  // Snapshot fetch
   const fetchSnapshot = useCallback(async () => {
     if (!token && !isUnlocked) return;
     try {
@@ -241,7 +273,6 @@ export default function OpsPage() {
     }
   }, [token, isUnlocked]);
 
-  // Connect SSE stream
   useEffect(() => {
     if (!isUnlocked || !autoRefresh) {
       if (esRef.current) {
@@ -331,7 +362,6 @@ export default function OpsPage() {
     }
   };
 
-  // If locked, render the private PIN screen
   if (!isUnlocked) {
     return (
       <div className="min-h-screen bg-[#070D18] text-slate-100 flex items-center justify-center p-4">
@@ -344,7 +374,7 @@ export default function OpsPage() {
               Operations & Telemetry Console
             </h1>
             <p className="text-xs text-slate-400 leading-relaxed">
-              Developer-only private dashboard. Enter your Master PIN to access live server hardware, storage, and error diagnostics.
+              Developer-only private dashboard. Enter your Master PIN to access live server hardware, storage, registered users, and error diagnostics.
             </p>
           </div>
 
@@ -396,16 +426,16 @@ export default function OpsPage() {
     );
   }
 
-  // Calculated metrics
   const hourlyData = monitor?.visitors?.hourlyCounts || {};
   const hoursArray = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
   const maxHourly = Math.max(1, ...Object.values(hourlyData).map(Number));
   const currentHourStr = String(new Date().getHours()).padStart(2, '0');
 
-  const diskTotal = monitor?.disk?.totalBytes || 40 * 1024 * 1024 * 1024;
-  const diskUsed = monitor?.disk?.usedBytes || 18.4 * 1024 * 1024 * 1024;
+  const diskTotal = monitor?.disk?.totalBytes || 78 * 1024 * 1024 * 1024;
+  const diskUsed = monitor?.disk?.usedBytes || 7 * 1024 * 1024 * 1024;
   const diskFree = monitor?.disk?.freeBytes || diskTotal - diskUsed;
   const diskPercent = monitor?.disk?.usedPercent || Math.round((diskUsed / diskTotal) * 100);
+  const diskTotalGb = Math.round(diskTotal / (1024 * 1024 * 1024));
 
   const uploadsBytes = monitor?.storageBreakdown?.uploadsBytes || 0;
   const dbBytes = monitor?.storageBreakdown?.dbBytes || 0;
@@ -421,7 +451,6 @@ export default function OpsPage() {
 
   return (
     <div className="min-h-screen bg-[#070D18] text-slate-100 p-4 sm:p-6 lg:p-8">
-      {/* Toast notification */}
       {toastMsg && (
         <div className="fixed top-5 right-5 z-50 bg-blue-600 text-white px-4 py-2.5 rounded-2xl text-xs font-bold shadow-2xl animate-in fade-in slide-in-from-top duration-200">
           {toastMsg}
@@ -463,13 +492,12 @@ export default function OpsPage() {
                   </span>
                 </div>
                 <p className="text-xs text-slate-400 mt-1">
-                  Private Owner Portal • Singapore AWS Lightsail (2 vCPU, 4GB RAM) • Dual Node.js Cluster
+                  Private Owner Portal • Singapore AWS Lightsail ({diskTotalGb}GB NVMe, 2 vCPU, 4GB RAM) • Dual Node.js Cluster
                 </p>
               </div>
             </div>
 
             <div className="flex items-center gap-2.5 flex-wrap self-start lg:self-center">
-              {/* SSE Stream status */}
               <div
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-2 ${
                   isSseActive
@@ -518,37 +546,68 @@ export default function OpsPage() {
             </div>
           </div>
 
-          {/* Quick Metrics Bar */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5 pt-5 border-t border-slate-800">
+          {/* ─── Real VPS Quick Metrics Bar ──────────────────────────────────── */}
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mt-5 pt-5 border-t border-slate-800">
+            {/* Real Total Users in Database */}
+            <div className="bg-[#132238] rounded-2xl p-3.5 border border-slate-800/80">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Users (DB)</span>
+              <div className="flex items-baseline gap-1.5 mt-1">
+                <span className="text-2xl font-black text-white">{monitor?.users?.totalUsers ?? 0}</span>
+                <span className="text-[11px] text-blue-400 font-bold">accounts</span>
+              </div>
+              <span className="text-[10px] text-slate-500 block mt-0.5">
+                {monitor?.users?.customers ?? 0} students • {monitor?.users?.admins ?? 0} staff
+              </span>
+            </div>
+
+            {/* Live Visitors Right Now */}
             <div className="bg-[#132238] rounded-2xl p-3.5 border border-slate-800/80">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Live Visitors</span>
               <div className="flex items-baseline gap-1.5 mt-1">
-                <span className="text-2xl font-black text-white">{monitor?.visitors?.activeAll ?? 1}</span>
-                <span className="text-[11px] text-emerald-400 font-bold">active now</span>
+                <span className="text-2xl font-black text-white">{monitor?.visitors?.activeAll ?? 0}</span>
+                <span className="text-[11px] text-emerald-400 font-bold">online now</span>
               </div>
+              <span className="text-[10px] text-slate-500 block mt-0.5">
+                {monitor?.visitors?.activeShoppers ?? 0} shoppers active
+              </span>
             </div>
+
+            {/* Server Uptime */}
             <div className="bg-[#132238] rounded-2xl p-3.5 border border-slate-800/80">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Server Uptime</span>
               <div className="flex items-baseline gap-1.5 mt-1">
-                <span className="text-2xl font-black text-white">{monitor?.server?.uptimeFormatted ?? '49d 4h'}</span>
+                <span className="text-2xl font-black text-white">{monitor?.server?.uptimeFormatted ?? '—'}</span>
                 <span className="text-[11px] text-slate-400 font-medium">unbroken</span>
               </div>
+              <span className="text-[10px] text-slate-500 block mt-0.5">
+                Node PID: {monitor?.process?.pid ?? '—'}
+              </span>
             </div>
+
+            {/* NVMe Storage */}
             <div className="bg-[#132238] rounded-2xl p-3.5 border border-slate-800/80">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">NVMe Storage</span>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">NVMe Volume</span>
               <div className="flex items-baseline gap-1.5 mt-1">
                 <span className="text-2xl font-black text-white">{diskPercent}%</span>
                 <span className="text-[11px] text-slate-400 font-medium">{formatBytes(diskFree)} free</span>
               </div>
+              <span className="text-[10px] text-slate-500 block mt-0.5">
+                {formatBytes(diskUsed)} of {formatBytes(diskTotal)}
+              </span>
             </div>
-            <div className="bg-[#132238] rounded-2xl p-3.5 border border-slate-800/80">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">5xx Server Errors</span>
+
+            {/* 5xx Server Errors */}
+            <div className="bg-[#132238] rounded-2xl p-3.5 border border-slate-800/80 col-span-2 sm:col-span-1">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">5xx Errors (Today)</span>
               <div className="flex items-baseline gap-1.5 mt-1">
                 <span className={`text-2xl font-black ${(monitor?.errors?.fiveXx || 0) > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
                   {monitor?.errors?.fiveXx ?? 0}
                 </span>
-                <span className="text-[11px] text-slate-400 font-medium">today</span>
+                <span className="text-[11px] text-slate-400 font-medium">faults</span>
               </div>
+              <span className="text-[10px] text-slate-500 block mt-0.5">
+                {monitor?.errors?.paymentFailures ?? 0} payment drops
+              </span>
             </div>
           </div>
         </div>
@@ -578,28 +637,130 @@ export default function OpsPage() {
           </div>
         )}
 
-        {/* ─── Row 1: 4 Primary Metrics Cards ────────────────────────────────── */}
+        {/* ─── Row 1: Users & Lifetime Database Metrics Grid ─────────────────── */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          {/* Card: Total Registered User Accounts */}
+          <div className="bg-[#0D1829] rounded-3xl border border-slate-800 p-5 shadow-lg space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-400 flex items-center gap-1.5">
+                <Users className="w-4 h-4 text-blue-400" />
+                REGISTERED USER ACCOUNTS
+              </span>
+              <span className="text-[10px] font-black bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded">
+                POSTGRESQL DB
+              </span>
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className="font-heading font-black text-4xl text-white">
+                {monitor?.users?.totalUsers ?? 0}
+              </span>
+              <span className="text-xs font-bold text-slate-400">total accounts</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 pt-2 text-xs">
+              <div className="p-2.5 bg-[#132238] rounded-xl border border-slate-800">
+                <span className="text-[10px] text-slate-400 font-bold uppercase block">Student Customers</span>
+                <span className="font-bold text-white text-base mt-0.5 block">
+                  {monitor?.users?.customers ?? 0}
+                </span>
+              </div>
+              <div className="p-2.5 bg-[#132238] rounded-xl border border-slate-800">
+                <span className="text-[10px] text-slate-400 font-bold uppercase block">Staff & Admins</span>
+                <span className="font-bold text-white text-base mt-0.5 block">
+                  {monitor?.users?.admins ?? 0}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Card: Lifetime Orders & Revenue */}
+          <div className="bg-[#0D1829] rounded-3xl border border-slate-800 p-5 shadow-lg space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-400 flex items-center gap-1.5">
+                <ShoppingBag className="w-4 h-4 text-emerald-400" />
+                LIFETIME STORE METRICS
+              </span>
+              <span className="text-[10px] font-black bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded">
+                ALL TIME
+              </span>
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className="font-heading font-black text-4xl text-emerald-400">
+                ₹{(monitor?.lifetime?.lifetimeRevenue ?? 0).toLocaleString('en-IN')}
+              </span>
+              <span className="text-xs font-bold text-slate-400">gross</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 pt-2 text-xs">
+              <div className="p-2.5 bg-[#132238] rounded-xl border border-slate-800">
+                <span className="text-[10px] text-slate-400 font-bold uppercase block">Total Orders Created</span>
+                <span className="font-bold text-white text-base mt-0.5 block">
+                  {monitor?.lifetime?.totalOrders ?? 0}
+                </span>
+              </div>
+              <div className="p-2.5 bg-[#132238] rounded-xl border border-slate-800">
+                <span className="text-[10px] text-slate-400 font-bold uppercase block">Paid & Settled</span>
+                <span className="font-bold text-emerald-400 text-base mt-0.5 block">
+                  {monitor?.lifetime?.paidOrders ?? 0}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Card: Book Inventory & Warehouse */}
+          <div className="bg-[#0D1829] rounded-3xl border border-slate-800 p-5 shadow-lg space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-400 flex items-center gap-1.5">
+                <Package className="w-4 h-4 text-amber-400" />
+                WAREHOUSE & BOOK STOCK
+              </span>
+              <span className="text-[10px] font-black bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded">
+                CATALOG
+              </span>
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className="font-heading font-black text-4xl text-white">
+                {monitor?.catalog?.totalStockUnits ?? 0}
+              </span>
+              <span className="text-xs font-bold text-slate-400">units in stock</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 pt-2 text-xs">
+              <div className="p-2.5 bg-[#132238] rounded-xl border border-slate-800">
+                <span className="text-[10px] text-slate-400 font-bold uppercase block">Published Titles</span>
+                <span className="font-bold text-white text-base mt-0.5 block">
+                  {monitor?.catalog?.totalBooks ?? 0}
+                </span>
+              </div>
+              <div className="p-2.5 bg-[#132238] rounded-xl border border-slate-800">
+                <span className="text-[10px] text-slate-400 font-bold uppercase block">Low / Out of Stock</span>
+                <span className="font-bold text-slate-200 text-base mt-0.5 block">
+                  {monitor?.catalog?.lowStockCount ?? 0} low • {monitor?.catalog?.outOfStockCount ?? 0} OOS
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ─── Row 2: Live Visitors & Today's Traffic Velocity ───────────────── */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-          {/* Card 1: Live Users */}
+          {/* Card: Live Concurrent Visitors */}
           <div className="bg-[#0D1829] rounded-3xl border border-slate-800 p-5 shadow-lg flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-bold text-slate-400 flex items-center gap-1.5">
                   <Users className="w-4 h-4 text-emerald-400" />
-                  LIVE USERS NOW
+                  LIVE VISITORS NOW
                 </span>
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                  ACTIVE
+                  LIVE
                 </span>
               </div>
               <div className="flex items-baseline gap-2 mt-2">
                 <span className="font-heading font-black text-4xl text-white">
-                  {monitor?.visitors?.activeAll ?? 1}
+                  {monitor?.visitors?.activeAll ?? 0}
                 </span>
-                <span className="text-xs font-bold text-slate-400">concurrent</span>
+                <span className="text-xs font-bold text-slate-400">online</span>
               </div>
-              <p className="text-[11px] text-slate-400 mt-1">Rolling 60s window (Zero Postgres load)</p>
+              <p className="text-[11px] text-slate-400 mt-1">Rolling 60s active window in Redis</p>
 
               <div className="space-y-2 mt-4 pt-3 border-t border-slate-800 text-xs">
                 <div className="flex items-center justify-between">
@@ -628,35 +789,35 @@ export default function OpsPage() {
                     <span className="w-2 h-2 rounded-full bg-purple-500" />
                     Staff Admin Sessions
                   </span>
-                  <span className="font-bold text-white">{monitor?.visitors?.activeAdmins ?? 1}</span>
+                  <span className="font-bold text-white">{monitor?.visitors?.activeAdmins ?? 0}</span>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Card 2: Today's Traffic & Hourly Velocity */}
+          {/* Card: Today's Traffic & Hourly Chart */}
           <div className="bg-[#0D1829] rounded-3xl border border-slate-800 p-5 shadow-lg flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-bold text-slate-400 flex items-center gap-1.5">
                   <TrendingUp className="w-4 h-4 text-blue-400" />
-                  TODAY'S TRAFFIC & PEAK
+                  TODAY'S TRAFFIC
                 </span>
                 <span className="text-[10px] font-black bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded">
-                  HYPERLOGLOG
+                  REDIS HLL
                 </span>
               </div>
               <div className="grid grid-cols-2 gap-2 mt-2">
                 <div>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase block">Unique Visitors</span>
+                  <span className="text-[10px] text-slate-400 font-bold uppercase block">Uniques (Today)</span>
                   <span className="font-heading font-black text-2xl text-white">
-                    {(monitor?.visitors?.todayUniques ?? 1).toLocaleString('en-IN')}
+                    {(monitor?.visitors?.todayUniques ?? 0).toLocaleString('en-IN')}
                   </span>
                 </div>
                 <div>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase block">Pageviews</span>
+                  <span className="text-[10px] text-slate-400 font-bold uppercase block">Total Views</span>
                   <span className="font-heading font-black text-2xl text-white">
-                    {(monitor?.visitors?.todayViews ?? 1).toLocaleString('en-IN')}
+                    {(monitor?.visitors?.todayViews ?? 0).toLocaleString('en-IN')}
                   </span>
                 </div>
               </div>
@@ -665,16 +826,16 @@ export default function OpsPage() {
                 <div>
                   <span className="text-[10px] text-slate-400 font-bold uppercase block">Peak Users Today</span>
                   <span className="text-sm font-black text-emerald-400">
-                    {monitor?.visitors?.peakToday ?? 1} Concurrent
+                    {monitor?.visitors?.peakToday ?? 0} Concurrent
                   </span>
                 </div>
                 <div className="text-right">
-                  <span className="text-[10px] text-slate-400 font-medium block">Peak Timestamp</span>
-                  <span className="text-xs font-bold text-slate-300">{monitor?.visitors?.peakTime || 'Just now'}</span>
+                  <span className="text-[10px] text-slate-400 font-medium block">Peak Time</span>
+                  <span className="text-xs font-bold text-slate-300">{monitor?.visitors?.peakTime || '—'}</span>
                 </div>
               </div>
 
-              {/* 24h Hourly Traffic Bars */}
+              {/* 24h Hourly Sparkline */}
               <div className="mt-4 pt-3 border-t border-slate-800">
                 <div className="flex items-center justify-between text-[10px] text-slate-400 font-bold mb-1.5">
                   <span>HOURLY TRAFFIC (00:00 - 23:00)</span>
@@ -705,7 +866,7 @@ export default function OpsPage() {
             </div>
           </div>
 
-          {/* Card 3: CPU & Dual Workers */}
+          {/* Card: CPU & Dual Workers */}
           <div className="bg-[#0D1829] rounded-3xl border border-slate-800 p-5 shadow-lg flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between mb-2">
@@ -722,13 +883,13 @@ export default function OpsPage() {
                 <div>
                   <span className="text-[10px] text-slate-400 font-bold uppercase block">CPU Utilization</span>
                   <span className="font-heading font-black text-2xl text-white">
-                    {monitor?.server?.cpuPercent ?? 5}%
+                    {monitor?.server?.cpuPercent ?? 0}%
                   </span>
                 </div>
                 <div className="text-right">
                   <span className="text-[10px] text-slate-400 font-bold uppercase block">1m Load Avg</span>
                   <span className="text-xs font-mono font-bold text-slate-300">
-                    {monitor?.server?.loadAvg?.[0]?.toFixed(2) ?? '0.08'}
+                    {monitor?.server?.loadAvg?.[0]?.toFixed(2) ?? '0.00'}
                   </span>
                 </div>
               </div>
@@ -760,16 +921,16 @@ export default function OpsPage() {
             </div>
           </div>
 
-          {/* Card 4: RAM Memory (4.0 GB) */}
+          {/* Card: Real RAM & Process Telemetry */}
           <div className="bg-[#0D1829] rounded-3xl border border-slate-800 p-5 shadow-lg flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-bold text-slate-400 flex items-center gap-1.5">
                   <Server className="w-4 h-4 text-blue-400" />
-                  VPS RAM (4.0 GB TOTAL)
+                  VPS RAM (REAL FOOTPRINT)
                 </span>
                 <span className="text-[10px] font-black bg-slate-800 text-slate-300 px-2 py-0.5 rounded">
-                  MEMORY
+                  4.0 GB
                 </span>
               </div>
 
@@ -777,13 +938,13 @@ export default function OpsPage() {
                 <div>
                   <span className="text-[10px] text-slate-400 font-bold uppercase block">Memory Used</span>
                   <span className="font-heading font-black text-2xl text-white">
-                    {formatBytes(monitor?.server?.memUsedBytes || 800 * 1024 * 1024)}
+                    {formatBytes(monitor?.server?.memUsedBytes || 0)}
                   </span>
                 </div>
                 <div className="text-right">
-                  <span className="text-[10px] text-slate-400 font-bold uppercase block">Usage Ratio</span>
+                  <span className="text-[10px] text-slate-400 font-bold uppercase block">System Ratio</span>
                   <span className="text-sm font-black text-emerald-400">
-                    {monitor?.server?.memPercent ?? 21}%
+                    {monitor?.server?.memPercent ?? 0}%
                   </span>
                 </div>
               </div>
@@ -791,38 +952,44 @@ export default function OpsPage() {
               <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden my-2.5">
                 <div
                   className="bg-emerald-500 h-full rounded-full transition-all"
-                  style={{ width: `${Math.min(100, monitor?.server?.memPercent || 21)}%` }}
+                  style={{ width: `${Math.min(100, monitor?.server?.memPercent || 20)}%` }}
                 />
               </div>
 
               <div className="p-2.5 bg-[#132238] rounded-xl border border-slate-800 space-y-1 text-[11px] text-slate-400 mt-3">
                 <div className="flex justify-between">
-                  <span>Free Available:</span>
+                  <span>Free Available RAM:</span>
                   <span className="font-bold text-slate-200">
-                    {formatBytes((monitor?.server?.memTotalBytes || 4 * 1024 * 1024 * 1024) - (monitor?.server?.memUsedBytes || 800 * 1024 * 1024))}
+                    {formatBytes((monitor?.server?.memTotalBytes || 0) - (monitor?.server?.memUsedBytes || 0))}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Postgres Buffer Cache:</span>
-                  <span className="font-bold text-slate-200">~256 MB</span>
+                  <span>Node Process RSS:</span>
+                  <span className="font-bold text-slate-200">
+                    {formatBytes(monitor?.process?.rssBytes || 0)}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span>Redis Memory:</span>
-                  <span className="font-bold text-slate-200">&lt; 15 MB</span>
+                  <span className="font-bold text-slate-200">
+                    {monitor?.redis?.usedMemoryHuman || '—'} (RSS: {monitor?.redis?.usedMemoryRssHuman || '—'})
+                  </span>
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* ─── Row 2: Storage & Database Pool ────────────────────────────────── */}
+        {/* ─── Row 3: NVMe Storage Breakdown & PostgreSQL Engine ──────────────── */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Storage Card */}
           <div className="bg-[#0D1829] rounded-3xl border border-slate-800 p-6 shadow-xl space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <HardDrive className="w-5 h-5 text-indigo-400" />
-                <h2 className="font-bold text-base text-white">40 GB NVMe Storage Breakdown</h2>
+                <h2 className="font-bold text-base text-white">
+                  {diskTotalGb} GB NVMe SSD Volume Breakdown
+                </h2>
               </div>
               <span
                 className={`text-xs font-black px-2.5 py-1 rounded-full ${
@@ -885,7 +1052,7 @@ export default function OpsPage() {
               <div className="p-2.5 bg-[#132238] rounded-xl border border-slate-800">
                 <span className="flex items-center gap-1.5 text-slate-400 text-[11px]">
                   <span className="w-2.5 h-2.5 rounded-full bg-purple-500 flex-shrink-0" />
-                  Postgres DB
+                  Postgres DB Size
                 </span>
                 <span className="font-bold text-white block mt-1">{formatBytes(dbBytes)}</span>
               </div>
@@ -922,7 +1089,9 @@ export default function OpsPage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Database className="w-5 h-5 text-emerald-400" />
-                <h2 className="font-bold text-base text-white">PostgreSQL 16 Pool & Redis Engine</h2>
+                <h2 className="font-bold text-base text-white">
+                  {monitor?.database?.version || 'PostgreSQL 16'} & Redis
+                </h2>
               </div>
               <span className="text-[10px] font-black bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-1 rounded-full">
                 {monitor?.database?.status || 'ONLINE'}
@@ -940,14 +1109,14 @@ export default function OpsPage() {
               <div className="p-3 bg-[#132238] rounded-2xl border border-slate-800">
                 <span className="text-[10px] font-bold text-slate-400 uppercase block">Idle Pool Conns</span>
                 <div className="flex items-baseline gap-1 mt-0.5">
-                  <span className="text-xl font-black text-emerald-400">{monitor?.database?.idleConnections ?? 14}</span>
+                  <span className="text-xl font-black text-emerald-400">{monitor?.database?.idleConnections ?? 0}</span>
                   <span className="text-[10px] font-bold text-slate-500">ready</span>
                 </div>
               </div>
               <div className="p-3 bg-[#132238] rounded-2xl border border-slate-800">
                 <span className="text-[10px] font-bold text-slate-400 uppercase block">DB Latency</span>
                 <div className="flex items-baseline gap-1 mt-0.5">
-                  <span className="text-xl font-black text-blue-400">{monitor?.database?.pingMs ?? 2}</span>
+                  <span className="text-xl font-black text-blue-400">{monitor?.database?.pingMs ?? 0}</span>
                   <span className="text-[10px] font-bold text-slate-500">ms</span>
                 </div>
               </div>
@@ -955,16 +1124,20 @@ export default function OpsPage() {
 
             <div className="p-3.5 bg-[#132238] rounded-2xl border border-slate-800 space-y-2 text-xs">
               <div className="flex items-center justify-between">
+                <span className="text-slate-400">Total Committed Transactions:</span>
+                <span className="font-bold text-emerald-400 font-mono">
+                  {(monitor?.database?.totalCommits || 0).toLocaleString('en-IN')} commits
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
                 <span className="text-slate-400">Waiting Query Locks:</span>
                 <span className="font-bold text-emerald-400">✓ {monitor?.database?.waitingLocks ?? 0} locks</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-slate-400">Slow Queries (&gt;2s):</span>
-                <span className="font-bold text-emerald-400">✓ {monitor?.database?.slowQueries ?? 0} slow queries</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-400">Redis Lua Windows:</span>
-                <span className="font-bold text-emerald-400">✓ Active (sub-1ms)</span>
+                <span className="text-slate-400">Redis Clients & Commands:</span>
+                <span className="font-bold text-emerald-400">
+                  {monitor?.redis?.connectedClients ?? 1} clients • {(monitor?.redis?.commandsProcessed || 0).toLocaleString('en-IN')} commands
+                </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-slate-400">Statement Timeout Guard:</span>
@@ -974,7 +1147,7 @@ export default function OpsPage() {
           </div>
         </div>
 
-        {/* ─── Row 3: Live Error Logs & Diagnostics Feed ─────────────────────── */}
+        {/* ─── Row 4: Live Error Logs & Diagnostics Feed ─────────────────────── */}
         <div className="bg-[#0D1829] rounded-3xl border border-slate-800 p-6 shadow-xl space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-2.5">
@@ -1070,12 +1243,12 @@ export default function OpsPage() {
           )}
         </div>
 
-        {/* ─── Row 4: E-Commerce Activity & Capacity Benchmark ───────────────── */}
+        {/* ─── Row 5: E-Commerce Today & Probes ──────────────────────────────── */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           <div className="bg-[#0D1829] rounded-3xl border border-slate-800 p-5 shadow-lg space-y-3">
             <div className="flex items-center gap-2">
               <ShoppingBag className="w-5 h-5 text-blue-400" />
-              <h3 className="font-bold text-sm text-white">Today's E-Commerce Activity</h3>
+              <h3 className="font-bold text-sm text-white">Today's Storefront Pulse</h3>
             </div>
             <div className="grid grid-cols-2 gap-2 text-xs">
               <div className="p-2.5 bg-[#132238] rounded-xl border border-slate-800">

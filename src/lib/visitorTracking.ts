@@ -165,12 +165,12 @@ export async function getLiveMonitorMetrics() {
       activeSupport = support || 0;
       activeAdmins = admins || 0;
 
-      todayViews = views ? parseInt(views, 10) : activeAll * 3;
-      todayUniques = uniques || Math.max(1, activeAll);
-      peakToday = peak ? parseInt(peak, 10) : Math.max(activeAll, 1);
-      peakTime = pTime || 'Just now';
-      allTimePeak = atPeak ? parseInt(atPeak, 10) : Math.max(peakToday, 500);
-      allTimePeakDate = atPeakDate || 'September 18, 2026';
+      todayViews = views ? parseInt(views, 10) : 0;
+      todayUniques = uniques || 0;
+      peakToday = peak ? parseInt(peak, 10) : activeAll;
+      peakTime = pTime || (peakToday > 0 ? 'Earlier today' : '—');
+      allTimePeak = atPeak ? parseInt(atPeak, 10) : peakToday;
+      allTimePeakDate = atPeakDate || '—';
       hourlyCounts = Object.fromEntries(
         Object.entries(hourly || {}).map(([k, v]) => [k, parseInt(v, 10) || 0])
       );
@@ -190,16 +190,9 @@ export async function getLiveMonitorMetrics() {
         else if (item.type === 'admin') activeAdmins++;
       }
     }
-    todayViews = Math.max(todayViews, activeAll * 3);
+    todayViews = Math.max(todayViews, activeAll);
     todayUniques = Math.max(todayUniques, activeAll);
     peakToday = Math.max(peakToday, activeAll);
-  }
-
-  // Ensure realistic baseline when server is live
-  if (activeAll === 0) {
-    activeAll = 1; // current admin browsing the monitor
-    activeAdmins = 1;
-    peakToday = Math.max(peakToday, 1);
   }
 
   return {
