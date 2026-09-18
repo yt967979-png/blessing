@@ -32,6 +32,10 @@ const TAB_TITLES: Record<AdminTab, { title: string; subtitle: string }> = {
     title: 'Live Orders & Fulfillment',
     subtitle: 'Process student orders, print packing slips, and assign ST Courier AWBs',
   },
+  abandoned: {
+    title: 'Abandoned Carts Recovery',
+    subtitle: 'Recover dropped student checkouts with 1-click WhatsApp customer nudges',
+  },
   support: {
     title: 'Live Customer Support',
     subtitle: 'Real-time WhatsApp-style chat, incoming queue, and customer intelligence',

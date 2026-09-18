@@ -17,12 +17,14 @@ import {
   Activity,
   Headphones,
   Tag,
+  ShoppingBag,
 } from 'lucide-react';
 import { BrandLogo } from '@/components/ui/BrandLogo';
 
 export type AdminTab =
   | 'overview'
   | 'orders'
+  | 'abandoned'
   | 'support'
   | 'courier'
   | 'catalog'
@@ -35,6 +37,7 @@ export type AdminTab =
 export const ADMIN_TAB_KEYS: AdminTab[] = [
   'overview',
   'orders',
+  'abandoned',
   'support',
   'courier',
   'catalog',
@@ -80,6 +83,12 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
       icon: ShoppingCart,
       badge: pendingOrdersCount > 0 ? String(pendingOrdersCount) : undefined,
       badgeColor: 'bg-amber-500 text-white animate-pulse',
+    },
+    {
+      key: 'abandoned' as AdminTab,
+      label: 'Abandoned Carts',
+      subtitle: '1-click WhatsApp recovery',
+      icon: ShoppingBag,
     },
     {
       key: 'support' as AdminTab,

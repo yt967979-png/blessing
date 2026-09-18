@@ -27,6 +27,7 @@ import CouponsSection from '@/components/admin/CouponsSection';
 import AnalyticsSection from '@/components/admin/AnalyticsSection';
 import SystemHealthSection from '@/components/admin/SystemHealthSection';
 import { LiveSupportSection } from '@/components/admin/LiveSupportSection';
+import AbandonedCartsSection from '@/components/admin/AbandonedCartsSection';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface OrderItem { title: string; qty: number; price?: number; subtotal?: number; }
@@ -693,6 +694,14 @@ function AdminPageInner() {
               }}
               onAssignAwb={handleAssignAwb}
               onCancelOrder={handleCancelOrder}
+              onShowToast={showToast}
+            />
+          )}
+
+          {/* SECTION: ABANDONED CARTS */}
+          {activeTab === 'abandoned' && (
+            <AbandonedCartsSection
+              authHeaders={authHeaders(user)}
               onShowToast={showToast}
             />
           )}
