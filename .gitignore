@@ -25,6 +25,9 @@ server/node_modules
 # misc
 .DS_Store
 *.pem
+*.tar.gz
+*.tar
+*.zip
 
 # debug
 npm-debug.log*

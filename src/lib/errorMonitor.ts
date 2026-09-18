@@ -103,7 +103,7 @@ export async function getErrorDiagnostics() {
         redis.get('bpg:monitor:errors:api'),
       ]);
 
-      if (Array.isArray(listRaw) && listRaw.length > 0) {
+      if (Array.isArray(listRaw)) {
         errors = listRaw.map((s) => {
           try {
             return JSON.parse(s);
@@ -112,11 +112,11 @@ export async function getErrorDiagnostics() {
           }
         }).filter(Boolean);
       }
-      if (r5) fiveXx = parseInt(r5, 10);
-      if (r4) fourXx = parseInt(r4, 10);
-      if (rp) payments = parseInt(rp, 10);
-      if (rw) webhooks = parseInt(rw, 10);
-      if (ra) api = parseInt(ra, 10);
+      fiveXx = r5 ? parseInt(r5, 10) : 0;
+      fourXx = r4 ? parseInt(r4, 10) : 0;
+      payments = rp ? parseInt(rp, 10) : 0;
+      webhooks = rw ? parseInt(rw, 10) : 0;
+      api = ra ? parseInt(ra, 10) : 0;
     } catch {
       // Fallback to in-memory values
     }
