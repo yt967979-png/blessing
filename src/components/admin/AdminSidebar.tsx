@@ -138,9 +138,11 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
     },
     {
       key: 'health' as AdminTab,
-      label: 'System Health & Telemetry',
-      subtitle: 'Worker heartbeats & dead-letter queue',
+      label: 'Live System Monitor',
+      subtitle: 'Live users, traffic, server & errors',
       icon: Activity,
+      badge: 'LIVE',
+      badgeColor: 'bg-emerald-500 text-white font-black animate-pulse',
     },
   ];
 

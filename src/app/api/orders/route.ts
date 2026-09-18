@@ -17,6 +17,7 @@ import { blocksShippingActions, isOrderCancelled, logOrderStateTransition } from
 import { refundRazorpayPayment } from '@/lib/razorpayRefund';
 import { confirmStockHolds, recordConfirmedSale, shrinkConfirmedHold, releaseStockHolds } from '@/lib/stockHold';
 import { isValidMobileNumber, normalizeRequiredAlternateMobile } from '@/lib/authValidation';
+import { recordSystemError } from '@/lib/errorMonitor';
 
 /**
  * Money-safety net: payment is captured by Razorpay client-side BEFORE this
@@ -589,6 +590,13 @@ export async function POST(request: Request) {
       );
     }
 
+    void recordSystemError({
+      endpoint: '/api/orders [POST]',
+      status: 500,
+      message: err.message || 'Order creation failed',
+      isPaymentFailure: Boolean(paymentAlreadyVerified),
+    });
+
     return NextResponse.json({ error: err.message || 'Order failed' }, { status: 500 });
   } finally {
     releaseDbClient(client);
@@ -693,6 +701,11 @@ export async function PATCH(request: NextRequest) {
 
     return NextResponse.json({ success: true, orderId, status: newStatus, awbNumber, trackingUrl });
   } catch (err: any) {
+    void recordSystemError({
+      endpoint: '/api/orders [PATCH]',
+      status: 500,
+      message: err.message || 'Order update failed',
+    });
     return NextResponse.json({ error: err.message }, { status: 500 });
   } finally {
     releaseDbClient(client);

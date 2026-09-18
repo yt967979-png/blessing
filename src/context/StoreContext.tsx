@@ -334,6 +334,53 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setHydrated(true);
   }, []);
 
+  // Lightweight background visitor heartbeat ping for live system monitoring (runs every 25s when tab is visible)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    let lastPing = 0;
+    const sendPing = () => {
+      const now = Date.now();
+      if (now - lastPing < 10000) return; // debounce 10s min
+      lastPing = now;
+
+      let currentPath = window.location.pathname || '/';
+      if (isCheckoutOpen) currentPath = '/checkout';
+      else if (isCartOpen) currentPath = '/cart';
+
+      fetch('/api/track/ping', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: currentPath }),
+        keepalive: true,
+      }).catch(() => {});
+    };
+
+    // Initial ping on mount after slight delay so it doesn't compete with catalog fetch
+    const initialTimer = setTimeout(sendPing, 1500);
+
+    // Periodic heartbeat every 25s while tab is visible
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        sendPing();
+      }
+    }, 25000);
+
+    // Ping on re-focusing the tab
+    const handleVis = () => {
+      if (document.visibilityState === 'visible') {
+        sendPing();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVis);
+
+    return () => {
+      clearTimeout(initialTimer);
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVis);
+    };
+  }, [isCheckoutOpen, isCartOpen]);
+
   // Realtime stock push — SSE fed by Postgres LISTEN/NOTIFY (`/api/stock/stream`).
   // Every write that changes books.stock/status (admin edit, Razorpay hold
   // reserve/release, order placement, cancel restore) notifies this stream

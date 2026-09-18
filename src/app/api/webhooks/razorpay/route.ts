@@ -4,6 +4,7 @@ import { getDbClient, releaseDbClient } from '@/lib/db';
 import { isOrderCancelled } from '@/lib/orderStatus';
 import { refundRazorpayPayment } from '@/lib/razorpayRefund';
 import { confirmStockHolds, releaseStockHolds } from '@/lib/stockHold';
+import { recordSystemError } from '@/lib/errorMonitor';
 
 /**
  * Grace window before an orphan capture (payment succeeded, no matching order
@@ -67,6 +68,12 @@ export async function POST(request: Request) {
   const signature = request.headers.get('x-razorpay-signature') || '';
   if (!verifyWebhookSignature(rawBody, signature, webhookSecret)) {
     console.warn('[razorpay-webhook] SECURITY ALERT: Invalid webhook signature received');
+    void recordSystemError({
+      endpoint: '/api/webhooks/razorpay',
+      status: 400,
+      message: 'Invalid Razorpay webhook signature header received',
+      isWebhookFailure: true,
+    });
     try {
       const { queryDb } = await import('@/lib/db');
       await queryDb(
@@ -117,6 +124,12 @@ export async function POST(request: Request) {
     const failedEntity = event?.payload?.payment?.entity || null;
     const failedOrderId = String(failedEntity?.order_id || '').trim();
     if (failedOrderId) {
+      void recordSystemError({
+        endpoint: '/api/webhooks/razorpay',
+        status: 400,
+        message: `Payment failed for Razorpay order ${failedOrderId}: ${failedEntity?.error_description || 'Card/UPI declined by bank'}`,
+        isPaymentFailure: true,
+      });
       try {
         const result = await releaseStockHolds({ razorpayOrderId: failedOrderId }, 'payment_failed_webhook');
         return NextResponse.json({

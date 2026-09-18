@@ -9,6 +9,7 @@ import {
 import { priceCheckoutOrder } from '@/lib/checkoutPricing';
 import { verifyRazorpayPayment } from '@/lib/orderPricing';
 import { createStockHolds, attachRazorpayOrderId, releaseStockHolds, STOCK_HOLD_TTL_MINUTES } from '@/lib/stockHold';
+import { recordSystemError } from '@/lib/errorMonitor';
 
 export async function POST(request: Request) {
   const session = await getAuthenticatedUser(request);
@@ -172,11 +173,22 @@ export async function PUT(request: Request) {
     });
 
     if (!verified.ok) {
+      void recordSystemError({
+        endpoint: '/api/razorpay [PUT verify]',
+        status: 400,
+        message: `Payment signature verification failed: ${verified.error}`,
+        isPaymentFailure: true,
+      });
       return NextResponse.json({ verified: false, error: verified.error }, { status: 400 });
     }
 
     return NextResponse.json({ verified: true, expectedRupees: amount });
   } catch (err: any) {
+    void recordSystemError({
+      endpoint: '/api/razorpay',
+      status: 500,
+      message: err.message || 'Razorpay order error',
+    });
     return NextResponse.json({ verified: false, error: err.message }, { status: 500 });
   }
 }
