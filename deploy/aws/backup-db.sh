@@ -55,8 +55,21 @@ log "OK Backup created: ${BACKUP_FILE} (${SIZE})"
 # Keep last N days
 find "$BACKUP_DIR" -type f -name "blessing_db_*.sql.gz" -mtime "+${KEEP_DAYS}" -delete 2>/dev/null || true
 COUNT="$(find "$BACKUP_DIR" -type f -name 'blessing_db_*.sql.gz' | wc -l | tr -d ' ')"
-log "Retention: ${KEEP_DAYS} days — ${COUNT} backup file(s) on disk"
+log "Retention: ${KEEP_DAYS} days — ${COUNT} database backup file(s) on disk"
 echo "$BACKUP_FILE" > "${BACKUP_DIR}/LATEST"
+
+# Also archive persistent media & sample uploads (/public/uploads)
+UPLOADS_DIR="${UPLOADS_DIR:-/opt/blessing/public/uploads}"
+UPLOADS_BACKUP="${BACKUP_DIR}/blessing_uploads_${TIMESTAMP}.tar.gz"
+if [[ -d "$UPLOADS_DIR" ]]; then
+  if tar -czf "$UPLOADS_BACKUP" -C "$UPLOADS_DIR" . 2>/dev/null; then
+    chmod 600 "$UPLOADS_BACKUP" 2>/dev/null || true
+    UPLOADS_SIZE="$(du -h "$UPLOADS_BACKUP" | cut -f1)"
+    log "OK Uploads archive created: ${UPLOADS_BACKUP} (${UPLOADS_SIZE})"
+    echo "$UPLOADS_BACKUP" > "${BACKUP_DIR}/LATEST_UPLOADS"
+  fi
+  find "$BACKUP_DIR" -type f -name "blessing_uploads_*.tar.gz" -mtime "+${KEEP_DAYS}" -delete 2>/dev/null || true
+fi
 
 # Optional: Push offsite via rclone if configured (e.g. Backblaze B2, S3, Google Drive)
 if command -v rclone >/dev/null 2>&1 && rclone listremotes | grep -q 'bpg-offsite:'; then
