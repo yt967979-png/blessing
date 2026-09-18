@@ -42,20 +42,22 @@ function getDirSizeSync(dirPath: string): number {
   }
 }
 
-export async function GET(request: NextRequest) {
-  // 1. Verify ops authorization
+function isOpsAuthorized(request: NextRequest): boolean {
   const cookieToken = request.cookies.get('bpg_ops_session')?.value;
   const authHeader = request.headers.get('Authorization') || '';
   const headerToken = authHeader.startsWith('Bearer ') ? authHeader.substring(7).trim() : '';
   const pinHeader = request.headers.get('x-ops-pin');
   const expectedPin = (process.env.OPS_PIN || '789234').trim();
 
-  const isAuthorized =
+  return Boolean(
     (cookieToken && verifyOpsToken(cookieToken)) ||
     (headerToken && verifyOpsToken(headerToken)) ||
-    (pinHeader && pinHeader === expectedPin);
+    (pinHeader && pinHeader === expectedPin)
+  );
+}
 
-  if (!isAuthorized) {
+export async function GET(request: NextRequest) {
+  if (!isOpsAuthorized(request)) {
     return NextResponse.json({ error: 'Developer PIN or session required' }, { status: 401 });
   }
 
@@ -438,8 +440,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const isAuthed = await checkOpsAuth(request);
-  if (!isAuthed) {
+  if (!isOpsAuthorized(request)) {
     return NextResponse.json({ error: 'Unauthorized. PIN required.' }, { status: 401 });
   }
 
