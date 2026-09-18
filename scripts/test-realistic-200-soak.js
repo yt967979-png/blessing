@@ -18,8 +18,8 @@ const durationMinutes = Number(process.argv[4]) || 10; // Default 10 minutes soa
 
 const agent = new (targetBaseUrl.startsWith('https:') ? https.Agent : http.Agent)({
   keepAlive: true,
-  maxSockets: 500,
-  maxFreeSockets: 100,
+  maxSockets: Math.max(1200, concurrency * 2),
+  maxFreeSockets: 200,
   timeout: 15000,
 });
 
