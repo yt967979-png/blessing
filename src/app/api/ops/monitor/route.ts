@@ -5,7 +5,7 @@ import path from 'path';
 import { queryDb } from '@/lib/db';
 import { getRedisClient } from '@/lib/redis';
 import { getLiveMonitorMetrics } from '@/lib/visitorTracking';
-import { getErrorDiagnostics } from '@/lib/errorMonitor';
+import { getErrorDiagnostics, clearSystemErrors } from '@/lib/errorMonitor';
 import { verifyOpsToken } from '@/app/api/ops/auth/route';
 
 export const dynamic = 'force-dynamic';
@@ -435,4 +435,14 @@ export async function GET(request: NextRequest) {
     errors: errorDiagnostics,
     ecommerce: ecommerceToday,
   });
+}
+
+export async function DELETE(request: NextRequest) {
+  const isAuthed = await checkOpsAuth(request);
+  if (!isAuthed) {
+    return NextResponse.json({ error: 'Unauthorized. PIN required.' }, { status: 401 });
+  }
+
+  await clearSystemErrors();
+  return NextResponse.json({ ok: true, message: 'System error buffer cleared.' });
 }

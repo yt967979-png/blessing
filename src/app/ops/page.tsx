@@ -35,6 +35,7 @@ import {
   UserCheck,
   GraduationCap,
   Sparkles,
+  Trash2,
 } from 'lucide-react';
 
 interface MonitorPayload {
@@ -359,6 +360,26 @@ export default function OpsPage() {
       showToast('❌ Health endpoint probe failed');
     } finally {
       setTestingProbe(false);
+    }
+  };
+
+  const [clearingErrors, setClearingErrors] = useState(false);
+
+  const handleClearErrors = async () => {
+    if (!window.confirm('Clear all recorded system error logs and reset error counters?')) return;
+    setClearingErrors(true);
+    try {
+      const res = await fetch('/api/ops/monitor', { method: 'DELETE' });
+      if (res.ok) {
+        showToast('🧹 Error log buffer cleared');
+        void fetchSnapshot();
+      } else {
+        showToast('❌ Failed to clear error buffer');
+      }
+    } catch {
+      showToast('❌ Network error clearing error buffer');
+    } finally {
+      setClearingErrors(false);
     }
   };
 
@@ -1178,6 +1199,18 @@ export default function OpsPage() {
               <span className="px-2.5 py-1 rounded-full text-xs font-black bg-slate-800 text-slate-400">
                 Payment Drops: {monitor?.errors?.paymentFailures ?? 0}
               </span>
+              {((monitor?.errors?.recentErrors && monitor.errors.recentErrors.length > 0) || (monitor?.errors?.totalErrors || 0) > 0) && (
+                <button
+                  type="button"
+                  disabled={clearingErrors}
+                  onClick={handleClearErrors}
+                  className="px-3 py-1 bg-slate-800 hover:bg-rose-950/40 hover:text-rose-300 hover:border-rose-500/30 border border-slate-700 text-slate-300 rounded-full text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                  title="Clear all recorded errors"
+                >
+                  <Trash2 className="w-3 h-3" />
+                  <span>{clearingErrors ? 'Clearing...' : 'Clear Log'}</span>
+                </button>
+              )}
             </div>
           </div>
 

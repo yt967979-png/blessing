@@ -134,3 +134,28 @@ export async function getErrorDiagnostics() {
     recentErrors: errors.slice(0, 15),
   };
 }
+
+export async function clearSystemErrors() {
+  inMemoryErrors.length = 0;
+  count5xxToday = 0;
+  count4xxToday = 0;
+  countPaymentFailures = 0;
+  countWebhookFailures = 0;
+  countApiErrors = 0;
+
+  const redis = getRedisClient();
+  if (redis) {
+    try {
+      await Promise.all([
+        redis.del('bpg:monitor:errors:list'),
+        redis.del('bpg:monitor:errors:5xx'),
+        redis.del('bpg:monitor:errors:4xx'),
+        redis.del('bpg:monitor:errors:payment'),
+        redis.del('bpg:monitor:errors:webhook'),
+        redis.del('bpg:monitor:errors:api'),
+      ]);
+    } catch {
+      // ignore
+    }
+  }
+}
