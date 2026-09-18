@@ -406,6 +406,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           return item;
         }
         changed = true;
+        if (item.price !== newPrice) {
+          showToast(`⚡ Price update: "${item.title}" is now ₹${newPrice}`);
+        } else if (!upd.inStock && item.inStock) {
+          showToast(`⚠️ "${item.title}" is now Out of Stock`);
+        }
         return {
           ...item,
           stock: upd.stock,
@@ -461,7 +466,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
       return changed ? next : prev;
     });
-  }, []);
+  }, [showToast]);
 
   useEffect(() => {
     if (typeof window === 'undefined' || typeof EventSource === 'undefined') return;
