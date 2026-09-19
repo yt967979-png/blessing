@@ -203,12 +203,20 @@ export async function GET(request: Request) {
       return NextResponse.json([]);
     }
 
-    query += ` GROUP BY o.id ORDER BY o.ordered_at DESC`;
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1);
+    const defaultLimit = isAdminRequest ? 50 : 25;
+    const requestedLimit = parseInt(searchParams.get('limit') || String(defaultLimit), 10) || defaultLimit;
+    const limit = Math.min(Math.max(1, requestedLimit), isAdminRequest ? 100 : 50);
+    const offset = (page - 1) * limit;
+
+    query += ` GROUP BY o.id ORDER BY o.ordered_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+    params.push(limit, offset);
+
     const { queryDb } = await import('@/lib/db');
     const res = await queryDb(query, params);
     return NextResponse.json(res.rows.map(mapOrderRow));
   } catch (err: any) {
-    console.error('Error fetching orders from DB:', err.message);
+    console.error('Error fetching orders from DB:', err);
     return NextResponse.json({ error: 'Could not load orders' }, { status: 500 });
   }
 }
@@ -609,7 +617,7 @@ export async function POST(request: Request) {
       isPaymentFailure: Boolean(paymentAlreadyVerified),
     });
 
-    return NextResponse.json({ error: err.message || 'Order failed' }, { status: 500 });
+    return NextResponse.json({ error: 'Order could not be processed. Please try again or contact support.' }, { status: 500 });
   } finally {
     releaseDbClient(client);
   }
@@ -718,7 +726,7 @@ export async function PATCH(request: NextRequest) {
       status: 500,
       message: err.message || 'Order update failed',
     });
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to update order status' }, { status: 500 });
   } finally {
     releaseDbClient(client);
   }

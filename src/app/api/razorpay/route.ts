@@ -124,7 +124,7 @@ export async function POST(request: Request) {
     });
   } catch (err: any) {
     console.error('[Razorpay Route Error]', err);
-    return NextResponse.json({ error: err.message || 'Payment initiation failed' }, { status: 500 });
+    return NextResponse.json({ error: 'Payment initiation failed. Please try again later.' }, { status: 500 });
   }
 }
 
@@ -189,6 +189,6 @@ export async function PUT(request: Request) {
       status: 500,
       message: err.message || 'Razorpay order error',
     });
-    return NextResponse.json({ verified: false, error: err.message }, { status: 500 });
+    return NextResponse.json({ verified: false, error: 'Payment verification failed. Please contact support.' }, { status: 500 });
   }
 }

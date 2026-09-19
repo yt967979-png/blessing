@@ -1303,6 +1303,27 @@ async function runSchemaInit(client: any) {
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
+        CREATE TABLE IF NOT EXISTS review_votes (
+          id SERIAL PRIMARY KEY,
+          review_id INT NOT NULL,
+          voter_ip VARCHAR(64) NOT NULL,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+          CONSTRAINT uq_review_voter UNIQUE (review_id, voter_ip)
+        );
+        CREATE INDEX IF NOT EXISTS idx_review_votes_review_id ON review_votes (review_id);
+
+        CREATE TABLE IF NOT EXISTS abandoned_carts (
+          id VARCHAR(64) PRIMARY KEY,
+          user_id VARCHAR(255),
+          phone VARCHAR(20) NOT NULL,
+          name VARCHAR(255),
+          cart_json TEXT NOT NULL,
+          reminded BOOLEAN DEFAULT FALSE,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_abandoned_carts_phone ON abandoned_carts (phone);
+
         CREATE UNIQUE INDEX IF NOT EXISTS uq_orders_idempotency_key
           ON orders (idempotency_key) WHERE idempotency_key IS NOT NULL AND idempotency_key <> '';
 

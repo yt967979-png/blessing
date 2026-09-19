@@ -246,8 +246,7 @@ function HelpCenterContent() {
 
     let active = true;
     try {
-      const tokenParam = user?.token ? `&token=${encodeURIComponent(user.token)}` : '';
-      const streamUrl = `/api/support/stream?conversationId=${encodeURIComponent(conversation.id)}${tokenParam}`;
+      const streamUrl = `/api/support/stream?conversationId=${encodeURIComponent(conversation.id)}`;
       const es = new EventSource(streamUrl);
       eventSourceRef.current = es;
 

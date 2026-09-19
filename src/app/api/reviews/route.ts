@@ -152,9 +152,10 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
 
-    // Action: Helpful vote
+    // Action: Helpful vote (IP-deduplicated to prevent manipulation)
     if (body.action === 'vote_helpful') {
-      const rlVote = await applyRateLimitAsync(`vote_helpful:${clientIp(request)}`, 30, 60000);
+      const voterIp = clientIp(request) || 'unknown';
+      const rlVote = await applyRateLimitAsync(`vote_helpful:${voterIp}`, 30, 60000);
       if (!rlVote.allowed) {
         return NextResponse.json({ error: 'Too many votes. Please wait a minute.' }, { status: 429 });
       }
@@ -164,6 +165,25 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Review id is required.' }, { status: 400 });
       }
       await ensureReviewSchema(queryDb as any);
+
+      // Atomic insert — ON CONFLICT means same IP can only vote once per review
+      const voteRes = await queryDb(
+        `INSERT INTO review_votes (review_id, voter_ip) VALUES ($1, $2)
+         ON CONFLICT (review_id, voter_ip) DO NOTHING
+         RETURNING id`,
+        [reviewId, voterIp]
+      );
+
+      if (!voteRes.rows.length) {
+        // Already voted — return current count without incrementing
+        const cur = await queryDb(`SELECT helpful_count FROM reviews WHERE id = $1`, [reviewId]);
+        return NextResponse.json({
+          success: false,
+          alreadyVoted: true,
+          helpfulCount: Number(cur.rows[0]?.helpful_count || 0),
+        });
+      }
+
       const res = await queryDb(
         `UPDATE reviews SET helpful_count = COALESCE(helpful_count, 0) + 1 WHERE id = $1 RETURNING helpful_count`,
         [reviewId]

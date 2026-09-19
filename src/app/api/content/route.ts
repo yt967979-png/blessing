@@ -2,18 +2,7 @@ import { NextResponse } from 'next/server';
 import { tryGetDbClient, releaseDbClient } from '@/lib/db';
 import { verifyAdminRequest, forbiddenResponse } from '@/lib/serverSecurity';
 
-async function ensureFaqsTable(client: any) {
-  await client.query(`
-    CREATE TABLE IF NOT EXISTS faqs (
-      id VARCHAR(255) PRIMARY KEY,
-      question TEXT NOT NULL,
-      answer TEXT NOT NULL,
-      display_order INT DEFAULT 0,
-      status VARCHAR(50) DEFAULT 'active',
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-}
+
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -41,7 +30,7 @@ export async function GET(request: Request) {
       });
     }
 
-    await ensureFaqsTable(client);
+
 
     if (adminAll) {
       const auth = await verifyAdminRequest(request);
@@ -87,7 +76,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Database unavailable. Try again.' }, { status: 503 });
   }
   try {
-    await ensureFaqsTable(client);
     const id = `faq-${Date.now()}`;
     const res = await client.query(
       `INSERT INTO faqs (id, question, answer, display_order, status)
@@ -100,7 +88,8 @@ export async function POST(request: Request) {
     } catch (_) {}
     return NextResponse.json(res.rows[0], { status: 201 });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    console.error('[content POST error]', err);
+    return NextResponse.json({ error: 'Failed to create FAQ item' }, { status: 500 });
   } finally {
     releaseDbClient(client);
   }
@@ -119,7 +108,6 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: 'Database unavailable. Try again.' }, { status: 503 });
   }
   try {
-    await ensureFaqsTable(client);
     const fields: string[] = [];
     const values: any[] = [];
     let idx = 1;
@@ -151,7 +139,8 @@ export async function PATCH(request: Request) {
     } catch (_) {}
     return NextResponse.json(res.rows[0] || { success: true });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    console.error('[content PATCH error]', err);
+    return NextResponse.json({ error: 'Failed to update FAQ item' }, { status: 500 });
   } finally {
     releaseDbClient(client);
   }
@@ -177,7 +166,8 @@ export async function DELETE(request: Request) {
     } catch (_) {}
     return NextResponse.json({ success: true });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    console.error('[content DELETE error]', err);
+    return NextResponse.json({ error: 'Failed to delete FAQ item' }, { status: 500 });
   } finally {
     releaseDbClient(client);
   }

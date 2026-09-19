@@ -246,8 +246,7 @@ export const LiveSupportSection: React.FC<LiveSupportSectionProps> = ({
   // Real-time SSE listener (Persistent single connection — NEVER disconnects on conversation selection)
   useEffect(() => {
     if (!user) return;
-    const tokenParam = user?.token ? `&token=${encodeURIComponent(user.token)}` : '';
-    const es = new EventSource(`/api/support/stream?admin=1${tokenParam}`);
+    const es = new EventSource('/api/support/stream?admin=1');
 
     es.onmessage = (e) => {
       try {

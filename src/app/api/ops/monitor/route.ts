@@ -6,7 +6,7 @@ import { queryDb } from '@/lib/db';
 import { getRedisClient } from '@/lib/redis';
 import { getLiveMonitorMetrics } from '@/lib/visitorTracking';
 import { getErrorDiagnostics, clearSystemErrors } from '@/lib/errorMonitor';
-import { verifyOpsToken } from '@/app/api/ops/auth/route';
+import { verifyOpsToken, verifyOpsPin } from '@/app/api/ops/auth/route';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,14 +46,24 @@ function isOpsAuthorized(request: NextRequest): boolean {
   const cookieToken = request.cookies.get('bpg_ops_session')?.value;
   const authHeader = request.headers.get('Authorization') || '';
   const headerToken = authHeader.startsWith('Bearer ') ? authHeader.substring(7).trim() : '';
-  const pinHeader = request.headers.get('x-ops-pin');
-  const expectedPin = (process.env.OPS_PIN || '789234').trim();
+  const pinHeader = request.headers.get('x-ops-pin') || '';
 
-  return Boolean(
-    (cookieToken && verifyOpsToken(cookieToken)) ||
-    (headerToken && verifyOpsToken(headerToken)) ||
-    (pinHeader && pinHeader === expectedPin)
-  );
+  if ((cookieToken && verifyOpsToken(cookieToken)) || (headerToken && verifyOpsToken(headerToken))) {
+    return true;
+  }
+
+  // Timing-safe PIN comparison — no hardcoded fallback in production
+  if (pinHeader) {
+    try {
+      const expectedPin = (process.env.OPS_PIN || '').trim();
+      if (!expectedPin) return false;
+      return verifyOpsPin(pinHeader, expectedPin);
+    } catch {
+      return false;
+    }
+  }
+
+  return false;
 }
 
 export async function GET(request: NextRequest) {

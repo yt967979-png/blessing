@@ -17,20 +17,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Database unavailable' }, { status: 503 });
     }
 
-    // Ensure table exists
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS abandoned_carts (
-        id VARCHAR(64) PRIMARY KEY,
-        user_id VARCHAR(255),
-        phone VARCHAR(20) NOT NULL,
-        name VARCHAR(255),
-        cart_json TEXT NOT NULL,
-        reminded BOOLEAN DEFAULT FALSE,
-        created_at TIMESTAMPTZ DEFAULT NOW(),
-        updated_at TIMESTAMPTZ DEFAULT NOW()
-      )
-    `);
-
     // Fetch top 100 recent abandoned carts
     // ONLY marked as converted / recovered IF reminded = TRUE (we contacted them) and order was placed
     const res = await client.query(`

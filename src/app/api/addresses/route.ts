@@ -44,7 +44,8 @@ export async function GET(request: Request) {
     );
     return NextResponse.json(res.rows.map(mapAddress));
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    console.error('[addresses GET error]', err);
+    return NextResponse.json({ error: 'Failed to load addresses' }, { status: 500 });
   }
 }
 
@@ -115,7 +116,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json(mapAddress(res.rows[0]), { status: 201 });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    console.error('[addresses POST error]', err);
+    return NextResponse.json({ error: 'Failed to save address' }, { status: 500 });
   }
 }
 
@@ -214,7 +216,8 @@ export async function PATCH(request: Request) {
     }
     return NextResponse.json(mapAddress(res.rows[0]));
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    console.error('[addresses PATCH error]', err);
+    return NextResponse.json({ error: 'Failed to update address' }, { status: 500 });
   }
 }
 
@@ -237,6 +240,7 @@ export async function DELETE(request: Request) {
     }
     return NextResponse.json({ success: true, deletedId: id });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    console.error('[addresses DELETE error]', err);
+    return NextResponse.json({ error: 'Failed to delete address' }, { status: 500 });
   }
 }

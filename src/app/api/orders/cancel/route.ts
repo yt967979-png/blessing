@@ -62,6 +62,7 @@ export async function POST(request: NextRequest) {
           : 'Order cancelled.',
     });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || 'Cancel failed' }, { status: 500 });
+    console.error('[order-cancel error]', err);
+    return NextResponse.json({ error: 'Order cancellation failed. Please contact support.' }, { status: 500 });
   }
 }

@@ -99,6 +99,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Failed to save file to VPS storage' }, { status: 500 });
     }
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || 'Upload failed' }, { status: 500 });
+    console.error('[upload] error:', err);
+    return NextResponse.json({ error: 'Upload failed. Please try again.' }, { status: 500 });
   }
 }

@@ -254,34 +254,6 @@ async function persistCourierEvents(
   events: Array<{ time: string; activity: string; location: string }>
 ) {
   try {
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS courier_tracking (
-        id VARCHAR(255) PRIMARY KEY,
-        order_id VARCHAR(255),
-        awb_number VARCHAR(255),
-        docket_number VARCHAR(255),
-        status VARCHAR(255),
-        current_status VARCHAR(255),
-        location VARCHAR(255),
-        remarks TEXT,
-        event_time TIMESTAMP,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-    for (const col of [
-      `ALTER TABLE courier_tracking ADD COLUMN IF NOT EXISTS awb_number VARCHAR(255)`,
-      `ALTER TABLE courier_tracking ADD COLUMN IF NOT EXISTS status VARCHAR(255)`,
-      `ALTER TABLE courier_tracking ADD COLUMN IF NOT EXISTS location VARCHAR(255)`,
-      `ALTER TABLE courier_tracking ADD COLUMN IF NOT EXISTS remarks TEXT`,
-      `ALTER TABLE courier_tracking ADD COLUMN IF NOT EXISTS event_time TIMESTAMP`,
-      `ALTER TABLE courier_tracking ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`,
-      `ALTER TABLE courier_tracking ADD COLUMN IF NOT EXISTS docket_number VARCHAR(255)`,
-    ]) {
-      try {
-        await client.query(col);
-      } catch (_) {}
-    }
     for (const ev of events.slice(0, 30)) {
       const id = `ct-${docket}-${Buffer.from(`${ev.time}|${ev.activity}`).toString('base64url').slice(0, 24)}`;
       await client.query(

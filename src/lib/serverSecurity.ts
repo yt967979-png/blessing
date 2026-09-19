@@ -254,7 +254,11 @@ export function verifyOriginOrReferer(request: Request): { valid: boolean; error
   const target = origin || referer || '';
   try {
     const parsed = new URL(target);
-    if (host && (parsed.host === host || parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1')) {
+    if (host && parsed.host === host) {
+      return { valid: true };
+    }
+    // Only allow localhost in development — never in production
+    if (process.env.NODE_ENV !== 'production' && (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1')) {
       return { valid: true };
     }
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;

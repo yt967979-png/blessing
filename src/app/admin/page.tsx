@@ -412,9 +412,7 @@ function AdminPageInner() {
     const connectOrdersStream = () => {
       if (!active) return;
       try {
-        const streamUrl = user?.token
-          ? `/api/orders/stream?token=${encodeURIComponent(user.token)}`
-          : '/api/orders/stream';
+        const streamUrl = '/api/orders/stream';
         esOrders = new EventSource(streamUrl);
         esOrders.onmessage = (event) => {
           try {

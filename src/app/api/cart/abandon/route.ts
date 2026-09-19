@@ -3,21 +3,6 @@ import { getDbClient, releaseDbClient } from '@/lib/db';
 import { getAuthenticatedUser, applyRateLimitAsync, clientIp } from '@/lib/serverSecurity';
 import { normalizeMobileDigits } from '@/lib/authValidation';
 
-async function ensureAbandonTable(client: any) {
-  await client.query(`
-    CREATE TABLE IF NOT EXISTS abandoned_carts (
-      id VARCHAR(64) PRIMARY KEY,
-      user_id VARCHAR(255),
-      phone VARCHAR(20) NOT NULL,
-      name VARCHAR(255),
-      cart_json TEXT NOT NULL,
-      reminded BOOLEAN DEFAULT FALSE,
-      created_at TIMESTAMPTZ DEFAULT NOW(),
-      updated_at TIMESTAMPTZ DEFAULT NOW()
-    )
-  `);
-}
-
 /** Ping: save abandoned cart snapshot (no messaging). */
 export async function POST(request: NextRequest) {
   const rl = await applyRateLimitAsync(`abandon:${clientIp(request)}`, 20, 60000);
@@ -35,7 +20,6 @@ export async function POST(request: NextRequest) {
     // If cart is emptied or cleared, immediately delete from abandoned_carts
     if (phone.length === 10 && (cart.length === 0 || body.cleared === true)) {
       client = await getDbClient();
-      await ensureAbandonTable(client);
       const id = `ac-${phone}`;
       await client.query(
         `DELETE FROM abandoned_carts WHERE id = $1 OR phone = $2 OR (user_id IS NOT NULL AND user_id = $3)`,
@@ -49,7 +33,6 @@ export async function POST(request: NextRequest) {
     }
 
     client = await getDbClient();
-    await ensureAbandonTable(client);
     const id = `ac-${phone}`;
     await client.query(
       `INSERT INTO abandoned_carts (id, user_id, phone, name, cart_json, reminded, updated_at)

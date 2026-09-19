@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { verifyOpsToken } from '@/app/api/ops/auth/route';
+import { verifyOpsToken, verifyOpsPin } from '@/app/api/ops/auth/route';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -8,13 +8,14 @@ export async function GET(request: NextRequest) {
   const cookieToken = request.cookies.get('bpg_ops_session')?.value;
   const authHeader = request.headers.get('Authorization') || '';
   const headerToken = authHeader.startsWith('Bearer ') ? authHeader.substring(7).trim() : '';
-  const pinHeader = request.headers.get('x-ops-pin');
-  const expectedPin = (process.env.OPS_PIN || '789234').trim();
+  const pinHeader = request.headers.get('x-ops-pin') || '';
+  const expectedPin = (process.env.OPS_PIN || '').trim();
 
+  const isPinValid = Boolean(expectedPin && pinHeader && verifyOpsPin(pinHeader, expectedPin));
   const isAuthorized =
     (cookieToken && verifyOpsToken(cookieToken)) ||
     (headerToken && verifyOpsToken(headerToken)) ||
-    (pinHeader && pinHeader === expectedPin);
+    isPinValid;
 
   if (!isAuthorized) {
     return new Response('Unauthorized Ops Session', { status: 401 });

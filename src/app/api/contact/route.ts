@@ -38,23 +38,6 @@ export async function POST(request: Request) {
 
     client = await tryGetDbClient();
     if (client) {
-      if (!contactTableEnsured) {
-        await client.query(`
-          CREATE TABLE IF NOT EXISTS contact_submissions (
-            id SERIAL PRIMARY KEY,
-            contact_id VARCHAR(100) UNIQUE,
-            name VARCHAR(255) NOT NULL,
-            email VARCHAR(255),
-            phone VARCHAR(50) NOT NULL,
-            subject VARCHAR(255),
-            message TEXT NOT NULL,
-            status VARCHAR(50) DEFAULT 'unread',
-            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-          );
-        `);
-        contactTableEnsured = true;
-      }
-
       await client.query(
         `INSERT INTO contact_submissions (contact_id, name, email, phone, subject, message)
          VALUES ($1, $2, $3, $4, $5, $6)`,
@@ -68,7 +51,8 @@ export async function POST(request: Request) {
       contactId,
     });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || 'Server error processing contact message' }, { status: 500 });
+    console.error('[contact error]', err);
+    return NextResponse.json({ error: 'Server error processing contact message. Please try again.' }, { status: 500 });
   } finally {
     releaseDbClient(client);
   }

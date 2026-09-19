@@ -414,7 +414,7 @@ export default function OpsPage() {
                 className="w-full bg-[#132238] border border-slate-700 focus:border-blue-500 rounded-2xl px-4 py-3.5 text-center text-xl font-mono tracking-widest text-white placeholder:text-slate-600 outline-none transition-colors"
               />
               <p className="text-[10px] text-slate-500 mt-2 text-center">
-                Default PIN: <code className="text-blue-400 font-mono">789234</code> (Configurable via <code className="text-slate-400 font-mono">OPS_PIN</code> in /etc/blessing.env)
+                Configured securely via <code className="text-slate-400 font-mono">OPS_PIN</code> environment secret
               </p>
             </div>
 

@@ -12,7 +12,7 @@ function isProductionRuntime(): boolean {
 
 let sessionSecret: string | null = null;
 
-function getSessionSecret(): string {
+export function getSessionSecret(): string {
   if (sessionSecret) return sessionSecret;
   // Never fall back to Razorpay secret — that couples payment keys to session crypto.
   const secret = process.env.SESSION_SECRET;
@@ -162,10 +162,5 @@ export function getTokenFromRequest(request: Request): string | null {
   const cookieHeader = request.headers.get('cookie') || '';
   const fromCookie = cookieValue(cookieHeader, 'bpg_session');
   if (fromCookie) return fromCookie;
-  try {
-    const url = new URL(request.url);
-    const queryToken = url.searchParams.get('token');
-    if (queryToken) return queryToken.trim();
-  } catch (_) {}
   return null;
 }
