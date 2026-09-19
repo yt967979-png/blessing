@@ -56,6 +56,8 @@ export function getCatalogCacheTtlMs(): number {
 export function getCatalogCdnHeaders(): Record<string, string> {
   return {
     'Cache-Control': 'public, max-age=60, s-maxage=300, stale-while-revalidate=600',
+    'CDN-Cache-Control': 'max-age=300, stale-while-revalidate=600',
+    'Cloudflare-CDN-Cache-Control': 'max-age=300, stale-while-revalidate=600',
     Vary: 'Accept-Encoding',
   };
 }
