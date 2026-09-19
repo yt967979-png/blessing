@@ -18,15 +18,17 @@ export function getRedisClient(): Redis | null {
   const url = getRedisUrl();
   if (!url) return null;
 
-  const now = Date.now();
-  if (!redisClient && now - lastConnectionAttempt > RECONNECT_COOLDOWN_MS) {
-    lastConnectionAttempt = now;
+  if (!redisClient || redisClient.status === 'end') {
     try {
       const client = new Redis(url, {
-        retryStrategy: () => null, // Do not hang with infinite reconnect loops
+        retryStrategy: (times) => {
+          // Automatic resilient reconnect: retry every 1-3 seconds
+          if (times > 50) return 5000;
+          return Math.min(times * 500, 2000);
+        },
         maxRetriesPerRequest: 1,
-        connectTimeout: 800,
-        lazyConnect: true,
+        connectTimeout: 1000,
+        lazyConnect: false,
         enableOfflineQueue: false,
       });
 
@@ -35,6 +37,10 @@ export function getRedisClient(): Redis | null {
           console.warn('[redis] connection error:', err?.message || err);
         }
         isRedisAvailable = false;
+      });
+
+      client.on('ready', () => {
+        isRedisAvailable = true;
       });
 
       client.on('connect', () => {
@@ -46,10 +52,12 @@ export function getRedisClient(): Redis | null {
         isRedisAvailable = false;
       });
 
-      redisClient = client;
-      client.connect().catch(() => {
+      client.on('end', () => {
         isRedisAvailable = false;
+        redisClient = null;
       });
+
+      redisClient = client;
     } catch (err: any) {
       console.warn('[redis] init failed:', err?.message || err);
       redisClient = null;
