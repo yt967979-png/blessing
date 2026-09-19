@@ -170,6 +170,7 @@ async function runRealisticSoak() {
   let window5xx = 0;
   let windowTimeouts = 0;
 
+  const reportIntervalMs = durationSec <= 180 ? 15000 : 60000;
   const reportingTimer = setInterval(async () => {
     const elapsedSec = Math.round((Date.now() - (endTime - durationSec * 1000)) / 1000);
     const m = Math.floor(elapsedSec / 60);
@@ -177,7 +178,7 @@ async function runRealisticSoak() {
     const timeStr = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 
     const windowP = calculatePercentiles(windowLatencies);
-    const windowRps = (windowLatencies.length / 60).toFixed(1);
+    const windowRps = (windowLatencies.length / (reportIntervalMs / 1000)).toFixed(1);
 
     // Live health probe
     const probe = await makeRequest({ method: 'GET', path: '/api/ready', name: 'Probe' }, 'monitor');
@@ -195,7 +196,7 @@ async function runRealisticSoak() {
     window2xx = 0;
     window5xx = 0;
     windowTimeouts = 0;
-  }, 60000);
+  }, reportIntervalMs);
 
   // User session simulator
   async function simulateUserSession(sessionIndex) {

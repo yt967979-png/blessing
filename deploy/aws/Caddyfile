@@ -26,7 +26,7 @@ blessingpowerguide.in {
 	handle @sse {
 		reverse_proxy 127.0.0.1:3000 127.0.0.1:3001 {
 			lb_policy round_robin
-			lb_try_duration 2s
+			lb_try_duration 6s
 			flush_interval -1
 			header_down X-Proxy-Upstream {upstream_hostport}
 		}
@@ -35,11 +35,15 @@ blessingpowerguide.in {
 	handle {
 		reverse_proxy 127.0.0.1:3000 127.0.0.1:3001 {
 			lb_policy round_robin
-			lb_try_duration 2s
+			lb_try_duration 6s
 			health_uri /api/health
-			health_interval 5s
-			health_timeout 2s
+			health_interval 10s
+			health_timeout 5s
 			header_down X-Proxy-Upstream {upstream_hostport}
+			transport http {
+				keepalive 60s
+				keepalive_idle_conns 250
+			}
 		}
 	}
 
