@@ -572,7 +572,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         } catch {}
         es = null;
         if (!stopped) {
-          clearTimeout(retryTimer);
+          if (retryTimer) clearTimeout(retryTimer);
           retryTimer = setTimeout(connect, 15000);
         }
       };
