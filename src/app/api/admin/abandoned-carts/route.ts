@@ -129,3 +129,34 @@ export async function PATCH(request: NextRequest) {
     releaseDbClient(client);
   }
 }
+
+export async function DELETE(request: NextRequest) {
+  const auth = await verifyAdminRequest(request);
+  if (!auth.isAdmin) {
+    if (!auth.user) return unauthorizedResponse('Admin login required');
+    return forbiddenResponse('Admin privileges required');
+  }
+
+  const { searchParams } = new URL(request.url);
+  const id = searchParams.get('id');
+  if (!id) {
+    return NextResponse.json({ error: 'Missing cart ID' }, { status: 400 });
+  }
+
+  let client: any = null;
+  try {
+    client = await getDbClient();
+    if (!client) {
+      return NextResponse.json({ error: 'Database unavailable' }, { status: 503 });
+    }
+
+    await client.query(`DELETE FROM abandoned_carts WHERE id = $1`, [id]);
+    return NextResponse.json({ ok: true, deleted: id });
+  } catch (err: any) {
+    console.error('Failed to delete abandoned cart:', err);
+    return NextResponse.json({ error: err.message || 'Internal error' }, { status: 500 });
+  } finally {
+    releaseDbClient(client);
+  }
+}
+

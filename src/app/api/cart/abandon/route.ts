@@ -33,6 +33,19 @@ export async function POST(request: NextRequest) {
     const phone = normalizeMobileDigits(String(body.phone || ''));
     const name = String(body.name || 'Student').trim().slice(0, 80);
     const cart = Array.isArray(body.cart) ? body.cart.slice(0, 20) : [];
+
+    // If cart is emptied or cleared, remove from abandoned_carts
+    if (phone.length === 10 && (cart.length === 0 || body.cleared === true)) {
+      client = await getDbClient();
+      await ensureAbandonTable(client);
+      const id = `ac-${phone}`;
+      await client.query(
+        `DELETE FROM abandoned_carts WHERE id = $1 OR phone = $2 OR (user_id IS NOT NULL AND user_id = $3)`,
+        [id, phone, session.userId]
+      );
+      return NextResponse.json({ ok: true, cleared: true });
+    }
+
     if (phone.length !== 10 || cart.length === 0) {
       return NextResponse.json({ ok: true, skipped: true });
     }

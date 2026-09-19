@@ -12,6 +12,7 @@ import {
   ArrowUpRight,
   TrendingUp,
   CheckCheck,
+  Trash2,
 } from 'lucide-react';
 
 interface AbandonedCartItem {
@@ -104,6 +105,25 @@ export const AbandonedCartsSection: React.FC<AbandonedCartsSectionProps> = ({
         prev.map((c) => (c.id === cart.id ? { ...c, reminded: cart.reminded } : c))
       );
       onShowToast('❌ Network error updating status');
+    }
+  };
+
+  const deleteCart = async (cart: AbandonedCart) => {
+    setCarts((prev) => prev.filter((c) => c.id !== cart.id));
+    try {
+      const res = await fetch(`/api/admin/abandoned-carts?id=${encodeURIComponent(cart.id)}`, {
+        method: 'DELETE',
+        headers: authHeaders,
+      });
+      if (res.ok) {
+        onShowToast('🗑️ Cart dismissed');
+      } else {
+        fetchCarts();
+        onShowToast('❌ Failed to dismiss cart');
+      }
+    } catch {
+      fetchCarts();
+      onShowToast('❌ Network error dismissing cart');
     }
   };
 
@@ -389,6 +409,15 @@ export const AbandonedCartsSection: React.FC<AbandonedCartsSectionProps> = ({
                     title={cart.reminded ? 'Mark un-contacted' : 'Mark as contacted'}
                   >
                     {cart.reminded ? 'Contacted ✓' : 'Mark Done'}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => void deleteCart(cart)}
+                    className="p-2.5 rounded-xl border border-slate-200 text-slate-400 hover:text-rose-600 hover:border-rose-200 hover:bg-rose-50 transition-colors cursor-pointer"
+                    title="Dismiss / Delete cart"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
               </div>

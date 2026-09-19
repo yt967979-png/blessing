@@ -1540,10 +1540,28 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setCheckoutTotal(cartGrandTotal);
   }, [cartGrandTotal]);
 
-  /** Debounced abandoned-cart ping (analytics only — no SMS / no bot messages). */
+  /** Debounced abandoned-cart sync (captures cart on addition, clears on empty). */
   useEffect(() => {
-    if (!hydrated || !user?.phone || cart.length === 0) return;
+    if (!hydrated || !user?.phone) return;
+    const isCartEmpty = cart.length === 0;
     const t = setTimeout(() => {
+      if (isCartEmpty) {
+        fetch('/api/cart/abandon', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(user.token ? { Authorization: `Bearer ${user.token}` } : {}),
+          },
+          body: JSON.stringify({
+            phone: user.phone,
+            name: user.name,
+            cart: [],
+            cleared: true,
+          }),
+        }).catch(() => {});
+        return;
+      }
+
       fetch('/api/cart/abandon', {
         method: 'POST',
         headers: {
@@ -1556,7 +1574,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           cart: cart.map((c) => ({ id: c.id, title: c.title, qty: c.qty, price: c.price })),
         }),
       }).catch(() => {});
-    }, 8000);
+    }, isCartEmpty ? 500 : 8000);
     return () => clearTimeout(t);
   }, [hydrated, user?.phone, user?.name, user?.token, cart]);
 
