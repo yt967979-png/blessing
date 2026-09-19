@@ -1524,6 +1524,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || 'Update failed');
       }
+      try {
+        sessionStorage.removeItem(CATALOG_CACHE_KEY);
+      } catch {}
       refreshProducts(true);
       showToast(
         rest.stock !== undefined
