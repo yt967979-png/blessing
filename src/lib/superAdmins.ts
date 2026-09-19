@@ -1,15 +1,25 @@
-/** Shop owners who are always Super Admin (Make Admin). Extra addresses via SUPER_ADMIN_EMAILS. */
-export const OWNER_SUPER_ADMIN_EMAILS = [
-  'jeevadj1111@gmail.com',
-  'yogesh234456@gmail.com',
-];
-
-export function configuredSuperAdminEmails(): string[] {
-  const extra = String(process.env.SUPER_ADMIN_EMAILS || process.env.SUPER_ADMIN_EMAIL || '')
+/**
+ * Shop owners who have Super Admin permissions.
+ * Configurable via SUPER_ADMIN_EMAILS environment variable in production.
+ */
+function resolveSuperAdminEmails(): string[] {
+  const envEmails = String(process.env.SUPER_ADMIN_EMAILS || process.env.SUPER_ADMIN_EMAIL || '')
     .split(/[,;]+/)
     .map((s) => s.toLowerCase().trim())
     .filter(Boolean);
-  return [...new Set([...OWNER_SUPER_ADMIN_EMAILS, ...extra])];
+
+  if (envEmails.length > 0) {
+    return [...new Set(envEmails)];
+  }
+
+  // Fallback if environment variable is not explicitly populated
+  return ['jeevadj1111@gmail.com', 'yogesh234456@gmail.com'];
+}
+
+export const OWNER_SUPER_ADMIN_EMAILS = resolveSuperAdminEmails();
+
+export function configuredSuperAdminEmails(): string[] {
+  return resolveSuperAdminEmails();
 }
 
 export function isConfiguredSuperAdminEmail(email: string): boolean {

@@ -61,11 +61,8 @@ function cookieValue(cookieHeader: string, name: string): string | null {
 export function getDeviceIdFromRequest(request: Request): string | null {
   const fromCookie = cookieValue(request.headers.get('cookie') || '', DEVICE_COOKIE_NAME);
   if (fromCookie) return fromCookie;
-  try {
-    const url = new URL(request.url);
-    const queryDevice = url.searchParams.get('deviceId');
-    if (queryDevice) return queryDevice.trim();
-  } catch (_) {}
+  const headerDevice = request.headers.get('x-device-id');
+  if (headerDevice) return headerDevice.trim();
   return null;
 }
 

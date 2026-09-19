@@ -247,7 +247,15 @@ export function verifyOriginOrReferer(request: Request): { valid: boolean; error
   const host = request.headers.get('host');
 
   if (!origin && !referer) {
-    // Non-browser or direct server calls allowed if authorized via HMAC token / session
+    const method = String(request.method || 'GET').toUpperCase();
+    const isMutating = method !== 'GET' && method !== 'HEAD';
+    const hasSessionCookie = Boolean(request.headers.get('cookie')?.includes('bpg_session'));
+    const isProd = process.env.NODE_ENV === 'production';
+
+    // In production, cookie-authenticated mutating requests MUST provide a valid Origin or Referer
+    if (isProd && isMutating && hasSessionCookie) {
+      return { valid: false, error: 'Origin or Referer header required for state-changing browser requests.' };
+    }
     return { valid: true };
   }
 

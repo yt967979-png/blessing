@@ -392,7 +392,7 @@ export async function POST(request: Request) {
       );
     }
     const status = msg.includes('connect') || msg.includes('timeout') ? 503 : 500;
-    return NextResponse.json({ error: msg }, { status });
+    return NextResponse.json({ error: 'Failed to add product. Please try again.' }, { status });
   }
 }
 
@@ -506,7 +506,7 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ success: true, id });
   } catch (err: any) {
     console.error('PATCH /api/products failed:', err?.message || err);
-    return NextResponse.json({ error: err?.message || 'Update failed' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to update product. Please try again.' }, { status: 500 });
   }
 }
 
@@ -529,6 +529,6 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ success: true, deletedId: id });
   } catch (err: any) {
     console.error('DELETE /api/products failed:', err?.message || err);
-    return NextResponse.json({ error: err?.message || 'Delete failed' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to delete product. Please try again.' }, { status: 500 });
   }
 }
