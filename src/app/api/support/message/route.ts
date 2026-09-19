@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
 
     // If an unassigned conversation is replied to by an admin, auto-claim it for that admin
     if (isAdmin && !conv.assigned_admin_id) {
-      const adminName = user?.name || (user?.role === 'super_admin' ? 'Super Admin' : 'Support Admin');
+      const adminName = user?.role === 'super_admin' ? 'Super Admin' : 'Support Admin';
       await queryDb(
         `UPDATE support_conversations 
          SET assigned_admin_id = $1, assigned_admin_name = $2, status = 'ACTIVE', updated_at = NOW() 
@@ -121,7 +121,7 @@ export async function POST(req: NextRequest) {
     }
 
     const senderType: 'ADMIN' | 'CUSTOMER' = isAdmin ? 'ADMIN' : 'CUSTOMER';
-    const senderName = isAdmin ? (user?.name || conv.assigned_admin_name || 'Support Admin') : (conv.customer_name || 'Customer');
+    const senderName = isAdmin ? (conv.assigned_admin_name || (user?.role === 'super_admin' ? 'Super Admin' : 'Support Admin')) : (conv.customer_name || 'Customer');
     const msgId = `msg_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
 
     try {
