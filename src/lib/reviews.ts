@@ -25,18 +25,25 @@ async function execQuery(client: any, sql: string, params?: any[]): Promise<any>
   return queryDb(sql, params);
 }
 
+let schemaChecked = false;
 export async function ensureReviewSchema(client: any) {
-  await execQuery(client, `
-    ALTER TABLE reviews ADD COLUMN IF NOT EXISTS user_id VARCHAR(255);
-    ALTER TABLE reviews ADD COLUMN IF NOT EXISTS order_id VARCHAR(255);
-    ALTER TABLE reviews ADD COLUMN IF NOT EXISTS images JSONB DEFAULT '[]'::jsonb;
-    ALTER TABLE reviews ADD COLUMN IF NOT EXISTS helpful_count INT DEFAULT 0;
-    ALTER TABLE reviews ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
-    ALTER TABLE reviews ADD COLUMN IF NOT EXISTS verified_purchase BOOLEAN DEFAULT TRUE;
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_reviews_user_book
-      ON reviews (user_id, book_id)
-      WHERE user_id IS NOT NULL AND book_id IS NOT NULL;
-  `);
+  if (schemaChecked) return;
+  schemaChecked = true;
+  try {
+    await execQuery(client, `
+      ALTER TABLE reviews ADD COLUMN IF NOT EXISTS user_id VARCHAR(255);
+      ALTER TABLE reviews ADD COLUMN IF NOT EXISTS order_id VARCHAR(255);
+      ALTER TABLE reviews ADD COLUMN IF NOT EXISTS images JSONB DEFAULT '[]'::jsonb;
+      ALTER TABLE reviews ADD COLUMN IF NOT EXISTS helpful_count INT DEFAULT 0;
+      ALTER TABLE reviews ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+      ALTER TABLE reviews ADD COLUMN IF NOT EXISTS verified_purchase BOOLEAN DEFAULT TRUE;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_reviews_user_book
+        ON reviews (user_id, book_id)
+        WHERE user_id IS NOT NULL AND book_id IS NOT NULL;
+    `);
+  } catch {
+    // Schema already guaranteed by initDb()
+  }
 }
 
 function parseImages(raw: unknown): string[] {
