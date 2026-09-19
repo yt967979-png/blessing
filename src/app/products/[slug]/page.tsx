@@ -2,8 +2,16 @@ import type { Metadata } from 'next';
 import ProductDetailClient from './ProductDetailClient';
 import { queryDb } from '@/lib/db';
 import { isBookInStock } from '@/lib/stock';
+import { redisGetJson, redisSetJson } from '@/lib/redis';
+
+// Next.js ISR: cache rendered HTML on server for 60 seconds (drastically lowers CPU usage)
+export const revalidate = 60;
 
 type Props = { params: Promise<{ slug: string }> };
+
+// In-process cache to avoid DB roundtrips for repeated requests
+const metaMemoryCache = new Map<string, { data: any; timestamp: number }>();
+const META_TTL_MS = 60_000; // 1 minute local process cache
 
 function trimDescription(text: string | null | undefined, maxChars = 155): string {
   if (!text) return '';
@@ -15,6 +23,25 @@ function trimDescription(text: string | null | undefined, maxChars = 155): strin
 }
 
 async function getBookMeta(slug: string) {
+  const cleanSlug = String(slug || '').trim().toLowerCase();
+  const now = Date.now();
+
+  // 1. Check local process memory cache
+  const mem = metaMemoryCache.get(cleanSlug);
+  if (mem && now - mem.timestamp < META_TTL_MS) {
+    return mem.data;
+  }
+
+  // 2. Check Redis cache
+  try {
+    const redisVal = await redisGetJson<any>(`book_meta:${cleanSlug}`);
+    if (redisVal) {
+      metaMemoryCache.set(cleanSlug, { data: redisVal, timestamp: now });
+      return redisVal;
+    }
+  } catch {}
+
+  // 3. Fall back to PostgreSQL query
   try {
     const res = await queryDb(
       `SELECT b.id, b.slug, b.title, b.description,
@@ -47,10 +74,15 @@ async function getBookMeta(slug: string) {
       : classMatch
         ? classMatch[0].toLowerCase()
         : '10th';
-    return {
+    const result = {
       ...row,
       class_standard: extractedClass,
     };
+
+    metaMemoryCache.set(cleanSlug, { data: result, timestamp: now });
+    void redisSetJson(`book_meta:${cleanSlug}`, result, 300);
+
+    return result;
   } catch (err) {
     console.error('getBookMeta error for slug', slug, err);
     return null;
@@ -125,6 +157,49 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     alternates: {
       canonical: canonicalUrl,
     },
+  };
+}
+
+function mapBookToClientProduct(book: any) {
+  if (!book) return null;
+  const mrp = Number(book.price) || 0;
+  const rawSale = book.discount_price == null || book.discount_price === '' ? NaN : Number(book.discount_price);
+  const hasSale = Number.isFinite(rawSale) && rawSale > 0 && rawSale < mrp;
+  const price = hasSale ? rawSale : mrp;
+  const discount = hasSale && mrp > 0 ? Math.round(((mrp - price) / mrp) * 100) : 0;
+  const safeImg =
+    book.cover_image &&
+    !String(book.cover_image).startsWith('data:') &&
+    String(book.cover_image).length <= 2048
+      ? String(book.cover_image)
+      : 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80';
+
+  return {
+    id: book.id,
+    slug: book.slug || book.id,
+    title: book.title,
+    subtitle: `${book.class_standard || '10th'} Standard Guide`,
+    cls: book.class_standard || '10th',
+    category: book.category_id === 'cat-combos' ? 'combo' : 'guide',
+    subject: book.subject || 'General',
+    price,
+    mrp,
+    discount,
+    rating: Number(book.review_count) > 0 ? Number(book.avg_rating || 0) : 0,
+    reviews: Number(book.review_count || 0),
+    badge: book.badge || '',
+    badgeColor: (book.badge && String(book.badge).trim())
+      ? String(book.badge).toUpperCase().includes('COMBO')
+        ? 'bg-purple-600'
+        : 'bg-blue-600'
+      : 'bg-blue-600',
+    image: safeImg,
+    hoverImage: safeImg,
+    description: book.description || `Complete ${book.class_standard || '10th'} Standard guide book for exam success.`,
+    samplePdfUrl: book.sample_pdf_url || null,
+    inStock: isBookInStock(book),
+    stock: Math.max(0, Math.floor(Number(book.stock) || 0)),
+    features: ['Solved Papers', 'Chapter Notes'],
   };
 }
 
@@ -230,7 +305,7 @@ export default async function ProductPage({ params }: Props) {
           dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }}
         />
       )}
-      <ProductDetailClient slug={slug} />
+      <ProductDetailClient slug={slug} initialProduct={mapBookToClientProduct(book)} />
     </>
   );
 }

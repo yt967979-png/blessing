@@ -223,11 +223,10 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (productsRef.current.length === 0) {
       setProductsLoading(true);
     }
-    const ts = Date.now();
-    const url = forceFresh ? `/api/products?fresh=1&_t=${ts}` : `/api/products?_t=${ts}`;
+    const url = forceFresh ? '/api/products?fresh=1' : '/api/products';
     const opts: RequestInit = {
-      cache: 'no-store' as RequestCache,
-      // Fail fast — never leave the shop on a blank skeleton when Neon/pool stalls.
+      cache: forceFresh ? 'no-store' : 'default',
+      // Fail fast — never leave the shop on a blank skeleton when pool stalls.
       signal: AbortSignal.timeout(10_000),
     };
     fetch(url, opts)
@@ -595,26 +594,38 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     };
   }, []);
 
-  // Slow catalog poll always — catches missed SSE (new books / price edits).
-  // Faster 15s poll only while SSE is down.
+  // Lightweight delta poll: only checks price and stock deltas (~200 bytes)
+  // instead of re-downloading the entire catalog every 20 seconds.
   useEffect(() => {
-    const CATALOG_POLL_MS = 20_000;
-    const STOCK_FALLBACK_MS = 15_000;
-    const tick = (forceFresh = false) => {
+    const pollLiveStock = async () => {
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
-      refreshProducts(forceFresh);
+      try {
+        const res = await fetch('/api/products/live', { signal: AbortSignal.timeout(6000) });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data?.ok && data.books && typeof data.books === 'object') {
+          const list = Object.values(data.books) as StockPushEntry[];
+          applyStockPush(list);
+        }
+      } catch {}
     };
-    const catalogInterval = setInterval(() => tick(true), CATALOG_POLL_MS);
-    const stockFallback = setInterval(() => {
-      if (sseConnectedRef.current) return;
-      tick(true);
-    }, STOCK_FALLBACK_MS);
+
+    // Poll live stock delta every 20s (or every 10s if SSE is temporarily disconnected)
+    const stockInterval = setInterval(() => {
+      void pollLiveStock();
+    }, sseConnectedRef.current ? 20_000 : 10_000);
+
+    // Full catalog refresh only once every 3 minutes as an ultimate safety net
+    const catalogSafetyInterval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      refreshProducts(false);
+    }, 180_000);
+
     return () => {
-      clearInterval(catalogInterval);
-      clearInterval(stockFallback);
+      clearInterval(stockInterval);
+      clearInterval(catalogSafetyInterval);
     };
-     
-  }, []);
+  }, [applyStockPush]);
 
   // Debounced cart/wishlist sync — only after hydrate
   useEffect(() => {

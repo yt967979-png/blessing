@@ -54,14 +54,8 @@ export function getCatalogCacheTtlMs(): number {
 }
 
 export function getCatalogCdnHeaders(): Record<string, string> {
-  if (getLaunchScale() === 'peak') {
-    return {
-      'Cache-Control': 'public, max-age=10, s-maxage=30, stale-while-revalidate=60',
-      Vary: 'Accept-Encoding',
-    };
-  }
   return {
-    'Cache-Control': 'public, max-age=10, s-maxage=30, stale-while-revalidate=60',
+    'Cache-Control': 'public, max-age=60, s-maxage=300, stale-while-revalidate=600',
     Vary: 'Accept-Encoding',
   };
 }

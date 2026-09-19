@@ -58,11 +58,11 @@ function applyReviewsPayload(
   }
 }
 
-export default function ProductDetailClient({ slug }: { slug: string }) {
+export default function ProductDetailClient({ slug, initialProduct }: { slug: string; initialProduct?: any }) {
   const router = useRouter();
   const { products, productsLoading, addToCart, toggleWishlist, wishlist, user, setIsAuthOpen, setIsCheckoutOpen, cartCount, showToast } = useStore();
-  const [dbProduct, setDbProduct] = useState<any>(null);
-  const [productFetchDone, setProductFetchDone] = useState(false);
+  const [dbProduct, setDbProduct] = useState<any>(initialProduct || null);
+  const [productFetchDone, setProductFetchDone] = useState(Boolean(initialProduct));
   const [dbReviews, setDbReviews] = useState<any[]>([]);
   const [reviewStats, setReviewStats] = useState({ count: 0, avgRating: 0 });
   const [canReview, setCanReview] = useState(false);
@@ -137,15 +137,17 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
       };
 
       // Catalog snapshot at request start — enables parallel reviews when already warm
-      const knownId = products.find((p: any) => p.slug === slug || p.id === slug)?.id;
+      const knownId = initialProduct?.id || products.find((p: any) => p.slug === slug || p.id === slug)?.id;
 
-      const productPromise = fetch(`/api/products?slug=${encodeURIComponent(slug)}`)
-        .then(async (res) => {
-          if (!res.ok) return null;
-          const list = await res.json();
-          return Array.isArray(list) && list.length > 0 ? list[0] : null;
-        })
-        .catch(() => null);
+      const productPromise = initialProduct
+        ? Promise.resolve(initialProduct)
+        : fetch(`/api/products?slug=${encodeURIComponent(slug)}`)
+            .then(async (res) => {
+              if (!res.ok) return null;
+              const list = await res.json();
+              return Array.isArray(list) && list.length > 0 ? list[0] : null;
+            })
+            .catch(() => null);
 
       const reviewsPromise = knownId
         ? fetch(`/api/reviews?bookId=${knownId}&stats=1`, { headers: reviewHeaders })

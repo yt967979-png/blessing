@@ -3,6 +3,7 @@ import { getDbClient, releaseDbClient, ensureDefaultCategories, queryDb } from '
 import { verifyAdminRequest, forbiddenResponse } from '@/lib/serverSecurity';
 import { getCatalogCacheTtlMs, getCatalogCdnHeaders } from '@/lib/launchScale';
 import { isBookInStock } from '@/lib/stock';
+import { redisGetJson, redisSetJson } from '@/lib/redis';
 
 // Shared catalog cache: same search/class/slug reused without hitting DB again
 const queryCache = new Map<string, { data: any[]; timestamp: number }>();
@@ -23,6 +24,10 @@ function safeCatalogImage(raw: unknown): string {
 
 export function invalidateProductsCache() {
   queryCache.clear();
+  try {
+    const { invalidateLiveProductsCache } = require('./live/route');
+    void invalidateLiveProductsCache();
+  } catch {}
 }
 
 function cacheKey(cls: string | null, search: string | null, slug: string | null) {
@@ -171,6 +176,18 @@ export async function GET(request: Request) {
       });
     }
 
+    if (!forceFresh) {
+      try {
+        const redisCached = await redisGetJson<any[]>(`catalog:${key}`);
+        if (redisCached && Array.isArray(redisCached) && redisCached.length > 0) {
+          writeCache(key, redisCached);
+          return NextResponse.json(redisCached, {
+            headers: hdrs({ 'X-Cache-Status': 'HIT_REDIS' }),
+          });
+        }
+      } catch {}
+    }
+
     const emptyOk = (cacheStatus: string) => {
       const stale = readCache(key, true);
       if (stale && stale.length > 0) {
@@ -255,7 +272,10 @@ export async function GET(request: Request) {
         res = await loadFallback();
       }
       const mapped = mapCatalogRows(res.rows || []);
-      if (mapped.length > 0) writeCache(key, mapped);
+      if (mapped.length > 0) {
+        writeCache(key, mapped);
+        void redisSetJson(`catalog:${key}`, mapped, 300);
+      }
       return NextResponse.json(mapped, {
         headers: hdrs({
           'X-Cache-Status': mapped.length > 0 ? 'MISS_DB' : 'MISS_DB_EMPTY',
