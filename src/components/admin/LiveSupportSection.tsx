@@ -115,6 +115,14 @@ export const LiveSupportSection: React.FC<LiveSupportSectionProps> = ({
   const [claimingId, setClaimingId] = useState<string | null>(null);
 
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
+  const selectedConvRef = useRef<SupportConv | null>(null);
+  const messagesHashRef = useRef<string>('');
+  const supportDataHashRef = useRef<string>('');
+
+  useEffect(() => {
+    selectedConvRef.current = selectedConv;
+  }, [selectedConv]);
+
   const adminName = user?.name || user?.email?.split('@')[0] || 'Admin';
   const currentAdminId = String(user?.userId || user?.id || '');
 
@@ -126,7 +134,7 @@ export const LiveSupportSection: React.FC<LiveSupportSectionProps> = ({
     }
   }, [messages]);
 
-  // Load support queues and stats
+  // Load support queues and stats (silent diffing — zero re-renders unless data actually changed)
   const loadSupportData = useCallback(async () => {
     if (!user) return;
     try {
@@ -135,33 +143,51 @@ export const LiveSupportSection: React.FC<LiveSupportSectionProps> = ({
       });
       if (res.ok) {
         const data = await res.json();
-        setWaitingList(data.waiting || []);
-        setActiveList(data.active || []);
-        setResolvedList(data.resolved || []);
-        if (data.stats) setStats(data.stats);
+        const hash = JSON.stringify({
+          w: (data.waiting || []).map((c: any) => `${c.id}:${c.status}:${c.last_message_at}`),
+          a: (data.active || []).map((c: any) => `${c.id}:${c.status}:${c.last_message_at}`),
+          r: (data.resolved || []).map((c: any) => `${c.id}:${c.status}:${c.last_message_at}`),
+          s: data.stats,
+        });
 
-        // If current selected conversation is updated
-        if (selectedConv) {
+        if (hash !== supportDataHashRef.current) {
+          supportDataHashRef.current = hash;
+          setWaitingList(data.waiting || []);
+          setActiveList(data.active || []);
+          setResolvedList(data.resolved || []);
+          if (data.stats) setStats(data.stats);
+        }
+
+        // If current selected conversation has status updates, apply silently
+        const currentSelected = selectedConvRef.current;
+        if (currentSelected) {
           const updated =
-            data.active?.find((c: SupportConv) => c.id === selectedConv.id) ||
-            data.waiting?.find((c: SupportConv) => c.id === selectedConv.id) ||
-            data.resolved?.find((c: SupportConv) => c.id === selectedConv.id);
-          if (updated) setSelectedConv(updated);
+            data.active?.find((c: SupportConv) => c.id === currentSelected.id) ||
+            data.waiting?.find((c: SupportConv) => c.id === currentSelected.id) ||
+            data.resolved?.find((c: SupportConv) => c.id === currentSelected.id);
+          if (updated && (updated.status !== currentSelected.status || updated.assigned_admin_name !== currentSelected.assigned_admin_name)) {
+            setSelectedConv(updated);
+          }
         }
       }
     } catch (_) {}
-  }, [user, selectedConv]);
+  }, [user]);
 
-  // Load message history for active conversation
+  // Load message history for active conversation (silent diffing)
   const loadMessages = useCallback(async (convId: string) => {
-    if (!user) return;
+    if (!user || !convId) return;
     try {
       const res = await fetch(`/api/admin/support?view=messages&conversationId=${encodeURIComponent(convId)}`, {
         headers: authHeaders(user),
       });
       if (res.ok) {
         const data = await res.json();
-        setMessages(data.messages || []);
+        const msgs = data.messages || [];
+        const hash = `${convId}:${msgs.length}:${msgs[msgs.length - 1]?.id || ''}`;
+        if (hash !== messagesHashRef.current) {
+          messagesHashRef.current = hash;
+          setMessages(msgs);
+        }
       }
     } catch (_) {}
   }, [user]);
@@ -190,7 +216,7 @@ export const LiveSupportSection: React.FC<LiveSupportSectionProps> = ({
     }
   }, [user]);
 
-  // Initial load & periodic polling
+  // Initial load & periodic background polling (quiet 8s timer)
   useEffect(() => {
     loadSupportData();
     const timer = setInterval(loadSupportData, 8000);
@@ -199,22 +225,25 @@ export const LiveSupportSection: React.FC<LiveSupportSectionProps> = ({
 
   // Select conversation
   const handleSelectConversation = (conv: SupportConv) => {
+    messagesHashRef.current = '';
     setSelectedConv(conv);
     loadMessages(conv.id);
     loadContextCard(conv);
   };
 
-  // Continuous message sync for currently open conversation
+  // Message sync for currently open conversation
   useEffect(() => {
     if (!selectedConv?.id) return;
     loadMessages(selectedConv.id);
     const timer = setInterval(() => {
-      loadMessages(selectedConv.id);
-    }, 2500);
+      if (selectedConvRef.current?.id) {
+        loadMessages(selectedConvRef.current.id);
+      }
+    }, 3000);
     return () => clearInterval(timer);
   }, [selectedConv?.id, loadMessages]);
 
-  // Real-time SSE listener
+  // Real-time SSE listener (Persistent single connection — NEVER disconnects on conversation selection)
   useEffect(() => {
     if (!user) return;
     const tokenParam = user?.token ? `&token=${encodeURIComponent(user.token)}` : '';
@@ -225,7 +254,7 @@ export const LiveSupportSection: React.FC<LiveSupportSectionProps> = ({
         const ev = JSON.parse(e.data);
         if (ev.type === 'SUPPORT_REQUESTED') {
           playChime?.();
-          onShowToast(`🔔 New Support Request from ${ev.senderName || 'Customer'}!`);
+          onShowToast?.(`🔔 New Support Request from ${ev.senderName || 'Customer'}!`);
           loadSupportData();
         } else if (ev.type === 'CHAT_CLAIMED' || ev.type === 'CHAT_RESOLVED' || ev.type === 'CONVERSATION_UPDATED') {
           const targetId = ev.conversationId || ev.data?.conversation?.id;
@@ -237,14 +266,14 @@ export const LiveSupportSection: React.FC<LiveSupportSectionProps> = ({
                 waitingCount: Math.max(0, prev.waitingCount - 1),
               }));
             }
-            if (selectedConv && selectedConv.id === targetId) {
-              onShowToast('ℹ️ Customer ended or left the chat session.');
+            if (selectedConvRef.current && selectedConvRef.current.id === targetId) {
+              onShowToast?.('ℹ️ Customer ended or left the chat session.');
             }
           }
           loadSupportData();
         } else if (ev.type === 'NEW_MESSAGE') {
           const evConvId = ev.conversationId || ev.message?.conversation_id;
-          if (selectedConv && evConvId === selectedConv.id) {
+          if (selectedConvRef.current && evConvId === selectedConvRef.current.id) {
             const newMsg: SupportMessage = {
               id: ev.message?.id || ev.id || `msg_${Date.now()}`,
               conversation_id: evConvId,
@@ -259,10 +288,9 @@ export const LiveSupportSection: React.FC<LiveSupportSectionProps> = ({
               }
               return [...prev, newMsg];
             });
-            loadMessages(selectedConv.id);
+            loadMessages(selectedConvRef.current.id);
           } else if (ev.senderType === 'CUSTOMER' && ev.status === 'ACTIVE') {
-            // Only toast if an ongoing active conversation with admin; NEVER play sound for bot messages
-            onShowToast(`💬 New message from ${ev.senderName || 'Customer'}`);
+            onShowToast?.(`💬 New message from ${ev.senderName || 'Customer'}`);
           }
           loadSupportData();
         }
@@ -270,7 +298,7 @@ export const LiveSupportSection: React.FC<LiveSupportSectionProps> = ({
     };
 
     return () => es.close();
-  }, [user, selectedConv, playChime, onShowToast, loadSupportData]);
+  }, [user?.token, user?.role]);
 
   // ── ATOMIC CLAIM HANDLER
   const handleClaimChat = async (conv: SupportConv) => {

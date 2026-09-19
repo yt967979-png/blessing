@@ -188,6 +188,46 @@ export default function CheckoutPage() {
       ? newAddr
       : savedAddresses.find((a) => a.id === selectedAddrId) || savedAddresses[0];
 
+  // Capture phone and synchronize abandoned cart snapshot immediately
+  useEffect(() => {
+    const rawPhone =
+      (selectedAddress?.phone && selectedAddress.phone.replace(/\D/g, '').slice(-10)) ||
+      (newAddr.phone && newAddr.phone.replace(/\D/g, '').slice(-10)) ||
+      (user?.phone && user.phone.replace(/\D/g, '').slice(-10)) ||
+      '';
+
+    if (rawPhone && rawPhone.length === 10) {
+      try {
+        localStorage.setItem('bpg_checkout_phone', rawPhone);
+      } catch {}
+
+      if (cart.length > 0) {
+        fetch('/api/cart/abandon', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(user?.token ? { Authorization: `Bearer ${user.token}` } : {}),
+          },
+          body: JSON.stringify({
+            phone: rawPhone,
+            name: selectedAddress?.name || newAddr.name || user?.name || 'Student',
+            cart: cart.map((c) => ({ id: c.id, title: c.title, qty: c.qty, price: c.price })),
+            cleared: false,
+          }),
+        }).catch(() => {});
+      }
+    }
+  }, [
+    user?.phone,
+    user?.token,
+    user?.name,
+    selectedAddress?.phone,
+    selectedAddress?.name,
+    newAddr.phone,
+    newAddr.name,
+    cart,
+  ]);
+
   const handleSaveInlineAddress = async () => {
     if (!user?.id) return false;
     if (!newAddr.name || !newAddr.address || !newAddr.pincode) {
@@ -424,6 +464,9 @@ export default function CheckoutPage() {
         // 'confirmed' server-side, nothing left to release for this attempt.
         pendingRazorpayOrderIdRef.current = null;
         clearCartAfterOrder();
+        try {
+          localStorage.removeItem('bpg_checkout_phone');
+        } catch {}
         idempotencyKeyRef.current = null;
         setOrderSuccessData({
           orderId: serverOrderId,

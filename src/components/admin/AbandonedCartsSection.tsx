@@ -53,6 +53,8 @@ export const AbandonedCartsSection: React.FC<AbandonedCartsSectionProps> = ({
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | 'pending' | 'reminded' | 'converted'>('all');
 
+  const cartsHashRef = useRef<string>('');
+
   const fetchCarts = async (isManual = false) => {
     if (isManual) setRefreshing(true);
 
@@ -62,7 +64,11 @@ export const AbandonedCartsSection: React.FC<AbandonedCartsSectionProps> = ({
       });
       const data = await res.json();
       if (res.ok && Array.isArray(data.carts)) {
-        setCarts(data.carts);
+        const hash = JSON.stringify(data.carts.map((c: any) => `${c.id}:${c.totalAmount}:${c.reminded}:${c.converted}:${c.updatedAt}`));
+        if (hash !== cartsHashRef.current || isManual) {
+          cartsHashRef.current = hash;
+          setCarts(data.carts);
+        }
         if (isManual) onShowToast('✅ Abandoned carts refreshed');
       } else if (isManual) {
         onShowToast(`⚠️ ${data.error || 'Failed to load abandoned carts'}`);
@@ -79,10 +85,10 @@ export const AbandonedCartsSection: React.FC<AbandonedCartsSectionProps> = ({
     void fetchCarts();
     const onFocus = () => void fetchCarts(false);
     window.addEventListener('focus', onFocus);
-    // Real-time live auto-refresh every 1.5s so cart additions/removals sync instantly
+    // Quiet background poll every 5s — silent diffing prevents UI stutter
     const timer = setInterval(() => {
       void fetchCarts(false);
-    }, 1500);
+    }, 5000);
     return () => {
       window.removeEventListener('focus', onFocus);
       clearInterval(timer);

@@ -519,9 +519,21 @@ export async function POST(request: Request) {
     try {
       const phoneDigits = String(customerPhone || '').replace(/\D/g, '').slice(-10);
       if (phoneDigits.length === 10) {
+        // If this cart was reminded (contacted by admin), leave it as reminded so it counts as recovered!
+        // If this cart was NOT reminded, delete it so it doesn't linger as an abandoned cart nor falsely count as recovered.
         await client.query(
-          `UPDATE abandoned_carts SET reminded = TRUE, updated_at = NOW() WHERE id = $1`,
-          [`ac-${phoneDigits}`]
+          `DELETE FROM abandoned_carts 
+           WHERE (id = $1 OR phone = $2 OR (user_id IS NOT NULL AND user_id = $3))
+             AND (reminded = FALSE OR reminded IS NULL)`,
+          [`ac-${phoneDigits}`, phoneDigits, userId ? String(userId) : null]
+        ).catch(() => {});
+
+        await client.query(
+          `UPDATE abandoned_carts 
+           SET updated_at = NOW()
+           WHERE (id = $1 OR phone = $2 OR (user_id IS NOT NULL AND user_id = $3))
+             AND reminded = TRUE`,
+          [`ac-${phoneDigits}`, phoneDigits, userId ? String(userId) : null]
         ).catch(() => {});
       }
     } catch {

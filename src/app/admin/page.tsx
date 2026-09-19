@@ -161,6 +161,9 @@ function AdminPageInner() {
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [ordersError, setOrdersError] = useState<string | null>(null);
   const knownOrderIdsRef = useRef<Set<string> | null>(null);
+  const ordersHashRef = useRef<string>('');
+  const lowStockHashRef = useRef<string>('');
+  const waitingSupportRef = useRef<number>(-1);
   const soundUnlockedRef = useRef(false);
 
   // Auto-unlock Web Audio on first user interaction (click, touch, keydown)
@@ -192,7 +195,11 @@ function AdminPageInner() {
       const res = await fetch('/api/admin/support?view=overview', { headers: authHeaders(user) });
       if (res.ok) {
         const d = await res.json();
-        setWaitingSupportCount(d.stats?.waitingCount || 0);
+        const count = d.stats?.waitingCount || 0;
+        if (count !== waitingSupportRef.current) {
+          waitingSupportRef.current = count;
+          setWaitingSupportCount(count);
+        }
       }
     } catch (_) {}
   }, [user]);
@@ -232,7 +239,18 @@ function AdminPageInner() {
       if (res.ok) {
         const data = await res.json();
         const list: Order[] = Array.isArray(data) ? data : [];
-        setOrders(list);
+
+        // Fast hash diff: only trigger state update if orders payload actually changed
+        const hash = list
+          .map(
+            (o) =>
+              `${o.orderId || o.id}:${o.orderStatus || o.courierStatus}:${o.paymentStatus}:${o.trackingNumber || ''}:${o.totalAmount}`
+          )
+          .join('|');
+        if (hash !== ordersHashRef.current) {
+          ordersHashRef.current = hash;
+          setOrders(list);
+        }
 
         const nextIds = new Set(list.map((o) => String(o.orderId || o.id || '')).filter(Boolean));
         if (knownOrderIdsRef.current === null) {
@@ -293,8 +311,12 @@ function AdminPageInner() {
       });
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data?.alerts)) setLowStockAlerts(data.alerts);
-        if (data?.holds) setActiveStockHolds(data.holds);
+        const hash = JSON.stringify(data?.alerts || []) + ':' + JSON.stringify(data?.holds || {});
+        if (hash !== lowStockHashRef.current) {
+          lowStockHashRef.current = hash;
+          if (Array.isArray(data?.alerts)) setLowStockAlerts(data.alerts);
+          if (data?.holds) setActiveStockHolds(data.holds);
+        }
       }
     } catch {}
   }, [user]);
@@ -418,11 +440,11 @@ function AdminPageInner() {
     connectOrdersStream();
 
     // Guaranteed safety-net dual sync:
-    // Silent 4-second poll ensures admin never misses an order even if SSE stream was suspended or closed
+    // Silent 8-second poll ensures admin never misses an order even if SSE stream was suspended or closed
     const pollInterval = setInterval(() => {
       loadLowStock();
       loadLiveOrders({ fromStream: true, silent: true });
-    }, 4000);
+    }, 8000);
 
     // Instant sync when administrator focuses or returns to the dashboard tab
     const handleVisibilityChange = () => {

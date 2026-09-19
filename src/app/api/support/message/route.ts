@@ -68,8 +68,28 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized to post messages to this conversation' }, { status: 403 });
     }
 
-    // If an admin is posting to an ACTIVE conversation, they MUST be the assigned admin
-    if (isAdmin && conv.status === 'ACTIVE' && conv.assigned_admin_id && conv.assigned_admin_id !== String(user?.userId)) {
+    // If an unassigned conversation is replied to by an admin, auto-claim it for that admin
+    if (isAdmin && !conv.assigned_admin_id) {
+      const adminName = user?.name || (user?.role === 'super_admin' ? 'Super Admin' : 'Support Admin');
+      await queryDb(
+        `UPDATE support_conversations 
+         SET assigned_admin_id = $1, assigned_admin_name = $2, status = 'ACTIVE', updated_at = NOW() 
+         WHERE id = $3`,
+        [String(user?.userId), adminName, conversationId]
+      );
+      conv.assigned_admin_id = String(user?.userId);
+      conv.assigned_admin_name = adminName;
+      conv.status = 'ACTIVE';
+    }
+
+    // If a regular admin is posting to an ACTIVE conversation assigned to someone else, block them (super_admin can always reply)
+    if (
+      isAdmin &&
+      user?.role !== 'super_admin' &&
+      conv.status === 'ACTIVE' &&
+      conv.assigned_admin_id &&
+      conv.assigned_admin_id !== String(user?.userId)
+    ) {
       return NextResponse.json(
         {
           error: `This conversation is assigned to ${conv.assigned_admin_name || 'another staff member'}. Only the assigned admin can reply.`,
@@ -101,7 +121,7 @@ export async function POST(req: NextRequest) {
     }
 
     const senderType: 'ADMIN' | 'CUSTOMER' = isAdmin ? 'ADMIN' : 'CUSTOMER';
-    const senderName = isAdmin ? (conv.assigned_admin_name || 'Support Admin') : (conv.customer_name || 'Customer');
+    const senderName = isAdmin ? (user?.name || conv.assigned_admin_name || 'Support Admin') : (conv.customer_name || 'Customer');
     const msgId = `msg_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
 
     try {

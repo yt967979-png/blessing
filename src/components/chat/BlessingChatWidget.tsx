@@ -74,6 +74,10 @@ export const BlessingChatWidget: React.FC = () => {
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const prevPathnameRef = useRef(pathname);
+  const isOpenRef = useRef(isOpen);
+  isOpenRef.current = isOpen;
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
 
   const isStorefront =
     !pathname?.startsWith('/admin') &&
@@ -177,7 +181,7 @@ export const BlessingChatWidget: React.FC = () => {
             }
             return [...prev, newMsg];
           });
-          if (!isOpen && newMsg.sender_type !== 'CUSTOMER') {
+          if (!isOpenRef.current && newMsg.sender_type !== 'CUSTOMER') {
             setUnreadCount((c) => c + 1);
           }
         } else if (data.type === 'CHAT_CLAIMED') {
@@ -202,7 +206,8 @@ export const BlessingChatWidget: React.FC = () => {
       if (!reconnectTimer) {
         reconnectTimer = setTimeout(async () => {
           try {
-            const lastMsg = messages[messages.length - 1];
+            const curMsgs = messagesRef.current;
+            const lastMsg = curMsgs[curMsgs.length - 1];
             const afterParam = lastMsg?.id ? `&afterId=${encodeURIComponent(lastMsg.id)}` : '';
             const res = await fetch(`/api/support/conversation?id=${encodeURIComponent(conversation.id)}${afterParam}`, {
               headers: authHeaders(user),
@@ -229,7 +234,7 @@ export const BlessingChatWidget: React.FC = () => {
       es.close();
       eventSourceRef.current = null;
     };
-  }, [isStorefront, conversation?.id, isOpen, messages, user]);
+  }, [isStorefront, conversation?.id, user?.token]);
 
   // Send message handler
   const handleSendMessage = async (textToSend?: string) => {
