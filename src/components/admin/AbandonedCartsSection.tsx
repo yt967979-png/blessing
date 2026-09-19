@@ -29,6 +29,8 @@ interface AbandonedCart {
   name: string;
   items: AbandonedCartItem[];
   totalQty: number;
+  subtotal?: number;
+  shippingFee?: number;
   totalAmount: number;
   reminded: boolean;
   converted: boolean;
@@ -136,7 +138,11 @@ export const AbandonedCartsSection: React.FC<AbandonedCartsSectionProps> = ({
     const phoneWithCountry = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
 
     const bookTitles = cart.items.map((it) => `• ${it.title} (Qty: ${it.qty || 1})`).join('\n');
-    const msg = `Vanakkam ${cart.name}! 📚\n\nThis is Blessing Power Guide. We noticed you selected books in your cart:\n${bookTitles}\n\nTotal: ₹${cart.totalAmount}\n\nNeed any help with delivery pincode or payment? You can easily resume and complete your order directly here:\nhttps://blessingpowerguide.in/cart\n\nFast ST Courier Delivery across Tamil Nadu.`;
+    const shippingLine = cart.shippingFee && cart.shippingFee > 0
+      ? `Books: ₹${cart.subtotal || (cart.totalAmount - cart.shippingFee)}\nDelivery Charge: ₹${cart.shippingFee}\nTotal: ₹${cart.totalAmount}`
+      : `Total: ₹${cart.totalAmount} (Free Delivery 🎉)`;
+
+    const msg = `Vanakkam ${cart.name}! 📚\n\nThis is Blessing Power Guide. We noticed you selected books in your cart:\n${bookTitles}\n\n${shippingLine}\n\nNeed any help with delivery pincode or payment? You can easily resume and complete your order directly here:\nhttps://blessingpowerguide.in/cart\n\nFast ST Courier Delivery across Tamil Nadu.`;
 
     const waUrl = `https://api.whatsapp.com/send?phone=${phoneWithCountry}&text=${encodeURIComponent(msg)}`;
     window.open(waUrl, '_blank', 'noopener,noreferrer');
@@ -150,10 +156,10 @@ export const AbandonedCartsSection: React.FC<AbandonedCartsSectionProps> = ({
   const stats = useMemo(() => {
     const totalCount = carts.length;
     const totalPotential = carts.reduce((sum, c) => sum + (c.totalAmount || 0), 0);
-    const convertedCount = carts.filter((c) => c.converted).length;
-    const convertedRevenue = carts
-      .filter((c) => c.converted)
-      .reduce((sum, c) => sum + (c.totalAmount || 0), 0);
+    // ONLY show in recovered / converted if we actually contacted them (reminded === true) AND order was placed (converted === true)
+    const convertedCarts = carts.filter((c) => c.reminded && c.converted);
+    const convertedCount = convertedCarts.length;
+    const convertedRevenue = convertedCarts.reduce((sum, c) => sum + (c.totalAmount || 0), 0);
     const pendingCount = carts.filter((c) => !c.reminded && !c.converted).length;
     const recoveryRate = totalCount > 0 ? Math.round((convertedCount / totalCount) * 100) : 0;
 
@@ -171,7 +177,7 @@ export const AbandonedCartsSection: React.FC<AbandonedCartsSectionProps> = ({
 
       if (filter === 'pending') return !c.reminded && !c.converted;
       if (filter === 'reminded') return c.reminded && !c.converted;
-      if (filter === 'converted') return c.converted;
+      if (filter === 'converted') return c.reminded && c.converted;
       return true;
     });
   }, [carts, search, filter]);
@@ -379,13 +385,17 @@ export const AbandonedCartsSection: React.FC<AbandonedCartsSectionProps> = ({
               <div className="flex items-center justify-between md:justify-end gap-3 shrink-0 pt-3 md:pt-0 border-t md:border-t-0 border-slate-100">
                 <div className="text-right">
                   <div className="text-[10px] uppercase tracking-wider text-slate-400 font-extrabold">
-                    Cart Value
+                    Cart Total
                   </div>
                   <div className="text-lg font-black text-[#001B3A]">
                     ₹{cart.totalAmount.toLocaleString('en-IN')}
                   </div>
                   <div className="text-[10px] text-slate-500 font-semibold">
-                    {cart.totalQty} {cart.totalQty === 1 ? 'book' : 'books'}
+                    {cart.shippingFee && cart.shippingFee > 0 ? (
+                      <span>Books: ₹{cart.subtotal || (cart.totalAmount - cart.shippingFee)} + Shipping: ₹{cart.shippingFee}</span>
+                    ) : (
+                      <span>{cart.totalQty} {cart.totalQty === 1 ? 'book' : 'books'} · Free Delivery</span>
+                    )}
                   </div>
                 </div>
 

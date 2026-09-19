@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDbClient, releaseDbClient } from '@/lib/db';
 import { verifyAdminRequest, forbiddenResponse, unauthorizedResponse } from '@/lib/serverSecurity';
+import { deliveryFeeForQty } from '@/lib/deliveryRules';
 
 export async function GET(request: NextRequest) {
   const auth = await verifyAdminRequest(request);
@@ -31,6 +32,7 @@ export async function GET(request: NextRequest) {
     `);
 
     // Fetch top 100 recent abandoned carts
+    // ONLY marked as converted / recovered IF reminded = TRUE (we contacted them) and order was placed
     const res = await client.query(`
       SELECT 
         ac.id,
@@ -41,15 +43,17 @@ export async function GET(request: NextRequest) {
         ac.reminded,
         ac.created_at,
         ac.updated_at,
-        EXISTS (
-          SELECT 1 FROM orders o 
-          LEFT JOIN users u ON o.user_id = u.id
-          WHERE (
-            (ac.user_id IS NOT NULL AND ac.user_id <> '' AND o.user_id = ac.user_id)
-            OR (u.phone IS NOT NULL AND u.phone = ac.phone)
-            OR (o.shipping_address ILIKE '%' || ac.phone || '%')
+        (
+          ac.reminded = TRUE AND EXISTS (
+            SELECT 1 FROM orders o 
+            LEFT JOIN users u ON o.user_id = u.id
+            WHERE (
+              (ac.user_id IS NOT NULL AND ac.user_id <> '' AND o.user_id = ac.user_id)
+              OR (u.phone IS NOT NULL AND u.phone = ac.phone)
+              OR (o.shipping_address ILIKE '%' || ac.phone || '%')
+            )
+            AND o.created_at >= ac.created_at
           )
-          AND o.created_at >= ac.created_at
         ) as converted
       FROM abandoned_carts ac
       ORDER BY ac.updated_at DESC
@@ -63,7 +67,7 @@ export async function GET(request: NextRequest) {
       } catch {
         items = [];
       }
-      const totalAmount = items.reduce(
+      const subtotal = items.reduce(
         (sum: number, item: any) => sum + (Number(item.price || 0) * Number(item.qty || 1)),
         0
       );
@@ -71,6 +75,8 @@ export async function GET(request: NextRequest) {
         (sum: number, item: any) => sum + Number(item.qty || 1),
         0
       );
+      const shippingFee = deliveryFeeForQty(totalQty);
+      const totalAmount = subtotal + shippingFee;
 
       return {
         id: row.id,
@@ -79,6 +85,8 @@ export async function GET(request: NextRequest) {
         name: row.name || 'Student',
         items,
         totalQty,
+        subtotal,
+        shippingFee,
         totalAmount,
         reminded: Boolean(row.reminded),
         converted: Boolean(row.converted),
