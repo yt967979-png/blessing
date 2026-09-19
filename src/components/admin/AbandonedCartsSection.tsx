@@ -77,11 +77,16 @@ export const AbandonedCartsSection: React.FC<AbandonedCartsSectionProps> = ({
 
   useEffect(() => {
     void fetchCarts();
-    // Real-time live auto-refresh every 3s so cart additions/removals sync instantly
+    const onFocus = () => void fetchCarts(false);
+    window.addEventListener('focus', onFocus);
+    // Real-time live auto-refresh every 1.5s so cart additions/removals sync instantly
     const timer = setInterval(() => {
       void fetchCarts(false);
-    }, 3000);
-    return () => clearInterval(timer);
+    }, 1500);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      clearInterval(timer);
+    };
   }, []);
 
   const toggleReminded = async (cart: AbandonedCart) => {

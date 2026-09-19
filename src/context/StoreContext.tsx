@@ -854,6 +854,25 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       try {
         localStorage.setItem('bpg_cart_next', JSON.stringify(updated));
       } catch {}
+
+      // Instant abandoned cart sync on Add To Cart
+      const p = user?.phone || (typeof window !== 'undefined' ? localStorage.getItem('bpg_checkout_phone') : null);
+      if (p) {
+        fetch('/api/cart/abandon', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(user?.token ? { Authorization: `Bearer ${user.token}` } : {}),
+          },
+          body: JSON.stringify({
+            phone: p,
+            name: user?.name || 'Student',
+            cart: updated.map((c) => ({ id: c.id, title: c.title, qty: c.qty, price: c.price })),
+            cleared: false,
+          }),
+        }).catch(() => {});
+      }
+
       return updated;
     });
     showToast(toastMsg);
@@ -906,6 +925,25 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       try {
         localStorage.setItem('bpg_cart_next', JSON.stringify(next));
       } catch {}
+
+      // Instant abandoned cart sync on quantity update
+      const p = user?.phone || (typeof window !== 'undefined' ? localStorage.getItem('bpg_checkout_phone') : null);
+      if (p) {
+        fetch('/api/cart/abandon', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(user?.token ? { Authorization: `Bearer ${user.token}` } : {}),
+          },
+          body: JSON.stringify({
+            phone: p,
+            name: user?.name || 'Student',
+            cart: next.map((c) => ({ id: c.id, title: c.title, qty: c.qty, price: c.price })),
+            cleared: next.length === 0,
+          }),
+        }).catch(() => {});
+      }
+
       return next;
     });
     if (toastMsg) showToast(toastMsg);
@@ -1645,7 +1683,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           cart: cart.map((c) => ({ id: c.id, title: c.title, qty: c.qty, price: c.price })),
         }),
       }).catch(() => {});
-    }, isCartEmpty ? 500 : 8000);
+    }, isCartEmpty ? 0 : 500);
     return () => clearTimeout(t);
   }, [hydrated, user?.phone, user?.name, user?.token, cart]);
 
