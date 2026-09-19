@@ -1,0 +1,46 @@
+{
+  "testMode": "mixed",
+  "concurrency": 1500,
+  "durationSec": 45,
+  "totalRequests": 8146,
+  "overallRps": 181,
+  "percentiles": {
+    "p50": 554,
+    "p95": 12007,
+    "p99": 12215,
+    "avg": 3676,
+    "min": 77,
+    "max": 12452
+  },
+  "httpStatus": {
+    "success_2xx_3xx": 6169,
+    "client_4xx": 1085,
+    "server_5xx": 0,
+    "timeouts": 892
+  },
+  "cloudflare": {
+    "hitCount": 0,
+    "missCount": 0,
+    "dynamicCount": 7254,
+    "revalidatedCount": 0,
+    "bypassCount": 0,
+    "hitRatioPercent": 0,
+    "dynamicRatioPercent": 89.05
+  },
+  "origin": {
+    "requestsReachingCaddy": 7254,
+    "requestsReachingNode3000": 3638,
+    "requestsReachingNode3001": 3616,
+    "node3000SharePercent": 50.15,
+    "node3001SharePercent": 49.85
+  },
+  "applicationCategories": {
+    "Product Pages": 2782,
+    "Search": 1600,
+    "Cart": 1210,
+    "Login": 534,
+    "Address": 534,
+    "Coupon": 670,
+    "Checkout": 816
+  }
+}
