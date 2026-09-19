@@ -53,7 +53,6 @@ export const AbandonedCartsSection: React.FC<AbandonedCartsSectionProps> = ({
 
   const fetchCarts = async (isManual = false) => {
     if (isManual) setRefreshing(true);
-    else setLoading(true);
 
     try {
       const res = await fetch('/api/admin/abandoned-carts', {
@@ -63,11 +62,11 @@ export const AbandonedCartsSection: React.FC<AbandonedCartsSectionProps> = ({
       if (res.ok && Array.isArray(data.carts)) {
         setCarts(data.carts);
         if (isManual) onShowToast('✅ Abandoned carts refreshed');
-      } else {
+      } else if (isManual) {
         onShowToast(`⚠️ ${data.error || 'Failed to load abandoned carts'}`);
       }
     } catch {
-      onShowToast('❌ Network error loading abandoned carts');
+      if (isManual) onShowToast('❌ Network error loading abandoned carts');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -76,6 +75,11 @@ export const AbandonedCartsSection: React.FC<AbandonedCartsSectionProps> = ({
 
   useEffect(() => {
     void fetchCarts();
+    // Real-time live auto-refresh every 3s so cart additions/removals sync instantly
+    const timer = setInterval(() => {
+      void fetchCarts(false);
+    }, 3000);
+    return () => clearInterval(timer);
   }, []);
 
   const toggleReminded = async (cart: AbandonedCart) => {

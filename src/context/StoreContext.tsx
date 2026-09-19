@@ -917,6 +917,25 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       try {
         localStorage.setItem('bpg_cart_next', JSON.stringify(next));
       } catch {}
+
+      // Instant abandoned cart sync
+      const p = user?.phone || (typeof window !== 'undefined' ? localStorage.getItem('bpg_checkout_phone') : null);
+      if (p) {
+        fetch('/api/cart/abandon', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(user?.token ? { Authorization: `Bearer ${user.token}` } : {}),
+          },
+          body: JSON.stringify({
+            phone: p,
+            name: user?.name || 'Student',
+            cart: next.map((c) => ({ id: c.id, title: c.title, qty: c.qty, price: c.price })),
+            cleared: next.length === 0,
+          }),
+        }).catch(() => {});
+      }
+
       return next;
     });
   };
@@ -941,6 +960,25 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       try {
         localStorage.setItem('bpg_cart_next', JSON.stringify(updatedCart));
       } catch {}
+
+      // Instant abandoned cart sync
+      const p = user?.phone || (typeof window !== 'undefined' ? localStorage.getItem('bpg_checkout_phone') : null);
+      if (p) {
+        fetch('/api/cart/abandon', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(user?.token ? { Authorization: `Bearer ${user.token}` } : {}),
+          },
+          body: JSON.stringify({
+            phone: p,
+            name: user?.name || 'Student',
+            cart: updatedCart.map((c) => ({ id: c.id, title: c.title, qty: c.qty, price: c.price })),
+            cleared: updatedCart.length === 0,
+          }),
+        }).catch(() => {});
+      }
+
       return updatedCart;
     });
   };
@@ -967,7 +1005,24 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     } catch {
       /* ignore */
     }
-  }, []);
+
+    const p = user?.phone || (typeof window !== 'undefined' ? localStorage.getItem('bpg_checkout_phone') : null);
+    if (p) {
+      fetch('/api/cart/abandon', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(user?.token ? { Authorization: `Bearer ${user.token}` } : {}),
+        },
+        body: JSON.stringify({
+          phone: p,
+          name: user?.name || 'Student',
+          cart: [],
+          cleared: true,
+        }),
+      }).catch(() => {});
+    }
+  }, [user?.phone, user?.name, user?.token]);
 
   /** Clear cart locally + on server immediately after a successful order. */
   const clearCartAfterOrder = useCallback(() => {
@@ -976,6 +1031,22 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       localStorage.setItem('bpg_cart_next', '[]');
     } catch {
       /* ignore */
+    }
+    const p = user?.phone || (typeof window !== 'undefined' ? localStorage.getItem('bpg_checkout_phone') : null);
+    if (p) {
+      fetch('/api/cart/abandon', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(user?.token ? { Authorization: `Bearer ${user.token}` } : {}),
+        },
+        body: JSON.stringify({
+          phone: p,
+          name: user?.name || 'Student',
+          cart: [],
+          cleared: true,
+        }),
+      }).catch(() => {});
     }
     if (user?.id) {
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
