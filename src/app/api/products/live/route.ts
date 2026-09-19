@@ -12,11 +12,13 @@ export async function invalidateLiveProductsCache() {
   await redisDel('catalog:live_stock');
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const now = Date.now();
+  const url = new URL(request.url);
+  const forceFresh = url.searchParams.get('fresh') === '1' || Boolean(request.headers.get('authorization'));
 
   // 1. Fast-path: local process memory (sub-millisecond)
-  if (memoryCache && now - memoryCache.timestamp < MEMORY_TTL_MS) {
+  if (!forceFresh && memoryCache && now - memoryCache.timestamp < MEMORY_TTL_MS) {
     return NextResponse.json(
       { ok: true, books: memoryCache.data, cached: 'memory' },
       {
@@ -29,18 +31,20 @@ export async function GET() {
   }
 
   // 2. Shared Redis cache (coalesce across worker blessing@3000 and blessing@3001)
-  const redisCached = await redisGetJson<Record<string, any>>('catalog:live_stock');
-  if (redisCached) {
-    memoryCache = { data: redisCached, timestamp: now };
-    return NextResponse.json(
-      { ok: true, books: redisCached, cached: 'redis' },
-      {
-        headers: {
-          'Cache-Control': 'no-store, no-cache, must-revalidate',
-          'X-Live-Cache': 'HIT_REDIS',
-        },
-      }
-    );
+  if (!forceFresh) {
+    const redisCached = await redisGetJson<Record<string, any>>('catalog:live_stock');
+    if (redisCached) {
+      memoryCache = { data: redisCached, timestamp: now };
+      return NextResponse.json(
+        { ok: true, books: redisCached, cached: 'redis' },
+        {
+          headers: {
+            'Cache-Control': 'no-store, no-cache, must-revalidate',
+            'X-Live-Cache': 'HIT_REDIS',
+          },
+        }
+      );
+    }
   }
 
   // 3. Lean database query: only dynamic columns (0 joins, minimal bandwidth)

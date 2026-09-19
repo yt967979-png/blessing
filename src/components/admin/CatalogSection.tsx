@@ -249,6 +249,9 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
   };
 
   const handleSaveEdit = async (id: string | number) => {
+    const numPrice = Number(editPrice);
+    const numMrp = Number(editMrp);
+    const numStock = Math.max(0, parseInt(String(editStock), 10) || 0);
     try {
       await onUpdateProduct(id, {
         title: editTitle.trim(),
@@ -256,10 +259,10 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
         image: editImage.trim() || undefined,
         cls: editCls,
         subject: editSubject,
-        price: editPrice,
-        mrp: editMrp,
-        stock: editStock,
-        inStock: editStock > 0,
+        price: numPrice,
+        mrp: numMrp,
+        stock: numStock,
+        inStock: numStock > 0,
         samplePdfUrl: editSamplePdf.trim() || null,
       });
       onShowToast('✅ Publication details updated');
@@ -272,12 +275,19 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
   const handleToggleStockStatus = async (p: Product) => {
     const nextInStock = !p.inStock;
     const currentStock = p.stock ?? 0;
-    const nextStock = nextInStock ? (currentStock > 0 ? currentStock : 1) : 0;
     try {
-      await onUpdateProduct(p.id, {
-        inStock: nextInStock,
-        stock: nextStock,
-      });
+      if (nextInStock && currentStock <= 0) {
+        // Turning ON from 0: ensure at least 1 unit so customer can buy
+        await onUpdateProduct(p.id, {
+          inStock: true,
+          stock: 1,
+        });
+      } else {
+        // Toggling status without destroying existing rack inventory count!
+        await onUpdateProduct(p.id, {
+          inStock: nextInStock,
+        });
+      }
       onShowToast(nextInStock ? `📦 ${p.title} marked IN STOCK` : `⚠️ ${p.title} marked OUT OF STOCK`);
     } catch {
       onShowToast('❌ Toggle failed');
@@ -591,7 +601,11 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                 filteredProducts.map((p) => {
                   const isEditing = editingId === p.id;
                   const disc =
-                    p.mrp > p.price ? Math.round(((p.mrp - p.price) / p.mrp) * 100) : 0;
+                    p.mrp > p.price
+                      ? p.price <= 0
+                        ? 100
+                        : Math.min(99, Math.round(((p.mrp - p.price) / p.mrp) * 100))
+                      : 0;
                   const isOOS = !p.inStock || (p.stock ?? 0) <= 0;
                   const isLow = (p.stock ?? 99) <= 5 && !isOOS;
                   const heldCount = holdsByBookId.get(String(p.id)) || 0;

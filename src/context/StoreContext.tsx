@@ -181,6 +181,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const productsRef = useRef<Product[]>([]);
   productsRef.current = products;
+  const recentAdminEditsRef = useRef<Map<string, number>>(new Map());
 
   const cartRef = useRef<CartItem[]>([]);
   cartRef.current = cart;
@@ -398,6 +399,10 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const next = prev.map((p) => {
         const upd = byId.get(String(p.id));
         if (!upd) return p;
+        const lastEdit = recentAdminEditsRef.current.get(String(p.id)) || 0;
+        if (Date.now() - lastEdit < 15000) {
+          return p;
+        }
         const newPrice = typeof upd.price === 'number' && Number.isFinite(upd.price) && upd.price > 0 ? upd.price : p.price;
         const newMrp = typeof upd.mrp === 'number' && Number.isFinite(upd.mrp) && upd.mrp > 0 ? upd.mrp : p.mrp;
         const newDiscount = typeof upd.discount === 'number' ? upd.discount : p.discount;
@@ -1439,6 +1444,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         withDerived.price = mrp;
         withDerived.discount = 0;
       } else {
+        withDerived.price = sell;
         withDerived.discount = Math.round(((mrp - sell) / mrp) * 100);
       }
     }
@@ -1450,6 +1456,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       withDerived.stock = qty;
       withDerived.inStock = qty > 0;
     }
+    recentAdminEditsRef.current.set(String(id), Date.now());
     const previousProducts = products;
     setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, ...withDerived } : p)));
 

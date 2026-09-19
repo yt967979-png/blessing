@@ -142,13 +142,6 @@ function AdminPageInner() {
     setActiveTabState((cur) => (cur === fromUrl ? cur : fromUrl));
   }, [searchParams]);
 
-  // Admin portal must always view 100% fresh database catalog (bypassing client cache)
-  useEffect(() => {
-    if (isAdmin && refreshProducts) {
-      refreshProducts(true);
-    }
-  }, [isAdmin, refreshProducts]);
-
   const setActiveTab = useCallback(
     (tab: AdminTab) => {
       setActiveTabState(tab);
@@ -221,6 +214,13 @@ function AdminPageInner() {
   const [newFaqA, setNewFaqA] = useState('');
 
   const isAdmin = !!user && (user.role === 'admin' || user.role === 'super_admin');
+
+  // Admin portal must always view 100% fresh database catalog (bypassing client cache)
+  useEffect(() => {
+    if (isAdmin && refreshProducts) {
+      refreshProducts(true);
+    }
+  }, [isAdmin, refreshProducts]);
 
   const loadContent = useCallback(async () => {
     if (!user) return;
