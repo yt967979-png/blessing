@@ -567,10 +567,13 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
       es.onerror = () => {
         sseConnectedRef.current = false;
-        if (es && es.readyState === EventSource.CLOSED && !stopped) {
-          es.close();
-          es = null;
-          retryTimer = setTimeout(connect, 5000);
+        try {
+          es?.close();
+        } catch {}
+        es = null;
+        if (!stopped) {
+          clearTimeout(retryTimer);
+          retryTimer = setTimeout(connect, 15000);
         }
       };
     };

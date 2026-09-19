@@ -51,7 +51,13 @@ export async function POST(request: Request) {
 
     const amountInPaisa = Math.round(checkout.totalAmount * 100);
     if (amountInPaisa < 100) {
-      return NextResponse.json({ error: 'Invalid order total' }, { status: 400 });
+      return NextResponse.json(
+        {
+          error:
+            'Minimum transaction amount for Razorpay is ₹1.00 (100 paise). Orders below ₹1 cannot be processed through online payment.',
+        },
+        { status: 400 }
+      );
     }
 
     // Reserve stock the instant we're about to send the customer to Razorpay —

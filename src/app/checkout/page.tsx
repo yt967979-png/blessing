@@ -24,6 +24,7 @@ import { isValidMobileNumber, addressHasRequiredAlternate, normalizeRequiredAlte
 import { userNeedsProfile } from '@/lib/userProfile';
 import { imageNeedsUnoptimized } from '@/lib/productImage';
 import { getCartItemStockState, anyCartItemBlocking } from '@/lib/cartStock';
+import { MIN_BOOKS_PER_ORDER } from '@/lib/deliveryRules';
 import { Header } from '@/components/layout/Header';
 import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
 import { Footer } from '@/components/layout/Footer';
@@ -80,6 +81,19 @@ export default function CheckoutPage() {
   const [couponError, setCouponError] = useState<string | null>(null);
 
   const finalPayable = Math.max(0, cartGrandTotal - (appliedCoupon?.discountAmount || 0));
+
+  // Preload Razorpay checkout SDK as soon as customer opens checkout page
+  useEffect(() => {
+    if (typeof window !== 'undefined' && !(window as any).Razorpay) {
+      const existing = document.querySelector('script[src*="checkout.razorpay.com"]');
+      if (!existing) {
+        const s = document.createElement('script');
+        s.src = 'https://checkout.razorpay.com/v1/checkout.js';
+        s.async = true;
+        document.head.appendChild(s);
+      }
+    }
+  }, []);
 
   const handleApplyCoupon = async () => {
     if (!couponInput.trim()) return;
@@ -322,8 +336,8 @@ export default function CheckoutPage() {
   };
 
   const goToReview = async () => {
-    if (cartCount < 4) {
-      showToast('Minimum order quantity is 4 books.');
+    if (cartCount < MIN_BOOKS_PER_ORDER) {
+      showToast(`Minimum order quantity is ${MIN_BOOKS_PER_ORDER} book(s).`);
       return;
     }
     if (selectedAddrId === 'new' || savedAddresses.length === 0) {
@@ -352,8 +366,8 @@ export default function CheckoutPage() {
 
   const handlePlaceOrder = async () => {
     if (orderSubmitLock.current || isPlacingOrder || !user) return;
-    if (cartCount < 4) {
-      showToast('Minimum order quantity is 4 books.');
+    if (cartCount < MIN_BOOKS_PER_ORDER) {
+      showToast(`Minimum order quantity is ${MIN_BOOKS_PER_ORDER} book(s).`);
       return;
     }
     orderSubmitLock.current = true;
@@ -408,6 +422,12 @@ export default function CheckoutPage() {
         setEditDraft({ ...selectedAddress });
       }
       setStep(1);
+      release();
+      return;
+    }
+
+    if (finalPayable < 1) {
+      showToast('⚠️ Razorpay minimum transaction amount is ₹1.00 (cannot process amounts below ₹1).');
       release();
       return;
     }
@@ -624,15 +644,15 @@ export default function CheckoutPage() {
           </div>
         </div>
 
-        {/* Minimum 4 Books Alert Banner */}
-        {cartCount < 4 && (
+        {/* Minimum Books Alert Banner */}
+        {cartCount < MIN_BOOKS_PER_ORDER && (
           <div className="max-w-2xl mx-auto mb-6 p-4 bg-amber-50 border-2 border-amber-300 rounded-2xl flex items-start gap-3 text-amber-900 text-xs font-medium shadow-sm">
             <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
             <div>
-              <p className="font-extrabold text-sm mb-0.5">Minimum Order Quantity: 4 Books</p>
+              <p className="font-extrabold text-sm mb-0.5">Minimum Order Quantity: {MIN_BOOKS_PER_ORDER} Book(s)</p>
               <p>
                 You currently have <strong>{cartCount} book(s)</strong> in your cart. Please add{' '}
-                <strong>{4 - cartCount} more guide(s)</strong> to complete your order.
+                <strong>{MIN_BOOKS_PER_ORDER - cartCount} more guide(s)</strong> to complete your order.
               </p>
               <Link href="/search" className="inline-block mt-2 font-bold text-[#0044AA] hover:underline cursor-pointer">
                 + Browse Guides & Add to Cart →
@@ -874,7 +894,7 @@ export default function CheckoutPage() {
 
               <button
                 type="button"
-                disabled={cartCount < 4}
+                disabled={cartCount < MIN_BOOKS_PER_ORDER}
                 onClick={() => void goToReview()}
                 className="hidden sm:flex w-full items-center justify-center bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-[#001B3A] font-extrabold text-sm py-3.5 rounded-xl uppercase tracking-wider disabled:opacity-50 transition-all min-h-12 touch-manipulation"
               >
@@ -981,7 +1001,7 @@ export default function CheckoutPage() {
               )}
               <button
                 type="button"
-                disabled={cartCount < 4 || hasBlockingItem}
+                disabled={cartCount < MIN_BOOKS_PER_ORDER || hasBlockingItem}
                 onClick={async () => {
                   const clean = await validateCartStock();
                   if (!clean) return;
@@ -1177,7 +1197,7 @@ export default function CheckoutPage() {
 
               <button
                 type="button"
-                disabled={isPlacingOrder || cart.length === 0 || cartCount < 4 || hasBlockingItem}
+                disabled={isPlacingOrder || cart.length === 0 || cartCount < MIN_BOOKS_PER_ORDER || hasBlockingItem}
                 onClick={() => void handlePlaceOrder()}
                 className="hidden sm:flex w-full items-center justify-center bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 hover:from-amber-500 hover:to-amber-700 text-[#001B3A] font-black text-sm py-4 rounded-xl uppercase tracking-wider shadow-lg shadow-amber-500/20 disabled:opacity-60 transition-all hover:scale-[1.01] min-h-12 touch-manipulation"
               >
@@ -1211,7 +1231,7 @@ export default function CheckoutPage() {
         {step === 1 && (
           <button
             type="button"
-            disabled={cartCount < 4}
+            disabled={cartCount < MIN_BOOKS_PER_ORDER}
             onClick={() => void goToReview()}
             className="w-full bg-gradient-to-r from-amber-400 to-amber-500 disabled:opacity-50 text-[#001B3A] font-extrabold text-xs py-3.5 rounded-xl uppercase tracking-wider min-h-12 touch-manipulation"
           >
@@ -1222,7 +1242,7 @@ export default function CheckoutPage() {
         {step === 2 && (
           <button
             type="button"
-            disabled={cartCount < 4 || hasBlockingItem}
+            disabled={cartCount < MIN_BOOKS_PER_ORDER || hasBlockingItem}
             onClick={async () => {
               const clean = await validateCartStock();
               if (!clean) return;
@@ -1242,7 +1262,7 @@ export default function CheckoutPage() {
             </div>
             <button
               type="button"
-              disabled={isPlacingOrder || cart.length === 0 || cartCount < 4 || hasBlockingItem}
+              disabled={isPlacingOrder || cart.length === 0 || cartCount < MIN_BOOKS_PER_ORDER || hasBlockingItem}
               onClick={() => void handlePlaceOrder()}
               className="flex-1 bg-gradient-to-r from-amber-400 to-amber-500 disabled:opacity-50 text-[#001B3A] font-extrabold text-xs py-3.5 rounded-xl uppercase tracking-wider min-h-12 touch-manipulation"
             >
