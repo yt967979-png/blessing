@@ -43,8 +43,13 @@ export async function GET(request: NextRequest) {
         ac.updated_at,
         EXISTS (
           SELECT 1 FROM orders o 
-          WHERE (o.customer_phone = ac.phone OR o.customer_alt_phone = ac.phone)
-            AND o.created_at >= ac.created_at
+          LEFT JOIN users u ON o.user_id = u.id
+          WHERE (
+            (ac.user_id IS NOT NULL AND ac.user_id <> '' AND o.user_id = ac.user_id)
+            OR (u.phone IS NOT NULL AND u.phone = ac.phone)
+            OR (o.shipping_address ILIKE '%' || ac.phone || '%')
+          )
+          AND o.created_at >= ac.created_at
         ) as converted
       FROM abandoned_carts ac
       ORDER BY ac.updated_at DESC
