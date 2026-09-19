@@ -207,7 +207,7 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
     setEditImage(p.image || '');
     setEditPrice(p.price);
     setEditMrp(p.mrp || p.price);
-    setEditStock(p.stock ?? 10);
+    setEditStock(p.stock ?? 0);
     setEditSamplePdf(p.samplePdfUrl || '');
     setEditCls(p.cls || '10th');
     setEditSubject(p.subject || 'Mathematics');
@@ -271,7 +271,8 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
 
   const handleToggleStockStatus = async (p: Product) => {
     const nextInStock = !p.inStock;
-    const nextStock = nextInStock ? Math.max(p.stock || 0, 10) : 0;
+    const currentStock = p.stock ?? 0;
+    const nextStock = nextInStock ? (currentStock > 0 ? currentStock : 1) : 0;
     try {
       await onUpdateProduct(p.id, {
         inStock: nextInStock,
@@ -763,8 +764,10 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                               <span className="text-[10px] text-slate-400 block">Offer ₹</span>
                               <input
                                 type="number"
+                                step="any"
+                                min="0"
                                 value={editPrice}
-                                onChange={(e) => setEditPrice(Number(e.target.value))}
+                                onChange={(e) => setEditPrice(e.target.value === '' ? ('' as any) : Number(e.target.value))}
                                 className="w-18 px-2 py-1 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold outline-none focus:border-[#2874f0]"
                               />
                             </div>
@@ -772,8 +775,10 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                               <span className="text-[10px] text-slate-400 block">MRP ₹</span>
                               <input
                                 type="number"
+                                step="any"
+                                min="0"
                                 value={editMrp}
-                                onChange={(e) => setEditMrp(Number(e.target.value))}
+                                onChange={(e) => setEditMrp(e.target.value === '' ? ('' as any) : Number(e.target.value))}
                                 className="w-18 px-2 py-1 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold outline-none focus:border-[#2874f0]"
                               />
                             </div>
@@ -1023,7 +1028,8 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                     <input
                       type="number"
                       required
-                      min={1}
+                      step="any"
+                      min={0}
                       placeholder="e.g. 350"
                       value={newMrp}
                       onChange={(e) => setNewMrp(e.target.value)}
@@ -1039,7 +1045,8 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                     <input
                       type="number"
                       required
-                      min={1}
+                      step="any"
+                      min={0}
                       placeholder="e.g. 280"
                       value={newPrice}
                       onChange={(e) => setNewPrice(e.target.value)}

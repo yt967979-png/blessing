@@ -268,12 +268,12 @@ export function startStockListenBroker() {
 
 export async function GET(req: NextRequest) {
   // Public stream — stock/availability is already public catalog data (no auth needed),
-  // but still rate-limited so it can't be used to open unbounded connections.
-  const rl = await applyRateLimitAsync(req, 'stock-stream', 30, 60000);
+  // generous rate-limit (240/min) allows multi-tab browsing and quick reconnections without 429 locks.
+  const rl = await applyRateLimitAsync(req, 'stock-stream', 240, 60000);
   if (!rl.allowed) {
     return new Response(JSON.stringify({ error: 'Too many connections. Please wait.' }), {
       status: 429,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Retry-After': '5' },
     });
   }
 

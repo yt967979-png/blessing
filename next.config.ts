@@ -38,6 +38,7 @@ const nextConfig: NextConfig = {
       "https://www.gstatic.com",
       "https://checkout.razorpay.com",
       "https://cdn.razorpay.com",
+      "https://static.cloudflareinsights.com",
     ]
       .filter(Boolean)
       .join(" ");
@@ -48,6 +49,7 @@ const nextConfig: NextConfig = {
       "https://www.gstatic.com",
       "https://checkout.razorpay.com",
       "https://cdn.razorpay.com",
+      "https://static.cloudflareinsights.com",
     ].join(" ");
 
     return [

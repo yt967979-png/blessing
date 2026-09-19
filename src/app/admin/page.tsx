@@ -396,18 +396,30 @@ function AdminPageInner() {
     let esStock: EventSource | null = null;
     let esOrders: EventSource | null = null;
 
-    try {
-      esStock = new EventSource('/api/stock/stream');
-      esStock.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data.type === 'STOCK_CHANGED' || data.type === 'CATALOG_CHANGED') {
-            loadLowStock();
-            if (refreshProducts) refreshProducts(true);
+    const connectStockStream = () => {
+      if (!active) return;
+      try {
+        esStock = new EventSource('/api/stock/stream');
+        esStock.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data.type === 'STOCK_CHANGED' || data.type === 'CATALOG_CHANGED') {
+              loadLowStock();
+              if (refreshProducts) refreshProducts(true);
+            }
+          } catch (_) {}
+        };
+        esStock.onerror = () => {
+          try {
+            esStock?.close();
+          } catch (_) {}
+          if (active) {
+            setTimeout(connectStockStream, 8000);
           }
-        } catch (_) {}
-      };
-    } catch (_) {}
+        };
+      } catch (_) {}
+    };
+    connectStockStream();
 
     const connectOrdersStream = () => {
       if (!active) return;
