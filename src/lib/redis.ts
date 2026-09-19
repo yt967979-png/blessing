@@ -82,16 +82,17 @@ export async function redisRateLimit(
 
   const redisKey = `bpg:rl:${key}`;
   try {
-    const pipeline = client.pipeline();
-    pipeline.incr(redisKey);
-    pipeline.pexpire(redisKey, windowMs);
-    const results = await pipeline.exec();
-
-    if (!results || !results[0]) return null;
-    const [incrErr, incrResult] = results[0];
-    if (incrErr) return null;
-
-    const currentCount = Number(incrResult) || 1;
+    // Atomic fixed-window rate limit: only set TTL on first request (when count is 1).
+    // This prevents retry storms from resetting the TTL and trapping users in endless 429 loops.
+    const luaScript = `
+      local current = redis.call('INCR', KEYS[1])
+      if current == 1 then
+        redis.call('PEXPIRE', KEYS[1], ARGV[1])
+      end
+      return current
+    `;
+    const result = (await client.eval(luaScript, 1, redisKey, windowMs)) as number;
+    const currentCount = Number(result) || 1;
     if (currentCount > limit) {
       return { success: false, remaining: 0 };
     }

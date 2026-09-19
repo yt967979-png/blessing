@@ -267,14 +267,19 @@ export function startStockListenBroker() {
 }
 
 export async function GET(req: NextRequest) {
-  // Public stream — stock/availability is already public catalog data (no auth needed),
-  // generous rate-limit (240/min) allows multi-tab browsing and quick reconnections without 429 locks.
-  const rl = await applyRateLimitAsync(req, 'stock-stream', 240, 60000);
-  if (!rl.allowed) {
-    return new Response(JSON.stringify({ error: 'Too many connections. Please wait.' }), {
-      status: 429,
-      headers: { 'Content-Type': 'application/json', 'Retry-After': '5' },
-    });
+  // Public stream — stock/availability is public catalog data.
+  // Bypass rate limiting for active admins, and use a generous 600/min limit for visitors
+  // to avoid false 429 lockouts on multi-tab or network switches.
+  const authHeader = req.headers.get('authorization') || '';
+  const isAdmin = authHeader.includes('Bearer ') || Boolean(req.cookies.get('bpg_admin_token'));
+  if (!isAdmin) {
+    const rl = await applyRateLimitAsync(req, 'stock-stream', 600, 60000);
+    if (!rl.allowed) {
+      return new Response(JSON.stringify({ error: 'Too many connections. Please wait.' }), {
+        status: 429,
+        headers: { 'Content-Type': 'application/json', 'Retry-After': '5' },
+      });
+    }
   }
 
   void ensureListen();

@@ -2,10 +2,21 @@ import { NextResponse } from 'next/server';
 import { verifySessionToken, getTokenFromRequest, getDeviceIdFromRequest } from '@/lib/auth';
 
 export function clientIp(request: Request): string {
+  // 1. Cloudflare true client IP
+  const cfConnectingIp = request.headers.get('cf-connecting-ip');
+  if (cfConnectingIp && cfConnectingIp.trim()) {
+    return cfConnectingIp.trim();
+  }
+  // 2. Standard proxy chain — find first non-private IP
   const xForwardedFor = request.headers.get('x-forwarded-for');
   if (xForwardedFor) {
-    const ip = xForwardedFor.split(',')[0].trim();
-    if (ip) return ip;
+    const parts = xForwardedFor.split(',').map((p) => p.trim()).filter(Boolean);
+    for (const part of parts) {
+      if (!part.startsWith('172.') && !part.startsWith('10.') && !part.startsWith('127.') && !part.startsWith('192.168.')) {
+        return part;
+      }
+    }
+    if (parts[0]) return parts[0];
   }
   const xRealIp = request.headers.get('x-real-ip');
   if (xRealIp) return xRealIp.trim();
