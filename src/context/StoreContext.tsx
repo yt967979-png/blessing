@@ -223,18 +223,21 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const refreshProducts = (forceFresh = false) => {
     const now = Date.now();
-    // Deduplicate: if another refresh is already in-flight or one just finished <2s ago, skip
-    if (refreshInFlightRef.current) return;
-    if (now - lastRefreshTsRef.current < 2000) return;
+    // Non-fresh requests can be throttled/deduplicated; forceFresh requests must always proceed
+    if (!forceFresh) {
+      if (refreshInFlightRef.current) return;
+      if (now - lastRefreshTsRef.current < 2000) return;
+    }
+    refreshInFlightRef.current = true;
 
     // Soft SWR: keep previous catalog on screen — only skeleton when empty
     if (productsRef.current.length === 0) {
       setProductsLoading(true);
     }
-    refreshInFlightRef.current = true;
     const url = forceFresh ? '/api/products?fresh=1' : '/api/products';
     const opts: RequestInit = {
       cache: forceFresh ? 'no-store' : 'default',
+      headers: forceFresh ? { 'Cache-Control': 'no-cache, no-store, must-revalidate', Pragma: 'no-cache' } : {},
       signal: AbortSignal.timeout(10_000),
     };
     fetch(url, opts)
@@ -309,7 +312,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setProducts(cached);
       setProductsLoading(false);
     }
-    refreshProducts();
+    const isAdminPath = typeof window !== 'undefined' && window.location.pathname.startsWith('/admin');
+    refreshProducts(isAdminPath);
 
     const localCart = readLocalCart();
     const localWish = readLocalWishlist();

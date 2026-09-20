@@ -22,8 +22,12 @@ function safeCatalogImage(raw: unknown): string {
   return img;
 }
 
-export function invalidateProductsCache() {
+export async function invalidateProductsCache() {
   queryCache.clear();
+  try {
+    const { redisDelPattern } = await import('@/lib/redis');
+    await redisDelPattern('catalog:*');
+  } catch {}
   try {
     const { invalidateLiveProductsCache } = require('./live/route');
     void invalidateLiveProductsCache();
@@ -165,18 +169,27 @@ export async function GET(request: Request) {
     const search = searchParams.get('search');
     const slug = searchParams.get('slug');
     const key = cacheKey(cls, search, slug);
-    const forceFresh = searchParams.get('fresh') === '1';
+    const authHeader = request.headers.get('authorization');
+    const cookieHeader = request.headers.get('cookie') || '';
+    const isAdminHint = Boolean(
+      searchParams.get('admin') === '1' ||
+      authHeader ||
+      cookieHeader.includes('bpg_token') ||
+      cookieHeader.includes('bpg_session') ||
+      request.headers.get('x-admin-request') === '1'
+    );
+    const forceFresh = searchParams.get('fresh') === '1' || isAdminHint;
 
     const hdrs = forceFresh ? freshHeaders : catalogHeaders;
 
-    const cached = readCache(key);
-    if (cached && !forceFresh) {
-      return NextResponse.json(cached, {
-        headers: hdrs({ 'X-Cache-Status': 'HIT_MEMORY' }),
-      });
-    }
-
     if (!forceFresh) {
+      const cached = readCache(key);
+      if (cached) {
+        return NextResponse.json(cached, {
+          headers: hdrs({ 'X-Cache-Status': 'HIT_MEMORY' }),
+        });
+      }
+
       try {
         const redisCached = await redisGetJson<any[]>(`catalog:${key}`);
         if (redisCached && Array.isArray(redisCached) && redisCached.length > 0) {
@@ -376,7 +389,7 @@ export async function POST(request: Request) {
       stockQty,
       finalPdf,
     ]);
-    invalidateProductsCache();
+    await invalidateProductsCache();
     try {
       const { notifyCatalogChanged } = await import('@/app/api/stock/stream/route');
       void notifyCatalogChanged([id]);
@@ -486,7 +499,7 @@ export async function PATCH(request: Request) {
         `UPDATE books SET ${assignments.join(', ')} WHERE id = $${params.length}`,
         params
       );
-      invalidateProductsCache();
+      await invalidateProductsCache();
       try {
         const { notifyStockChanged, notifyCatalogChanged } = await import('@/app/api/stock/stream/route');
         if (
@@ -520,7 +533,7 @@ export async function DELETE(request: Request) {
     if (!id) return NextResponse.json({ error: 'Product id is required' }, { status: 400 });
 
     await queryDb(`DELETE FROM books WHERE id = $1`, [id]);
-    invalidateProductsCache();
+    await invalidateProductsCache();
     try {
       // Book row is gone — stock notify would no-op; force full catalog refresh
       const { notifyCatalogChanged } = await import('@/app/api/stock/stream/route');

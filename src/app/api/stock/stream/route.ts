@@ -87,7 +87,7 @@ export async function notifyStockChanged(bookIds: Array<string | number | null |
     // circular dependency between this route and api/products/route.
     try {
       const { invalidateProductsCache } = await import('@/app/api/products/route');
-      invalidateProductsCache();
+      await invalidateProductsCache();
     } catch (_) {}
     const payload = { type: 'STOCK_CHANGED', books, timestamp: Date.now() };
     // Same-process SSE clients must get the event even if LISTEN is down/slow
@@ -209,7 +209,7 @@ function ensureListen() {
         try {
           try {
             const { invalidateProductsCache } = await import('@/app/api/products/route');
-            invalidateProductsCache();
+            await invalidateProductsCache();
           } catch (_) {}
           broadcastStockChange(JSON.parse(msg.payload));
         } catch {

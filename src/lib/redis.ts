@@ -148,3 +148,32 @@ export async function redisDel(key: string): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * Safely delete keys matching pattern from Redis cache using SCAN to avoid blocking the event loop.
+ */
+export async function redisDelPattern(pattern: string): Promise<boolean> {
+  const client = getRedisClient();
+  if (!client) return false;
+
+  try {
+    const stream = client.scanStream({
+      match: `bpg:cache:${pattern}`,
+      count: 100,
+    });
+    const keysToDelete: string[] = [];
+    for await (const resultKeys of stream) {
+      if (Array.isArray(resultKeys) && resultKeys.length > 0) {
+        keysToDelete.push(...resultKeys);
+      }
+    }
+    if (keysToDelete.length > 0) {
+      await client.del(...keysToDelete);
+    }
+    return true;
+  } catch (err: any) {
+    console.warn('[redis] redisDelPattern failed:', err?.message || err);
+    return false;
+  }
+}
+
