@@ -16,7 +16,6 @@ import { Footer } from '@/components/layout/Footer';
 import { ContactSection } from '@/components/home/ContactSection';
 import { PromoSection } from '@/components/home/PromoSection';
 import { HomeCouponsSection } from '@/components/home/HomeCouponsSection';
-import { ExamPrepCompass } from '@/components/home/ExamPrepCompass';
 
 export default function Home() {
   const router = useRouter();
@@ -95,7 +94,6 @@ export default function Home() {
       <Header />
       <HeroSection />
       <ClassPicker />
-      <ExamPrepCompass />
       <ProductGrid />
       <PromoSection />
       <HomeCouponsSection />
