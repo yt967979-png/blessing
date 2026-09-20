@@ -173,40 +173,7 @@ const nextConfig: NextConfig = {
           },
         ],
       },
-      {
-        source: "/api/products",
-        headers: [
-          {
-            key: "Cache-Control",
-            value: "public, max-age=0, s-maxage=300, stale-while-revalidate=600",
-          },
-          {
-            key: "CDN-Cache-Control",
-            value: "max-age=300, stale-while-revalidate=600",
-          },
-          {
-            key: "Cloudflare-CDN-Cache-Control",
-            value: "max-age=300, stale-while-revalidate=600",
-          },
-        ],
-      },
-      {
-        source: "/api/products/:path*",
-        headers: [
-          {
-            key: "Cache-Control",
-            value: "public, max-age=0, s-maxage=300, stale-while-revalidate=600",
-          },
-          {
-            key: "CDN-Cache-Control",
-            value: "max-age=300, stale-while-revalidate=600",
-          },
-          {
-            key: "Cloudflare-CDN-Cache-Control",
-            value: "max-age=300, stale-while-revalidate=600",
-          },
-        ],
-      },
+
       // Private Customer & Admin Routes — Strictly NEVER Cached Publicly
       ...[
         "/api/orders/:path*",
