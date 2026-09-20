@@ -2,8 +2,6 @@ import Redis from 'ioredis';
 
 let redisClient: Redis | null = null;
 let isRedisAvailable = false;
-let lastConnectionAttempt = 0;
-const RECONNECT_COOLDOWN_MS = 30_000;
 
 function getRedisUrl(): string | null {
   if (process.env.DISABLE_REDIS === 'true') return null;

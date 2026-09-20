@@ -110,7 +110,7 @@ export async function GET(request: NextRequest) {
   }
 
   // 3. Database Pool & Query Performance
-  let dbPool = {
+  const dbPool = {
     activeConnections: 1,
     idleConnections: 0,
     waitingLocks: 0,
@@ -142,7 +142,7 @@ export async function GET(request: NextRequest) {
   }
 
   // 4. Redis Telemetry
-  let redisStats = {
+  const redisStats = {
     status: 'ONLINE',
     pingMs: 0,
   };

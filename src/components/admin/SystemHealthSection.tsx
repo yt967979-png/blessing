@@ -514,7 +514,7 @@ export const SystemHealthSection: React.FC<SystemHealthSectionProps> = ({
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-bold text-slate-500 flex items-center gap-1.5">
                 <TrendingUp className="w-4 h-4 text-blue-600" />
-                TODAY'S TRAFFIC & PEAK
+                TODAY&apos;S TRAFFIC &amp; PEAK
               </span>
               <span className="text-[10px] font-black bg-blue-50 text-blue-700 px-2 py-0.5 rounded">
                 HYPERLOGLOG
@@ -966,7 +966,7 @@ export const SystemHealthSection: React.FC<SystemHealthSectionProps> = ({
         <div className="bg-white rounded-3xl border border-slate-200 p-5 shadow-sm space-y-3">
           <div className="flex items-center gap-2">
             <ShoppingBag className="w-5 h-5 text-blue-600" />
-            <h3 className="font-bold text-sm text-slate-900">Today's E-Commerce Pulse</h3>
+            <h3 className="font-bold text-sm text-slate-900">Today&apos;s E-Commerce Pulse</h3>
           </div>
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100">

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import Link from 'next/link';
 import {
   Activity,
   CheckCircle2,
@@ -435,12 +436,12 @@ export default function OpsPage() {
           </form>
 
           <div className="pt-4 border-t border-slate-800/80 text-center">
-            <a
+            <Link
               href="/"
               className="text-xs text-slate-500 hover:text-slate-300 font-medium transition-colors"
             >
               ← Return to Bookstore
-            </a>
+            </Link>
           </div>
         </div>
       </div>
@@ -822,7 +823,7 @@ export default function OpsPage() {
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-bold text-slate-400 flex items-center gap-1.5">
                   <TrendingUp className="w-4 h-4 text-blue-400" />
-                  TODAY'S TRAFFIC
+                  TODAY&apos;S TRAFFIC
                 </span>
                 <span className="text-[10px] font-black bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded">
                   REDIS HLL
@@ -1281,7 +1282,7 @@ export default function OpsPage() {
           <div className="bg-[#0D1829] rounded-3xl border border-slate-800 p-5 shadow-lg space-y-3">
             <div className="flex items-center gap-2">
               <ShoppingBag className="w-5 h-5 text-blue-400" />
-              <h3 className="font-bold text-sm text-white">Today's Storefront Pulse</h3>
+              <h3 className="font-bold text-sm text-white">Today&apos;s Storefront Pulse</h3>
             </div>
             <div className="grid grid-cols-2 gap-2 text-xs">
               <div className="p-2.5 bg-[#132238] rounded-xl border border-slate-800">

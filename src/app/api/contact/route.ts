@@ -3,8 +3,6 @@ import { tryGetDbClient, releaseDbClient } from '@/lib/db';
 import { applyRateLimitAsync } from '@/lib/serverSecurity';
 import { isValidMobileNumber, normalizeMobileDigits } from '@/lib/authValidation';
 
-let contactTableEnsured = false;
-
 export async function POST(request: Request) {
   const ip = request.headers.get('x-forwarded-for') || 'anonymous';
   const rl = await applyRateLimitAsync(`contact-${ip}`, 5, 600000);

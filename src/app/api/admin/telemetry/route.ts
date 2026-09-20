@@ -23,7 +23,7 @@ export async function GET(request: Request) {
   const memPercent = Math.round((usedMem / totalMem) * 100);
 
   // 2. PostgreSQL Connection Pool & Wait Events
-  let dbStats = {
+  const dbStats = {
     activeConnections: 1,
     idleConnections: 0,
     waitingLocks: 0,
@@ -49,7 +49,7 @@ export async function GET(request: Request) {
   }
 
   // 3. Redis In-Memory Engine
-  let redisStats = {
+  const redisStats = {
     status: 'ONLINE',
     pingMs: 0,
     mode: 'In-Memory Pipeline',

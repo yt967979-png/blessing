@@ -141,7 +141,7 @@ export async function GET(request: NextRequest) {
   }
 
   // 5. Database Pool & Live PG Activity
-  let dbPool = {
+  const dbPool = {
     activeConnections: 1,
     idleConnections: 0,
     waitingLocks: 0,
@@ -264,7 +264,7 @@ export async function GET(request: NextRequest) {
   }
 
   // 6. Redis Telemetry & Exact Memory Stats
-  let redisStats = {
+  const redisStats = {
     status: 'ONLINE',
     pingMs: 0,
     usedMemoryHuman: '895 KB',
