@@ -386,9 +386,13 @@ async function migrateDatabase(connStr, dbName) {
         target_type VARCHAR(100),
         target_id VARCHAR(255),
         details JSONB,
+        ip_address VARCHAR(100),
+        user_agent TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
       CREATE INDEX IF NOT EXISTS idx_audit_logs_actor ON audit_logs (actor_id);
+      CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs (action);
+      CREATE INDEX IF NOT EXISTS idx_audit_logs_target ON audit_logs (target_type, target_id);
       CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON audit_logs (created_at DESC);
 
       CREATE TABLE IF NOT EXISTS email_otps (
@@ -606,6 +610,14 @@ async function migrateDatabase(connStr, dbName) {
       CREATE INDEX IF NOT EXISTS idx_books_department_status ON books (department, status);
       CREATE INDEX IF NOT EXISTS idx_books_status_stock ON books (status, stock);
       CREATE INDEX IF NOT EXISTS idx_books_subject ON books (subject);
+      CREATE INDEX IF NOT EXISTS idx_books_status_cat ON books (status, category_id);
+      CREATE INDEX IF NOT EXISTS idx_addresses_user_id ON addresses (user_id);
+      CREATE INDEX IF NOT EXISTS idx_orders_order_number ON orders (order_number);
+
+      ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS ip_address VARCHAR(100);
+      ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS user_agent TEXT;
+      CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs (action);
+      CREATE INDEX IF NOT EXISTS idx_audit_logs_target ON audit_logs (target_type, target_id);
 
       -- Super Admin is set from env only (no hardcoded emails in source)
     `);

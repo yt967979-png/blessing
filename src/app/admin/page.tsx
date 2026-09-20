@@ -27,6 +27,7 @@ import CouponsSection from '@/components/admin/CouponsSection';
 import AnalyticsSection from '@/components/admin/AnalyticsSection';
 import { LiveSupportSection } from '@/components/admin/LiveSupportSection';
 import AbandonedCartsSection from '@/components/admin/AbandonedCartsSection';
+import AdminAuditTab from '@/components/admin/AdminAuditTab';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface OrderItem { title: string; qty: number; price?: number; subtotal?: number; }
@@ -872,6 +873,11 @@ function AdminPageInner() {
               onRefresh={() => void loadAnalytics({ fresh: true })}
               onExportCsv={handleExportCsv}
             />
+          )}
+
+          {/* SECTION H: SECURITY & AUDIT TRAIL */}
+          {activeTab === 'audit' && user && (
+            <AdminAuditTab user={user} showToast={showToast} />
           )}
         </main>
       </div>

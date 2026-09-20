@@ -1269,9 +1269,13 @@ async function runSchemaInit(client: any) {
           target_type VARCHAR(100),
           target_id VARCHAR(255),
           details JSONB,
+          ip_address VARCHAR(100),
+          user_agent TEXT,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
         CREATE INDEX IF NOT EXISTS idx_audit_logs_actor ON audit_logs (actor_id);
+        CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs (action);
+        CREATE INDEX IF NOT EXISTS idx_audit_logs_target ON audit_logs (target_type, target_id);
         CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON audit_logs (created_at DESC);
 
         CREATE TABLE IF NOT EXISTS job_heartbeats (
@@ -1340,6 +1344,9 @@ async function runSchemaInit(client: any) {
         CREATE INDEX IF NOT EXISTS idx_books_department_status ON books (department, status);
         CREATE INDEX IF NOT EXISTS idx_books_status_stock ON books (status, stock);
         CREATE INDEX IF NOT EXISTS idx_books_subject ON books (subject);
+        CREATE INDEX IF NOT EXISTS idx_books_status_cat ON books (status, category_id);
+        CREATE INDEX IF NOT EXISTS idx_addresses_user_id ON addresses (user_id);
+        CREATE INDEX IF NOT EXISTS idx_orders_order_number ON orders (order_number);
       `);
     } catch (e) {
       /* schema already exists or partial — safe to continue */
@@ -1347,6 +1354,13 @@ async function runSchemaInit(client: any) {
 
     // Critical column heals — run separately so one failure cannot skip the rest
     const heals = [
+      `ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS ip_address VARCHAR(100)`,
+      `ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS user_agent TEXT`,
+      `CREATE INDEX IF NOT EXISTS idx_books_status_cat ON books (status, category_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_addresses_user_id ON addresses (user_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_orders_order_number ON orders (order_number)`,
+      `CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs (action)`,
+      `CREATE INDEX IF NOT EXISTS idx_audit_logs_target ON audit_logs (target_type, target_id)`,
       `ALTER TABLE orders ADD COLUMN IF NOT EXISTS invoice_number VARCHAR(50)`,
       `ALTER TABLE orders ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`,
       `ALTER TABLE orders ADD COLUMN IF NOT EXISTS ordered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`,

@@ -18,6 +18,7 @@ import {
   Headphones,
   Tag,
   ShoppingBag,
+  ShieldCheck,
 } from 'lucide-react';
 import { BrandLogo } from '@/components/ui/BrandLogo';
 
@@ -31,7 +32,8 @@ export type AdminTab =
   | 'coupons'
   | 'users'
   | 'reviews'
-  | 'analytics';
+  | 'analytics'
+  | 'audit';
 
 export const ADMIN_TAB_KEYS: AdminTab[] = [
   'overview',
@@ -44,6 +46,7 @@ export const ADMIN_TAB_KEYS: AdminTab[] = [
   'users',
   'reviews',
   'analytics',
+  'audit',
 ];
 
 interface AdminSidebarProps {
@@ -133,6 +136,12 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
       label: 'GST & Sales Reports',
       subtitle: 'Monthly trends & 1-click tax CSV',
       icon: BarChart3,
+    },
+    {
+      key: 'audit' as AdminTab,
+      label: 'Security & Audit Trail',
+      subtitle: 'Immutable logs of price/role changes',
+      icon: ShieldCheck,
     },
   ];
 

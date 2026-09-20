@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { queryDb } from '@/lib/db';
 import { forbiddenResponse, verifyAdminRequest, verifySuperAdminRequest } from '@/lib/serverSecurity';
+import { recordAdminAudit } from '@/lib/adminAudit';
 import { getActiveHoldsSummary, releaseStockHolds } from '@/lib/stockHold';
 
 /** Admin: list customers + low-stock books + active stock holds */
@@ -148,6 +149,17 @@ export async function POST(request: NextRequest) {
       [newRole, userId]
     );
 
+    void recordAdminAudit(
+      {
+        actorId: admin.user?.userId || 'admin',
+        action: 'USER_ROLE_CHANGED',
+        targetType: 'user',
+        targetId: userId,
+        details: { oldRole: targetRole, newRole },
+      },
+      request
+    );
+
     return NextResponse.json({ success: true, userId, role: newRole });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
@@ -191,6 +203,17 @@ export async function PATCH(request: NextRequest) {
       [status, userId]
     );
 
+    void recordAdminAudit(
+      {
+        actorId: superAdmin.user?.userId || 'super_admin',
+        action: status === 'banned' ? 'USER_BANNED' : 'USER_STATUS_CHANGED',
+        targetType: 'user',
+        targetId: userId,
+        details: { status },
+      },
+      request
+    );
+
     return NextResponse.json({ success: true, userId, status });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
@@ -227,6 +250,18 @@ export async function DELETE(request: NextRequest) {
     await queryDb(`DELETE FROM users WHERE id::text = $1::text AND COALESCE(role, 'customer') != 'super_admin'`, [
       userId,
     ]);
+
+    void recordAdminAudit(
+      {
+        actorId: superAdmin.user?.userId || 'super_admin',
+        action: 'USER_DELETED',
+        targetType: 'user',
+        targetId: userId,
+        details: { deletedUserId: userId },
+      },
+      request
+    );
+
     return NextResponse.json({ success: true, userId });
   } catch (err: any) {
     return NextResponse.json({ error: err.message || 'Delete failed' }, { status: 500 });

@@ -33,8 +33,19 @@ export async function POST(request: Request) {
   const session = await getAuthenticatedUser(request);
   const admin = session ? await verifyAdminRequest(request) : null;
 
+  const contentType = request.headers.get('content-type') || '';
+  if (!contentType.includes('multipart/form-data')) {
+    return NextResponse.json({ error: 'Content-Type must be multipart/form-data' }, { status: 400 });
+  }
+
+  let formData: FormData;
   try {
-    const formData = await request.formData();
+    formData = await request.formData();
+  } catch {
+    return NextResponse.json({ error: 'Invalid or malformed form-data' }, { status: 400 });
+  }
+
+  try {
     const file = formData.get('file') as File | null;
     const folder = (formData.get('folder') as string) || 'blessing_power_guides';
 

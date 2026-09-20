@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getDbClient, releaseDbClient, ensureDefaultCategories, queryDb } from '@/lib/db';
 import { verifyAdminRequest, forbiddenResponse } from '@/lib/serverSecurity';
+import { recordAdminAudit } from '@/lib/adminAudit';
 import { getCatalogCacheTtlMs, getCatalogCdnHeaders } from '@/lib/launchScale';
 import { isBookInStock, calculateBookPrices } from '@/lib/stock';
 import { redisGetJson, redisSetJson } from '@/lib/redis';
@@ -420,6 +421,16 @@ export async function POST(request: Request) {
       finalPdf,
     ]);
     await invalidateProductsCache();
+    void recordAdminAudit(
+      {
+        actorId: auth.user?.userId || 'admin',
+        action: 'PRODUCT_CREATED',
+        targetType: 'book',
+        targetId: id,
+        details: { title, price: finalMrp, discount_price: finalDiscountPrice, stock: stockQty },
+      },
+      request
+    );
     try {
       const { notifyCatalogChanged } = await import('@/app/api/stock/stream/route');
       void notifyCatalogChanged([id]);
@@ -544,6 +555,17 @@ export async function PATCH(request: Request) {
         // Title/price/image edits also need a shop-side catalog refresh
         void notifyCatalogChanged([id]);
       } catch (_) {}
+
+      void recordAdminAudit(
+        {
+          actorId: auth.user?.userId || 'admin',
+          action: price !== undefined || mrp !== undefined ? 'PRICE_CHANGED' : (finalStock !== undefined ? 'STOCK_CHANGED' : 'PRODUCT_UPDATED'),
+          targetType: 'book',
+          targetId: id,
+          details: Object.fromEntries(setCols.entries()),
+        },
+        request
+      );
     }
 
     return NextResponse.json({ success: true, id });
@@ -564,6 +586,18 @@ export async function DELETE(request: Request) {
 
     await queryDb(`DELETE FROM books WHERE id = $1`, [id]);
     await invalidateProductsCache();
+
+    void recordAdminAudit(
+      {
+        actorId: auth.user?.userId || 'admin',
+        action: 'PRODUCT_DELETED',
+        targetType: 'book',
+        targetId: id,
+        details: { deletedId: id },
+      },
+      request
+    );
+
     try {
       // Book row is gone — stock notify would no-op; force full catalog refresh
       const { notifyCatalogChanged } = await import('@/app/api/stock/stream/route');
