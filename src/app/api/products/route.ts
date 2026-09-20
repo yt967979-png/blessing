@@ -30,10 +30,21 @@ export async function invalidateProductsCache() {
   try {
     const { redisDelPattern } = await import('@/lib/redis');
     await redisDelPattern('catalog:*');
+    await redisDelPattern('book_meta:*');
   } catch {}
   try {
     const { invalidateLiveProductsCache } = await import('@/app/api/products/live/route');
     await invalidateLiveProductsCache();
+  } catch {}
+  try {
+    const { invalidateMetaMemoryCache } = await import('@/app/products/[slug]/page');
+    invalidateMetaMemoryCache();
+  } catch {}
+  try {
+    const { revalidatePath } = await import('next/cache');
+    revalidatePath('/', 'layout');
+    revalidatePath('/products/[slug]', 'page');
+    revalidatePath('/admin');
   } catch {}
 }
 

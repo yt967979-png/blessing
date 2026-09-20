@@ -50,14 +50,14 @@ export function getCatalogCacheTtlMs(): number {
     const n = Number(process.env.CATALOG_CACHE_TTL_MS);
     if (Number.isFinite(n) && n > 0) return Math.floor(n);
   }
-  return getLaunchScale() === 'peak' ? 5 * 60 * 1000 : 15 * 60 * 1000;
+  return 30 * 1000; // 30 seconds max RAM cache — prevents stale price drift
 }
 
 export function getCatalogCdnHeaders(): Record<string, string> {
   return {
-    'Cache-Control': 'public, max-age=60, s-maxage=300, stale-while-revalidate=600',
-    'CDN-Cache-Control': 'max-age=300, stale-while-revalidate=600',
-    'Cloudflare-CDN-Cache-Control': 'max-age=300, stale-while-revalidate=600',
+    'Cache-Control': 'public, max-age=0, must-revalidate, s-maxage=30, stale-while-revalidate=60',
+    'CDN-Cache-Control': 'max-age=30, stale-while-revalidate=60',
+    'Cloudflare-CDN-Cache-Control': 'max-age=30, stale-while-revalidate=60',
     Vary: 'Accept-Encoding',
   };
 }

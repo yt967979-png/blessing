@@ -190,8 +190,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const [isValidatingCartStock, setIsValidatingCartStock] = useState(false);
 
-  const CATALOG_CACHE_KEY = 'bpg_catalog_cache_v1';
-  const CATALOG_TTL_MS = 5 * 60 * 1000;
+  const CATALOG_CACHE_KEY = 'bpg_catalog_cache_v2';
+  const CATALOG_TTL_MS = 30 * 1000; // 30-second client cache — ensures price changes show instantly
 
   const readCatalogCache = (allowStale = false): Product[] | null => {
     if (typeof window === 'undefined') return null;
@@ -236,8 +236,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
     const url = forceFresh ? '/api/products?fresh=1' : '/api/products';
     const opts: RequestInit = {
-      cache: forceFresh ? 'no-store' : 'default',
-      headers: forceFresh ? { 'Cache-Control': 'no-cache, no-store, must-revalidate', Pragma: 'no-cache' } : {},
+      cache: 'no-store',
+      headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate', Pragma: 'no-cache' },
       signal: AbortSignal.timeout(10_000),
     };
     fetch(url, opts)
@@ -285,7 +285,73 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           }
         }
         setProducts(data);
-        if (data.length > 0) writeCatalogCache(data);
+        if (data.length > 0) {
+          writeCatalogCache(data);
+
+          // Reconcile active cart prices with the fresh server catalog
+          setCart((prevCart) => {
+            let cartChanged = false;
+            const catalogById = new Map(data.map((b: Product) => [String(b.id), b]));
+            const updatedCart = prevCart.map((item) => {
+              const fresh = catalogById.get(String(item.id));
+              if (!fresh) return item;
+              if (
+                item.price === fresh.price &&
+                item.mrp === fresh.mrp &&
+                item.discount === fresh.discount &&
+                item.inStock === fresh.inStock &&
+                item.stock === fresh.stock
+              ) {
+                return item;
+              }
+              cartChanged = true;
+              return {
+                ...item,
+                price: fresh.price,
+                mrp: fresh.mrp,
+                discount: fresh.discount,
+                inStock: fresh.inStock,
+                stock: fresh.stock,
+              };
+            });
+            if (cartChanged) {
+              try {
+                localStorage.setItem('bpg_cart_next', JSON.stringify(updatedCart));
+              } catch {}
+              return updatedCart;
+            }
+            return prevCart;
+          });
+
+          // Reconcile savedForLater prices
+          setSavedForLater((prevLater) => {
+            let laterChanged = false;
+            const catalogById = new Map(data.map((b: Product) => [String(b.id), b]));
+            const updatedLater = prevLater.map((item) => {
+              const fresh = catalogById.get(String(item.id));
+              if (!fresh) return item;
+              if (item.price === fresh.price && item.mrp === fresh.mrp && item.discount === fresh.discount) {
+                return item;
+              }
+              laterChanged = true;
+              return {
+                ...item,
+                price: fresh.price,
+                mrp: fresh.mrp,
+                discount: fresh.discount,
+                inStock: fresh.inStock,
+                stock: fresh.stock,
+              };
+            });
+            if (laterChanged) {
+              try {
+                localStorage.setItem('bpg_saved_later', JSON.stringify(updatedLater));
+              } catch {}
+              return updatedLater;
+            }
+            return prevLater;
+          });
+        }
       })
       .catch(() => {
         if (productsRef.current.length === 0) {
@@ -305,6 +371,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   // Hydrate cart/wishlist/user BEFORE any sync (prevents empty-cart wipe)
   useEffect(() => {
+    try {
+      sessionStorage.removeItem('bpg_catalog_cache_v1');
+    } catch {}
     const cached = readCatalogCache();
     if (cached?.length) {
       // Sync ref immediately so refreshProducts() does not flash skeleton over cache

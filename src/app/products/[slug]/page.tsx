@@ -13,6 +13,14 @@ type Props = { params: Promise<{ slug: string }> };
 const metaMemoryCache = new Map<string, { data: any; timestamp: number }>();
 const META_TTL_MS = 60_000; // 1 minute local process cache
 
+export function invalidateMetaMemoryCache(slug?: string) {
+  if (slug) {
+    metaMemoryCache.delete(String(slug).toLowerCase().trim());
+  } else {
+    metaMemoryCache.clear();
+  }
+}
+
 function trimDescription(text: string | null | undefined, maxChars = 155): string {
   if (!text) return '';
   const clean = text.replace(/\s+/g, ' ').trim();
