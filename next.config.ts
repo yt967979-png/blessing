@@ -96,110 +96,100 @@ const nextConfig: NextConfig = {
         ],
       },
 
-      {
-        source: "/track",
-        headers: [
-          {
-            key: "Cache-Control",
-            value: "public, max-age=0, s-maxage=30, stale-while-revalidate=60",
-          },
-        ],
-      },
-      {
-        source: "/",
-        headers: [
-          {
-            key: "Cache-Control",
-            value: "public, max-age=0, must-revalidate",
-          },
-          {
-            key: "CDN-Cache-Control",
-            value: "no-cache",
-          },
-          {
-            key: "Cloudflare-CDN-Cache-Control",
-            value: "no-cache",
-          },
-        ],
-      },
-      {
-        source: "/products",
-        headers: [
-          {
-            key: "Cache-Control",
-            value: "public, max-age=0, must-revalidate",
-          },
-          {
-            key: "CDN-Cache-Control",
-            value: "no-cache",
-          },
-          {
-            key: "Cloudflare-CDN-Cache-Control",
-            value: "no-cache",
-          },
-        ],
-      },
-      {
-        source: "/products/:path*",
-        headers: [
-          {
-            key: "Cache-Control",
-            value: "public, max-age=0, must-revalidate",
-          },
-          {
-            key: "CDN-Cache-Control",
-            value: "no-cache",
-          },
-          {
-            key: "Cloudflare-CDN-Cache-Control",
-            value: "no-cache",
-          },
-        ],
-      },
-      {
-        source: "/search",
-        headers: [
-          {
-            key: "Cache-Control",
-            value: "public, max-age=0, must-revalidate",
-          },
-          {
-            key: "CDN-Cache-Control",
-            value: "no-cache",
-          },
-          {
-            key: "Cloudflare-CDN-Cache-Control",
-            value: "no-cache",
-          },
-        ],
-      },
-
-      // Private Customer & Admin Routes — Strictly NEVER Cached Publicly
+      // Browsing Pages — Safe Edge & Fast Browser Caching for Instant Browsing
       ...[
-        "/api/orders/:path*",
-        "/api/addresses",
-        "/api/addresses/:path*",
-        "/api/admin/:path*",
-        "/api/razorpay/:path*",
-        "/api/support/:path*",
-        "/api/cart/:path*",
-        "/api/auth/:path*",
-        "/api/coupons/:path*",
-        "/api/courier/:path*",
-        "/api/notifications/:path*",
-        "/api/user/:path*",
+        "/",
+        "/products",
+        "/products/:path*",
+        "/search",
+        "/help",
+        "/privacy-policy",
+        "/shipping-policy",
+        "/terms-of-service",
+      ].map((browsePattern) => ({
+        source: browsePattern,
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=0, must-revalidate, s-maxage=60, stale-while-revalidate=120",
+          },
+          {
+            key: "CDN-Cache-Control",
+            value: "max-age=60, stale-while-revalidate=120",
+          },
+          {
+            key: "Cloudflare-CDN-Cache-Control",
+            value: "max-age=60, stale-while-revalidate=120",
+          },
+        ],
+      })),
+
+      // VPS DB Real-Time Pages & Dynamic APIs — Strictly NEVER Cached (Always Hit VPS & Database Direct)
+      ...[
         "/admin",
         "/admin/:path*",
         "/checkout",
+        "/checkout/:path*",
         "/cart",
+        "/cart/:path*",
+        "/orders",
+        "/orders/:path*",
+        "/track",
+        "/track/:path*",
+        "/payment",
+        "/payment/:path*",
         "/profile",
         "/profile/:path*",
+        "/wishlist",
+        "/wishlist/:path*",
+        "/ops",
+        "/ops/:path*",
+        "/support",
+        "/support/:path*",
+        "/api/orders",
+        "/api/orders/:path*",
+        "/api/track",
+        "/api/track/:path*",
+        "/api/stock",
+        "/api/stock/:path*",
+        "/api/admin",
+        "/api/admin/:path*",
+        "/api/checkout",
+        "/api/checkout/:path*",
+        "/api/razorpay",
+        "/api/razorpay/:path*",
+        "/api/cart",
+        "/api/cart/:path*",
+        "/api/auth",
+        "/api/auth/:path*",
+        "/api/addresses",
+        "/api/addresses/:path*",
+        "/api/courier",
+        "/api/courier/:path*",
+        "/api/user",
+        "/api/user/:path*",
+        "/api/contact",
+        "/api/health",
+        "/api/notifications",
+        "/api/notifications/:path*",
+        "/api/coupons",
+        "/api/coupons/:path*",
+        "/api/ops",
+        "/api/ops/:path*",
       ].map((pattern) => ({
         source: pattern,
         headers: [
           {
             key: "Cache-Control",
             value: "private, no-cache, no-store, max-age=0, must-revalidate",
+          },
+          {
+            key: "CDN-Cache-Control",
+            value: "no-store",
+          },
+          {
+            key: "Cloudflare-CDN-Cache-Control",
+            value: "no-store",
           },
           {
             key: "Pragma",

@@ -34,7 +34,14 @@ export const LivePurchaseNotification: React.FC = () => {
 
   useEffect(() => {
     if (isDismissed) return;
-    if (pathname.startsWith('/admin') || pathname.startsWith('/checkout')) return;
+    if (
+      pathname.startsWith('/admin') ||
+      pathname.startsWith('/checkout') ||
+      pathname.startsWith('/track') ||
+      pathname.startsWith('/orders')
+    ) {
+      return;
+    }
 
     // Show first toast after 8 seconds of browsing
     const initialTimer = setTimeout(() => {
@@ -74,7 +81,14 @@ export const LivePurchaseNotification: React.FC = () => {
   };
 
   if (isDismissed || !isVisible) return null;
-  if (pathname.startsWith('/admin') || pathname.startsWith('/checkout')) return null;
+  if (
+    pathname.startsWith('/admin') ||
+    pathname.startsWith('/checkout') ||
+    pathname.startsWith('/track') ||
+    pathname.startsWith('/orders')
+  ) {
+    return null;
+  }
 
   const current = EVENTS[eventIndex];
 

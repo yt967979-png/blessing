@@ -253,6 +253,13 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string, tokenRaw?: stri
         liveSynced: !cancelled && !!(live && live.verified),
         autoUpdated: !cancelled && !!(live && live.updated),
       },
+    }, {
+      headers: {
+        'Cache-Control': 'private, no-cache, no-store, max-age=0, must-revalidate',
+        'CDN-Cache-Control': 'no-store',
+        'Cloudflare-CDN-Cache-Control': 'no-store',
+        Pragma: 'no-cache',
+      },
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message || 'Tracking failed' }, { status: 500 });

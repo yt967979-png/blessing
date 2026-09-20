@@ -24,7 +24,7 @@ export const SampleChapterReaderModal: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [data, setData] = useState<SamplePdfPayload | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const { addToCart, setIsCheckoutOpen } = useStore();
+  const { addToCart, setIsCheckoutOpen, products } = useStore();
 
   const handleOpen = useCallback((e: Event) => {
     const customEvent = e as CustomEvent<SamplePdfPayload>;
@@ -60,28 +60,36 @@ export const SampleChapterReaderModal: React.FC = () => {
     : 0;
 
   const handleAddToCart = () => {
-    addToCart({
-      id: data.bookId,
-      slug: data.bookId,
-      title: data.title,
-      price: data.price,
-      mrp: data.mrp || data.price,
-      image: data.coverImage || '/logo.png',
-      cls: data.cls || '10th',
-      category: 'guide',
-      subject: 'General',
-      discount: discount,
-      inStock: true,
-      stock: 50,
-      rating: 5.0,
-      reviews: 1,
-      badge: 'Official Guide',
-      badgeColor: 'bg-blue-600',
-      description: data.title,
-      features: ['Solved Papers', 'Chapter Notes'],
-      hoverImage: data.coverImage || '/logo.png',
-      isBestSeller: true,
-    } as any);
+    const realProduct = products.find(
+      (p) => String(p.id) === String(data.bookId) || p.slug === data.bookId
+    );
+    if (realProduct) {
+      addToCart(realProduct);
+    } else {
+      addToCart({
+        id: data.bookId,
+        slug: data.bookId,
+        title: data.title,
+        subtitle: 'Blessing Power Guide Official Edition',
+        price: data.price,
+        mrp: data.mrp || data.price,
+        image: data.coverImage || '/logo.png',
+        cls: data.cls || '10th',
+        category: 'guide',
+        subject: 'General',
+        discount: discount,
+        inStock: true,
+        stock: 50,
+        rating: 5.0,
+        reviews: 1,
+        badge: 'Official Guide',
+        badgeColor: 'bg-blue-600',
+        description: data.title,
+        features: ['Solved Papers', 'Chapter Notes'],
+        hoverImage: data.coverImage || '/logo.png',
+        isBestSeller: true,
+      } as any);
+    }
   };
 
   const handleBuyNow = () => {
@@ -136,7 +144,7 @@ export const SampleChapterReaderModal: React.FC = () => {
               href={data.pdfUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition hidden sm:inline-flex"
+              className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition inline-flex"
               title="Open in New Tab"
               aria-label="Open in New Tab"
             >
@@ -154,12 +162,26 @@ export const SampleChapterReaderModal: React.FC = () => {
         </div>
 
         {/* PDF Viewer Container */}
-        <div className="relative flex-1 bg-slate-950 overflow-hidden">
+        <div className="relative flex-1 bg-slate-950 overflow-hidden flex flex-col">
           <iframe
             src={`${data.pdfUrl}#toolbar=0&navpanes=0`}
-            className="w-full h-full border-0 bg-slate-900"
+            className="w-full flex-1 border-0 bg-slate-900"
             title={`${data.title} Sample Chapter`}
+            loading="lazy"
           />
+
+          {/* Mobile direct view helper strip */}
+          <div className="sm:hidden px-3 py-1.5 bg-slate-900/90 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-300">
+            <span>Can&apos;t view PDF inside browser?</span>
+            <a
+              href={data.pdfUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-400 font-bold underline inline-flex items-center gap-1"
+            >
+              Open PDF <ExternalLink className="w-3 h-3" />
+            </a>
+          </div>
 
           {/* Discreet Official Authenticity Watermark Strip */}
           <div className="absolute top-2 right-4 pointer-events-none opacity-40 hover:opacity-100 transition-opacity bg-slate-950/80 px-2.5 py-1 rounded-md border border-slate-800 text-[10px] font-mono text-slate-400 flex items-center gap-1.5">
