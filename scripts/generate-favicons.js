@@ -16,8 +16,10 @@ async function main() {
   // 2. Generate 192x192 true PNG
   const png192 = await sharp(masterBuf).resize(192, 192).png({ quality: 90 }).toBuffer();
   fs.writeFileSync(path.join(__dirname, '..', 'public', 'icon.png'), png192);
+  fs.writeFileSync(path.join(__dirname, '..', 'public', 'icon-192.png'), png192);
+  fs.writeFileSync(path.join(__dirname, '..', 'public', 'icon-512.png'), png512);
   fs.writeFileSync(path.join(__dirname, '..', 'src', 'app', 'icon.png'), png192);
-  console.log('✅ Generated public/icon.png and src/app/icon.png (192x192 true PNG)');
+  console.log('✅ Generated public/icon.png, icon-192.png, icon-512.png, and src/app/icon.png (true PNG)');
 
   // 3. Generate 180x180 Apple Touch Icon true PNG
   const png180 = await sharp(masterBuf).resize(180, 180).png({ quality: 90 }).toBuffer();
