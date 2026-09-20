@@ -318,7 +318,7 @@ async function migrateDatabase(connStr, dbName) {
         id VARCHAR(50) PRIMARY KEY DEFAULT 'main',
         site_name VARCHAR(255) DEFAULT 'BLESSING POWER GUIDE',
         support_email VARCHAR(255) DEFAULT 'blessingpowerguide@gmail.com',
-        support_phone VARCHAR(255) DEFAULT '+91 63829 63350',
+        support_phone VARCHAR(255) DEFAULT '+91 94860 17820',
         razorpay_key VARCHAR(255),
         shipping_charge NUMERIC DEFAULT 0,
         tax_percentage NUMERIC DEFAULT 0,

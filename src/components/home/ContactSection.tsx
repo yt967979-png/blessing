@@ -125,7 +125,7 @@ export const ContactSection = () => {
                   </div>
                   <div>
                     <h4 className="font-bold text-white mb-1">Phone & WhatsApp Support</h4>
-                    <p className="text-amber-400 font-bold text-sm">+91 63829 63350 / +91 94860 17820</p>
+                    <p className="text-amber-400 font-bold text-sm">+91 94860 17820 / +91 63829 63350</p>
                     <p className="text-slate-400 text-xs mt-0.5">Mon – Sat: 9:00 AM – 8:00 PM</p>
                   </div>
                 </div>
@@ -194,7 +194,7 @@ export const ContactSection = () => {
                       <input
                         type="tel"
                         required
-                        placeholder="e.g. 6382963350"
+                        placeholder="e.g. 9486017820"
                         value={phone}
                         onChange={(e) => setPhone(e.target.value)}
                         className="w-full p-3 bg-slate-900 border border-slate-700 rounded-xl text-white outline-none focus:border-amber-400 transition-colors"

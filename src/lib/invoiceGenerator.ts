@@ -420,7 +420,7 @@ export async function generateTaxInvoiceHtml(orderData: InvoiceData): Promise<st
           ${gstinLine ? `${esc(gstinLine)} · ` : ''}State: Tamil Nadu (Code: 33)
         </div>
         <div style="font-size:11px;color:#2874f0;font-weight:700;margin-top:2px;">
-          ☎ +91 63829 63350 / +91 94860 17820 · blessingpowerguide@gmail.com
+          ☎ +91 94860 17820 / +91 63829 63350 · blessingpowerguide@gmail.com
         </div>
       </div>
 

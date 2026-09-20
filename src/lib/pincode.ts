@@ -42,7 +42,7 @@ export function pincodeDeliveryMessage(raw: string): {
   }
   return {
     ok: false,
-    message: 'This pincode may not be serviceable yet. Call +91 63829 63350 to confirm.',
+    message: 'This pincode may not be serviceable yet. Call +91 94860 17820 to confirm.',
     region: 'invalid',
   };
 }

@@ -60,7 +60,7 @@ export default function Home() {
     },
     contactPoint: {
       '@type': 'ContactPoint',
-      telephone: '+91-6382963350',
+      telephone: '+91-9486017820',
       contactType: 'customer service',
       areaServed: 'IN',
       availableLanguage: ['English', 'Tamil'],
