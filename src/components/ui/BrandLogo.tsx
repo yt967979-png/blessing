@@ -15,7 +15,7 @@ export function BrandLogo({ size = 40, className = '', priority = false }: Brand
       width={size}
       height={size}
       priority={priority}
-      className={`rounded-[22%] object-contain flex-shrink-0 ${className}`}
+      className={`rounded-full object-contain flex-shrink-0 ${className}`}
     />
   );
 }

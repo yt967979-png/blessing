@@ -47,13 +47,13 @@ function HeroShowcase({
   const logoSize = size === 'lg' ? 280 : 120;
   const logoClass =
     size === 'lg'
-      ? 'w-52 h-52 md:w-64 md:h-64 rounded-[22%]'
-      : 'w-[6.5rem] h-[6.5rem] rounded-3xl';
+      ? 'w-52 h-52 md:w-64 md:h-64 rounded-full shadow-2xl'
+      : 'w-[6.5rem] h-[6.5rem] rounded-full shadow-lg';
 
   return (
     <div className={`hero-showcase ${box}`}>
       <div className={`hero-showcase-inner ${box} ${showBook && canFlip ? 'is-book' : ''}`}>
-        <div className="hero-showcase-face hero-showcase-logo flex items-center justify-center rounded-[28%] bg-white p-3 md:p-5 shadow-xl border border-white/30">
+        <div className="hero-showcase-face hero-showcase-logo flex items-center justify-center rounded-full bg-slate-950 p-1 md:p-2 shadow-2xl border border-amber-400/30 overflow-hidden">
           <BrandLogo size={logoSize} priority className={logoClass} />
         </div>
         {book?.image ? (
