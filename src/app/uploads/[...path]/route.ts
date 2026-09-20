@@ -39,6 +39,21 @@ export async function GET(
       return new NextResponse('Forbidden file type', { status: 403 });
     }
 
+    const isPdf = ext === '.pdf';
+
+    // Anti-Hotlinking & Content Protection for proprietary sample chapter PDFs
+    const referer = _request.headers.get('referer');
+    if (referer && isPdf) {
+      try {
+        const refUrl = new URL(referer);
+        const isLocal = refUrl.hostname === 'localhost' || refUrl.hostname === '127.0.0.1';
+        const isOwnDomain = refUrl.hostname.includes('blessingpowerguide.in');
+        if (!isLocal && !isOwnDomain) {
+          return new NextResponse('Hotlinking forbidden', { status: 403 });
+        }
+      } catch {}
+    }
+
     try {
       const stats = await fs.promises.stat(targetFilePath);
       if (!stats.isFile()) {
@@ -47,16 +62,22 @@ export async function GET(
 
       const fileBuffer = await fs.promises.readFile(targetFilePath);
 
+      const headers: Record<string, string> = {
+        'Content-Type': contentType,
+        'Content-Length': stats.size.toString(),
+        'Cache-Control': isPdf ? 'public, max-age=86400' : 'public, max-age=31536000, immutable',
+        'Content-Disposition': `inline; filename="${path.basename(targetFilePath)}"`,
+        'X-Content-Type-Options': 'nosniff',
+        'X-Frame-Options': 'SAMEORIGIN',
+      };
+
+      if (isPdf) {
+        headers['X-Robots-Tag'] = 'noindex, nofollow';
+      }
+
       return new NextResponse(fileBuffer, {
         status: 200,
-        headers: {
-          'Content-Type': contentType,
-          'Content-Length': stats.size.toString(),
-          'Cache-Control': 'public, max-age=31536000, immutable',
-          'Content-Disposition': `inline; filename="${path.basename(targetFilePath)}"`,
-          'X-Content-Type-Options': 'nosniff',
-          'X-Frame-Options': 'DENY',
-        },
+        headers,
       });
     } catch {
       return new NextResponse('File Not Found', { status: 404 });

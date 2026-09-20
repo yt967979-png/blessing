@@ -82,6 +82,30 @@ export default function CheckoutPage() {
 
   const finalPayable = Math.max(0, cartGrandTotal - (appliedCoupon?.discountAmount || 0));
 
+  // Restore draft address from localStorage if user reloaded or navigated away
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const savedDraft = localStorage.getItem('bpg_checkout_addr_draft');
+      if (savedDraft) {
+        const parsed = JSON.parse(savedDraft);
+        if (parsed && typeof parsed === 'object' && parsed.address) {
+          setNewAddr((prev) => ({ ...prev, ...parsed }));
+        }
+      }
+    } catch {}
+  }, []);
+
+  // Persist draft address on input changes
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (newAddr.name || newAddr.phone || newAddr.address) {
+      try {
+        localStorage.setItem('bpg_checkout_addr_draft', JSON.stringify(newAddr));
+      } catch {}
+    }
+  }, [newAddr]);
+
   // Preload Razorpay checkout SDK as soon as customer opens checkout page
   useEffect(() => {
     if (typeof window !== 'undefined' && !(window as any).Razorpay) {
@@ -505,6 +529,9 @@ export default function CheckoutPage() {
           })),
         });
         if (!orderData.duplicate) showToast(`🎉 Order #${serverOrderId} confirmed!`);
+        try {
+          localStorage.removeItem('bpg_checkout_addr_draft');
+        } catch {}
         router.push(`/orders?orderId=${encodeURIComponent(serverOrderId)}`);
         return true;
       };

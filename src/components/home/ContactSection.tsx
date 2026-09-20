@@ -17,6 +17,7 @@ export const ContactSection = () => {
   const [phone, setPhone] = useState(user?.phone || '');
   const [subject, setSubject] = useState('Guide Book Inquiry');
   const [message, setMessage] = useState('');
+  const [honeypot, setHoneypot] = useState('');
 
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -31,11 +32,11 @@ export const ContactSection = () => {
 
     setLoading(true);
     try {
-      // Save contact inquiry in DB
+      // Save contact inquiry in DB (with invisible honeypot check)
       await fetch('/api/contact', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, phone, subject, message }),
+        body: JSON.stringify({ name, email, phone, subject, message, _bpg_verify_fax: honeypot }),
       }).catch(() => {});
 
       // Build pre-filled WhatsApp message (shop phone from ADMIN_PHONE / shopContact)
@@ -176,6 +177,18 @@ export const ContactSection = () => {
                 </div>
               ) : (
                 <form onSubmit={handleSubmit} className="space-y-4">
+                  {/* Invisible Anti-Bot Honeypot Trap */}
+                  <div className="hidden opacity-0 pointer-events-none absolute -left-[9999px]" aria-hidden="true">
+                    <input
+                      type="text"
+                      name="_bpg_verify_fax"
+                      tabIndex={-1}
+                      autoComplete="off"
+                      value={honeypot}
+                      onChange={(e) => setHoneypot(e.target.value)}
+                    />
+                  </div>
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
                     <div>
                       <label className="block text-slate-300 font-bold mb-1.5">Your Full Name *</label>

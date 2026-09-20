@@ -16,6 +16,19 @@ export async function POST(request: Request) {
   let client: any = null;
   try {
     const body = await request.json().catch(() => ({}));
+    // Invisible Honeypot Anti-Bot Shield:
+    // Legitimate humans never see or fill these hidden fields; automated scraping bots blindly fill them.
+    const hpFax = String(body._bpg_verify_fax || body.fax || '').trim();
+    const hpCompany = String(body._bpg_company_hp || '').trim();
+    if (hpFax || hpCompany) {
+      // Deception response: return success so the bot is satisfied and does not re-attack
+      return NextResponse.json({
+        success: true,
+        message: 'Thank you! Your message has been received. Our team will contact you shortly.',
+        contactId: `MSG-${Date.now()}`,
+      });
+    }
+
     const name = String(body.name || '').trim().slice(0, 80);
     const email = String(body.email || '').trim().slice(0, 120);
     const phone = normalizeMobileDigits(String(body.phone || ''));
