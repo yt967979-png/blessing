@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { queryDb } from '@/lib/db';
 import { getAuthenticatedUser, applyRateLimitAsync, clientIp } from '@/lib/serverSecurity';
-import { isBookInStock, availableStock, displayStock } from '@/lib/stock';
+import { isBookInStock, availableStock, displayStock, calculateBookPrices } from '@/lib/stock';
 
 interface CartValidateItem {
   id?: string | number;
@@ -87,14 +87,7 @@ export async function POST(request: Request) {
         message = `Only ${avail} of "${book.title}" available`;
       }
 
-      const mrp = Number(book.price) || 0;
-      const rawSale =
-        book.discount_price == null || book.discount_price === ''
-          ? NaN
-          : Number(book.discount_price);
-      const hasSale = Number.isFinite(rawSale) && rawSale > 0 && rawSale < mrp;
-      const livePrice = hasSale ? rawSale : mrp;
-      const liveDiscount = hasSale && mrp > 0 ? Math.round(((mrp - livePrice) / mrp) * 100) : 0;
+      const { price: livePrice, mrp, discount: liveDiscount } = calculateBookPrices(book);
 
       return {
         id,

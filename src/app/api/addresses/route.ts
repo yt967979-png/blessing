@@ -42,7 +42,12 @@ export async function GET(request: Request) {
       `SELECT * FROM addresses WHERE user_id = $1 ORDER BY is_default DESC, created_at DESC`,
       [userId]
     );
-    return NextResponse.json(res.rows.map(mapAddress));
+    return NextResponse.json(res.rows.map(mapAddress), {
+      headers: {
+        'Cache-Control': 'private, no-cache, no-store, max-age=0, must-revalidate',
+        Pragma: 'no-cache',
+      },
+    });
   } catch (err: any) {
     console.error('[addresses GET error]', err);
     return NextResponse.json({ error: 'Failed to load addresses' }, { status: 500 });

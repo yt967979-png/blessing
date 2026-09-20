@@ -1,5 +1,5 @@
 import { queryDb } from '@/lib/db';
-import { isBookInStock, availableStock } from '@/lib/stock';
+import { isBookInStock, availableStock, calculateBookPrices } from '@/lib/stock';
 
 async function execQuery(client: any, sql: string, params?: any[]): Promise<any> {
   if (typeof client === 'function') {
@@ -46,13 +46,7 @@ export async function priceCartItems(
     if (itemQty > stock) {
       return { ok: false, error: `"${book.title}" — only ${stock} left in stock.`, status: 400 };
     }
-    const mrp = Number(book.price) || 0;
-    const rawSale =
-      book.discount_price == null || book.discount_price === ''
-        ? NaN
-        : Number(book.discount_price);
-    const unitPrice =
-      Number.isFinite(rawSale) && rawSale > 0 && rawSale < mrp ? rawSale : mrp;
+    const { price: unitPrice } = calculateBookPrices(book);
     const subtotal = unitPrice * itemQty;
     calculatedSubtotal += subtotal;
     verifiedItems.push({

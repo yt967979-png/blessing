@@ -29,6 +29,8 @@ export async function POST(request: Request) {
         );
       }
 
+      await client.query('BEGIN');
+
       if (Array.isArray(cart)) {
         const cartId = `cart-${userId}`;
         await client.query(`INSERT INTO cart (id, user_id) VALUES ($1, $2) ON CONFLICT (user_id) DO NOTHING`, [
@@ -67,15 +69,17 @@ export async function POST(request: Request) {
         for (const addr of addresses.slice(0, 15)) {
           const addrId = String(addr.id || `addr-${Date.now()}`);
           await client.query(
-            `INSERT INTO addresses (id, user_id, full_name, phone, alternate_phone, address_line1, city, pincode, landmark)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            `INSERT INTO addresses (id, user_id, full_name, phone, alternate_phone, address_line1, near_landmark, city, pincode, landmark)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
              ON CONFLICT (id) DO UPDATE SET
                full_name = EXCLUDED.full_name,
                phone = EXCLUDED.phone,
                alternate_phone = COALESCE(NULLIF(EXCLUDED.alternate_phone, ''), addresses.alternate_phone),
                address_line1 = EXCLUDED.address_line1,
+               near_landmark = COALESCE(NULLIF(EXCLUDED.near_landmark, ''), addresses.near_landmark),
                city = EXCLUDED.city,
-               pincode = EXCLUDED.pincode`,
+               pincode = EXCLUDED.pincode,
+               landmark = COALESCE(NULLIF(EXCLUDED.landmark, ''), addresses.landmark)`,
             [
               addrId,
               userId,
@@ -83,16 +87,21 @@ export async function POST(request: Request) {
               addr.phone || '',
               addr.alternatePhone || addr.alternate_phone || '',
               addr.address || '',
+              addr.nearLandmark || addr.near_landmark || '',
               addr.city || 'Chennai',
               addr.pincode || '600012',
-              addr.type || 'HOME',
+              addr.landmark || addr.type || 'HOME',
             ]
           );
         }
       }
 
+      await client.query('COMMIT');
       return NextResponse.json({ success: true, message: 'Synced.' });
     } catch (err: any) {
+      try {
+        await client.query('ROLLBACK');
+      } catch {}
       return NextResponse.json({ error: err?.message || 'Sync failed' }, { status: 500 });
     } finally {
       releaseDbClient(client);

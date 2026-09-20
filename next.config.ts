@@ -177,11 +177,17 @@ const nextConfig: NextConfig = {
       // Private Customer & Admin Routes — Strictly NEVER Cached Publicly
       ...[
         "/api/orders/:path*",
+        "/api/addresses",
+        "/api/addresses/:path*",
         "/api/admin/:path*",
         "/api/razorpay/:path*",
         "/api/support/:path*",
         "/api/cart/:path*",
         "/api/auth/:path*",
+        "/api/coupons/:path*",
+        "/api/courier/:path*",
+        "/api/notifications/:path*",
+        "/api/user/:path*",
         "/admin",
         "/admin/:path*",
         "/checkout",

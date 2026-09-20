@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { queryDb } from '@/lib/db';
-import { isBookInStock } from '@/lib/stock';
+import { isBookInStock, calculateBookPrices } from '@/lib/stock';
 import { redisGetJson, redisSetJson, redisDel } from '@/lib/redis';
 
 // Short in-memory buffer on each worker (2.5 seconds) to coalesce concurrent poll bursts
@@ -55,11 +55,7 @@ export async function GET(request: Request) {
 
     const map: Record<string, any> = {};
     for (const row of res.rows || []) {
-      const mrp = Number(row.price) || 0;
-      const rawSale = row.discount_price == null || row.discount_price === '' ? NaN : Number(row.discount_price);
-      const hasSale = Number.isFinite(rawSale) && rawSale > 0 && rawSale < mrp;
-      const price = hasSale ? rawSale : mrp;
-      const discount = hasSale && mrp > 0 ? Math.round(((mrp - price) / mrp) * 100) : 0;
+      const { price, mrp, discount } = calculateBookPrices(row);
       const inStock = isBookInStock(row);
       const stock = Math.max(0, Math.floor(Number(row.stock) || 0));
 

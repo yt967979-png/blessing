@@ -3,7 +3,7 @@ import { Client } from 'pg';
 import { getDbClient, releaseDbClient, resolveDbConnectionConfig, queryDb } from '@/lib/db';
 import { applyRateLimitAsync } from '@/lib/serverSecurity';
 import { resolveTunedNumber, shouldRunBackgroundTask } from '@/lib/runtimeProfile';
-import { isBookInStock } from '@/lib/stock';
+import { isBookInStock, calculateBookPrices } from '@/lib/stock';
 
 /**
  * Customer-facing realtime stock push — Postgres LISTEN/NOTIFY + SSE, same
@@ -64,12 +64,7 @@ export async function notifyStockChanged(bookIds: Array<string | number | null |
       [ids]
     );
     const books: StockChangeEntry[] = (res.rows || []).map((r: any) => {
-      const mrp = Number(r.price) || 0;
-      const rawSale =
-        r.discount_price == null || r.discount_price === '' ? NaN : Number(r.discount_price);
-      const hasSale = Number.isFinite(rawSale) && rawSale > 0 && rawSale < mrp;
-      const price = hasSale ? rawSale : mrp;
-      const discount = hasSale && mrp > 0 ? Math.round(((mrp - price) / mrp) * 100) : 0;
+      const { price, mrp, discount } = calculateBookPrices(r);
       return {
         id: String(r.id),
         stock: Number(r.stock ?? 0),

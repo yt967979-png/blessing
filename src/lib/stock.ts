@@ -44,3 +44,33 @@ export function clampQtyToStock(requestedQty: number, row: StockRow): number {
 export function displayStock(avail: number): number {
   return Math.min(avail, 999_999);
 }
+
+/**
+ * Single source of truth for calculating book selling price, MRP, and discount percentage.
+ * Correctly handles:
+ *  - Normal rupee discount price (e.g., MRP 350, discount_price 280 -> ₹280)
+ *  - Accidental fractional decimal input (e.g., 0.2 meaning 20% off -> 350 * 0.8 = ₹280)
+ *  - Fallback to MRP when discount is invalid, negative, or >= MRP
+ */
+export function calculateBookPrices(d: { price?: unknown; discount_price?: unknown }): {
+  price: number;
+  mrp: number;
+  discount: number;
+} {
+  const mrp = Math.max(0, Math.round(Number(d.price) || 0));
+  const rawSale =
+    d.discount_price == null || d.discount_price === '' ? NaN : Number(d.discount_price);
+
+  // If rawSale is between 0 and 1 (e.g. 0.2), treat as fractional discount percentage (20% off -> 350 * 0.8 = 280)
+  const effectiveSale =
+    Number.isFinite(rawSale) && rawSale > 0 && rawSale < 1 && mrp > 0
+      ? Math.round(mrp * (1 - rawSale))
+      : Number.isFinite(rawSale)
+      ? Math.round(rawSale)
+      : NaN;
+
+  const hasSale = Number.isFinite(effectiveSale) && effectiveSale >= 1 && effectiveSale < mrp;
+  const price = hasSale ? effectiveSale : mrp;
+  const discount = hasSale && mrp > 0 ? Math.round(((mrp - price) / mrp) * 100) : 0;
+  return { price, mrp, discount };
+}

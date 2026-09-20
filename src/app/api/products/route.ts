@@ -2,12 +2,15 @@ import { NextResponse } from 'next/server';
 import { getDbClient, releaseDbClient, ensureDefaultCategories, queryDb } from '@/lib/db';
 import { verifyAdminRequest, forbiddenResponse } from '@/lib/serverSecurity';
 import { getCatalogCacheTtlMs, getCatalogCdnHeaders } from '@/lib/launchScale';
-import { isBookInStock } from '@/lib/stock';
+import { isBookInStock, calculateBookPrices } from '@/lib/stock';
 import { redisGetJson, redisSetJson } from '@/lib/redis';
 
 // Shared catalog cache: same search/class/slug reused without hitting DB again
 const queryCache = new Map<string, { data: any[]; timestamp: number }>();
 const MAX_CACHE_KEYS = 120;
+
+// In-flight single-flight request coalescing: if 20,000 requests arrive at the same millisecond, only 1 queries DB
+const inFlightRequests = new Map<string, Promise<any[]>>();
 
 const PLACEHOLDER_COVER =
   'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80';
@@ -76,12 +79,7 @@ function freshHeaders(extra: Record<string, string> = {}) {
 
 /** Selling price: use discount_price only when it is a real sale (< MRP). */
 function mapBookPrices(d: { price?: unknown; discount_price?: unknown }) {
-  const mrp = Number(d.price) || 0;
-  const rawSale = d.discount_price == null || d.discount_price === '' ? NaN : Number(d.discount_price);
-  const hasSale = Number.isFinite(rawSale) && rawSale > 0 && rawSale < mrp;
-  const price = hasSale ? rawSale : mrp;
-  const discount = hasSale && mrp > 0 ? Math.round(((mrp - price) / mrp) * 100) : 0;
-  return { price, mrp, discount };
+  return calculateBookPrices(d);
 }
 
 function mapBookInStock(d: { status?: unknown; stock?: unknown }) {
@@ -199,6 +197,17 @@ export async function GET(request: Request) {
           });
         }
       } catch {}
+
+      // In-flight coalescing: if request 1 is already querying DB, requests 2-20,000 share its exact result!
+      const existingInFlight = inFlightRequests.get(key);
+      if (existingInFlight) {
+        try {
+          const coalesced = await existingInFlight;
+          return NextResponse.json(coalesced, {
+            headers: hdrs({ 'X-Cache-Status': 'HIT_COALESCED' }),
+          });
+        } catch {}
+      }
     }
 
     const emptyOk = (cacheStatus: string) => {
@@ -276,7 +285,7 @@ export async function GET(request: Request) {
       return queryDb(sql, params);
     };
 
-    const load = (async () => {
+    const loadDataPromise = (async () => {
       let res: { rows?: any[] };
       try {
         res = await loadPrimary();
@@ -289,6 +298,16 @@ export async function GET(request: Request) {
         writeCache(key, mapped);
         void redisSetJson(`catalog:${key}`, mapped, 300);
       }
+      return mapped;
+    })();
+
+    if (!forceFresh) {
+      inFlightRequests.set(key, loadDataPromise);
+      loadDataPromise.finally(() => inFlightRequests.delete(key));
+    }
+
+    const load = (async () => {
+      const mapped = await loadDataPromise;
       return NextResponse.json(mapped, {
         headers: hdrs({
           'X-Cache-Status': mapped.length > 0 ? 'MISS_DB' : 'MISS_DB_EMPTY',
