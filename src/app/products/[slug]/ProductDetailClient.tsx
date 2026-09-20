@@ -751,7 +751,7 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
               <span>Share Book with Classmates on WhatsApp</span>
             </button>
             {minOrderMsg && product.inStock !== false && (
-              <p className="hidden sm:block mt-3 text-[11px] text-amber-800 font-medium bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              <p className="mt-3 text-[11px] text-amber-800 font-medium bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
                 {minOrderMsg} Same title can be added multiple times.
               </p>
             )}

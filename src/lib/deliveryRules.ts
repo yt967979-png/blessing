@@ -1,4 +1,4 @@
-export const MIN_BOOKS_PER_ORDER = Number(process.env.NEXT_PUBLIC_MIN_BOOKS_PER_ORDER || 1);
+export const MIN_BOOKS_PER_ORDER = Math.max(4, Number(process.env.NEXT_PUBLIC_MIN_BOOKS_PER_ORDER || 4));
 export const FREE_DELIVERY_AT_QTY = 5;
 export const STANDARD_DELIVERY_FEE = 150;
 

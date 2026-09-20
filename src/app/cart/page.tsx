@@ -155,8 +155,8 @@ export default function CartPage() {
                       <Truck className="w-4 h-4 text-amber-300" />
                     </span>
                     <span className="font-heading font-black text-xs sm:text-sm text-[#001B3A]">
-                      {cartCount < 4 ? (
-                        <>Add <span className="text-amber-600 font-extrabold">{booksNeeded}</span> more guide(s) for Minimum Order (4 books)</>
+                      {cartCount < MIN_BOOKS_PER_ORDER ? (
+                        <>Add <span className="text-amber-600 font-extrabold">{booksNeeded}</span> more guide{booksNeeded === 1 ? '' : 's'} for Minimum Order ({MIN_BOOKS_PER_ORDER} books)</>
                       ) : cartCount === 4 ? (
                         <>Add <span className="text-emerald-600 font-extrabold">1</span> more guide to unlock <span className="text-emerald-700">FREE Delivery</span>!</>
                       ) : (
