@@ -61,7 +61,7 @@ export default function PaymentFailedPage() {
         </Link>
 
         <p className="text-[10px] text-slate-400 mt-8">
-          Need help? Call +91 98404 18228 or email blessingpowerguide@gmail.com
+          Need help? Call +91 63829 63350 / +91 94860 17820 or email blessingpowerguide@gmail.com
         </p>
       </div>
 

@@ -29,7 +29,7 @@ const STORE_POLICIES = {
   turnaroundChennai: '24 to 48 hours for Chennai, Chengalpattu & Tiruvallur',
   turnaroundTN: '2 to 3 business days across other Tamil Nadu districts (Coimbatore, Madurai, Trichy, Salem, Tirunelveli, Erode, Vellore, Thanjavur, etc.)',
   turnaroundOther: '3 to 5 business days for other South Indian locations',
-  helpline: '+91 98404 18228',
+  helpline: '+91 63829 63350',
   office: 'Trust Square, Ayanavaram, Chennai - 600012, Tamil Nadu, India',
   hours: 'Monday to Saturday, 9:00 AM – 8:00 PM IST',
   returnPolicy: 'We provide a 100% Free Replacement Guarantee for any misprinted, missing pages, or transit-damaged guides. A fresh copy is dispatched immediately via ST Courier at zero extra cost.',
@@ -230,7 +230,7 @@ export async function generateSupportRagAnswer(
   if (isExplicitAdminRequest) {
     return {
       answer: 'I am connecting you directly with our Chennai head office support team right now. An administrator has been alerted with an audible chime and will accept your chat momentarily.\n\nOur team is available **Monday to Saturday, 9:00 AM – 8:00 PM IST**.',
-      suggestions: ['🚚 Track My Order', '📚 Browse 10th Guides', '📞 Call Office (+91 98404 18228)'],
+      suggestions: ['🚚 Track My Order', '📚 Browse 10th Guides', '📞 Call Office (+91 63829 63350)'],
       shouldEscalate: true,
       cardType: 'contact',
     };
@@ -371,7 +371,7 @@ export async function generateSupportRagAnswer(
       if (customerId && orderRow.user_id && String(orderRow.user_id) !== String(customerId) && !isPhoneMatch) {
         return {
           answer: `🔒 **Privacy Protection Notice**:\n\nOrder **#${orderRef}** is linked to a different customer account. To protect customer privacy, details can only be viewed by the verified account that placed it.\n\nPlease log in with the correct account or verify the order with our support team.`,
-          suggestions: ['🚚 Track My Own Order', '👨‍💼 Talk to Admin', '📞 Call Helpline (+91 98404 18228)'],
+          suggestions: ['🚚 Track My Own Order', '👨‍💼 Talk to Admin', '📞 Call Helpline (+91 63829 63350)'],
           shouldEscalate: false,
         };
       }
@@ -379,8 +379,8 @@ export async function generateSupportRagAnswer(
       // If anonymous / guest user provides an order ID without matching phone verification: strictly require verification!
       if (!isAuthUserOrder && !isPhoneMatch) {
         return {
-          answer: `🔒 **Verification Required**:\n\nTo view live delivery and tracking details for order **#${orderRef}**, please provide the **10-digit mobile number** used during checkout to verify ownership.\n\n*(Example: "Where is order #${orderRef} phone 9840418228")*`,
-          suggestions: ['👨‍💼 Talk to Admin', '📞 Call Office (+91 98404 18228)'],
+          answer: `🔒 **Verification Required**:\n\nTo view live delivery and tracking details for order **#${orderRef}**, please provide the **10-digit mobile number** used during checkout to verify ownership.\n\n*(Example: "Where is order #${orderRef} phone 6382963350")*`,
+          suggestions: ['👨‍💼 Talk to Admin', '📞 Call Office (+91 63829 63350)'],
           shouldEscalate: false,
         };
       }
@@ -524,8 +524,8 @@ export async function generateSupportRagAnswer(
 
   if (isOfficeOrHelpline) {
     return {
-      answer: `🏢 **Blessing Power Guide Head Office & Helpline**:\n\n• **Publication & Dispatch Office**: ${STORE_POLICIES.office}\n• **Direct Phone Helpline**: **${STORE_POLICIES.helpline}**\n• **Working Hours**: **${STORE_POLICIES.hours}**\n• **Official WhatsApp Help**: [Chat on WhatsApp](https://wa.me/919840418228) (+91 98404 18228)\n• **Courier Dispatch**: We are an official publishing house based in Chennai. All guides are packaged directly here and dispatched via ST Courier Express daily across South India.`,
-      suggestions: ['📞 Call Helpline (+91 98404 18228)', '💬 WhatsApp Support', '🚚 Track My Order', '👨‍💼 Talk to Admin'],
+      answer: `🏢 **Blessing Power Guide Head Office & Helpline**:\n\n• **Publication & Dispatch Office**: ${STORE_POLICIES.office}\n• **Direct Phone Helpline**: **${STORE_POLICIES.helpline}**\n• **Working Hours**: **${STORE_POLICIES.hours}**\n• **Official WhatsApp Help**: [Chat on WhatsApp](https://wa.me/916382963350) (+91 63829 63350 / +91 94860 17820)\n• **Courier Dispatch**: We are an official publishing house based in Chennai. All guides are packaged directly here and dispatched via ST Courier Express daily across South India.`,
+      suggestions: ['📞 Call Helpline (+91 63829 63350)', '💬 WhatsApp Support', '🚚 Track My Order', '👨‍💼 Talk to Admin'],
       shouldEscalate: false,
       cardType: 'contact',
     };
@@ -569,8 +569,8 @@ export async function generateSupportRagAnswer(
     q.includes('exchange')
   ) {
     return {
-      answer: `🛡️ **100% Free Replacement Guarantee**:\n\n${STORE_POLICIES.returnPolicy}\n\nIf your parcel arrived damaged in transit or has any printing defect, please click **Connect to Admin Now** below or send a photo of the parcel/book to our WhatsApp helpline at **+91 98404 18228**. Our Chennai dispatch office will send a fresh copy immediately.`,
-      suggestions: ['👨‍💼 Talk to Admin', '📞 Call Helpline (+91 98404 18228)', '💬 WhatsApp Support', '🚚 Track Order'],
+      answer: `🛡️ **100% Free Replacement Guarantee**:\n\n${STORE_POLICIES.returnPolicy}\n\nIf your parcel arrived damaged in transit or has any printing defect, please click **Connect to Admin Now** below or send a photo of the parcel/book to our WhatsApp helpline at **+91 63829 63350**. Our Chennai dispatch office will send a fresh copy immediately.`,
+      suggestions: ['👨‍💼 Talk to Admin', '📞 Call Helpline (+91 63829 63350)', '💬 WhatsApp Support', '🚚 Track Order'],
       shouldEscalate: false,
       cardType: 'contact',
     };
@@ -592,7 +592,7 @@ export async function generateSupportRagAnswer(
   ) {
     return {
       answer: `✏️ **Update Delivery Address or Mobile Number**:\n\nIf your parcel has not yet been scanned and picked up by ST Courier Express, our team can update your shipping label immediately.\n\nClick **Connect to Admin Now** so our warehouse staff can update your delivery phone number or address before dispatch.`,
-      suggestions: ['👨‍💼 Talk to Admin', '📞 Call Office Directly (+91 98404 18228)', '💬 WhatsApp Helpline', '🚚 Track Order'],
+      suggestions: ['👨‍💼 Talk to Admin', '📞 Call Office Directly (+91 63829 63350)', '💬 WhatsApp Helpline', '🚚 Track Order'],
       shouldEscalate: false,
       cardType: 'contact',
     };
@@ -727,7 +727,7 @@ export async function generateSupportRagAnswer(
   ) {
     return {
       answer: `🏫 **School & Institutional Bulk Orders**:\n\nWe provide special institutional pricing, teacher evaluation copies, and custom courier logistics for schools, tuition centers, and educators ordering **20 or more books**.\n\nPlease connect with our administration team directly to receive an official school quotation and invoice.`,
-      suggestions: ['👨‍💼 Talk to Admin', '📞 Call Office (+91 98404 18228)', '💬 WhatsApp Admin'],
+      suggestions: ['👨‍💼 Talk to Admin', '📞 Call Office (+91 63829 63350)', '💬 WhatsApp Admin'],
       shouldEscalate: false,
     };
   }
@@ -802,7 +802,7 @@ export async function generateSupportRagAnswer(
   ) {
     return {
       answer: `🧾 **Order Invoice & Receipt**:\n\n• Digital order details are sent via SMS upon checkout and accessible in **My Account > Orders**.\n• A printed invoice is included inside your ST Courier parcel.\n• For GST invoice requests, please contact our admin team.`,
-      suggestions: ['🚚 Track Order', '👨‍💼 Request GST Invoice from Admin', '📞 Call Office (+91 98404 18228)'],
+      suggestions: ['🚚 Track Order', '👨‍💼 Request GST Invoice from Admin', '📞 Call Office (+91 63829 63350)'],
       shouldEscalate: false,
     };
   }
@@ -821,8 +821,8 @@ export async function generateSupportRagAnswer(
     q.includes('nerla vandhu vangalama')
   ) {
     return {
-      answer: `🏬 **Direct Purchase in Chennai**:\n\n• **Head Office**: Blessing Power Guide, Trust Square, Ayanavaram, Chennai - 600012, Tamil Nadu.\n• **Hours**: Monday to Saturday, 9:00 AM – 8:00 PM IST.\n• **Phone / WhatsApp**: +91 98404 18228.\n\nFor customers across Tamil Nadu, online orders are delivered to your doorstep within 2–3 business days via ST Courier.`,
-      suggestions: ['🏢 Office Map & Contact', '📞 Call Office (+91 98404 18228)', '🛒 Buy Online for Home Delivery'],
+      answer: `🏬 **Direct Purchase in Chennai**:\n\n• **Head Office**: Blessing Power Guide, Trust Square, Ayanavaram, Chennai - 600012, Tamil Nadu.\n• **Hours**: Monday to Saturday, 9:00 AM – 8:00 PM IST.\n• **Phone / WhatsApp**: +91 63829 63350 / +91 94860 17820.\n\nFor customers across Tamil Nadu, online orders are delivered to your doorstep within 2–3 business days via ST Courier.`,
+      suggestions: ['🏢 Office Map & Contact', '📞 Call Office (+91 63829 63350)', '🛒 Buy Online for Home Delivery'],
       shouldEscalate: false,
     };
   }
@@ -893,7 +893,7 @@ export async function generateSupportRagAnswer(
     q.includes('evvalo naalaagum')
   ) {
     return {
-      answer: `வணக்கம்! 🙏 **Blessing Power Guide** பற்றிய முக்கிய விவரங்கள்:\n\n• 📚 **10-ஆம் வகுப்பு சமச்சீர் கல்வி வழிகாட்டிகள்**: தமிழ், ஆங்கிலம், கணிதம், அறிவியல், சமூக அறிவியல்.\n• 🚚 **டெலிவரி விவரங்கள்**: 5 அல்லது அதற்கு மேற்பட்ட புத்தகங்கள் ஆர்டர் செய்தால் **முழுக்க முழுக்க இலவச டோர் டெலிவரி (Free Delivery)**!\n• ⏱️ **வந்து சேரும் காலம்**: ST Courier வழியாக 2 முதல் 3 நாட்களுக்குள் உங்கள் வீட்டிற்கே வந்து சேரும்.\n• 💳 **பணம் செலுத்துதல்**: Razorpay (GPay, PhonePe, Paytm, UPI, Card).\n• 🏢 **முகவரி**: Trust Square, அயனாவரம், சென்னை - 600012.\n• 📞 **உதவிக்கு**: +91 98404 18228.`,
+      answer: `வணக்கம்! 🙏 **Blessing Power Guide** பற்றிய முக்கிய விவரங்கள்:\n\n• 📚 **10-ஆம் வகுப்பு சமச்சீர் கல்வி வழிகாட்டிகள்**: தமிழ், ஆங்கிலம், கணிதம், அறிவியல், சமூக அறிவியல்.\n• 🚚 **டெலிவரி விவரங்கள்**: 5 அல்லது அதற்கு மேற்பட்ட புத்தகங்கள் ஆர்டர் செய்தால் **முழுக்க முழுக்க இலவச டோர் டெலிவரி (Free Delivery)**!\n• ⏱️ **வந்து சேரும் காலம்**: ST Courier வழியாக 2 முதல் 3 நாட்களுக்குள் உங்கள் வீட்டிற்கே வந்து சேரும்.\n• 💳 **பணம் செலுத்துதல்**: Razorpay (GPay, PhonePe, Paytm, UPI, Card).\n• 🏢 **முகவரி**: Trust Square, அயனாவரம், சென்னை - 600012.\n• 📞 **உதவிக்கு**: +91 63829 63350 / +91 94860 17820.`,
       suggestions: ['📚 10th Full Set (இலவச டெலிவரி)', '🚚 Track Order', '👨‍💼 Talk to Admin', '📞 Call Office'],
       shouldEscalate: false,
     };
@@ -926,7 +926,7 @@ export async function generateSupportRagAnswer(
   }
 
   return {
-    answer: `${greeting}I only provide verified information for Blessing Power Guide:\n\n1. 🚚 **Where is my order?** (Live ST Courier tracking & order status)\n2. 📚 **10th Class Guides & Prices** (Tamil, English, Maths, Science & Social Science)\n3. 📦 **Order Rules** (Minimum 4 books MOQ, 100% Free delivery on 5+ books)\n4. 🛡️ **100% Free Replacement** for transit-damaged or misprinted books\n5. 💳 **Razorpay Online Payments** (UPI, GPay, PhonePe, Cards)\n6. 🏢 **Chennai Head Office**: Trust Square, Ayanavaram (+91 98404 18228)\n\nFor any other questions, please click **Talk to Admin** to chat directly with our staff:`,
+    answer: `${greeting}I only provide verified information for Blessing Power Guide:\n\n1. 🚚 **Where is my order?** (Live ST Courier tracking & order status)\n2. 📚 **10th Class Guides & Prices** (Tamil, English, Maths, Science & Social Science)\n3. 📦 **Order Rules** (Minimum 4 books MOQ, 100% Free delivery on 5+ books)\n4. 🛡️ **100% Free Replacement** for transit-damaged or misprinted books\n5. 💳 **Razorpay Online Payments** (UPI, GPay, PhonePe, Cards)\n    6. 🏢 **Chennai Head Office**: Trust Square, Ayanavaram (+91 63829 63350)\n\nFor any other questions, please click **Talk to Admin** to chat directly with our staff:`,
     suggestions: ['🚚 Track My Order', '📚 10th Guides & Prices', '📦 Minimum Order & Delivery Fee', '👨‍💼 Talk to Admin'],
     shouldEscalate: false,
   };

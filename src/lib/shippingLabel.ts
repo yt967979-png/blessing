@@ -120,7 +120,7 @@ export function generateSingleThermalLabelHtml(o: ShippingLabelOrder, qrSvg: str
         <div class="section-lbl">RETURN IF UNDELIVERED TO (SENDER):</div>
         <strong>${esc(OFFICE_COMPANY_NAME)}</strong><br>
         Trust Square, Ayanavaram, Chennai - 600012, TN<br>
-        Helpline: +91 98404 18228
+        Helpline: +91 63829 63350 / +91 94860 17820
       </div>
       <div class="handling-box">
         <div class="handling-tag">📚 EDUCATIONAL BOOKS</div>

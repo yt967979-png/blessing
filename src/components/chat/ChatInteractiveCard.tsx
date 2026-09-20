@@ -251,15 +251,15 @@ export const ChatInteractiveCard: React.FC<ChatInteractiveCardProps> = ({
 
         <div className="grid grid-cols-2 gap-2">
           <a
-            href="tel:+919840418228"
+            href="tel:+916382963350"
             className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-extrabold bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 transition-colors"
           >
             <PhoneCall className="w-3.5 h-3.5" />
-            <span>+91 98404 18228</span>
+            <span>+91 63829 63350</span>
           </a>
 
           <a
-            href="https://wa.me/919840418228?text=Hello%20Blessing%20Power%20Guide,%20I%20need%20help"
+            href="https://wa.me/916382963350?text=Hello%20Blessing%20Power%20Guide,%20I%20need%20help"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-extrabold bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 transition-colors"

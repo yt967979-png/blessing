@@ -76,7 +76,7 @@ export const Footer = () => {
               </a>
 
               <a
-                href="https://wa.me/919840418228"
+                href="https://wa.me/916382963350"
                 target="_blank"
                 rel="noreferrer"
                 className="bg-[#25D366]/10 hover:bg-[#25D366] border border-[#25D366]/30 text-[#25D366] hover:text-slate-950 px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all duration-300 flex items-center gap-2 cursor-pointer shadow-sm hover:scale-105 active:scale-95 group"
@@ -166,7 +166,7 @@ export const Footer = () => {
             </a>
             <div className="pt-2 space-y-1">
               <p className="text-amber-300 font-black text-xs flex items-center gap-1.5">
-                <span>📞</span> +91 98404 18228
+                <span>📞</span> +91 63829 63350 / +91 94860 17820
               </p>
               <p className="text-slate-300 font-medium text-[11px] flex items-center gap-1.5">
                 <span>✉️</span> blessingpowerguide@gmail.com

@@ -575,15 +575,15 @@ function HelpCenterContent() {
         {/* Action Pills */}
         <div className="flex items-center gap-2">
           <a
-            href="tel:+919840418228"
+            href="tel:+916382963350"
             className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 transition-all"
           >
             <PhoneCall className="w-3.5 h-3.5 text-blue-600" />
-            <span className="hidden sm:inline">+91 98404 18228</span>
+            <span className="hidden sm:inline">+91 63829 63350</span>
             <span className="sm:hidden">Call</span>
           </a>
           <a
-            href="https://wa.me/919840418228?text=Hello%20Blessing%20Power%20Guide%20Support,%20I%20need%20help%20with%20an%20order"
+            href="https://wa.me/916382963350?text=Hello%20Blessing%20Power%20Guide%20Support,%20I%20need%20help%20with%20an%20order"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition-all shadow-2xs"
