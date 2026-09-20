@@ -7,7 +7,7 @@ export async function GET(request: Request) {
   const session = await getAuthenticatedUser(request);
   const ip = clientIp(request);
   const rlKey = session ? `coupons-list-${session.userId}-${ip}` : `coupons-list-pub-${ip}`;
-  const { allowed } = await applyRateLimitAsync(rlKey, 40, 60000);
+  const { allowed } = await applyRateLimitAsync(rlKey, 120, 60000);
   if (!allowed) {
     return NextResponse.json({ error: 'Please wait a moment and try again.' }, { status: 429 });
   }

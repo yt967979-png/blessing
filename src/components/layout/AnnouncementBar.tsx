@@ -8,6 +8,11 @@ import { shopWhatsAppChatUrl } from '@/lib/shopContact';
 
 export const AnnouncementBar = () => {
   const { user, setIsAuthOpen } = useStore();
+  const [mounted, setMounted] = React.useState(false);
+
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Hidden on phones — bottom nav + header cover Help / Track / Login
   return (
@@ -30,7 +35,7 @@ export const AnnouncementBar = () => {
             <span>Track Order</span>
           </Link>
           <span className="text-slate-700">|</span>
-          {user ? (
+          {mounted && user ? (
             <Link
               href="/profile"
               className="flex items-center gap-1 text-amber-400 font-semibold hover:underline"

@@ -30,8 +30,14 @@ export const Header = () => {
   const [showSearchDropdown, setShowSearchDropdown] = useState(false);
   const [localQuery, setLocalQuery] = useState(searchQuery);
   const cartBump = useCartBadgeBump(cartCount);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const staffPreview =
-    Boolean(user && (user.role === 'admin' || user.role === 'super_admin') && isAdminShopPreview());
+    mounted && Boolean(user && (user.role === 'admin' || user.role === 'super_admin') && isAdminShopPreview());
 
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
   const [notificationsList, setNotificationsList] = useState<any[]>([]);

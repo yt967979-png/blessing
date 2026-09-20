@@ -76,31 +76,44 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className="antialiased">
+    <html lang="en" suppressHydrationWarning>
+      <body className="antialiased" suppressHydrationWarning>
         <StoreProvider>
           <ClientChrome>{children}</ClientChrome>
         </StoreProvider>
         <script
           dangerouslySetInnerHTML={{
             __html: `
-              window.addEventListener('error', function(e) {
-                if (e && e.message && (e.message.indexOf('Loading chunk') !== -1 || e.message.indexOf('ChunkLoadError') !== -1 || e.message.indexOf('Refused to execute script') !== -1)) {
-                  console.warn('New deployment detected — refreshing page for latest bundle...');
-                  window.location.reload();
-                  return;
-                }
-                // Failed <script>/<link> loads (e.g. stale /_next/static/* chunk from
-                // a build that has since been redeployed) fire a resource error with
-                // no useful message — detect via the target element instead.
-                var target = e && e.target;
-                var src = target && (target.src || target.href);
-                if (target && src && typeof src === 'string' && src.indexOf('/_next/static/') !== -1
-                    && (target.tagName === 'SCRIPT' || target.tagName === 'LINK')) {
-                  console.warn('Stale build asset detected — refreshing page for latest bundle...');
-                  window.location.reload();
-                }
-              }, true);
+              (function() {
+                window.addEventListener('error', function(e) {
+                  try {
+                    var msg = (e && e.message) || '';
+                    var target = e && e.target;
+                    var src = (target && target.src) || '';
+                    
+                    var isChunkErr = typeof msg === 'string' && (
+                      msg.indexOf('Loading chunk') !== -1 ||
+                      msg.indexOf('ChunkLoadError') !== -1 ||
+                      msg.indexOf('Failed to fetch dynamically imported module') !== -1
+                    );
+                    var isStaleScript = target && target.tagName === 'SCRIPT' &&
+                      typeof src === 'string' && src.indexOf('/_next/static/') !== -1;
+
+                    if (isChunkErr || isStaleScript) {
+                      var now = Date.now();
+                      var lastReload = parseInt(sessionStorage.getItem('bpg_last_chunk_reload') || '0', 10);
+                      // Strict throttle: reload at most once every 30 seconds to prevent infinite reload loops
+                      if (now - lastReload > 30000) {
+                        sessionStorage.setItem('bpg_last_chunk_reload', String(now));
+                        console.warn('New deployment detected — reloading once for latest bundle...');
+                        window.location.reload();
+                      } else {
+                        console.warn('Stale asset reload throttled to avoid infinite loop.');
+                      }
+                    }
+                  } catch (err) {}
+                }, true);
+              })();
             `,
           }}
         />

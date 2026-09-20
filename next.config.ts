@@ -110,15 +110,15 @@ const nextConfig: NextConfig = {
         headers: [
           {
             key: "Cache-Control",
-            value: "public, max-age=0, s-maxage=300, stale-while-revalidate=600",
+            value: "public, max-age=0, must-revalidate",
           },
           {
             key: "CDN-Cache-Control",
-            value: "max-age=300, stale-while-revalidate=600",
+            value: "no-cache",
           },
           {
             key: "Cloudflare-CDN-Cache-Control",
-            value: "max-age=300, stale-while-revalidate=600",
+            value: "no-cache",
           },
         ],
       },
@@ -127,15 +127,15 @@ const nextConfig: NextConfig = {
         headers: [
           {
             key: "Cache-Control",
-            value: "public, max-age=0, s-maxage=300, stale-while-revalidate=600",
+            value: "public, max-age=0, must-revalidate",
           },
           {
             key: "CDN-Cache-Control",
-            value: "max-age=300, stale-while-revalidate=600",
+            value: "no-cache",
           },
           {
             key: "Cloudflare-CDN-Cache-Control",
-            value: "max-age=300, stale-while-revalidate=600",
+            value: "no-cache",
           },
         ],
       },
@@ -144,15 +144,15 @@ const nextConfig: NextConfig = {
         headers: [
           {
             key: "Cache-Control",
-            value: "public, max-age=0, s-maxage=300, stale-while-revalidate=600",
+            value: "public, max-age=0, must-revalidate",
           },
           {
             key: "CDN-Cache-Control",
-            value: "max-age=300, stale-while-revalidate=600",
+            value: "no-cache",
           },
           {
             key: "Cloudflare-CDN-Cache-Control",
-            value: "max-age=300, stale-while-revalidate=600",
+            value: "no-cache",
           },
         ],
       },
@@ -161,15 +161,15 @@ const nextConfig: NextConfig = {
         headers: [
           {
             key: "Cache-Control",
-            value: "public, max-age=0, s-maxage=120, stale-while-revalidate=300",
+            value: "public, max-age=0, must-revalidate",
           },
           {
             key: "CDN-Cache-Control",
-            value: "max-age=120, stale-while-revalidate=300",
+            value: "no-cache",
           },
           {
             key: "Cloudflare-CDN-Cache-Control",
-            value: "max-age=120, stale-while-revalidate=300",
+            value: "no-cache",
           },
         ],
       },
