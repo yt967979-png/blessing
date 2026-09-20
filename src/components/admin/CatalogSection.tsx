@@ -445,7 +445,7 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
         if (!res.ok) {
           throw new Error(data.error || `Failed to create publication (${res.status})`);
         }
-        if (refreshProducts) refreshProducts(true);
+        // Server POST triggers notifyCatalogChanged → SSE → auto-refresh via StoreContext
       }
 
       onShowToast(

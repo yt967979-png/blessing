@@ -182,6 +182,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const productsRef = useRef<Product[]>([]);
   productsRef.current = products;
   const recentAdminEditsRef = useRef<Map<string, number>>(new Map());
+  const refreshInFlightRef = useRef(false);
+  const lastRefreshTsRef = useRef(0);
 
   const cartRef = useRef<CartItem[]>([]);
   cartRef.current = cart;
@@ -220,19 +222,23 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const refreshProducts = (forceFresh = false) => {
+    const now = Date.now();
+    // Deduplicate: if another refresh is already in-flight or one just finished <2s ago, skip
+    if (refreshInFlightRef.current) return;
+    if (now - lastRefreshTsRef.current < 2000) return;
+
     // Soft SWR: keep previous catalog on screen — only skeleton when empty
     if (productsRef.current.length === 0) {
       setProductsLoading(true);
     }
+    refreshInFlightRef.current = true;
     const url = forceFresh ? '/api/products?fresh=1' : '/api/products';
     const opts: RequestInit = {
       cache: forceFresh ? 'no-store' : 'default',
-      // Fail fast — never leave the shop on a blank skeleton when pool stalls.
       signal: AbortSignal.timeout(10_000),
     };
     fetch(url, opts)
       .then(async (res) => {
-        // Redeploy maintenance HTML / 5xx must never blank the shop or spam as a fatal app error
         const ctype = res.headers.get('content-type') || '';
         if (!res.ok || !ctype.includes('application/json')) {
           throw new Error(`catalog unavailable (${res.status})`);
@@ -241,8 +247,40 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       })
       .then((data) => {
         if (!Array.isArray(data)) return;
-        // Keep last good catalog if API soft-returns []
         if (data.length === 0 && productsRef.current.length > 0) return;
+
+        // Admin-aware merge: if any product was recently edited by the admin,
+        // preserve the local optimistic state for that product instead of
+        // overwriting it with the server response (which may be fractionally stale
+        // due to cache/CDN or just reflect the same data we already set).
+        const hasRecentEdits = recentAdminEditsRef.current.size > 0;
+        if (hasRecentEdits) {
+          const editCutoff = Date.now() - 30_000;
+          const protectedIds = new Set<string>();
+          for (const [pid, ts] of recentAdminEditsRef.current) {
+            if (ts > editCutoff) protectedIds.add(pid);
+            else recentAdminEditsRef.current.delete(pid);
+          }
+          if (protectedIds.size > 0) {
+            // Build a map of server data, then overlay our protected local state
+            const serverById = new Map(data.map((p: Product) => [String(p.id), p]));
+            const localById = new Map(productsRef.current.map((p) => [String(p.id), p]));
+            const merged = data.map((serverProd: Product) => {
+              const pid = String(serverProd.id);
+              if (protectedIds.has(pid) && localById.has(pid)) {
+                return localById.get(pid)!;
+              }
+              return serverProd;
+            });
+            // Also include any local-only products (temp IDs from add that hasn't resolved yet)
+            for (const [pid, localProd] of localById) {
+              if (!serverById.has(pid)) merged.push(localProd);
+            }
+            setProducts(merged);
+            if (merged.length > 0) writeCatalogCache(merged);
+            return;
+          }
+        }
         setProducts(data);
         if (data.length > 0) writeCatalogCache(data);
       })
@@ -253,10 +291,13 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             productsRef.current = cached;
             setProducts(cached);
           }
-          // leave [] only when we truly never had products — no throw, no console spam
         }
       })
-      .finally(() => setProductsLoading(false));
+      .finally(() => {
+        refreshInFlightRef.current = false;
+        lastRefreshTsRef.current = Date.now();
+        setProductsLoading(false);
+      });
   };
 
   // Hydrate cart/wishlist/user BEFORE any sync (prevents empty-cart wipe)
@@ -400,7 +441,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         const upd = byId.get(String(p.id));
         if (!upd) return p;
         const lastEdit = recentAdminEditsRef.current.get(String(p.id)) || 0;
-        if (Date.now() - lastEdit < 15000) {
+        if (Date.now() - lastEdit < 30000) {
           return p;
         }
         const newPrice = typeof upd.price === 'number' && Number.isFinite(upd.price) && upd.price > 0 ? upd.price : p.price;
@@ -559,7 +600,15 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             return;
           }
           if (data?.type === 'CATALOG_CHANGED') {
-            refreshProducts(true);
+            // Only do a full refresh if admin has NOT recently edited a product.
+            // The optimistic local state is already correct; a full refetch would
+            // cause a flicker as the entire products array gets replaced.
+            const editCutoff = Date.now() - 30_000;
+            let hasRecentEdit = false;
+            for (const [, ts] of recentAdminEditsRef.current) {
+              if (ts > editCutoff) { hasRecentEdit = true; break; }
+            }
+            if (!hasRecentEdit) refreshProducts(true);
             return;
           }
           if (data?.type === 'STOCK_CHANGED' && Array.isArray(data.books)) {
@@ -585,7 +634,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
-        refreshProducts();
+        // Delay slightly so we don't race with the SSE reconnect
+        setTimeout(() => refreshProducts(), 1000);
         connect();
       } else {
         disconnect();
@@ -1534,7 +1584,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       try {
         sessionStorage.removeItem(CATALOG_CACHE_KEY);
       } catch {}
-      refreshProducts(true);
+      // Do NOT call refreshProducts here — the server PATCH already triggers
+      // notifyCatalogChanged → SSE CATALOG_CHANGED → refreshProducts.
+      // Calling it here too causes a double-refresh flicker.
       showToast(
         rest.stock !== undefined
           ? `✓ Stock updated — ${Math.max(0, Math.floor(Number(rest.stock) || 0))} units`
@@ -1615,8 +1667,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (data?.id) {
         setProducts((prev) => prev.map((p) => (p.id === tempId ? { ...p, id: data.id, slug: data.slug || data.id } : p)));
       }
-      // Pull authoritative mapped catalog so every open shop tab (and this one) match DB
-      refreshProducts(true);
+      // Server POST already triggers notifyCatalogChanged → SSE → auto-refresh.
+      // Only do a delayed refresh as a fallback in case SSE is disconnected.
+      setTimeout(() => { if (!sseConnectedRef.current) refreshProducts(true); }, 3000);
       return data;
     } catch (err: any) {
       setProducts((prev) => prev.filter((p) => p.id !== tempId));
@@ -1642,7 +1695,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || 'Delete failed');
       }
-      refreshProducts(true);
+      // Server DELETE already triggers notifyCatalogChanged → SSE → auto-refresh.
+      setTimeout(() => { if (!sseConnectedRef.current) refreshProducts(true); }, 3000);
       showToast(`🗑️ Book removed from database`);
       return true;
     } catch (err: any) {

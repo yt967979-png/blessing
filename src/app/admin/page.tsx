@@ -412,7 +412,9 @@ function AdminPageInner() {
             const data = JSON.parse(event.data);
             if (data.type === 'STOCK_CHANGED' || data.type === 'CATALOG_CHANGED') {
               loadLowStock();
-              if (refreshProducts) refreshProducts(true);
+              // NOTE: Do NOT call refreshProducts here. The StoreContext already
+              // has its own SSE listener that handles STOCK_CHANGED and CATALOG_CHANGED.
+              // Calling it here too causes a duplicate refresh → flickering.
             }
           } catch (_) {}
         };
@@ -440,7 +442,7 @@ function AdminPageInner() {
               loadLiveOrders({ fromStream: true, silent: true });
               loadLowStock();
               loadAnalytics();
-              if (refreshProducts) refreshProducts(true);
+              // Don't call refreshProducts here — StoreContext handles product state via its SSE.
             }
           } catch (_) {}
         };
@@ -479,7 +481,7 @@ function AdminPageInner() {
       if (esStock) esStock.close();
       if (esOrders) esOrders.close();
     };
-  }, [user, isAdmin, loadLowStock, loadLiveOrders, loadAnalytics, loadWaitingSupport, refreshProducts]);
+  }, [user, isAdmin, loadLowStock, loadLiveOrders, loadAnalytics, loadWaitingSupport]);
 
   // Manual stock hold release handler (Restores reserved stock immediately)
   const handleReleaseHold = async (holdGroupId: string, bookTitle: string) => {
@@ -494,7 +496,6 @@ function AdminPageInner() {
       if (res.ok && data.success) {
         showToast(`🔓 Hold released for "${bookTitle}". Copies restored to rack!`);
         loadLowStock();
-        if (refreshProducts) refreshProducts(true);
       } else {
         showToast(`❌ ${data.error || 'Failed to release hold'}`);
       }
