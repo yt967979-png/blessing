@@ -43,6 +43,12 @@ export function isBackgroundLeader(): boolean {
     return false;
   }
 
+  // If running multiple port instances (e.g. systemd blessing@3000 and blessing@3001),
+  // non-primary ports (3001+) must not run background cron jobs unless they win the advisory lock.
+  if (process.env.PORT && process.env.PORT !== '3000' && !isLeader) {
+    return false;
+  }
+
   // Single instance (Lightsail 1 process / 1 replica): allow background jobs.
   const replicas = Number(process.env.APP_REPLICA_COUNT || process.env.RAILWAY_NUM_REPLICAS || '1');
   if (replicas <= 1 && (pm2Instance === undefined || pm2Instance === '0')) return true;

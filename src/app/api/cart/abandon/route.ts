@@ -18,12 +18,15 @@ export async function POST(request: NextRequest) {
     const userId = session?.userId || null;
 
     // If cart is emptied or cleared, immediately delete from abandoned_carts
-    if (phone.length === 10 && (cart.length === 0 || body.cleared === true)) {
+    if ((phone.length === 10 || userId) && (cart.length === 0 || body.cleared === true)) {
       client = await getDbClient();
-      const id = `ac-${phone}`;
+      const id = phone.length === 10 ? `ac-${phone}` : null;
       await client.query(
-        `DELETE FROM abandoned_carts WHERE id = $1 OR phone = $2 OR (user_id IS NOT NULL AND user_id = $3)`,
-        [id, phone, userId]
+        `DELETE FROM abandoned_carts
+         WHERE ($1::text IS NOT NULL AND id = $1)
+            OR ($2::text IS NOT NULL AND phone = $2)
+            OR ($3::text IS NOT NULL AND user_id = $3)`,
+        [id, phone.length === 10 ? phone : null, userId ? String(userId) : null]
       );
       return NextResponse.json({ ok: true, cleared: true });
     }

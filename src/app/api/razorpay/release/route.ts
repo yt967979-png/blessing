@@ -21,13 +21,18 @@ export async function POST(request: Request) {
   try {
     const body = await request.json().catch(() => ({}));
     const razorpayOrderId = String(body?.razorpayOrderId || '').trim();
+    const holdGroupId = String(body?.holdGroupId || '').trim();
     const reason = String(body?.reason || 'client_cancelled').slice(0, 100);
-    if (!razorpayOrderId) {
-      return NextResponse.json({ error: 'razorpayOrderId is required' }, { status: 400 });
+    if (!razorpayOrderId && !holdGroupId) {
+      return NextResponse.json({ error: 'razorpayOrderId or holdGroupId is required' }, { status: 400 });
     }
 
     const result = await releaseStockHolds(
-      { razorpayOrderId, userId: session.userId },
+      {
+        razorpayOrderId: razorpayOrderId || undefined,
+        holdGroupId: holdGroupId || undefined,
+        userId: session.userId,
+      },
       reason
     );
 

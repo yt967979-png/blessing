@@ -443,7 +443,7 @@ export async function POST(request: Request) {
     }
 
     for (const item of verifiedItems) {
-      const itemId = `item-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
+      const itemId = `item-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       await client.query(
         `INSERT INTO order_items (id, order_id, book_id, book_title, book_price, quantity, subtotal)
          VALUES ($1, $2, $3, $4, $5, $6, $7)`,
@@ -521,6 +521,13 @@ export async function POST(request: Request) {
       `INSERT INTO order_timeline (id, order_id, status, remarks) VALUES ($1, $2, 'Confirmed', 'Order placed successfully')`,
       [`tl-${Date.now()}`, id]
     );
+
+    // Immediately empty customer's cart in DB within the transaction so purchased items never resurrect
+    if (userId) {
+      try {
+        await client.query(`DELETE FROM cart_items WHERE cart_id = $1`, [`cart-${userId}`]);
+      } catch (_) {}
+    }
 
     await client.query('COMMIT');
 

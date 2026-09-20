@@ -14,9 +14,12 @@ export async function GET(request: NextRequest) {
   try {
     if (view === 'low_stock' || view === 'stock_holds') {
       const res = await queryDb(
-        `SELECT id, title, stock, status, price, department AS cls, subject
+        `SELECT id, title, stock, status,
+                COALESCE(NULLIF(discount_price, 0), price, 0) AS price,
+                COALESCE(NULLIF(department, ''), REPLACE(category_id, 'cat-', ''), '') AS cls,
+                subject
          FROM books
-         WHERE COALESCE(stock, 0) <= 5
+         WHERE COALESCE(stock, 0) <= 5 OR status = 'out_of_stock'
          ORDER BY COALESCE(stock, 0) ASC, title ASC
          LIMIT 100`
       );

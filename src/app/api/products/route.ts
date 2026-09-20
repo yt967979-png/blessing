@@ -29,8 +29,8 @@ export async function invalidateProductsCache() {
     await redisDelPattern('catalog:*');
   } catch {}
   try {
-    const { invalidateLiveProductsCache } = require('./live/route');
-    void invalidateLiveProductsCache();
+    const { invalidateLiveProductsCache } = await import('@/app/api/products/live/route');
+    await invalidateLiveProductsCache();
   } catch {}
 }
 

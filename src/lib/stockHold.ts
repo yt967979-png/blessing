@@ -315,7 +315,7 @@ export async function sweepExpiredStockHolds(): Promise<number> {
   try {
     const expired = await queryDb(
       `SELECT DISTINCT hold_group_id FROM stock_holds
-       WHERE status = 'held' AND expires_at < NOW()
+       WHERE status = 'held' AND expires_at < NOW() AND hold_group_id IS NOT NULL
        LIMIT 200`
     );
     let releasedGroups = 0;
@@ -333,7 +333,10 @@ export async function sweepExpiredStockHolds(): Promise<number> {
 /** Admin visibility — active reservations right now (units held, not yet sold or released). */
 export async function getActiveHoldsSummary(limit = 100) {
   const res = await queryDb(
-    `SELECT sh.id, sh.hold_group_id, sh.book_id, b.title, COALESCE(b.department, '') AS cls, b.price, sh.qty, sh.razorpay_order_id, sh.expires_at, sh.created_at
+    `SELECT sh.id, sh.hold_group_id, sh.book_id, b.title,
+            COALESCE(NULLIF(b.department, ''), REPLACE(b.category_id, 'cat-', ''), '') AS cls,
+            COALESCE(NULLIF(b.discount_price, 0), b.price, 0) AS price,
+            sh.qty, sh.razorpay_order_id, sh.expires_at, sh.created_at
      FROM stock_holds sh
      LEFT JOIN books b ON b.id = sh.book_id
      WHERE sh.status = 'held' AND (sh.expires_at IS NULL OR sh.expires_at > NOW() - INTERVAL '5 minutes')
