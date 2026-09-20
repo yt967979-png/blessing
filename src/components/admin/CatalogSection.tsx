@@ -571,8 +571,8 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
         </div>
       </div>
 
-      {/* Publications Table */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+      {/* Publications Table (Desktop md+) */}
+      <div className="hidden md:block bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
@@ -903,6 +903,222 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* Publications Cards (Mobile md:hidden) */}
+      <div className="block md:hidden space-y-3">
+        {filteredProducts.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center text-slate-400 space-y-2">
+            <BookOpen className="w-8 h-8 mx-auto text-slate-300" />
+            <p className="font-bold text-sm text-slate-800">No Publications Found</p>
+            <p className="text-xs text-slate-500">Try adjusting your filters or search.</p>
+          </div>
+        ) : (
+          filteredProducts.map((p) => {
+            const isEditing = editingId === p.id;
+            const disc =
+              p.mrp > p.price
+                ? p.price <= 0
+                  ? 100
+                  : Math.min(99, Math.round(((p.mrp - p.price) / p.mrp) * 100))
+                : 0;
+            const isOOS = !p.inStock || (p.stock ?? 0) <= 0;
+            const isLow = (p.stock ?? 99) <= 5 && !isOOS;
+            const heldCount = holdsByBookId.get(String(p.id)) || 0;
+
+            if (isEditing) {
+              return (
+                <div key={p.id} className="bg-white rounded-2xl border-2 border-blue-400 p-4 shadow-md space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <span className="text-xs font-bold text-blue-600">Editing Publication</span>
+                    <button
+                      type="button"
+                      onClick={() => setEditingId(null)}
+                      className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-700 block mb-1">Guide Book Title</label>
+                      <input
+                        type="text"
+                        value={editTitle}
+                        onChange={(e) => setEditTitle(e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold outline-none focus:border-[#2874f0] text-slate-900"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[11px] font-bold text-slate-700 block mb-1">Standard</label>
+                        <select
+                          value={editCls}
+                          onChange={(e) => setEditCls(e.target.value)}
+                          className="w-full px-2 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold outline-none cursor-pointer"
+                        >
+                          {['6th', '7th', '8th', '9th', '10th', '11th', '12th'].map((c) => (
+                            <option key={c} value={c}>{c} Standard</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-bold text-slate-700 block mb-1">Subject</label>
+                        <input
+                          type="text"
+                          value={editSubject}
+                          onChange={(e) => setEditSubject(e.target.value)}
+                          className="w-full px-2 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs outline-none"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 bg-blue-50/50 p-3 rounded-xl border border-blue-100">
+                      <div>
+                        <label className="text-[11px] font-bold text-blue-900 block mb-0.5">Offer Price (₹)</label>
+                        <span className="text-[9px] text-blue-600 block mb-1">Customer selling price</span>
+                        <input
+                          type="number"
+                          step="any"
+                          min="0"
+                          value={editPrice}
+                          onChange={(e) => setEditPrice(e.target.value === '' ? ('' as any) : Number(e.target.value))}
+                          className="w-full px-2 py-2 bg-white border border-blue-300 rounded-lg text-xs font-extrabold outline-none text-slate-900"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-bold text-slate-700 block mb-0.5">MRP (₹)</label>
+                        <span className="text-[9px] text-slate-500 block mb-1">Original printed price</span>
+                        <input
+                          type="number"
+                          step="any"
+                          min="0"
+                          value={editMrp}
+                          onChange={(e) => setEditMrp(e.target.value === '' ? ('' as any) : Number(e.target.value))}
+                          className="w-full px-2 py-2 bg-white border border-slate-300 rounded-lg text-xs font-bold outline-none text-slate-900"
+                        />
+                      </div>
+                    </div>
+                    <div className="bg-amber-50/60 p-3 rounded-xl border border-amber-100">
+                      <label className="text-[11px] font-bold text-amber-900 block mb-0.5">Copies in Rack</label>
+                      <span className="text-[9px] text-amber-700 block mb-1">Available warehouse inventory count</span>
+                      <input
+                        type="number"
+                        min="0"
+                        value={editStock}
+                        onChange={(e) => setEditStock(Math.max(0, Number(e.target.value) || 0))}
+                        className="w-full px-2 py-2 bg-white border border-amber-300 rounded-lg text-xs font-extrabold outline-none text-slate-900"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => handleSaveEdit(p.id)}
+                      className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold cursor-pointer transition-colors text-center shadow-xs"
+                    >
+                      Save Changes
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingId(null)}
+                      className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              );
+            }
+
+            return (
+              <div key={p.id} className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs space-y-3">
+                <div className="flex items-start gap-3">
+                  <img
+                    src={p.image}
+                    alt={p.title}
+                    className="w-14 h-14 object-contain bg-slate-50 border border-slate-200 rounded-xl p-0.5 shrink-0"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded-md text-[10px] border border-slate-200">
+                        {p.cls || 'General'}
+                      </span>
+                      {p.subject && (
+                        <span className="text-[11px] text-slate-500 font-medium">
+                          {p.subject}
+                        </span>
+                      )}
+                      {p.badge && (
+                        <span className="text-[9px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md">
+                          {p.badge}
+                        </span>
+                      )}
+                    </div>
+                    <span className="font-bold text-xs text-slate-900 block mt-1 leading-snug">
+                      {p.title}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
+                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                    <span className="text-[10px] text-slate-500 block font-medium">Price</span>
+                    <div className="flex items-baseline gap-1.5 mt-0.5">
+                      <span className="font-extrabold text-sm text-slate-900">₹{p.price}</span>
+                      {p.mrp > p.price && (
+                        <span className="line-through text-xs text-slate-400">₹{p.mrp}</span>
+                      )}
+                    </div>
+                    {disc > 0 && (
+                      <span className="text-[10px] text-emerald-600 font-bold block mt-0.5">
+                        {disc}% OFF
+                      </span>
+                    )}
+                  </div>
+                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 flex flex-col justify-between">
+                    <span className="text-[10px] text-slate-500 block font-medium">Rack Stock</span>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleStockStatus(p)}
+                      className={`text-[10px] font-bold px-2 py-1 rounded-lg border transition-colors cursor-pointer text-center mt-1 ${
+                        isOOS
+                          ? 'bg-red-50 text-red-600 border-red-200'
+                          : isLow
+                          ? 'bg-amber-50 text-amber-700 border-amber-200 animate-pulse'
+                          : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      }`}
+                    >
+                      {isOOS ? 'OUT OF STOCK' : `${p.stock ?? '—'} IN RACK`}
+                    </button>
+                    {heldCount > 0 && (
+                      <span className="text-[9px] text-blue-700 font-bold mt-1 block">
+                        {heldCount} on hold
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-1 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => handleStartEdit(p)}
+                    className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold cursor-pointer transition-colors"
+                  >
+                    Edit Publication
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onDeleteProduct(p.id)}
+                    className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
+                    title="Delete Publication"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
 
       {/* Add New Publication Modal */}

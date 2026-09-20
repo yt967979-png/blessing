@@ -502,10 +502,13 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           return item;
         }
         changed = true;
-        if (item.price !== newPrice) {
-          showToast(`⚡ Price update: "${item.title}" is now ₹${newPrice}`);
-        } else if (!upd.inStock && item.inStock) {
-          showToast(`⚠️ "${item.title}" is now Out of Stock`);
+        const isAdminPage = typeof window !== 'undefined' && window.location.pathname.startsWith('/admin');
+        if (!isAdminPage) {
+          if (item.price !== newPrice) {
+            showToast(`⚡ Price update: "${item.title}" is now ₹${newPrice}`);
+          } else if (!upd.inStock && item.inStock) {
+            showToast(`⚠️ "${item.title}" is now Out of Stock`);
+          }
         }
         return {
           ...item,
@@ -1247,7 +1250,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         return next;
       });
 
-      if (messages.length > 0) {
+      const isAdminPage = typeof window !== 'undefined' && window.location.pathname.startsWith('/admin');
+      if (messages.length > 0 && !isAdminPage) {
         showToast(`⚠️ ${messages[0]}${messages.length > 1 ? ` (+${messages.length - 1} more)` : ''}`);
       }
       return clean;
