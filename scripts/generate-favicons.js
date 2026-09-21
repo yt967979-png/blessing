@@ -11,7 +11,8 @@ async function main() {
   // 1. Generate 512x512 true PNG
   const png512 = await sharp(masterBuf).resize(512, 512).png({ quality: 90 }).toBuffer();
   fs.writeFileSync(path.join(__dirname, '..', 'public', 'logo.png'), png512);
-  console.log('✅ Generated public/logo.png (512x512 true PNG)');
+  fs.writeFileSync(path.join(__dirname, '..', 'public', 'bpg-og-emblem.png'), png512);
+  console.log('✅ Generated public/logo.png & public/bpg-og-emblem.png (512x512 true PNG)');
 
   // 2. Generate 192x192 true PNG
   const png192 = await sharp(masterBuf).resize(192, 192).png({ quality: 90 }).toBuffer();

@@ -32,13 +32,13 @@ export const metadata: Metadata = {
   manifest: '/manifest.webmanifest',
   icons: {
     icon: [
-      { url: '/favicon-48x48.png?v=4', sizes: '48x48', type: 'image/png' },
-      { url: '/favicon.ico?v=4', sizes: 'any' },
-      { url: '/icon.png?v=4', sizes: '192x192', type: 'image/png' },
-      { url: '/logo.png?v=4', sizes: '512x512', type: 'image/png' },
+      { url: '/favicon-48x48.png?v=20260921', sizes: '48x48', type: 'image/png' },
+      { url: '/favicon.ico?v=20260921', sizes: 'any' },
+      { url: '/icon.png?v=20260921', sizes: '192x192', type: 'image/png' },
+      { url: '/logo.png?v=20260921', sizes: '512x512', type: 'image/png' },
     ],
-    shortcut: ['/favicon-48x48.png?v=4', '/favicon.ico?v=4'],
-    apple: [{ url: '/apple-touch-icon.png?v=4', sizes: '180x180', type: 'image/png' }],
+    shortcut: ['/favicon-48x48.png?v=20260921', '/favicon.ico?v=20260921'],
+    apple: [{ url: '/apple-touch-icon.png?v=20260921', sizes: '180x180', type: 'image/png' }],
   },
   openGraph: {
     title: 'Blessing Power Guide — Tamil Nadu State Board & CBSE Exam Guides (Class 6-12)',
@@ -46,16 +46,24 @@ export const metadata: Metadata = {
       'High-scoring study guides and question banks for 6th to 12th standard students. Fast doorstep courier delivery across Tamil Nadu & South India.',
     url: siteUrl,
     siteName: 'Blessing Power Guide',
-    images: [{ url: '/logo.png?v=4', width: 512, height: 512, alt: 'Blessing Power Guide Publications' }],
+    images: [
+      {
+        url: `${siteUrl}/bpg-og-emblem.png?v=20260921`,
+        width: 512,
+        height: 512,
+        alt: 'Blessing Power Guide Publications — Learn • Grow • Excel',
+        type: 'image/png',
+      },
+    ],
     locale: 'en_IN',
     type: 'website',
   },
   twitter: {
-    card: 'summary_large_image',
+    card: 'summary',
     title: 'Blessing Power Guide — Tamil Nadu State Board & CBSE Exam Guides',
     description:
       'Quality guides for better preparation and brighter results for 6th to 12th standard students.',
-    images: ['/logo.png?v=4'],
+    images: [`${siteUrl}/bpg-og-emblem.png?v=20260921`],
   },
   alternates: {
     canonical: siteUrl,

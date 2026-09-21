@@ -153,7 +153,7 @@ export const AbandonedCartsSection: React.FC<AbandonedCartsSectionProps> = ({
       ? `Books: ₹${cart.subtotal || (cart.totalAmount - cart.shippingFee)}\nDelivery Charge: ₹${cart.shippingFee}\nTotal: ₹${cart.totalAmount}`
       : `Total: ₹${cart.totalAmount} (Free Delivery 🎉)`;
 
-    const msg = `Vanakkam ${cart.name}! 📚\n\nThis is Blessing Power Guide. We noticed you selected books in your cart:\n${bookTitles}\n\n${shippingLine}\n\nNeed any help with delivery pincode or payment? You can easily resume and complete your order directly here:\nhttps://blessingpowerguide.in/cart\n\nFast ST Courier Delivery across Tamil Nadu.`;
+    const msg = `Vanakkam ${cart.name}! 📚\n\nThis is Blessing Power Guide. We noticed you selected books in your cart:\n${bookTitles}\n\n${shippingLine}\n\nNeed any help with delivery pincode or payment? You can easily resume and complete your order directly here:\nhttps://blessingpowerguide.in/cart?resume=order\n\nFast ST Courier Delivery across Tamil Nadu.`;
 
     const waUrl = `https://api.whatsapp.com/send?phone=${phoneWithCountry}&text=${encodeURIComponent(msg)}`;
     window.open(waUrl, '_blank', 'noopener,noreferrer');
