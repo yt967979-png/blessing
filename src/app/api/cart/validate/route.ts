@@ -35,8 +35,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Too many requests. Please wait a moment.' }, { status: 429 });
   }
 
+  let body: any;
   try {
-    const body = await request.json().catch(() => ({}));
+    body = await request.json();
+  } catch {
+    return NextResponse.json(
+      { error: 'Invalid JSON payload: malformed syntax' },
+      { status: 400 }
+    );
+  }
+
+  try {
     const items: CartValidateItem[] = Array.isArray(body?.items) ? body.items : [];
     if (items.length === 0) {
       return NextResponse.json({ items: [], checkedAt: Date.now() });

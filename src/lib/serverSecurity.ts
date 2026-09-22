@@ -246,7 +246,8 @@ export function unauthorizedResponse(message = 'Unauthorized') {
 }
 
 export function forbiddenResponse(message = 'Forbidden') {
-  return NextResponse.json({ error: message }, { status: 403 });
+  const status = typeof message === 'string' && message.toLowerCase().includes('unauthorized') ? 401 : 403;
+  return NextResponse.json({ error: message }, { status });
 }
 
 /**

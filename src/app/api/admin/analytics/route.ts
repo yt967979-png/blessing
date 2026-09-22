@@ -3,6 +3,7 @@ import { withEphemeralClient } from '@/lib/db';
 import {
   getAuthenticatedUser,
   forbiddenResponse,
+  unauthorizedResponse,
 } from '@/lib/serverSecurity';
 
 /** Active (non-cancelled) orders only — cancelled sales do not count toward revenue. */
@@ -44,7 +45,7 @@ export async function GET(request: Request) {
   // JWT only here — DB role check runs on the same ephemeral Client as analytics
   // so we never wait on the shared pool acquire queue before work starts.
   const session = await getAuthenticatedUser(request);
-  if (!session) return forbiddenResponse('Unauthorized: Missing session');
+  if (!session) return unauthorizedResponse('Unauthorized: Missing session');
 
   const { searchParams } = new URL(request.url);
   const range = searchParams.get('range') || searchParams.get('days') || '30';
