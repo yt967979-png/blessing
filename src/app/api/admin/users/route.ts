@@ -203,6 +203,14 @@ export async function PATCH(request: NextRequest) {
       [status, userId]
     );
 
+    try {
+      const { getRedisClient } = await import('@/lib/redis');
+      const redis = getRedisClient();
+      if (redis) {
+        await redis.del(`user_status:${userId}`);
+      }
+    } catch (_) {}
+
     void recordAdminAudit(
       {
         actorId: superAdmin.user?.userId || 'super_admin',
@@ -250,6 +258,14 @@ export async function DELETE(request: NextRequest) {
     await queryDb(`DELETE FROM users WHERE id::text = $1::text AND COALESCE(role, 'customer') != 'super_admin'`, [
       userId,
     ]);
+
+    try {
+      const { getRedisClient } = await import('@/lib/redis');
+      const redis = getRedisClient();
+      if (redis) {
+        await redis.del(`user_status:${userId}`);
+      }
+    } catch (_) {}
 
     void recordAdminAudit(
       {

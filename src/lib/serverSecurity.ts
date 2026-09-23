@@ -158,7 +158,58 @@ export async function getAuthenticatedUser(
 ): Promise<{ userId: string; role: string } | null> {
   const token = getTokenFromRequest(request);
   if (!token) return null;
-  return verifySessionToken(token, getDeviceIdFromRequest(request));
+  const decoded = verifySessionToken(token, getDeviceIdFromRequest(request));
+  if (!decoded) return null;
+
+  try {
+    // 1. Fast Redis check if available
+    let redis: any = null;
+    try {
+      const { getRedisClient } = await import('@/lib/redis');
+      redis = getRedisClient();
+      if (redis) {
+        const cached = await redis.get(`user_status:${decoded.userId}`);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed.status === 'banned' || parsed.status === 'inactive') {
+            return null;
+          }
+          return { userId: decoded.userId, role: parsed.role || decoded.role };
+        }
+      }
+    } catch (_) {}
+
+    // 2. Query DB to ensure user exists and is active
+    const { queryEphemeral } = await import('@/lib/db');
+    const res = await queryEphemeral(
+      `SELECT status, role FROM users WHERE id::text = $1::text LIMIT 1`,
+      [decoded.userId],
+      { budgetMs: 3_000, statementTimeoutMs: 2_000, label: 'authUserCheck' }
+    );
+    if (!res.rows.length) {
+      return null;
+    }
+
+    const row = res.rows[0];
+    const status = String(row.status || 'active').toLowerCase();
+    const role = String(row.role || decoded.role);
+
+    // Cache status in Redis for 5 seconds for fast revocation responsiveness
+    if (redis) {
+      try {
+        await redis.setex(`user_status:${decoded.userId}`, 5, JSON.stringify({ status, role }));
+      } catch (_) {}
+    }
+
+    if (status === 'banned' || status === 'inactive') {
+      return null;
+    }
+
+    return { userId: decoded.userId, role };
+  } catch {
+    // If DB check fails transiently, fall back to decoded token
+    return decoded;
+  }
 }
 
 export interface AdminVerifyResult {
@@ -182,11 +233,21 @@ export async function verifyAdminRequest(
     if (method !== 'GET' && method !== 'HEAD') {
       const fetchSite = String(request.headers.get('sec-fetch-site') || '').toLowerCase();
       if (fetchSite === 'cross-site') {
-        return { isAdmin: false, isSuperAdmin: false, error: 'Forbidden: Cross-site request blocked' };
+        return {
+          isAdmin: false,
+          isSuperAdmin: false,
+          error: 'Forbidden: Cross-site request blocked',
+          user: { userId: session.userId, role: session.role || 'customer', isSuperAdmin: false },
+        };
       }
       const originCheck = verifyOriginOrReferer(request);
       if (!originCheck.valid) {
-        return { isAdmin: false, isSuperAdmin: false, error: originCheck.error || 'Forbidden' };
+        return {
+          isAdmin: false,
+          isSuperAdmin: false,
+          error: originCheck.error || 'Forbidden: Invalid origin',
+          user: { userId: session.userId, role: session.role || 'customer', isSuperAdmin: false },
+        };
       }
     }
 

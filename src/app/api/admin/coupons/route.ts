@@ -6,8 +6,7 @@ import { mapAdminCoupon } from '@/lib/coupons';
 export async function GET(request: Request) {
   const auth = await verifyAdminRequest(request);
   if (!auth.isAdmin) {
-    if (!auth.user) return unauthorizedResponse('Admin login required');
-    return forbiddenResponse('Admin privileges required to view coupons');
+    return forbiddenResponse(auth.error || 'Admin privileges required to view coupons');
   }
 
   try {
@@ -43,8 +42,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const auth = await verifyAdminRequest(request);
   if (!auth.isAdmin) {
-    if (!auth.user) return unauthorizedResponse('Admin login required');
-    return forbiddenResponse('Admin privileges required to create coupons');
+    return forbiddenResponse(auth.error || 'Admin privileges required to create coupons');
   }
 
   try {
@@ -138,8 +136,7 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   const auth = await verifyAdminRequest(request);
   if (!auth.isAdmin) {
-    if (!auth.user) return unauthorizedResponse('Admin login required');
-    return forbiddenResponse('Admin privileges required to update coupons');
+    return forbiddenResponse(auth.error || 'Admin privileges required to update coupons');
   }
 
   try {
@@ -191,8 +188,7 @@ export async function PATCH(request: Request) {
 export async function DELETE(request: Request) {
   const auth = await verifyAdminRequest(request);
   if (!auth.isAdmin) {
-    if (!auth.user) return unauthorizedResponse('Admin login required');
-    return forbiddenResponse('Admin privileges required to delete coupons');
+    return forbiddenResponse(auth.error || 'Admin privileges required to delete coupons');
   }
 
   try {
