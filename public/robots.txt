@@ -1,0 +1,39 @@
+User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /admin
+Disallow: /api/
+Disallow: /api
+Disallow: /checkout/
+Disallow: /checkout
+Disallow: /cart/
+Disallow: /cart
+Disallow: /track/
+Disallow: /track
+Disallow: /orders/
+Disallow: /orders
+Disallow: /profile/
+Disallow: /profile
+Disallow: /payment/
+
+User-agent: Googlebot
+Allow: /
+Allow: /search
+Allow: /products/
+Allow: /favicon.ico
+Allow: /favicon-48x48.png
+Allow: /icon.png
+Allow: /logo.png
+Allow: /robots.txt
+Allow: /sitemap.xml
+
+User-agent: Googlebot-Image
+Allow: /
+Allow: /favicon.ico
+Allow: /favicon-48x48.png
+Allow: /icon.png
+Allow: /logo.png
+Allow: /apple-touch-icon.png
+Allow: /uploads/
+
+Sitemap: https://blessingpowerguide.in/sitemap.xml
