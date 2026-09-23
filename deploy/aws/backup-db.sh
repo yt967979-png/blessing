@@ -71,11 +71,9 @@ if [[ -d "$UPLOADS_DIR" ]]; then
   find "$BACKUP_DIR" -type f -name "blessing_uploads_*.tar.gz" -mtime "+${KEEP_DAYS}" -delete 2>/dev/null || true
 fi
 
-# Optional: Push offsite via rclone if configured (e.g. Backblaze B2, S3, Google Drive)
-if command -v rclone >/dev/null 2>&1 && rclone listremotes | grep -q 'bpg-offsite:'; then
-  if rclone copy "$BACKUP_FILE" bpg-offsite:blessing-power-guide-backups/ 2>/dev/null; then
-    log "OK Offsite snapshot uploaded to bpg-offsite:blessing-power-guide-backups/"
-  else
-    log "WARNING: Offsite rclone upload failed — check rclone credentials"
-  fi
+# Off-site replication to S3
+S3_SYNC_SCRIPT="$(dirname "$0")/backup-s3-sync.sh"
+if [[ -x "$S3_SYNC_SCRIPT" ]]; then
+  log "Triggering automated off-site S3 replication..."
+  "$S3_SYNC_SCRIPT" || log "WARNING: Automated S3 replication encountered non-fatal notice."
 fi

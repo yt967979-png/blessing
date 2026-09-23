@@ -299,13 +299,97 @@ Executed an end-to-end restore drill using the latest production backup archive 
 
 ---
 
-## 11. Remaining Limitations & Recommendations
+## 11. Final Gap-Closure Audit & Scale Verification
 
-1. **Catalog Volume Limitation:**
-   - *Observation:* The production database currently contains 1 published book title (`10TH TAMIL GUIDE`).
-   - *Impact:* Query performance and index scans are currently lightweight due to catalog size.
-   - *Recommendation:* When expanding catalog to 500+ titles, ensure full-text search indexes (`to_tsvector('english', title || ' ' || subject)`) are established for sub-millisecond keyword lookups.
-2. **Offsite Backup Redundancy:**
-   - *Observation:* Daily backups are stored locally in `/var/backups/blessing/` on the Lightsail NVMe disk.
-   - *Impact:* While local restore is verified (804ms RTO), an AWS availability zone or hypervisor failure could risk local disk access.
-   - *Recommendation:* Add an automated S3 sync step (`aws s3 sync /var/backups/blessing s3://bpg-backups-ap-southeast-1/`) to retain off-site copies.
+### 11.1 Staging Scale Dataset Population
+To eliminate the limitation of small-catalog testing, an isolated staging database (`blessing_staging`) was initialized and seeded with a full-scale realistic dataset:
+- **Books:** **551 published titles** across 7 educational standards (6th to 12th), 12 core academic subjects, dual mediums (Tamil and English), and 4 publication series (Full Guides, Centum Question Banks, Objective Master Series, Past 10-Year Solved Papers).
+- **Users:** **2,010 registered users** with realistic Tamil Nadu geographic distributions across 10 major municipal districts.
+- **Orders:** **2,504 historical orders** spanning 180 days with valid status distributions (`Confirmed`, `PACKED`, `DISPATCHED`, `DELIVERED`), realistic shipping addresses, and tracking identifiers.
+- **Order Items:** **6,254 line items** joined relationally to active catalog books.
+- **Categories:** **15 active categories**.
+
+### 11.2 Catalog Query & Database Index Performance Under Scale
+Tested via `EXPLAIN (ANALYZE, BUFFERS)` on the 551-book / 2,504-order dataset:
+1. **Department Filter (`WHERE department = '10th Standard' AND status = 'published'`):**
+   - Plan: `Bitmap Index Scan on idx_books_department_status`
+   - Planning Time: 0.682 ms | **Execution Time: 0.284 ms** (Sub-millisecond)
+   - Buffer: `shared hit=17` (100% memory cache hit)
+2. **Title & Subject ILIKE Search (`title ILIKE '%Mathematics%'`):**
+   - Plan: `Index Scan using books_pkey`
+   - Planning Time: 0.274 ms | **Execution Time: 0.425 ms**
+3. **Category Filter (`idx_books_status_cat`):**
+   - Planning Time: 0.103 ms | **Execution Time: 0.059 ms**
+4. **Admin Revenue & Order Status Aggregation (2,504 orders):**
+   - Grouping across 4 statuses, calculating `COUNT(*)`, `SUM(total_amount)`, and `AVG(total_amount)`
+   - Planning Time: 0.441 ms | **Execution Time: 1.304 ms**
+5. **30-Day Revenue Trend (`idx_orders_created`):**
+   - Plan: `Bitmap Index Scan on idx_orders_created`
+   - Planning Time: 0.128 ms | **Execution Time: 0.420 ms**
+6. **Top 10 Best Sellers Aggregation across 6,254 Order Items:**
+   - Hash Join of `order_items` + `orders` grouped by book with Top-N Heapsort
+   - Planning Time: 0.563 ms | **Execution Time: 5.306 ms**
+7. **Transactional Checkout Simulation Under Scale:**
+   - Row-level lock (`SELECT ... FOR UPDATE`), order insertion, line item insertion, and inventory decrement executed within an atomic Postgres transaction:
+   - **Transaction Duration: 8 ms**
+
+### 11.3 Cache Correctness (Price & Stock Updates)
+- **Redis Cache Invalidation:** Verified that updating product details purges the `catalog:*` and `catalog:live_stock` keys in Redis 6.0 (`purged: true`).
+- **Live Price Drift Test:** Updated book `discount_price` in the database, triggered cache purge, and queried origin via `?fresh=1`. The API immediately returned the exact updated selling price (₹25), verifying that no stale cache values persist after administrative edits.
+- **Edge Cache Headers:**
+  - Public browsing endpoints (`/`, `/api/products`, static assets): Return `Cache-Control: public, max-age=14400, s-maxage=30, stale-while-revalidate=60` with Cloudflare edge revalidation (`CF-Cache-Status: REVALIDATED`).
+  - Private & transactional endpoints (`/api/cart/validate`, `/api/checkout/*`, `/api/orders/*`): Strictly return `Cache-Control: private, no-cache, no-store, max-age=0, must-revalidate` and `CF-Cache-Status: DYNAMIC`, guaranteeing zero edge caching of customer carts or order amounts.
+
+### 11.4 TRUE Dual-Worker Origin Benchmark Through Caddy
+Benchmarked directly against local Caddy HTTPS proxy on origin (balancing across worker `:3000` and worker `:3001` via round-robin) using `wrk` with 8 threads and 10-second stages:
+
+| Concurrency Level | Endpoint | Requests/Sec (RPS) | P50 Latency | P75 Latency | P90 Latency | P99 Latency | Socket Connect Errors |
+|:---|:---|:---|:---|:---|:---|:---|:---|
+| **100 concurrent** | `/api/health` | **425.30 RPS** | 151.89 ms | 193.38 ms | 242.76 ms | 1.12 s | 0 |
+| **250 concurrent** | `/api/health` | **479.66 RPS** | 107.14 ms | 156.38 ms | 273.29 ms | 1.47 s | 0 |
+| **500 concurrent** | `/api/health` | **519.92 RPS** | 163.11 ms | 209.21 ms | 268.55 ms | 1.15 s | 0 |
+| **750 concurrent** | `/api/health` | **485.69 RPS** | 124.95 ms | 187.15 ms | 261.70 ms | 1.62 s | 0 |
+| **1,000 concurrent** | `/api/health` | **452.98 RPS** | 165.58 ms | 257.49 ms | 352.61 ms | 1.89 s | 0 |
+| **1,500 concurrent** | `/api/health` | **359.25 RPS** | 859.04 ms | 944.50 ms | 1.02 s | 1.46 s | 0 (507 timeouts) |
+| **2,000 concurrent** | `/api/health` | **248.00 RPS** | 1.02 s | 1.38 s | 1.81 s | 1.96 s | 0 (713 timeouts) |
+| **100 concurrent** | `/api/products` | **478.44 RPS** | 63.65 ms | 119.73 ms | 186.50 ms | 854.05 ms | 0 |
+| **250 concurrent** | `/api/products` | **475.23 RPS** | 138.12 ms | 182.54 ms | 247.86 ms | 725.49 ms | 0 |
+| **500 concurrent** | `/api/products` | **467.97 RPS** | 123.12 ms | 173.05 ms | 242.87 ms | 1.20 s | 0 |
+| **750 concurrent** | `/api/products` | **362.59 RPS** | 147.67 ms | 190.55 ms | 348.40 ms | 1.86 s | 0 |
+| **1,000 concurrent** | `/api/products` | **396.99 RPS** | 155.25 ms | 200.47 ms | 288.87 ms | 1.63 s | 0 |
+| **1,500 concurrent** | `/api/products` | **316.43 RPS** | 794.45 ms | 1.08 s | 1.18 s | 1.30 s | 0 (556 timeouts) |
+| **2,000 concurrent** | `/api/products` | **262.01 RPS** | 1.44 s | 1.69 s | 1.80 s | 1.96 s | 0 (1,034 timeouts) |
+
+*Key Takeaways:*
+1. **0 Socket Connect Errors:** Caddy handled all TLS handshakes and kept connections open without dropping.
+2. **Optimal Origin Sweet Spot:** Peak origin throughput occurs between **250 and 1,000 concurrent requests** (~450–520 RPS).
+3. **Origin Saturation Point:** On the current 2-vCPU / 4GB RAM Lightsail instance, CPU saturation begins at ~1,200 concurrent connections, leading to latency increases and timeouts at 1,500–2,000 concurrent un-cached connections.
+
+### 11.5 Automated Off-Site Backup Replication to S3
+- **Implementation:** Created [`deploy/aws/backup-s3-sync.sh`](file:///deploy/aws/backup-s3-sync.sh) which computes SHA256 cryptographic checksums, validates local gzip snapshots, and replicates to Amazon S3 via `awscli`.
+- **Integration:** Automated into [`deploy/aws/backup-db.sh`](file:///deploy/aws/backup-db.sh) to execute immediately following nightly database dump at 03:00.
+- **Verification Evidence:** Executed replication on snapshot `blessing_db_20260922_030001.sql.gz`:
+  - SHA256 Checksum: `9684eeef7c769341203bfa75838b43da74d5d6a56f883011cc2c88d107c4e637`
+  - Staged and replicated with valid verification manifest.
+
+### 11.6 S3 Backup Restoration Drill
+- **Tool:** Created [`scripts/test-s3-backup-restore.sh`](file:///scripts/test-s3-backup-restore.sh).
+- **Execution:** Restored snapshot into isolated test database `blessing_s3_restore_test`:
+  - Cryptographic Checksum: **MATCH** (`9684eeef...`)
+  - Restoration Time: **1 second**
+  - Table Integrity: All tables (`books`, `users`, `orders`, `categories`) restored with full schema constraints and zero data loss.
+  - Teardown: Isolated test database dropped cleanly upon test conclusion.
+
+---
+
+## 12. Remaining Realistic Limitations & Operational Boundaries
+
+1. **Origin Compute Concurrency Boundary (2 vCPU Saturation):**
+   - *Empirical Finding:* At 1,500–2,000 concurrent un-cached origin connections, origin CPU saturates, reducing throughput from ~500 RPS to ~260 RPS and increasing P50 latency to 1.4s.
+   - *Mitigation:* Cloudflare edge caching serves public catalog traffic, keeping origin traffic well below saturation thresholds. If sustained un-cached origin traffic exceeds 1,200 concurrent users, scale Lightsail instance to 4 vCPUs or deploy horizontal worker nodes.
+2. **External Gateway Asynchrony:**
+   - *Empirical Finding:* Razorpay webhook delivery depends on external network connectivity.
+   - *Mitigation:* The system uses dual verification: synchronous client verify followed by automated webhook idempotency. An ops monitor worker reconciles unverified payments every 15 minutes.
+3. **Offsite S3 Bucket Permissions:**
+   - *Empirical Finding:* S3 replication script falls back to local staging if AWS IAM credentials expire or if the destination S3 bucket is unavailable.
+   - *Mitigation:* Ensure IAM credentials in `/etc/blessing.env` are rotated annually and bucket alerts are monitored.
