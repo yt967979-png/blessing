@@ -6,6 +6,7 @@ import { useStore } from '@/context/StoreContext';
 
 const SUBJECTS = [
   { id: 'all', label: 'All Subjects', icon: '📚' },
+  { id: 'Combo', label: '5-in-1 Combo', icon: '🎁' },
   { id: 'Maths', label: 'Mathematics', icon: '📐' },
   { id: 'Science', label: 'Science', icon: '🧪' },
   { id: 'Social Science', label: 'Social Science', icon: '🌍' },

@@ -7,6 +7,7 @@ import { ProductCard } from '@/components/ui/ProductCard';
 import { ProductCardSkeletonGrid } from '@/components/ui/ProductCardSkeleton';
 import { useStore } from '@/context/StoreContext';
 import { CLASSES } from '@/lib/products';
+import { isComboItem } from '@/lib/deliveryRules';
 
 export const ProductGrid = () => {
   const {
@@ -26,13 +27,24 @@ export const ProductGrid = () => {
       const catFilter = (selectedCategory || 'all').toLowerCase();
 
       if (clsFilter !== 'all' && product.cls?.toLowerCase() !== clsFilter) return false;
-      if (catFilter !== 'all' && product.category?.toLowerCase() !== catFilter) return false;
-      if (
-        searchQuery &&
-        !product.title.toLowerCase().includes(searchQuery.toLowerCase()) &&
-        !product.subject?.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-        return false;
+      
+      if (catFilter !== 'all') {
+        const isCombo = isComboItem(product);
+        if (catFilter === 'combo' && !isCombo) return false;
+        if (catFilter === 'guide' && isCombo) return false;
+        if (catFilter !== 'combo' && catFilter !== 'guide' && product.category?.toLowerCase() !== catFilter) return false;
+      }
+
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase().trim();
+        const matchesTitle = product.title?.toLowerCase().includes(q);
+        const matchesSubject = product.subject?.toLowerCase().includes(q);
+        const matchesCat = product.category?.toLowerCase().includes(q);
+        const matchesCombo = (q.includes('combo') || q.includes('5 in 1') || q.includes('5-in-1')) && isComboItem(product);
+        if (!matchesTitle && !matchesSubject && !matchesCat && !matchesCombo) {
+          return false;
+        }
+      }
       return true;
     });
   }, [products, selectedClass, selectedCategory, searchQuery]);

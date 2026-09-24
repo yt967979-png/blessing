@@ -9,6 +9,7 @@ import { Footer } from '@/components/layout/Footer';
 import { ProductCard } from '@/components/ui/ProductCard';
 import { ProductCardSkeletonGrid } from '@/components/ui/ProductCardSkeleton';
 import { useStore } from '@/context/StoreContext';
+import { isComboItem } from '@/lib/deliveryRules';
 
 function SearchContent() {
   const searchParams = useSearchParams();
@@ -19,10 +20,17 @@ function SearchContent() {
 
   const { products, productsLoading } = useStore();
 
+  const highestCatalogPrice = useMemo(() => {
+    if (!products || products.length === 0) return 3000;
+    const max = Math.max(...products.map((p) => p.price || 0));
+    return Math.max(3000, Math.ceil(max / 500) * 500);
+  }, [products]);
+
   const [searchTerm, setSearchTerm] = useState(queryParam);
   const [selectedClass, setSelectedClass] = useState(classParam);
   const [selectedCategory, setSelectedCategory] = useState(categoryParam);
-  const [maxPrice, setMaxPrice] = useState<number>(1000);
+  const [maxPrice, setMaxPrice] = useState<number>(3000);
+  const [userChangedPrice, setUserChangedPrice] = useState(false);
   const [sortBy, setSortBy] = useState<'relevance' | 'price-low' | 'price-high' | 'discount'>('relevance');
   const [showMobileFilters, setShowMobileFilters] = useState(false);
 
@@ -31,6 +39,23 @@ function SearchContent() {
     setSelectedClass(classParam);
     setSelectedCategory(categoryParam);
   }, [queryParam, classParam, categoryParam]);
+
+  useEffect(() => {
+    if (!userChangedPrice && highestCatalogPrice > 0) {
+      setMaxPrice(highestCatalogPrice);
+    }
+  }, [highestCatalogPrice, userChangedPrice]);
+
+  const categoryCounts = useMemo(() => {
+    const total = products.length;
+    let combos = 0;
+    let guides = 0;
+    for (const p of products) {
+      if (isComboItem(p)) combos++;
+      else guides++;
+    }
+    return { all: total, combo: combos, guide: guides };
+  }, [products]);
 
   const filteredProducts = useMemo(() => {
     const result = products.filter((p) => {
@@ -41,9 +66,23 @@ function SearchContent() {
         return false;
       }
 
-      // Category Filter
-      if (selectedCategory !== 'all' && p.category?.toLowerCase() !== selectedCategory.toLowerCase()) {
-        return false;
+      // Category Filter (Combo vs Single Guides vs Specific)
+      if (selectedCategory !== 'all') {
+        const isCombo = isComboItem(p);
+        if (selectedCategory === 'combo' && !isCombo) {
+          return false;
+        }
+        if (selectedCategory === 'guide' && isCombo) {
+          return false;
+        }
+        if (
+          selectedCategory !== 'combo' &&
+          selectedCategory !== 'guide' &&
+          p.category?.toLowerCase() !== selectedCategory.toLowerCase() &&
+          (p as { category_id?: string }).category_id !== selectedCategory
+        ) {
+          return false;
+        }
       }
 
       // Max Price Filter
@@ -57,7 +96,10 @@ function SearchContent() {
         const matchTitle = p.title.toLowerCase().includes(q);
         const matchSubject = p.subject?.toLowerCase().includes(q) || false;
         const matchClass = p.cls?.toLowerCase().includes(q) || false;
-        if (!matchTitle && !matchSubject && !matchClass) return false;
+        const matchCategory =
+          p.category?.toLowerCase().includes(q) ||
+          ((q.includes('combo') || q.includes('5 in 1') || q.includes('5-in-1')) && isComboItem(p));
+        if (!matchTitle && !matchSubject && !matchClass && !matchCategory) return false;
       }
 
       return true;
@@ -79,7 +121,8 @@ function SearchContent() {
     setSearchTerm('');
     setSelectedClass('all');
     setSelectedCategory('all');
-    setMaxPrice(1000);
+    setMaxPrice(highestCatalogPrice);
+    setUserChangedPrice(false);
     setSortBy('relevance');
     router.push('/search');
   };
@@ -175,19 +218,29 @@ function SearchContent() {
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Category</label>
               <div className="space-y-1.5">
                 {[
-                  { id: 'all', label: 'All Products' },
-                  { id: 'guide', label: 'Single Subject Guides' },
+                  { id: 'all', label: 'All Products', count: categoryCounts.all },
+                  { id: 'combo', label: '🎁 All-in-1 Combo Packs', count: categoryCounts.combo },
+                  { id: 'guide', label: 'Single Subject Guides', count: categoryCounts.guide },
                 ].map((cat) => (
                   <button
                     key={cat.id}
                     onClick={() => setSelectedCategory(cat.id)}
-                    className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
                       selectedCategory === cat.id
                         ? 'bg-blue-50 text-[#2874f0] font-bold border border-blue-200'
                         : 'text-slate-600 hover:bg-slate-50'
                     }`}
                   >
-                    {cat.label}
+                    <span>{cat.label}</span>
+                    <span
+                      className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                        selectedCategory === cat.id
+                          ? 'bg-[#2874f0] text-white'
+                          : 'bg-slate-100 text-slate-500'
+                      }`}
+                    >
+                      {cat.count}
+                    </span>
                   </button>
                 ))}
               </div>
@@ -197,20 +250,23 @@ function SearchContent() {
             <div>
               <div className="flex justify-between items-center text-xs font-bold text-slate-700 mb-2">
                 <span>Max Price</span>
-                <span className="text-[#2874f0]">₹{maxPrice}</span>
+                <span className="text-[#2874f0] font-bold">₹{maxPrice.toLocaleString('en-IN')}</span>
               </div>
               <input
                 type="range"
-                min={100}
-                max={1000}
-                step={20}
+                min={0}
+                max={highestCatalogPrice}
+                step={50}
                 value={maxPrice}
-                onChange={(e) => setMaxPrice(Number(e.target.value))}
+                onChange={(e) => {
+                  setUserChangedPrice(true);
+                  setMaxPrice(Number(e.target.value));
+                }}
                 className="w-full accent-[#2874f0] cursor-pointer"
               />
               <div className="flex justify-between text-[10px] text-slate-400 mt-1 font-semibold">
-                <span>₹100</span>
-                <span>₹1,000</span>
+                <span>₹0</span>
+                <span>₹{highestCatalogPrice.toLocaleString('en-IN')}</span>
               </div>
             </div>
           </aside>
