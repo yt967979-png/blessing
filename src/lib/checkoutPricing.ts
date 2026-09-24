@@ -69,6 +69,8 @@ export async function priceCheckoutOrder(
       cartQty,
       subtotal: calculatedSubtotal,
       userId: opts.userId,
+      hasCombo,
+      items: verifiedItems,
     });
     if (!applied.ok) return applied;
     appliedCoupon = applied.coupon;

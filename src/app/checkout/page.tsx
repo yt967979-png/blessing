@@ -39,6 +39,8 @@ export default function CheckoutPage() {
     products,
     cartCount,
     cartTotal,
+    hasComboInCart,
+    effectiveCartCount,
     shippingFee,
     cartGrandTotal,
     checkoutTotal,
@@ -133,9 +135,10 @@ export default function CheckoutPage() {
         },
         body: JSON.stringify({
           code: couponInput.trim(),
-          cartQty: cartCount,
+          cartQty: effectiveCartCount || cartCount,
           subtotal: cartTotal,
-          items: cart.map((i) => ({ id: i.id, qty: i.qty })),
+          items: cart.map((i) => ({ id: i.id, qty: i.qty, category: i.category, title: i.title })),
+          hasCombo: hasComboInCart,
         }),
       });
       const data = await res.json();
@@ -1188,7 +1191,7 @@ export default function CheckoutPage() {
 
               <div className="space-y-1.5 p-4 bg-slate-50 rounded-2xl border border-slate-200">
                 <div className="flex justify-between text-slate-600">
-                  <span>Subtotal ({cartCount} guides)</span>
+                  <span>Subtotal ({hasComboInCart ? (cartCount === 1 ? '1 combo set' : `${cartCount} items`) : `${cartCount} guides`})</span>
                   <span>₹{cartTotal}</span>
                 </div>
                 {appliedCoupon && (

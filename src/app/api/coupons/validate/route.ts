@@ -3,6 +3,7 @@ import { queryDb } from '@/lib/db';
 import { applyRateLimitAsync, clientIp, getAuthenticatedUser } from '@/lib/serverSecurity';
 import { validateCouponForCart } from '@/lib/coupons';
 import { priceCartItems } from '@/lib/orderPricing';
+import { cartHasCombo } from '@/lib/deliveryRules';
 
 export async function POST(request: Request) {
   const session = await getAuthenticatedUser(request);
@@ -21,6 +22,7 @@ export async function POST(request: Request) {
     const rawCode = String(body.code || '').trim();
     let cartQty = Number(body.cartQty || 0);
     let subtotal = Number(body.subtotal || 0);
+    let hasCombo = Boolean(body.hasCombo);
 
     // Prefer DB-priced items so the preview matches Razorpay / order totals
     if (Array.isArray(body.items) && body.items.length > 0) {
@@ -30,6 +32,7 @@ export async function POST(request: Request) {
       }
       cartQty = priced.verifiedItems.reduce((s, i) => s + Number(i.qty || 0), 0);
       subtotal = priced.total;
+      hasCombo = hasCombo || cartHasCombo(priced.verifiedItems);
     }
 
     const applied = await validateCouponForCart(queryDb, {
@@ -37,6 +40,7 @@ export async function POST(request: Request) {
       cartQty,
       subtotal,
       userId: session.userId,
+      hasCombo,
     });
 
     if (!applied.ok) {

@@ -83,7 +83,7 @@ export function HomeCouponsSection() {
               <p className="font-heading font-black text-[#001B3A] leading-snug">{c.title}</p>
               <p className="mt-1 text-lg font-black text-amber-700">{discountLabel(c)}</p>
               <ul className="mt-3 text-[11px] sm:text-xs text-slate-600 space-y-0.5 font-semibold">
-                <li>Min {c.minCartQty} books in cart</li>
+                <li>Min {c.minCartQty} books in cart (or 1 Combo Pack)</li>
                 {c.minOrderAmount > 0 ? (
                   <li>Min order ₹{c.minOrderAmount.toLocaleString('en-IN')}</li>
                 ) : null}

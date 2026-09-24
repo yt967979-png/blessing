@@ -93,7 +93,7 @@ export function ProfileCouponsSection({
                   <p className="font-heading font-black text-[#001B3A] leading-snug">{c.title}</p>
                   <p className="mt-1 text-sm font-black text-amber-700">{discountLabel(c)}</p>
                   <ul className="mt-2 text-[11px] text-slate-600 space-y-0.5 font-semibold">
-                    <li>Min {c.minCartQty} books in cart</li>
+                    <li>Min {c.minCartQty} books in cart (or 1 Combo Pack)</li>
                     {c.minOrderAmount > 0 ? <li>Min order ₹{c.minOrderAmount.toLocaleString('en-IN')}</li> : null}
                     {c.maxDiscountAmount != null && c.discountType === 'percentage' ? (
                       <li>Max discount ₹{c.maxDiscountAmount.toLocaleString('en-IN')}</li>

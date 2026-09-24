@@ -1,5 +1,6 @@
 import { queryDb } from '@/lib/db';
 import { isOrderCancelled } from '@/lib/orderStatus';
+import { cartHasCombo } from '@/lib/deliveryRules';
 
 export type AppliedCoupon = {
   id: string;
@@ -107,7 +108,14 @@ async function userAlreadyUsedCoupon(client: any, couponId: string, userId: stri
 /** Validate a code against cart qty/subtotal. Does not increment usage. */
 export async function validateCouponForCart(
   client: any,
-  opts: { code: string; cartQty: number; subtotal: number; userId?: string | null }
+  opts: {
+    code: string;
+    cartQty: number;
+    subtotal: number;
+    userId?: string | null;
+    hasCombo?: boolean;
+    items?: any[];
+  }
 ): Promise<CouponApplyResult> {
   const rawCode = String(opts.code || '').trim().toUpperCase();
   if (!rawCode) {
@@ -147,11 +155,17 @@ export async function validateCouponForCart(
       status: 400,
     };
   }
+
+  const hasCombo = Boolean(
+    opts.hasCombo ||
+    (Array.isArray(opts.items) && cartHasCombo(opts.items))
+  );
   const minQty = Number(c.min_cart_qty || 4);
-  if (opts.cartQty < minQty) {
+  // Combo packs bundle multiple guides and satisfy the minimum order/cart quantity threshold
+  if (!hasCombo && opts.cartQty < minQty) {
     return {
       ok: false,
-      error: `Coupon "${c.code}" requires at least ${minQty} books in cart. (Current: ${opts.cartQty})`,
+      error: `Coupon "${c.code}" requires at least ${minQty} books in cart (or 1 Combo Pack). (Current: ${opts.cartQty})`,
       status: 400,
     };
   }
