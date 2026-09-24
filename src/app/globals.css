@@ -71,16 +71,16 @@ html {
   padding-bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px));
 }
 
-/* Product detail — clears bottom nav + sticky ADD/BUY bar */
+/* Product detail — clears single sticky ADD/BUY bar */
 .page-mobile-nav-pdp {
   padding-bottom: calc(
-    var(--bottom-nav-height) + var(--pdp-sticky-cta) + env(safe-area-inset-bottom, 0px) + 0.75rem
+    var(--pdp-sticky-cta, 4.75rem) + env(safe-area-inset-bottom, 0px) + 0.5rem
   );
 }
 
 @media (min-width: 640px) {
   .page-mobile-nav-pdp {
-    padding-bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px));
+    padding-bottom: 0;
   }
 }
 
