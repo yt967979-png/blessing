@@ -13,8 +13,13 @@ export function isComboItem(item: any): boolean {
     title.includes('combo') ||
     title.includes('5 in 1') ||
     title.includes('5-in-1') ||
+    title.includes('6 in 1') ||
+    title.includes('6-in-1') ||
+    title.includes('7 in 1') ||
+    title.includes('7-in-1') ||
     title.includes('all in one') ||
-    title.includes('all-in-one')
+    title.includes('all-in-one') ||
+    title.includes('full set')
   );
 }
 

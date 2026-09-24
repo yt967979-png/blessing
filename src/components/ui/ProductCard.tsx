@@ -229,7 +229,7 @@ export const ProductCard = ({ product }: { product: Product }) => {
               return;
             }
             if (isComboItem(product)) {
-              showToast(`Added ${product.title}! 🎁 Includes 5 Guides + FREE Express Delivery!`);
+              showToast(`Added ${product.title}! 🎁 FREE Express Delivery Unlocked!`);
               setIsCheckoutOpen(true);
               router.push('/checkout');
               return;

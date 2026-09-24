@@ -172,7 +172,7 @@ export default function CartPage() {
                     </span>
                   </div>
                   <span className="text-[11px] font-black text-slate-600 bg-white/90 border border-slate-200 px-2 py-0.5 rounded-md">
-                    {isComboInCart ? 'Combo Pack (5 Guides)' : `${cartCount}/5 Books`}
+                    {isComboInCart ? 'Combo Pack' : `${cartCount}/5 Books`}
                   </span>
                 </div>
 

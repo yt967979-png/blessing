@@ -103,7 +103,7 @@ export const CartDrawer = () => {
                   )}
                 </div>
                 <span className="text-[11px] font-black text-slate-600 bg-white/80 px-2 py-0.5 rounded-full border border-slate-200">
-                  {hasCombo ? 'Combo = 5 Books' : `${totalBooks}/5 Books`}
+                  {hasCombo ? 'Combo Pack' : `${totalBooks}/5 Books`}
                 </span>
               </div>
               <div className="w-full h-2 bg-slate-200/80 rounded-full overflow-hidden p-0.5 shadow-inner">

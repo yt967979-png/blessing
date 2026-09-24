@@ -124,6 +124,24 @@ assert.strictEqual(isMoqSatisfied(cartMixed), true);
 assert.strictEqual(deliveryFeeForQty(effectiveBookCount(cartMixed), cartHasCombo(cartMixed)), 0);
 console.log('✅ [PASS] 1 Combo Pack + 1 Regular Guide maintains 100% FREE DELIVERY (₹0)');
 
+// TEST 7: 11th Standard 6-in-1 Combo Pack
+const cart11th6in1 = [
+  { id: 'bpg-11th-6in1', title: '11TH STD 6 IN 1 FULL SET COMBO', category: 'combo', qty: 1 }
+];
+assert.strictEqual(cartHasCombo(cart11th6in1), true);
+assert.strictEqual(isMoqSatisfied(cart11th6in1), true);
+assert.strictEqual(deliveryFeeForQty(effectiveBookCount(cart11th6in1), cartHasCombo(cart11th6in1)), 0);
+console.log('✅ [PASS] 11th Std 6-in-1 Combo Pack ALONE satisfies MOQ and unlocks 100% FREE DELIVERY (₹0)');
+
+// TEST 8: 11th Standard 7-in-1 Combo Pack
+const cart11th7in1 = [
+  { id: 'bpg-11th-7in1', title: '11TH STD 7-IN-1 COMPLETE GUIDE COMBO', category: 'combo', qty: 1 }
+];
+assert.strictEqual(cartHasCombo(cart11th7in1), true);
+assert.strictEqual(isMoqSatisfied(cart11th7in1), true);
+assert.strictEqual(deliveryFeeForQty(effectiveBookCount(cart11th7in1), cartHasCombo(cart11th7in1)), 0);
+console.log('✅ [PASS] 11th Std 7-in-1 Combo Pack ALONE satisfies MOQ and unlocks 100% FREE DELIVERY (₹0)');
+
 console.log('\n================================================================');
-console.log('🎉 ALL 6 BUSINESS INVARIANT CHECKS PASSED: 1 COMBO = FREE DELIVERY!');
+console.log('🎉 ALL 8 BUSINESS INVARIANT CHECKS PASSED: ANY COMBO = FREE DELIVERY!');
 console.log('================================================================');
