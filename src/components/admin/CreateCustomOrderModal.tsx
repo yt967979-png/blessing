@@ -20,10 +20,9 @@ import {
   Loader2,
   CheckCircle2,
 } from 'lucide-react';
-import type { Product } from '@/context/StoreContext';
+import { useStore, type Product } from '@/context/StoreContext';
 import { authHeaders } from '@/lib/clientAuth';
-import { useStore } from '@/context/StoreContext';
-import { MIN_BOOKS_PER_ORDER, FREE_DELIVERY_AT_QTY, deliveryFeeForQty } from '@/lib/deliveryRules';
+import { MIN_BOOKS_PER_ORDER, FREE_DELIVERY_AT_QTY, deliveryFeeForQty, cartHasCombo, effectiveBookCount, isMoqSatisfied } from '@/lib/deliveryRules';
 import { normalizeRequiredAlternateMobile } from '@/lib/authValidation';
 
 interface CreateCustomOrderModalProps {
@@ -103,8 +102,10 @@ export const CreateCustomOrderModal: React.FC<CreateCustomOrderModalProps> = ({
   };
 
   const bookQty = selectedItems.reduce((sum, it) => sum + it.qty, 0);
+  const hasCombo = cartHasCombo(selectedItems);
+  const effQty = effectiveBookCount(selectedItems);
   const booksSubtotal = selectedItems.reduce((sum, it) => sum + it.price * it.qty, 0);
-  const shippingFee = deliveryFeeForQty(bookQty);
+  const shippingFee = deliveryFeeForQty(effQty, hasCombo);
   const calculatedTotal = booksSubtotal + shippingFee;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -128,8 +129,8 @@ export const CreateCustomOrderModal: React.FC<CreateCustomOrderModalProps> = ({
       onShowToast('Please provide delivery address and pincode');
       return;
     }
-    if (bookQty < MIN_BOOKS_PER_ORDER) {
-      onShowToast(`Minimum ${MIN_BOOKS_PER_ORDER} books required. Add ${MIN_BOOKS_PER_ORDER - bookQty} more.`);
+    if (!isMoqSatisfied(selectedItems)) {
+      onShowToast(`Minimum ${MIN_BOOKS_PER_ORDER} books required (or 1 Combo Pack). Add ${MIN_BOOKS_PER_ORDER - bookQty} more.`);
       return;
     }
 
@@ -501,9 +502,9 @@ export const CreateCustomOrderModal: React.FC<CreateCustomOrderModalProps> = ({
                         {shippingFee === 0 ? 'FREE' : `₹${shippingFee}`}
                       </span>
                     </div>
-                    {bookQty < MIN_BOOKS_PER_ORDER ? (
+                    {!isMoqSatisfied(selectedItems) ? (
                       <p className="text-[11px] font-semibold text-amber-800">
-                        Minimum {MIN_BOOKS_PER_ORDER} books. Add {MIN_BOOKS_PER_ORDER - bookQty} more.
+                        Minimum {MIN_BOOKS_PER_ORDER} books. Add {MIN_BOOKS_PER_ORDER - bookQty} more (or 1 Combo Pack).
                       </p>
                     ) : null}
                     <div className="flex justify-between items-center pt-1 border-t border-blue-200">
@@ -572,7 +573,7 @@ export const CreateCustomOrderModal: React.FC<CreateCustomOrderModalProps> = ({
               </button>
               <button
                 type="submit"
-                disabled={loading || bookQty < MIN_BOOKS_PER_ORDER}
+                disabled={loading || !isMoqSatisfied(selectedItems)}
                 className="px-6 py-2.5 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 disabled:opacity-50 text-white font-extrabold rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer"
               >
                 {loading ? (

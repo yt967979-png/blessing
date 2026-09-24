@@ -25,7 +25,7 @@ import { pincodeDeliveryMessage } from '@/lib/pincode';
 import { getSTCourierDeliveryEstimate } from '@/lib/deliveryEstimator';
 import { imageNeedsUnoptimized } from '@/lib/productImage';
 import { getCartItemStockState, anyCartItemBlocking } from '@/lib/cartStock';
-import { MIN_BOOKS_PER_ORDER, booksUntilMinOrder, minOrderCheckoutMessage } from '@/lib/deliveryRules';
+import { MIN_BOOKS_PER_ORDER, booksUntilMinOrder, minOrderCheckoutMessage, cartHasCombo, effectiveBookCount } from '@/lib/deliveryRules';
 import { Header } from '@/components/layout/Header';
 import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
 import { Footer } from '@/components/layout/Footer';
@@ -56,8 +56,9 @@ export default function CartPage() {
   const [pincodeMsg, setPincodeMsg] = useState('✓ Deliverable via ST Courier — usually 2–3 days in Tamil Nadu.');
   const [pincodeOk, setPincodeOk] = useState(true);
   const hasBlockingItem = anyCartItemBlocking(cart, products);
-  const booksNeeded = booksUntilMinOrder(cartCount);
-  const minOrderMsg = minOrderCheckoutMessage(cartCount);
+  const isComboInCart = cartHasCombo(cart);
+  const booksNeeded = booksUntilMinOrder(cart);
+  const minOrderMsg = minOrderCheckoutMessage(cart);
 
   // Dynamic detection of academic class for same-standard upsells
   const detectedClass = useMemo(() => {
@@ -82,7 +83,7 @@ export default function CartPage() {
       .slice(0, 3);
   }, [detectedClass, products, cart]);
 
-  const freeDeliveryProgress = Math.min(100, Math.round((cartCount / 5) * 100));
+  const freeDeliveryProgress = isComboInCart ? 100 : Math.min(100, Math.round((cartCount / 5) * 100));
 
   // Instant stock re-check the moment a customer opens the cart page.
   useEffect(() => {
@@ -155,7 +156,11 @@ export default function CartPage() {
                       <Truck className="w-4 h-4 text-amber-300" />
                     </span>
                     <span className="font-heading font-black text-xs sm:text-sm text-[#001B3A]">
-                      {cartCount < MIN_BOOKS_PER_ORDER ? (
+                      {isComboInCart ? (
+                        <span className="text-emerald-700 flex items-center gap-1 font-bold">
+                          <CheckCircle2 className="w-4 h-4 inline text-emerald-600" /> 🎁 Combo Pack: FREE Doorstep Delivery Unlocked!
+                        </span>
+                      ) : cartCount < MIN_BOOKS_PER_ORDER ? (
                         <>Add <span className="text-amber-600 font-extrabold">{booksNeeded}</span> more guide{booksNeeded === 1 ? '' : 's'} for Minimum Order ({MIN_BOOKS_PER_ORDER} books)</>
                       ) : cartCount === 4 ? (
                         <>Add <span className="text-emerald-600 font-extrabold">1</span> more guide to unlock <span className="text-emerald-700">FREE Delivery</span>!</>
@@ -167,14 +172,14 @@ export default function CartPage() {
                     </span>
                   </div>
                   <span className="text-[11px] font-black text-slate-600 bg-white/90 border border-slate-200 px-2 py-0.5 rounded-md">
-                    {cartCount}/5 Books
+                    {isComboInCart ? 'Combo Pack (5 Guides)' : `${cartCount}/5 Books`}
                   </span>
                 </div>
 
                 <div className="w-full bg-slate-200/80 rounded-full h-2.5 overflow-hidden">
                   <div
                     className={`h-full transition-all duration-500 rounded-full ${
-                      cartCount >= 5
+                      isComboInCart || cartCount >= 5
                         ? 'bg-gradient-to-r from-emerald-500 to-teal-500'
                         : cartCount === 4
                         ? 'bg-gradient-to-r from-blue-500 to-emerald-500'

@@ -8,7 +8,7 @@ import { Heart, Star, ShoppingBag, Truck, Check, FileText } from 'lucide-react';
 import { Product } from '@/lib/products';
 import { useStore } from '@/context/StoreContext';
 import { imageNeedsUnoptimized } from '@/lib/productImage';
-import { MIN_BOOKS_PER_ORDER, booksUntilMinOrder } from '@/lib/deliveryRules';
+import { MIN_BOOKS_PER_ORDER, booksUntilMinOrder, isComboItem } from '@/lib/deliveryRules';
 import { openSamplePdfModal } from '@/components/books/SampleChapterReaderModal';
 
 export const ProductCard = ({ product }: { product: Product }) => {
@@ -226,6 +226,12 @@ export const ProductCard = ({ product }: { product: Product }) => {
             if (!user) {
               setIsAuthOpen(true);
               showToast('Book added to cart! Please sign in with Google to proceed.');
+              return;
+            }
+            if (isComboItem(product)) {
+              showToast(`Added ${product.title}! 🎁 Includes 5 Guides + FREE Express Delivery!`);
+              setIsCheckoutOpen(true);
+              router.push('/checkout');
               return;
             }
             const need = booksUntilMinOrder(cartCount + 1);

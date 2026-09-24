@@ -31,7 +31,7 @@ import { getSTCourierDeliveryEstimate } from '@/lib/deliveryEstimator';
 import { pincodeDeliveryMessage } from '@/lib/pincode';
 import { authHeaders, authFormHeaders } from '@/lib/clientAuth';
 import { imageNeedsUnoptimized } from '@/lib/productImage';
-import { MIN_BOOKS_PER_ORDER, booksUntilMinOrder, minOrderCheckoutMessage } from '@/lib/deliveryRules';
+import { MIN_BOOKS_PER_ORDER, booksUntilMinOrder, minOrderCheckoutMessage, isComboItem } from '@/lib/deliveryRules';
 
 function applyReviewsPayload(
   data: any,
@@ -108,6 +108,12 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
     if (!user) {
       setIsAuthOpen(true);
       showToast('Book added to cart! Please sign in with Google to proceed.');
+      return;
+    }
+    if (isComboItem(product)) {
+      showToast(`Added ${product.title}! 🎁 Includes 5 Guides + FREE Express Delivery!`);
+      setIsCheckoutOpen(true);
+      router.push('/checkout');
       return;
     }
     const need = booksUntilMinOrder(cartCount + 1);

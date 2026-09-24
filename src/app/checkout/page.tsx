@@ -24,7 +24,7 @@ import { isValidMobileNumber, addressHasRequiredAlternate, normalizeRequiredAlte
 import { userNeedsProfile } from '@/lib/userProfile';
 import { imageNeedsUnoptimized } from '@/lib/productImage';
 import { getCartItemStockState, anyCartItemBlocking } from '@/lib/cartStock';
-import { MIN_BOOKS_PER_ORDER } from '@/lib/deliveryRules';
+import { MIN_BOOKS_PER_ORDER, isMoqSatisfied, cartHasCombo } from '@/lib/deliveryRules';
 import { Header } from '@/components/layout/Header';
 import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
 import { Footer } from '@/components/layout/Footer';
@@ -360,8 +360,8 @@ export default function CheckoutPage() {
   };
 
   const goToReview = async () => {
-    if (cartCount < MIN_BOOKS_PER_ORDER) {
-      showToast(`Minimum order quantity is ${MIN_BOOKS_PER_ORDER} book(s).`);
+    if (!isMoqSatisfied(cart)) {
+      showToast(`Minimum order quantity is ${MIN_BOOKS_PER_ORDER} book(s) (or 1 Combo Pack).`);
       return;
     }
     if (selectedAddrId === 'new' || savedAddresses.length === 0) {
@@ -390,8 +390,8 @@ export default function CheckoutPage() {
 
   const handlePlaceOrder = async () => {
     if (orderSubmitLock.current || isPlacingOrder || !user) return;
-    if (cartCount < MIN_BOOKS_PER_ORDER) {
-      showToast(`Minimum order quantity is ${MIN_BOOKS_PER_ORDER} book(s).`);
+    if (!isMoqSatisfied(cart)) {
+      showToast(`Minimum order quantity is ${MIN_BOOKS_PER_ORDER} book(s) (or 1 Combo Pack).`);
       return;
     }
     orderSubmitLock.current = true;
@@ -672,14 +672,14 @@ export default function CheckoutPage() {
         </div>
 
         {/* Minimum Books Alert Banner */}
-        {cartCount < MIN_BOOKS_PER_ORDER && (
+        {!isMoqSatisfied(cart) && (
           <div className="max-w-2xl mx-auto mb-6 p-4 bg-amber-50 border-2 border-amber-300 rounded-2xl flex items-start gap-3 text-amber-900 text-xs font-medium shadow-sm">
             <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
             <div>
               <p className="font-extrabold text-sm mb-0.5">Minimum Order Quantity: {MIN_BOOKS_PER_ORDER} Book(s)</p>
               <p>
                 You currently have <strong>{cartCount} book(s)</strong> in your cart. Please add{' '}
-                <strong>{MIN_BOOKS_PER_ORDER - cartCount} more guide(s)</strong> to complete your order.
+                <strong>{MIN_BOOKS_PER_ORDER - cartCount} more guide(s)</strong> (or 1 Combo Pack) to complete your order.
               </p>
               <Link href="/search" className="inline-block mt-2 font-bold text-[#0044AA] hover:underline cursor-pointer">
                 + Browse Guides & Add to Cart →
@@ -921,7 +921,7 @@ export default function CheckoutPage() {
 
               <button
                 type="button"
-                disabled={cartCount < MIN_BOOKS_PER_ORDER}
+                disabled={!isMoqSatisfied(cart)}
                 onClick={() => void goToReview()}
                 className="hidden sm:flex w-full items-center justify-center bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-[#001B3A] font-extrabold text-sm py-3.5 rounded-xl uppercase tracking-wider disabled:opacity-50 transition-all min-h-12 touch-manipulation"
               >
@@ -989,14 +989,14 @@ export default function CheckoutPage() {
 
               {/* Delivery Fee Notice */}
               <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-blue-900 text-xs">
-                {cartCount >= 5 ? (
+                {shippingFee === 0 ? (
                   <p className="font-bold flex items-center gap-1 text-emerald-700">
-                    <Check className="w-4 h-4 text-emerald-600" /> 🎉 FREE Delivery Offer applied ({cartCount} books)!
+                    <Check className="w-4 h-4 text-emerald-600" /> 🎉 FREE Doorstep Delivery Unlocked! {cartHasCombo(cart) ? '(Combo Pack Offer)' : `(${cartCount} books)`}
                   </p>
                 ) : (
                   <p className="font-medium">
                     📦 Delivery Charge: <strong>₹150</strong> ({cartCount} books). Add{' '}
-                    <strong>{5 - cartCount} more guide(s)</strong> for <strong>FREE Delivery</strong>!
+                    <strong>{5 - cartCount} more guide(s)</strong> (or 1 Combo Pack) for <strong>FREE Delivery</strong>!
                   </p>
                 )}
               </div>
@@ -1028,7 +1028,7 @@ export default function CheckoutPage() {
               )}
               <button
                 type="button"
-                disabled={cartCount < MIN_BOOKS_PER_ORDER || hasBlockingItem}
+                disabled={!isMoqSatisfied(cart) || hasBlockingItem}
                 onClick={async () => {
                   const clean = await validateCartStock();
                   if (!clean) return;
@@ -1224,7 +1224,7 @@ export default function CheckoutPage() {
 
               <button
                 type="button"
-                disabled={isPlacingOrder || cart.length === 0 || cartCount < MIN_BOOKS_PER_ORDER || hasBlockingItem}
+                disabled={isPlacingOrder || cart.length === 0 || !isMoqSatisfied(cart) || hasBlockingItem}
                 onClick={() => void handlePlaceOrder()}
                 className="hidden sm:flex w-full items-center justify-center bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 hover:from-amber-500 hover:to-amber-700 text-[#001B3A] font-black text-sm py-4 rounded-xl uppercase tracking-wider shadow-lg shadow-amber-500/20 disabled:opacity-60 transition-all hover:scale-[1.01] min-h-12 touch-manipulation"
               >
@@ -1258,7 +1258,7 @@ export default function CheckoutPage() {
         {step === 1 && (
           <button
             type="button"
-            disabled={cartCount < MIN_BOOKS_PER_ORDER}
+            disabled={!isMoqSatisfied(cart)}
             onClick={() => void goToReview()}
             className="w-full bg-gradient-to-r from-amber-400 to-amber-500 disabled:opacity-50 text-[#001B3A] font-extrabold text-xs py-3.5 rounded-xl uppercase tracking-wider min-h-12 touch-manipulation"
           >
@@ -1269,7 +1269,7 @@ export default function CheckoutPage() {
         {step === 2 && (
           <button
             type="button"
-            disabled={cartCount < MIN_BOOKS_PER_ORDER || hasBlockingItem}
+            disabled={!isMoqSatisfied(cart) || hasBlockingItem}
             onClick={async () => {
               const clean = await validateCartStock();
               if (!clean) return;
@@ -1289,7 +1289,7 @@ export default function CheckoutPage() {
             </div>
             <button
               type="button"
-              disabled={isPlacingOrder || cart.length === 0 || cartCount < MIN_BOOKS_PER_ORDER || hasBlockingItem}
+              disabled={isPlacingOrder || cart.length === 0 || !isMoqSatisfied(cart) || hasBlockingItem}
               onClick={() => void handlePlaceOrder()}
               className="flex-1 bg-gradient-to-r from-amber-400 to-amber-500 disabled:opacity-50 text-[#001B3A] font-extrabold text-xs py-3.5 rounded-xl uppercase tracking-wider min-h-12 touch-manipulation"
             >

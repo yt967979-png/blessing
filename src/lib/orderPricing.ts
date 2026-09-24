@@ -32,7 +32,7 @@ export async function priceCartItems(
     }
     const dbBook = await execQuery(
       client,
-      `SELECT id, title, price, discount_price, stock, status FROM books WHERE id = $1 LIMIT 1`,
+      `SELECT id, title, price, discount_price, stock, status, category_id FROM books WHERE id = $1 LIMIT 1`,
       [item.id]
     );
     if (dbBook.rows.length === 0) {
@@ -49,11 +49,17 @@ export async function priceCartItems(
     const { price: unitPrice } = calculateBookPrices(book);
     const subtotal = unitPrice * itemQty;
     calculatedSubtotal += subtotal;
+    const isCombo =
+      book.category_id === 'cat-combos' ||
+      String(book.title || '').toLowerCase().includes('combo') ||
+      String(book.title || '').toLowerCase().includes('5 in 1');
     verifiedItems.push({
       id: book.id,
       title: book.title,
       price: unitPrice,
       qty: itemQty,
+      category: isCombo ? 'combo' : 'guide',
+      category_id: book.category_id,
       subtotal,
     });
   }

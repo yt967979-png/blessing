@@ -511,7 +511,7 @@ export async function generateTaxInvoiceHtml(orderData: InvoiceData): Promise<st
           <tr>
             <td style="color:#64748b;">Doorstep Delivery (ST Courier):</td>
             <td class="text-right" style="font-weight:700;color:${shippingCharge === 0 ? '#16a34a' : '#0f172a'};">
-              ${shippingCharge === 0 ? 'FREE (5+ Books Offer)' : `₹${shippingCharge.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`}
+              ${shippingCharge === 0 ? 'FREE (Free Delivery Offer)' : `₹${shippingCharge.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`}
             </td>
           </tr>
           <tr>

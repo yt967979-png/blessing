@@ -475,7 +475,7 @@ export async function generateSupportRagAnswer(
     q.includes('quantity limit')
   ) {
     return {
-      answer: `📦 **Minimum Order Quantity (MOQ) Rule**:\n\n• **Minimum Requirement**: Exactly **4 books** per order.\n• **Why?**: Blessing Power Guides are packed in heavy-duty, moisture-proof protective packaging and shipped via priority ST Courier Express.\n• **Shipping Fee**: Ordering 4 books has a flat courier fee of ₹${STORE_POLICIES.shippingBelowMoqFee}.\n• **🎁 Free Delivery Unlock**: If you order **5 or more books** (e.g. the Complete 10th 5-Subject Full Set), delivery is **100% FREE** anywhere in Tamil Nadu!\n\n💡 *Recommendation: Adding a 5th guide saves you the ₹150 delivery charge!*`,
+      answer: `📦 **Minimum Order Quantity (MOQ) Rule**:\n\n• **Minimum Requirement**: Exactly **4 books** per order OR **1 All-in-One Combo Pack**.\n• **Why 1 Combo is enough?**: Each Combo Pack bundles 5 full subjects (price of 5 guides) and qualifies for **100% FREE Doorstep Delivery** automatically!\n• **Individual Books**: Ordering 4 individual books has a flat courier fee of ₹${STORE_POLICIES.shippingBelowMoqFee}.\n• **🎁 Free Delivery Unlock**: Ordering **5 or more individual books** OR any **Combo Pack** gives you **100% FREE DELIVERY** anywhere in Tamil Nadu!`,
       suggestions: ['📚 View 10th Full Set (5 Books - Free Delivery)', '🚚 Delivery Timelines', '💳 Payment Options', '👨‍💼 Talk to Admin'],
       shouldEscalate: false,
       cardType: 'policy',
@@ -496,7 +496,7 @@ export async function generateSupportRagAnswer(
     q.includes('free shipping')
   ) {
     return {
-      answer: `🚚 **Shipping & Delivery Rates**:\n\n• **4 Books (MOQ)**: ₹${STORE_POLICIES.shippingBelowMoqFee} flat delivery fee across Tamil Nadu.\n• **5 or more Books**: **100% FREE DOORSTEP DELIVERY (₹0 shipping)**!\n• **Delivery Partner**: ${STORE_POLICIES.courier} (Direct daily dispatch from Chennai Central Packaging Hub).\n• **Transit Times**:\n  - Chennai & suburbs: **24 to 48 hours**\n  - Rest of Tamil Nadu (Coimbatore, Madurai, Trichy, Salem, Tirunelveli, Erode, etc.): **2 to 3 business days**\n\n🎯 *Pro Tip: Buying the complete 10th set (5 subjects) gives you free shipping automatically!*`,
+      answer: `🚚 **Shipping & Delivery Rates**:\n\n• **All-in-One Combo Pack (1 pack)**: **100% FREE DOORSTEP DELIVERY (₹0 shipping)**! (1 combo is already 5 guides).\n• **Individual Books (4 Books MOQ)**: ₹${STORE_POLICIES.shippingBelowMoqFee} flat delivery fee across Tamil Nadu.\n• **5 or more Individual Books**: **100% FREE DOORSTEP DELIVERY (₹0 shipping)**!\n• **Delivery Partner**: ${STORE_POLICIES.courier} (Direct daily dispatch from Chennai Central Packaging Hub).\n• **Transit Times**:\n  - Chennai & suburbs: **24 to 48 hours**\n  - Rest of Tamil Nadu (Coimbatore, Madurai, Trichy, Salem, Tirunelveli, Erode, etc.): **2 to 3 business days**\n\n🎯 *Pro Tip: Buying any 5-in-1 Combo Pack gives you free shipping automatically!*`,
       suggestions: ['📚 View 10th Full Set (5 Books - Free Delivery)', '🚚 Delivery Timelines', '👨‍💼 Talk to Admin', '📞 Helpline'],
       shouldEscalate: false,
       cardType: 'policy',

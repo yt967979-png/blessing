@@ -9,6 +9,7 @@ import { useStore } from '@/context/StoreContext';
 import { getSTCourierDeliveryEstimate } from '@/lib/deliveryEstimator';
 import { getCartItemStockState, anyCartItemBlocking } from '@/lib/cartStock';
 import { imageNeedsUnoptimized } from '@/lib/productImage';
+import { cartHasCombo, isMoqSatisfied as checkMoqSatisfied } from '@/lib/deliveryRules';
 
 export const CartDrawer = () => {
   const {
@@ -26,13 +27,14 @@ export const CartDrawer = () => {
     validateCartStock,
   } = useStore();
 
+  const hasCombo = cartHasCombo(cart);
   const totalBooks = cart.reduce((a, b) => a + Number(b.qty || 0), 0);
   const minOrderQty = 4;
   const freeShippingQty = 5;
-  const isMoqSatisfied = totalBooks >= minOrderQty;
-  const booksToMoq = Math.max(0, minOrderQty - totalBooks);
-  const booksToFreeShipping = Math.max(0, freeShippingQty - totalBooks);
-  const deliveryProgress = Math.min(100, (totalBooks / freeShippingQty) * 100);
+  const isMoqSatisfied = hasCombo || totalBooks >= minOrderQty;
+  const booksToMoq = hasCombo ? 0 : Math.max(0, minOrderQty - totalBooks);
+  const booksToFreeShipping = hasCombo ? 0 : Math.max(0, freeShippingQty - totalBooks);
+  const deliveryProgress = hasCombo ? 100 : Math.min(100, (totalBooks / freeShippingQty) * 100);
   const hasBlockingItem = anyCartItemBlocking(cart, products);
 
   // Instant re-check the moment the drawer opens
@@ -82,7 +84,11 @@ export const CartDrawer = () => {
               <div className="flex items-center justify-between font-bold mb-1.5">
                 <div className="flex items-center gap-2">
                   <Truck className="w-4 h-4 text-[#0284c7] flex-shrink-0" />
-                  {!isMoqSatisfied ? (
+                  {hasCombo ? (
+                    <span className="text-emerald-700 font-extrabold flex items-center gap-1">
+                      🎉 Combo Pack: FREE Express Delivery Unlocked!
+                    </span>
+                  ) : !isMoqSatisfied ? (
                     <span className="text-amber-800 font-extrabold">
                       Add {booksToMoq} more {booksToMoq === 1 ? 'book' : 'books'} for Minimum Order (4 books)
                     </span>
@@ -97,7 +103,7 @@ export const CartDrawer = () => {
                   )}
                 </div>
                 <span className="text-[11px] font-black text-slate-600 bg-white/80 px-2 py-0.5 rounded-full border border-slate-200">
-                  {totalBooks}/5 Books
+                  {hasCombo ? 'Combo = 5 Books' : `${totalBooks}/5 Books`}
                 </span>
               </div>
               <div className="w-full h-2 bg-slate-200/80 rounded-full overflow-hidden p-0.5 shadow-inner">
@@ -106,7 +112,7 @@ export const CartDrawer = () => {
                   animate={{ width: `${deliveryProgress}%` }}
                   transition={{ duration: 0.4, ease: 'easeOut' }}
                   className={`h-full rounded-full transition-all ${
-                    totalBooks >= 5
+                    hasCombo || totalBooks >= 5
                       ? 'bg-gradient-to-r from-emerald-500 to-teal-400 shadow-sm'
                       : totalBooks >= 4
                       ? 'bg-gradient-to-r from-blue-500 to-indigo-500'

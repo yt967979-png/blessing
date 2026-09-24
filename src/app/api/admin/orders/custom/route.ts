@@ -8,6 +8,9 @@ import {
   MIN_BOOKS_PER_ORDER,
   deliveryFeeForQty,
   FREE_DELIVERY_AT_QTY,
+  cartHasCombo,
+  effectiveBookCount,
+  isMoqSatisfied,
 } from '@/lib/deliveryRules';
 import { publicSiteOrigin } from '@/lib/publicSiteUrl';
 import { normalizeRequiredAlternateMobile } from '@/lib/authValidation';
@@ -75,15 +78,17 @@ export async function POST(request: Request) {
     }
     const { total: calculatedSubtotal, verifiedItems } = priced;
     const bookQty = verifiedItems.reduce((s, i) => s + Number(i.qty || 0), 0);
-    if (bookQty < MIN_BOOKS_PER_ORDER) {
+    const hasCombo = cartHasCombo(verifiedItems);
+    const effQty = effectiveBookCount(verifiedItems);
+    if (!isMoqSatisfied(verifiedItems)) {
       return NextResponse.json(
         {
-          error: `Minimum ${MIN_BOOKS_PER_ORDER} books required (same as website checkout). Current: ${bookQty}.`,
+          error: `Minimum ${MIN_BOOKS_PER_ORDER} books required (same as website checkout). Current: ${bookQty} (or 1 Combo Pack).`,
         },
         { status: 400 }
       );
     }
-    const shippingFee = deliveryFeeForQty(bookQty);
+    const shippingFee = deliveryFeeForQty(effQty, hasCombo);
     const totalAmount = calculatedSubtotal + shippingFee;
 
     const randomSuffix = Math.random().toString(36).substring(2, 8).toUpperCase();

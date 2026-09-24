@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { userNeedsProfile } from '@/lib/userProfile';
-import { deliveryFeeForQty } from '@/lib/deliveryRules';
+import { deliveryFeeForQty, cartHasCombo, effectiveBookCount, isMoqSatisfied } from '@/lib/deliveryRules';
 
 export interface Product {
   id: string | number;
@@ -117,6 +117,8 @@ interface StoreContextType {
   checkoutTotal: number;
   setCheckoutTotal: (amount: number) => void;
   shippingFee: number;
+  hasComboInCart: boolean;
+  effectiveCartCount: number;
   cartGrandTotal: number;
   productsLoading: boolean;
   orderSuccessData: any | null;
@@ -1785,7 +1787,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const cartTotal = cart.reduce((acc, item) => acc + item.price * item.qty, 0);
   const cartCount = cart.reduce((acc, item) => acc + item.qty, 0);
-  const shippingFee = deliveryFeeForQty(cartCount);
+  const hasComboInCart = cartHasCombo(cart);
+  const effectiveCartCount = effectiveBookCount(cart);
+  const shippingFee = deliveryFeeForQty(effectiveCartCount, hasComboInCart);
   const [checkoutTotal, setCheckoutTotal] = useState(0);
   const cartGrandTotal = cartCount > 0 ? cartTotal + shippingFee : 0;
 
@@ -1883,6 +1887,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         checkoutTotal,
         setCheckoutTotal,
         shippingFee,
+        hasComboInCart,
+        effectiveCartCount,
         cartGrandTotal,
         orderSuccessData,
         setOrderSuccessData,

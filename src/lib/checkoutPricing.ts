@@ -1,8 +1,24 @@
 import { priceCartItems } from '@/lib/orderPricing';
 import { validateCouponForCart, type AppliedCoupon } from '@/lib/coupons';
-import { MIN_BOOKS_PER_ORDER, deliveryFeeForQty } from '@/lib/deliveryRules';
+import {
+  MIN_BOOKS_PER_ORDER,
+  FREE_DELIVERY_AT_QTY,
+  STANDARD_DELIVERY_FEE,
+  deliveryFeeForQty,
+  cartHasCombo,
+  effectiveBookCount,
+  isMoqSatisfied,
+} from '@/lib/deliveryRules';
 
-export { MIN_BOOKS_PER_ORDER, FREE_DELIVERY_AT_QTY, STANDARD_DELIVERY_FEE, deliveryFeeForQty } from '@/lib/deliveryRules';
+export {
+  MIN_BOOKS_PER_ORDER,
+  FREE_DELIVERY_AT_QTY,
+  STANDARD_DELIVERY_FEE,
+  deliveryFeeForQty,
+  cartHasCombo,
+  effectiveBookCount,
+  isMoqSatisfied,
+} from '@/lib/deliveryRules';
 
 export type CheckoutPricingResult =
   | {
@@ -30,16 +46,20 @@ export async function priceCheckoutOrder(
 
   const { total: calculatedSubtotal, verifiedItems } = priced;
 
-  const cartQty = verifiedItems.reduce((s, i) => s + Number(i.qty || 0), 0);
-  if (cartQty < MIN_BOOKS_PER_ORDER) {
+  const rawCartQty = verifiedItems.reduce((s, i) => s + Number(i.qty || 0), 0);
+  const hasCombo = cartHasCombo(verifiedItems);
+  const effQty = effectiveBookCount(verifiedItems);
+  const cartQty = Math.max(rawCartQty, effQty);
+
+  if (!isMoqSatisfied(verifiedItems)) {
     return {
       ok: false,
-      error: `Minimum order quantity is ${MIN_BOOKS_PER_ORDER} books. You currently have ${cartQty} book(s) in your cart.`,
+      error: `Minimum order quantity is ${MIN_BOOKS_PER_ORDER} books. You currently have ${rawCartQty} book(s) in your cart (or add 1 Combo Pack for instant checkout & Free Delivery).`,
       status: 400,
     };
   }
 
-  const shippingFee = deliveryFeeForQty(cartQty);
+  const shippingFee = deliveryFeeForQty(effQty, hasCombo);
   let discountAmount = 0;
   let appliedCoupon: AppliedCoupon | null = null;
 
