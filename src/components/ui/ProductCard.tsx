@@ -9,6 +9,7 @@ import { Product } from '@/lib/products';
 import { useStore } from '@/context/StoreContext';
 import { imageNeedsUnoptimized } from '@/lib/productImage';
 import { MIN_BOOKS_PER_ORDER, booksUntilMinOrder, isComboItem } from '@/lib/deliveryRules';
+import { getComboIncludedSubjects } from '@/lib/comboMetadata';
 import { openSamplePdfModal } from '@/components/books/SampleChapterReaderModal';
 
 export const ProductCard = ({ product }: { product: Product }) => {
@@ -32,6 +33,8 @@ export const ProductCard = ({ product }: { product: Product }) => {
   const imgSrc = product.image;
   const productHref = `/products/${product.slug}`;
   const isOutOfStock = product.inStock === false;
+  const isCombo = isComboItem(product);
+  const comboSubjects = isCombo ? getComboIncludedSubjects(product) : [];
 
   const prefetchProduct = () => {
     router.prefetch(productHref);
@@ -134,12 +137,38 @@ export const ProductCard = ({ product }: { product: Product }) => {
 
       <Link
         href={productHref}
-        className={`font-heading font-black text-xs sm:text-sm leading-snug mb-1 line-clamp-2 min-h-[2.25rem] transition-colors ${
+        className={`font-heading font-black text-xs sm:text-sm leading-snug mb-1.5 line-clamp-2 min-h-[2.25rem] transition-colors ${
           isOutOfStock ? 'text-slate-500' : 'text-[#001226] group-hover:text-blue-700'
         }`}
       >
         {product.title}
       </Link>
+
+      {/* Visual What's Inside This Combo showcase pills */}
+      {isCombo && comboSubjects.length > 0 && (
+        <div className="mb-2 p-1.5 sm:p-2 rounded-xl bg-gradient-to-r from-blue-50/90 via-indigo-50/80 to-purple-50/60 border border-blue-200/70 shadow-2xs">
+          <div className="flex items-center justify-between text-[9px] font-black uppercase tracking-wider text-blue-950 mb-1">
+            <span className="flex items-center gap-1">
+              <span>🎁 Inside ({comboSubjects.length} Books Set):</span>
+            </span>
+            <span className="text-[8px] font-extrabold text-emerald-800 bg-emerald-100/90 px-1.5 py-0.2 rounded shadow-2xs">
+              ALL INCLUDED
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {comboSubjects.map((sub) => (
+              <span
+                key={sub.name}
+                className="inline-flex items-center gap-0.5 text-[9px] font-extrabold px-1.5 py-0.5 rounded-md bg-white border border-blue-200/80 text-slate-800 shadow-2xs whitespace-nowrap transition-transform hover:scale-105"
+                title={`${sub.name}: ${sub.description}`}
+              >
+                <span className="text-[10px] leading-none">{sub.icon}</span>
+                <span>{sub.shortName}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="flex items-center justify-between mb-1.5">
         <div className="flex items-center gap-1 bg-amber-50 border border-amber-200/60 px-1.5 py-0.5 rounded-full">

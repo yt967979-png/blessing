@@ -32,6 +32,7 @@ import { pincodeDeliveryMessage } from '@/lib/pincode';
 import { authHeaders, authFormHeaders } from '@/lib/clientAuth';
 import { imageNeedsUnoptimized } from '@/lib/productImage';
 import { MIN_BOOKS_PER_ORDER, booksUntilMinOrder, minOrderCheckoutMessage, isComboItem } from '@/lib/deliveryRules';
+import { getComboIncludedSubjects, getComboSavingsSummary } from '@/lib/comboMetadata';
 
 function applyReviewsPayload(
   data: any,
@@ -380,6 +381,9 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
   }
 
   const isWishlisted = Boolean(product?.id && wishlist.some((id) => String(id) === String(product.id)));
+  const isCombo = isComboItem(product);
+  const comboSubjects = isCombo ? getComboIncludedSubjects(product) : [];
+  const comboSavings = isCombo ? getComboSavingsSummary(product) : null;
   const relatedProducts = (() => {
     const others = products.filter((p: any) => String(p.id) !== String(product.id) && p.inStock !== false);
     const sameClass = others.filter((p: any) => p.cls === product.cls);
@@ -617,6 +621,35 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
               </div>
             )}
 
+            {/* Quick Visual "What's Inside This Combo" Showcase Pills */}
+            {isCombo && comboSubjects.length > 0 && (
+              <div className="mb-5 p-3 rounded-2xl bg-gradient-to-r from-blue-50/90 via-indigo-50/80 to-purple-50/60 border border-blue-200/80 shadow-2xs">
+                <div className="flex items-center justify-between text-xs font-black uppercase tracking-wider text-blue-950 mb-2">
+                  <span className="flex items-center gap-1.5">
+                    <span>🎁 Complete Box Set ({comboSubjects.length} Books Included):</span>
+                  </span>
+                  <span className="text-[10px] font-extrabold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-300">
+                    ALL INCLUDED
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {comboSubjects.map((sub) => (
+                    <span
+                      key={sub.name}
+                      className="inline-flex items-center gap-1 text-xs font-black px-2.5 py-1 rounded-xl bg-white border border-blue-200 text-slate-800 shadow-2xs hover:border-blue-400 transition-colors"
+                      title={sub.description}
+                    >
+                      <span className="text-sm leading-none">{sub.icon}</span>
+                      <span>{sub.name}</span>
+                      {sub.tamilName && (
+                        <span className="text-[10px] text-blue-600 font-bold font-tamil">({sub.tamilName})</span>
+                      )}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Description */}
             <p className="text-xs text-slate-600 leading-relaxed mb-6">
               {product.description}
@@ -774,6 +807,120 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
             )}
           </div>
         </div>
+
+        {/* Complete Box Set Showcase — Visual Book Breakdown & Savings Matrix */}
+        {isCombo && comboSubjects.length > 0 && comboSavings && (
+          <section className="bg-white border-2 border-blue-200 rounded-3xl p-5 sm:p-8 shadow-sm mb-12 relative overflow-hidden">
+            <div className="flex flex-col md:flex-row md:items-end justify-between border-b border-slate-200 pb-5 mb-6 gap-4">
+              <div>
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-blue-100 text-blue-800 uppercase tracking-wider mb-2">
+                  <span>🎁 All-in-1 Box Set Contents</span>
+                </div>
+                <h2 className="font-heading font-black text-2xl sm:text-3xl text-[#001B3A]">
+                  What&apos;s Inside This Complete Combo Pack
+                </h2>
+                <p className="text-xs sm:text-sm text-slate-600 mt-1 max-w-2xl">
+                  Everything your child needs for top exam scores in one single box. Every textbook is 100% updated to the latest Tamil Nadu State Board Samacheer Kalvi syllabus.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 px-3.5 py-2 rounded-2xl shrink-0">
+                <Truck className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span className="text-xs font-black text-emerald-800">
+                  FREE ST Courier Delivery Unlocked
+                </span>
+              </div>
+            </div>
+
+            {/* Subject Cards Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4 mb-8">
+              {comboSubjects.map((sub, idx) => (
+                <div
+                  key={sub.name}
+                  className="relative bg-slate-50/70 hover:bg-white border border-slate-200 hover:border-blue-300 rounded-2xl p-4 transition-all duration-300 hover:shadow-md flex flex-col justify-between"
+                >
+                  <div>
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-2.5">
+                        <span className="text-2xl p-2 bg-white rounded-xl border border-slate-200 shadow-2xs">
+                          {sub.icon}
+                        </span>
+                        <div>
+                          <h3 className="font-heading font-black text-base text-slate-900 leading-tight">
+                            {sub.name}
+                          </h3>
+                          {sub.tamilName && (
+                            <span className="text-xs font-bold text-blue-700 font-tamil">
+                              {sub.tamilName}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${sub.color}`}>
+                        {sub.tag}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-600 leading-relaxed mb-3">
+                      {sub.description}
+                    </p>
+                  </div>
+                  <div className="pt-2.5 border-t border-slate-200/80 flex items-center justify-between text-[11px] font-extrabold text-emerald-700">
+                    <span className="flex items-center gap-1">
+                      <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Full Guide Included</span>
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-semibold">Book #{idx + 1}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Value & Direct Savings Comparison Summary */}
+            <div className="bg-gradient-to-br from-[#001B3A] to-[#002855] text-white rounded-2xl p-5 sm:p-6 shadow-lg">
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-center">
+                <div className="md:col-span-8">
+                  <div className="text-amber-400 text-xs font-black uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                    <span>⚡ Maximum Savings Breakdown</span>
+                  </div>
+                  <h3 className="font-heading font-black text-xl sm:text-2xl text-white mb-2">
+                    Why Buy The Combo Instead of Single Guides?
+                  </h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-2 text-xs">
+                    <div className="bg-white/10 rounded-xl p-2.5 backdrop-blur-xs">
+                      <div className="text-slate-300 text-[10px] font-bold">Individual Guides MRP</div>
+                      <div className="text-base font-black text-slate-200 line-through">₹{comboSavings.individualMrp}</div>
+                    </div>
+                    <div className="bg-white/10 rounded-xl p-2.5 backdrop-blur-xs">
+                      <div className="text-slate-300 text-[10px] font-bold">Combo Offer Price</div>
+                      <div className="text-lg font-black text-amber-400">₹{comboSavings.comboPrice}</div>
+                    </div>
+                    <div className="bg-emerald-500/20 border border-emerald-400/40 rounded-xl p-2.5 col-span-2 sm:col-span-1">
+                      <div className="text-emerald-300 text-[10px] font-bold">Total Customer Benefit</div>
+                      <div className="text-lg font-black text-emerald-300">Save ₹{comboSavings.totalCustomerSavings}</div>
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-slate-300 mt-3">
+                    ✨ Includes instant book discount (-₹{comboSavings.cashSavings}) + 100% FREE ST Courier doorstep shipping (saves ₹150).
+                  </p>
+                </div>
+
+                <div className="md:col-span-4 flex flex-col gap-2.5">
+                  <button
+                    type="button"
+                    onClick={tryBuyNow}
+                    className="w-full bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-[#001B3A] font-black text-xs sm:text-sm py-3.5 px-4 rounded-xl uppercase tracking-wider shadow-md transition-all hover:scale-102 cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <ShoppingBag className="w-4 h-4" />
+                    <span>Order Complete Box Set</span>
+                  </button>
+                  <p className="text-[10px] text-center text-slate-300 font-semibold">
+                    🛡️ 100% Genuine Publisher Guides · Dispatched within 24 Hours
+                  </p>
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
 
         {/* Same Standard Frequently Bought Together Bundle */}
         <FrequentlyBoughtTogether currentProduct={product} />

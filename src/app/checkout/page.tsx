@@ -82,6 +82,39 @@ export default function CheckoutPage() {
   const [couponLoading, setCouponLoading] = useState(false);
   const [couponError, setCouponError] = useState<string | null>(null);
 
+  interface AvailableOffer {
+    id: string;
+    code: string;
+    title: string;
+    discountType: 'percentage' | 'flat';
+    discountValue: number;
+    minCartQty: number;
+    minOrderAmount: number;
+    maxDiscountAmount: number | null;
+    alreadyUsed: boolean;
+  }
+  const [availableOffers, setAvailableOffers] = useState<AvailableOffer[]>([]);
+
+  // Fetch active promotional coupons
+  useEffect(() => {
+    let cancelled = false;
+    async function loadOffers() {
+      try {
+        const res = await fetch('/api/coupons/available', {
+          headers: user?.token ? { Authorization: `Bearer ${user.token}` } : {},
+        });
+        const data = await res.json();
+        if (!cancelled && Array.isArray(data?.coupons)) {
+          setAvailableOffers(data.coupons);
+        }
+      } catch {}
+    }
+    loadOffers();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.token]);
+
   const finalPayable = Math.max(0, cartGrandTotal - (appliedCoupon?.discountAmount || 0));
 
   // Restore draft address from localStorage if user reloaded or navigated away
@@ -121,8 +154,10 @@ export default function CheckoutPage() {
     }
   }, []);
 
-  const handleApplyCoupon = async () => {
-    if (!couponInput.trim()) return;
+  const handleApplyCoupon = async (explicitCode?: unknown) => {
+    const code = (typeof explicitCode === 'string' ? explicitCode : couponInput).trim().toUpperCase();
+    if (!code) return;
+    setCouponInput(code);
     setCouponLoading(true);
     setCouponError(null);
     try {
@@ -134,7 +169,7 @@ export default function CheckoutPage() {
           ...(user?.token ? { Authorization: `Bearer ${user.token}` } : {}),
         },
         body: JSON.stringify({
-          code: couponInput.trim(),
+          code,
           cartQty: effectiveCartCount || cartCount,
           subtotal: cartTotal,
           items: cart.map((i) => ({ id: i.id, qty: i.qty, category: i.category, title: i.title })),
@@ -158,6 +193,28 @@ export default function CheckoutPage() {
       setCouponLoading(false);
     }
   };
+
+  const eligibleOffers = (availableOffers.length > 0
+    ? availableOffers
+    : [
+        {
+          id: 'bpgfirst',
+          code: 'BPGFIRST',
+          title: 'Special First Order Discount',
+          discountType: 'flat' as const,
+          discountValue: 150,
+          minCartQty: 4,
+          minOrderAmount: 0,
+          maxDiscountAmount: null,
+          alreadyUsed: false,
+        },
+      ]
+  ).filter((c) => {
+    if (c.alreadyUsed) return false;
+    const meetsQty = hasComboInCart || (effectiveCartCount || cartCount) >= c.minCartQty;
+    const meetsSubtotal = cartTotal >= c.minOrderAmount;
+    return meetsQty && meetsSubtotal;
+  });
 
   const handleRemoveCoupon = () => {
     setAppliedCoupon(null);
@@ -1166,7 +1223,7 @@ export default function CheckoutPage() {
                       <button
                         type="button"
                         disabled={couponLoading || !couponInput.trim()}
-                        onClick={handleApplyCoupon}
+                        onClick={() => void handleApplyCoupon()}
                         className="px-4 py-2.5 bg-[#001B3A] hover:bg-blue-600 disabled:opacity-50 text-white font-extrabold text-xs rounded-xl uppercase tracking-wider transition-colors cursor-pointer shrink-0 min-h-10"
                       >
                         {couponLoading ? (
@@ -1179,15 +1236,86 @@ export default function CheckoutPage() {
                     {couponError && (
                       <p className="text-[11px] text-red-600 font-semibold">{couponError}</p>
                     )}
-                    <Link
-                      href="/profile?tab=coupons"
-                      className="text-[11px] font-bold text-blue-700 hover:underline"
-                    >
-                      See all available coupons
-                    </Link>
+                    <div className="flex items-center justify-between text-[11px] pt-1">
+                      {eligibleOffers.length > 0 ? (
+                        <button
+                          type="button"
+                          onClick={() => void handleApplyCoupon(eligibleOffers[0].code)}
+                          className="font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 cursor-pointer"
+                        >
+                          <span>⚡ Quick Apply:</span>
+                          <span className="font-mono font-black underline">{eligibleOffers[0].code}</span>
+                          <span>(-₹{eligibleOffers[0].discountValue})</span>
+                        </button>
+                      ) : (
+                        <span />
+                      )}
+                      <Link
+                        href="/profile?tab=coupons"
+                        className="font-bold text-blue-700 hover:underline"
+                      >
+                        All coupons
+                      </Link>
+                    </div>
                   </div>
                 )}
               </div>
+
+              {/* Animated One-Click Coupon Apply Chip right above the subtotal */}
+              {!appliedCoupon && eligibleOffers.length > 0 && (
+                <div className="relative overflow-hidden rounded-2xl p-3.5 bg-gradient-to-r from-emerald-50 via-teal-50 to-blue-50 border-2 border-emerald-400 shadow-md">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-9 h-9 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-sm animate-bounce">
+                        <Tag className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-[11px] font-black uppercase text-emerald-950 tracking-wider">
+                            Available for this order:
+                          </span>
+                          <span className="font-mono font-black text-xs px-2 py-0.5 rounded-md bg-emerald-700 text-white shadow-xs tracking-wider">
+                            {eligibleOffers[0].code}
+                          </span>
+                        </div>
+                        <p className="text-[11px] font-extrabold text-emerald-800 truncate mt-0.5">
+                          Save ₹{eligibleOffers[0].discountType === 'flat' ? eligibleOffers[0].discountValue : `${eligibleOffers[0].discountValue}%`} instantly — click to claim
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={couponLoading}
+                      onClick={() => void handleApplyCoupon(eligibleOffers[0].code)}
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-md transition-all hover:scale-105 shrink-0 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    >
+                      {couponLoading ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <>
+                          <span>APPLY</span>
+                          <span className="text-amber-300">⚡</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  {eligibleOffers.length > 1 && (
+                    <div className="mt-2.5 pt-2 border-t border-emerald-200/70 flex items-center gap-1.5 flex-wrap text-[10px]">
+                      <span className="text-slate-600 font-extrabold">Other offers:</span>
+                      {eligibleOffers.slice(1).map((c) => (
+                        <button
+                          key={c.code}
+                          type="button"
+                          onClick={() => void handleApplyCoupon(c.code)}
+                          className="font-mono font-black text-blue-700 bg-white border border-blue-200 px-2 py-0.5 rounded-md hover:bg-blue-50 cursor-pointer shadow-2xs"
+                        >
+                          {c.code} (-₹{c.discountValue})
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="space-y-1.5 p-4 bg-slate-50 rounded-2xl border border-slate-200">
                 <div className="flex justify-between text-slate-600">
