@@ -175,6 +175,8 @@ export default function CheckoutPage() {
               sessionStorage.removeItem('bpg_pending_rzp_order');
               clearCartAfterOrder();
               router.push(`/orders?orderId=${encodeURIComponent(d.orderId)}`);
+            } else if (d.status === 'FAILED' || d.status === 'CANCELLED') {
+              sessionStorage.removeItem('bpg_pending_rzp_order');
             }
           })
           .catch(() => {});
@@ -776,7 +778,10 @@ export default function CheckoutPage() {
         },
         modal: {
           ondismiss: function () {
-            showToast('Payment window closed.');
+            try {
+              sessionStorage.removeItem('bpg_pending_rzp_order');
+            } catch {}
+            showToast('Payment window closed. Your items are safe in your cart.');
             releasePendingHold('modal_dismissed');
             release();
           },
@@ -785,12 +790,18 @@ export default function CheckoutPage() {
 
       const rzp = new (window as any).Razorpay(options);
       rzp.on('payment.failed', function (resp: any) {
+        try {
+          sessionStorage.removeItem('bpg_pending_rzp_order');
+        } catch {}
         showToast(`❌ Payment Failed: ${resp.error?.description || 'Declined'}`);
         releasePendingHold('payment_failed');
         release();
       });
       rzp.open();
     } catch (e: any) {
+      try {
+        sessionStorage.removeItem('bpg_pending_rzp_order');
+      } catch {}
       showToast(`❌ ${e?.message || 'Order failed'}`);
       releasePendingHold('client_error');
       release();
