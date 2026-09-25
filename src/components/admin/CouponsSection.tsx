@@ -105,6 +105,18 @@ export default function CouponsSection() {
     setTimeout(() => setCopiedCode(null), 2000);
   };
 
+  const notifyLocalCouponsChanged = () => {
+    if (typeof window === 'undefined') return;
+    window.dispatchEvent(new Event('bpg:coupons-changed'));
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        const bc = new BroadcastChannel('bpg_coupons_bus');
+        bc.postMessage('changed');
+        bc.close();
+      }
+    } catch (_) {}
+  };
+
   const handleToggleHero = async (coupon: Coupon) => {
     try {
       const res = await fetch('/api/admin/coupons', {
@@ -126,6 +138,7 @@ export default function CouponsSection() {
             showOnHero: next && c.id === coupon.id,
           }))
         );
+        notifyLocalCouponsChanged();
       }
     } catch (err) {
       console.error('Failed to pin coupon to hero:', err);
@@ -150,6 +163,7 @@ export default function CouponsSection() {
         setCoupons((prev) =>
           prev.map((c) => (c.id === coupon.id ? { ...c, isActive: !c.isActive } : c))
         );
+        notifyLocalCouponsChanged();
       }
     } catch (err) {
       console.error('Failed to toggle coupon:', err);
@@ -169,6 +183,7 @@ export default function CouponsSection() {
         setCoupons((prev) => prev.filter((c) => c.id !== id));
         setSuccessMsg(`Coupon "${code}" removed.`);
         setTimeout(() => setSuccessMsg(null), 3000);
+        notifyLocalCouponsChanged();
       }
     } catch (err) {
       console.error('Failed to delete coupon:', err);
@@ -219,6 +234,7 @@ export default function CouponsSection() {
       setIsModalOpen(false);
       resetForm();
       fetchCoupons();
+      notifyLocalCouponsChanged();
     } catch (err: any) {
       setError(err.message || 'Error creating coupon');
     } finally {

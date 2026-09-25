@@ -19,7 +19,15 @@ export async function GET() {
     const offer = mapped ? { title: mapped.title } : null;
     return NextResponse.json(
       { offer },
-      { headers: { 'Cache-Control': 'public, max-age=15, stale-while-revalidate=60' } }
+      {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+          'CDN-Cache-Control': 'no-store',
+          'Surrogate-Control': 'no-store',
+        },
+      }
     );
   } catch {
     return NextResponse.json({ offer: null });

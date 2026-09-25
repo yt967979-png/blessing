@@ -30,6 +30,11 @@ import {
 import type { Product } from '@/context/StoreContext';
 import { useStore } from '@/context/StoreContext';
 import { authHeaders, authFormHeaders } from '@/lib/clientAuth';
+import {
+  STANDARD_COMBO_CHOICES,
+  ALL_COMBO_SUBJECT_DEFINITIONS,
+  getComboIncludedSubjects,
+} from '@/lib/comboMetadata';
 
 export interface StockHoldItem {
   id: string;
@@ -81,6 +86,34 @@ const DEFAULT_SUBJECTS = [
   'All-in-One Full Set (Combo)',
 ];
 
+export const COMBO_PRESETS = [
+  {
+    label: '⚡ 10th Core (5 Books)',
+    cls: '10th',
+    subjects: ['Tamil', 'English', 'Mathematics', 'Science', 'Social Science'],
+  },
+  {
+    label: '🔬 11th/12th Bio-Maths (6 Books)',
+    cls: '12th',
+    subjects: ['Tamil', 'English', 'Mathematics', 'Physics', 'Chemistry', 'Biology'],
+  },
+  {
+    label: '💻 11th/12th Comp Sci (6 Books)',
+    cls: '12th',
+    subjects: ['Tamil', 'English', 'Mathematics', 'Physics', 'Chemistry', 'Computer Science'],
+  },
+  {
+    label: '📊 11th/12th Commerce (6 Books)',
+    cls: '12th',
+    subjects: ['Tamil', 'English', 'Commerce', 'Accountancy', 'Economics', 'Business Mathematics'],
+  },
+  {
+    label: '🌿 11th/12th Pure Science (6 Books)',
+    cls: '12th',
+    subjects: ['Tamil', 'English', 'Physics', 'Chemistry', 'Botany', 'Zoology'],
+  },
+];
+
 export const CatalogSection: React.FC<CatalogSectionProps> = ({
   products,
   activeStockHolds,
@@ -112,12 +145,22 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
   const [editImage, setEditImage] = useState<string>('');
   const [editImageUploading, setEditImageUploading] = useState<boolean>(false);
   const editImageInputRef = useRef<HTMLInputElement>(null);
+  const [editComboSubjects, setEditComboSubjects] = useState<string[]>([]);
+  const [editCustomComboSubjectInput, setEditCustomComboSubjectInput] = useState('');
 
   // New publication modal states
   const [newTitle, setNewTitle] = useState('');
   const [newCls, setNewCls] = useState('10th');
   const [selectedSubjectOption, setSelectedSubjectOption] = useState('Mathematics');
   const [customSubjectText, setCustomSubjectText] = useState('');
+  const [selectedComboSubjects, setSelectedComboSubjects] = useState<string[]>([
+    'Tamil',
+    'English',
+    'Mathematics',
+    'Science',
+    'Social Science',
+  ]);
+  const [customComboSubjectInput, setCustomComboSubjectInput] = useState('');
   const [newMrp, setNewMrp] = useState<string>('350');
   const [newPrice, setNewPrice] = useState<string>('280');
   const [newStock, setNewStock] = useState<string>('50');
@@ -211,6 +254,12 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
     setEditSamplePdf(p.samplePdfUrl || '');
     setEditCls(p.cls || '10th');
     setEditSubject(p.subject || 'Mathematics');
+    const initialSubs =
+      p.comboSubjects && p.comboSubjects.length > 0
+        ? p.comboSubjects
+        : getComboIncludedSubjects(p).map((s) => s.name);
+    setEditComboSubjects(initialSubs);
+    setEditCustomComboSubjectInput('');
   };
 
   const handleEditDeviceImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -252,6 +301,10 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
     const numPrice = Number(editPrice);
     const numMrp = Number(editMrp);
     const numStock = Math.max(0, parseInt(String(editStock), 10) || 0);
+    const isCombo =
+      editSubject === 'All-in-One Full Set (Combo)' ||
+      editTitle.toLowerCase().includes('combo') ||
+      editComboSubjects.length > 0;
     try {
       await onUpdateProduct(id, {
         title: editTitle.trim(),
@@ -259,6 +312,8 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
         image: editImage.trim() || undefined,
         cls: editCls,
         subject: editSubject,
+        category: isCombo ? 'combo' : 'guide',
+        comboSubjects: isCombo ? editComboSubjects : undefined,
         price: numPrice,
         mrp: numMrp,
         stock: numStock,
@@ -409,18 +464,31 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
       return;
     }
 
+    const isCombo =
+      selectedSubjectOption === 'All-in-One Full Set (Combo)' ||
+      resolvedSubject.toLowerCase().includes('combo');
+
+    if (isCombo && selectedComboSubjects.length === 0) {
+      onShowToast('⚠️ Please tick at least 1 subject for this combo pack');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const payload = {
         title: newTitle.trim(),
         cls: newCls,
+        category: isCombo ? 'combo' : 'guide',
         subject: resolvedSubject,
+        comboSubjects: isCombo ? selectedComboSubjects : undefined,
         price: numPrice,
         mrp: numMrp,
         stock: Math.max(0, Number(newStock) || 0),
         status: targetStatus,
-        badge: newBadge.trim(),
-        description: `Complete ${newCls} Standard ${resolvedSubject} guide covering Tamil Nadu Samacheer Kalvi syllabus with question banks and answers.`,
+        badge: newBadge.trim() || (isCombo ? 'Combo Set' : ''),
+        description: isCombo
+          ? `Complete ${newCls} Standard All-in-One Combo Guide Pack (${selectedComboSubjects.join(', ')}). Covers full Tamil Nadu State Board syllabus with solved question papers.`
+          : `Complete ${newCls} Standard ${resolvedSubject} guide covering Tamil Nadu Samacheer Kalvi syllabus with question banks and answers.`,
         image: newImage.trim() || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80',
         samplePdfUrl: newSamplePdf.trim() || null,
       };
@@ -729,6 +797,128 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                                 )}
                               </div>
                             )}
+                            {isEditing && (editSubject === 'All-in-One Full Set (Combo)' || p.category === 'combo' || p.title.toLowerCase().includes('combo') || editComboSubjects.length > 0) && (
+                              <div className="mt-3 p-3 bg-purple-50/80 border border-purple-200 rounded-xl space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-xs">📦</span>
+                                    <span className="text-[11px] font-black text-purple-950 uppercase tracking-wide">
+                                      Combo Subjects ({editComboSubjects.length} Books)
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditComboSubjects(['Tamil', 'English', 'Mathematics', 'Science', 'Social Science'])}
+                                      className="text-[9px] font-bold px-1.5 py-0.5 bg-white border border-purple-200 text-purple-800 rounded hover:bg-purple-100 cursor-pointer"
+                                    >
+                                      10th (5)
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditComboSubjects(['Tamil', 'English', 'Mathematics', 'Physics', 'Chemistry', 'Biology'])}
+                                      className="text-[9px] font-bold px-1.5 py-0.5 bg-white border border-purple-200 text-purple-800 rounded hover:bg-purple-100 cursor-pointer"
+                                    >
+                                      Bio-Maths (6)
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditComboSubjects(['Tamil', 'English', 'Commerce', 'Accountancy', 'Economics', 'Business Mathematics'])}
+                                      className="text-[9px] font-bold px-1.5 py-0.5 bg-white border border-purple-200 text-purple-800 rounded hover:bg-purple-100 cursor-pointer"
+                                    >
+                                      Commerce (6)
+                                    </button>
+                                  </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-1.5 max-h-36 overflow-y-auto pr-1">
+                                  {STANDARD_COMBO_CHOICES.map((choice) => {
+                                    const isTicked = editComboSubjects.includes(choice.name);
+                                    return (
+                                      <label
+                                        key={choice.name}
+                                        className={`flex items-center gap-1.5 p-1.5 rounded-lg border text-[10px] font-bold cursor-pointer transition-colors ${
+                                          isTicked
+                                            ? 'bg-white border-purple-500 text-purple-950 shadow-2xs'
+                                            : 'bg-white/60 border-slate-200 text-slate-600 hover:bg-white'
+                                        }`}
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          checked={isTicked}
+                                          onChange={(e) => {
+                                            if (e.target.checked) {
+                                              setEditComboSubjects((prev) => [...prev, choice.name]);
+                                            } else {
+                                              setEditComboSubjects((prev) => prev.filter((s) => s !== choice.name));
+                                            }
+                                          }}
+                                          className="w-3.5 h-3.5 rounded text-purple-600 focus:ring-purple-500 cursor-pointer accent-purple-600"
+                                        />
+                                        <span>{choice.icon}</span>
+                                        <span className="truncate">{choice.name}</span>
+                                      </label>
+                                    );
+                                  })}
+                                </div>
+
+                                <div className="flex items-center gap-1.5">
+                                  <input
+                                    type="text"
+                                    placeholder="+ Extra book to combo..."
+                                    value={editCustomComboSubjectInput}
+                                    onChange={(e) => setEditCustomComboSubjectInput(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        const v = editCustomComboSubjectInput.trim();
+                                        if (v && !editComboSubjects.includes(v)) {
+                                          setEditComboSubjects((prev) => [...prev, v]);
+                                          setEditCustomComboSubjectInput('');
+                                        }
+                                      }
+                                    }}
+                                    className="flex-1 px-2 py-1 bg-white border border-purple-200 rounded text-[10px] outline-none"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const v = editCustomComboSubjectInput.trim();
+                                      if (v && !editComboSubjects.includes(v)) {
+                                        setEditComboSubjects((prev) => [...prev, v]);
+                                        setEditCustomComboSubjectInput('');
+                                      }
+                                    }}
+                                    className="px-2 py-1 bg-purple-600 text-white rounded text-[10px] font-bold cursor-pointer"
+                                  >
+                                    Add
+                                  </button>
+                                </div>
+
+                                <div className="p-2 bg-gradient-to-br from-amber-50 to-orange-50/70 border border-dashed border-amber-300 rounded-xl space-y-1">
+                                  <span className="text-[10px] font-black text-amber-900 flex items-center gap-1">
+                                    <span>📦 Inside This Combo Pack ({editComboSubjects.length} Books):</span>
+                                  </span>
+                                  <div className="flex flex-wrap gap-1">
+                                    {editComboSubjects.map((sub, i) => (
+                                      <span
+                                        key={sub}
+                                        className="text-[9px] font-bold bg-white text-slate-800 border border-amber-200 px-1.5 py-0.5 rounded-md flex items-center gap-1 shadow-2xs"
+                                      >
+                                        <span>{i + 1}. {sub}</span>
+                                        <button
+                                          type="button"
+                                          onClick={() => setEditComboSubjects((prev) => prev.filter((s) => s !== sub))}
+                                          className="text-slate-300 hover:text-red-500 cursor-pointer"
+                                        >
+                                          ×
+                                        </button>
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         </div>
                       </td>
@@ -972,6 +1162,75 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                         />
                       </div>
                     </div>
+
+                    {/* Mobile Combo Subjects Editor */}
+                    {(editSubject === 'All-in-One Full Set (Combo)' || p.category === 'combo' || p.title.toLowerCase().includes('combo') || editComboSubjects.length > 0) && (
+                      <div className="p-3 bg-purple-50/80 border border-purple-200 rounded-xl space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-black text-purple-950 uppercase">
+                            📦 Inside Combo ({editComboSubjects.length} Books)
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setEditComboSubjects(['Tamil', 'English', 'Mathematics', 'Science', 'Social Science'])}
+                            className="text-[9px] font-bold px-1.5 py-0.5 bg-white border border-purple-200 text-purple-800 rounded"
+                          >
+                            10th (5)
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-1.5 max-h-36 overflow-y-auto pr-1">
+                          {STANDARD_COMBO_CHOICES.map((choice) => {
+                            const isTicked = editComboSubjects.includes(choice.name);
+                            return (
+                              <label
+                                key={choice.name}
+                                className={`flex items-center gap-1.5 p-1.5 rounded-lg border text-[10px] font-bold cursor-pointer ${
+                                  isTicked ? 'bg-white border-purple-500 text-purple-950' : 'bg-white/60 border-slate-200 text-slate-600'
+                                }`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={isTicked}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setEditComboSubjects((prev) => [...prev, choice.name]);
+                                    } else {
+                                      setEditComboSubjects((prev) => prev.filter((s) => s !== choice.name));
+                                    }
+                                  }}
+                                  className="w-3.5 h-3.5 rounded text-purple-600 accent-purple-600"
+                                />
+                                <span>{choice.icon}</span>
+                                <span className="truncate">{choice.name}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                        <div className="p-2 bg-amber-50/90 border border-dashed border-amber-300 rounded-xl">
+                          <span className="text-[10px] font-black text-amber-900 block mb-1">
+                            📦 Inside This Pack ({editComboSubjects.length} Books):
+                          </span>
+                          <div className="flex flex-wrap gap-1">
+                            {editComboSubjects.map((sub, i) => (
+                              <span
+                                key={sub}
+                                className="text-[9px] font-bold bg-white text-slate-800 border border-amber-200 px-1.5 py-0.5 rounded-md flex items-center gap-1"
+                              >
+                                <span>{i + 1}. {sub}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditComboSubjects((prev) => prev.filter((s) => s !== sub))}
+                                  className="text-slate-300 hover:text-red-500 cursor-pointer"
+                                >
+                                  ×
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     <div className="grid grid-cols-2 gap-2 bg-blue-50/50 p-3 rounded-xl border border-blue-100">
                       <div>
                         <label className="text-[11px] font-bold text-blue-900 block mb-0.5">Offer Price (₹)</label>
@@ -1200,7 +1459,16 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                     </label>
                     <select
                       value={selectedSubjectOption}
-                      onChange={(e) => setSelectedSubjectOption(e.target.value)}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setSelectedSubjectOption(val);
+                        if (val === 'All-in-One Full Set (Combo)') {
+                          if (!newTitle || newTitle.includes('Guide') || newTitle.includes('Mathematics')) {
+                            setNewTitle(`${newCls} Standard All-in-One Complete Guide Combo Pack (${selectedComboSubjects.length} Books)`);
+                          }
+                          if (!newBadge) setNewBadge('Combo Set');
+                        }
+                      }}
                       className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl outline-none focus:border-[#2874f0] text-slate-900 cursor-pointer font-semibold shadow-2xs"
                     >
                       {availableSubjects.map((s) => (
@@ -1227,6 +1495,199 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                       onChange={(e) => setCustomSubjectText(e.target.value)}
                       className="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl outline-none focus:border-[#2874f0] text-slate-900 shadow-2xs"
                     />
+                  </div>
+                )}
+
+                {/* ALL-IN-ONE COMBO SUBJECT CHECKLIST & LIVE BOX PREVIEW */}
+                {selectedSubjectOption === 'All-in-One Full Set (Combo)' && (
+                  <div className="mt-3 p-4 bg-gradient-to-br from-purple-50/90 via-slate-50 to-amber-50/60 border-2 border-purple-300 rounded-2xl space-y-3.5 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="text-[10px] font-black uppercase tracking-wider text-purple-700 bg-purple-100 px-2 py-0.5 rounded-md">
+                          Combo Pack Configurator
+                        </span>
+                        <h4 className="font-extrabold text-sm text-slate-900 mt-1">
+                          Tick the Subjects Included in this Combo Set
+                        </h4>
+                        <p className="text-[10px] text-slate-600">
+                          Check each book that comes inside this set. The live box below shows exactly what customers see.
+                        </p>
+                      </div>
+                      <span className="text-xs font-black text-purple-900 bg-purple-200/90 px-3 py-1 rounded-full border border-purple-300 shadow-2xs">
+                        {selectedComboSubjects.length} Books Selected
+                      </span>
+                    </div>
+
+                    {/* Quick Presets */}
+                    <div>
+                      <span className="text-[10px] font-extrabold text-slate-600 uppercase tracking-wider block mb-1.5">
+                        ⚡ 1-Click Fast Presets:
+                      </span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {COMBO_PRESETS.map((preset) => (
+                          <button
+                            key={preset.label}
+                            type="button"
+                            onClick={() => {
+                              setSelectedComboSubjects([...preset.subjects]);
+                              if (preset.cls && newCls !== preset.cls) {
+                                setNewCls(preset.cls);
+                              }
+                              if (!newTitle || newTitle.includes('Combo') || newTitle.includes('All-in-One')) {
+                                setNewTitle(`${preset.cls} Standard All-in-One Complete Combo Guide (${preset.subjects.length} Books)`);
+                              }
+                            }}
+                            className="text-[10px] font-bold px-2.5 py-1 bg-white hover:bg-purple-100 text-purple-950 border border-purple-200 rounded-lg cursor-pointer transition-colors shadow-2xs active:scale-95"
+                          >
+                            {preset.label}
+                          </button>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => setSelectedComboSubjects(STANDARD_COMBO_CHOICES.map(c => c.name))}
+                          className="text-[10px] font-bold px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg cursor-pointer shadow-2xs"
+                        >
+                          Select All
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedComboSubjects([])}
+                          className="text-[10px] font-bold px-2.5 py-1 bg-white hover:bg-red-50 text-red-600 border border-red-200 rounded-lg cursor-pointer shadow-2xs"
+                        >
+                          Clear All
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Subject Checkbox Grid */}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1">
+                      {STANDARD_COMBO_CHOICES.map((choice) => {
+                        const isTicked = selectedComboSubjects.includes(choice.name);
+                        return (
+                          <label
+                            key={choice.name}
+                            className={`flex items-center gap-2 p-2 rounded-xl border text-xs font-semibold cursor-pointer transition-all ${
+                              isTicked
+                                ? 'bg-white border-purple-500 text-purple-950 shadow-2xs ring-1 ring-purple-400/40'
+                                : 'bg-white/70 border-slate-200 text-slate-600 hover:bg-white'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isTicked}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedComboSubjects((prev) => [...prev, choice.name]);
+                                } else {
+                                  setSelectedComboSubjects((prev) => prev.filter((s) => s !== choice.name));
+                                }
+                              }}
+                              className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500 cursor-pointer accent-purple-600"
+                            />
+                            <span className="text-sm shrink-0">{choice.icon}</span>
+                            <div className="min-w-0 flex-1 leading-tight">
+                              <span className="block truncate text-[11px] font-bold">{choice.name}</span>
+                              {choice.tamilName && (
+                                <span className="block text-[9px] text-slate-400 font-tamil truncate">{choice.tamilName}</span>
+                              )}
+                            </div>
+                          </label>
+                        );
+                      })}
+                    </div>
+
+                    {/* Custom subject write-in */}
+                    <div className="flex items-center gap-2 pt-1">
+                      <input
+                        type="text"
+                        placeholder="Add extra custom subject book to combo..."
+                        value={customComboSubjectInput}
+                        onChange={(e) => setCustomComboSubjectInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            const val = customComboSubjectInput.trim();
+                            if (val && !selectedComboSubjects.includes(val)) {
+                              setSelectedComboSubjects((prev) => [...prev, val]);
+                              setCustomComboSubjectInput('');
+                            }
+                          }
+                        }}
+                        className="flex-1 px-3 py-1.5 bg-white border border-purple-200 rounded-lg text-xs outline-none text-slate-900"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const val = customComboSubjectInput.trim();
+                          if (val && !selectedComboSubjects.includes(val)) {
+                            setSelectedComboSubjects((prev) => [...prev, val]);
+                            setCustomComboSubjectInput('');
+                          }
+                        }}
+                        className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 active:scale-95 text-white rounded-lg text-xs font-bold cursor-pointer transition-colors shadow-2xs"
+                      >
+                        + Add Book
+                      </button>
+                    </div>
+
+                    {/* THE BOX SHOWING THE SELECTED SUBJECTS */}
+                    <div className="bg-gradient-to-br from-amber-50 to-orange-50/70 border-2 border-dashed border-amber-300 rounded-2xl p-4 space-y-3 shadow-2xs">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xl">📦</span>
+                          <div>
+                            <h5 className="font-extrabold text-xs text-slate-900 flex items-center gap-1.5">
+                              <span>What's Inside This Complete Combo Pack</span>
+                              <span className="text-[10px] bg-amber-400 text-slate-900 px-2 py-0.5 rounded-full font-black">
+                                {selectedComboSubjects.length} IN 1
+                              </span>
+                            </h5>
+                            <span className="text-[10px] text-slate-500">
+                              Live storefront box preview — updates in real time as you tick subjects
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {selectedComboSubjects.length === 0 ? (
+                        <div className="text-center py-4 bg-white/80 rounded-xl border border-amber-200">
+                          <p className="text-xs font-bold text-amber-900">⚠️ No subjects ticked yet</p>
+                          <p className="text-[10px] text-slate-500">Please tick at least 1 subject checkbox above</p>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                          {selectedComboSubjects.map((subName, i) => {
+                            const def = ALL_COMBO_SUBJECT_DEFINITIONS[subName.toLowerCase().trim()];
+                            const icon = def?.icon || '📖';
+                            const tamil = def?.tamilName || '';
+                            return (
+                              <div
+                                key={subName}
+                                className="flex items-center gap-2 p-2 bg-white rounded-xl border border-amber-200 shadow-2xs"
+                              >
+                                <span className="text-base shrink-0">{icon}</span>
+                                <div className="min-w-0 flex-1">
+                                  <span className="text-[11px] font-bold text-slate-900 block truncate">
+                                    {i + 1}. {subName}
+                                  </span>
+                                  {tamil && (
+                                    <span className="text-[9px] text-slate-400 font-tamil block truncate">{tamil}</span>
+                                  )}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedComboSubjects((prev) => prev.filter((s) => s !== subName))}
+                                  className="text-slate-300 hover:text-red-500 p-0.5 rounded cursor-pointer"
+                                  title="Remove from combo"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>

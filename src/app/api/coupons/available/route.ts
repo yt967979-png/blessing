@@ -16,7 +16,15 @@ export async function GET(request: Request) {
     const coupons = await listAvailableCouponsForUser(session?.userId || '');
     return NextResponse.json(
       { coupons },
-      { headers: { 'Cache-Control': session ? 'private, no-store' : 'public, max-age=30, stale-while-revalidate=60' } }
+      {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+          'CDN-Cache-Control': 'no-store',
+          'Surrogate-Control': 'no-store',
+        },
+      }
     );
   } catch (err: any) {
     console.error('[coupons/available]', err?.message || err);

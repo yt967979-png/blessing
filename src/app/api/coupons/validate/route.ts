@@ -3,7 +3,7 @@ import { queryDb } from '@/lib/db';
 import { applyRateLimitAsync, clientIp, getAuthenticatedUser } from '@/lib/serverSecurity';
 import { validateCouponForCart } from '@/lib/coupons';
 import { priceCartItems } from '@/lib/orderPricing';
-import { cartHasCombo } from '@/lib/deliveryRules';
+import { cartHasCombo, effectiveBookCount } from '@/lib/deliveryRules';
 
 export async function POST(request: Request) {
   const session = await getAuthenticatedUser(request);
@@ -23,6 +23,7 @@ export async function POST(request: Request) {
     let cartQty = Number(body.cartQty || 0);
     let subtotal = Number(body.subtotal || 0);
     let hasCombo = Boolean(body.hasCombo);
+    let verifiedItemsList: any[] | undefined = undefined;
 
     // Prefer DB-priced items so the preview matches Razorpay / order totals
     if (Array.isArray(body.items) && body.items.length > 0) {
@@ -30,9 +31,12 @@ export async function POST(request: Request) {
       if (!priced.ok) {
         return NextResponse.json({ error: priced.error }, { status: priced.status });
       }
-      cartQty = priced.verifiedItems.reduce((s, i) => s + Number(i.qty || 0), 0);
+      const rawCartQty = priced.verifiedItems.reduce((s, i) => s + Number(i.qty || 0), 0);
+      const effQty = effectiveBookCount(priced.verifiedItems);
+      cartQty = Math.max(rawCartQty, effQty);
       subtotal = priced.total;
       hasCombo = hasCombo || cartHasCombo(priced.verifiedItems);
+      verifiedItemsList = priced.verifiedItems;
     }
 
     const applied = await validateCouponForCart(queryDb, {
@@ -41,6 +45,7 @@ export async function POST(request: Request) {
       subtotal,
       userId: session.userId,
       hasCombo,
+      items: verifiedItemsList,
     });
 
     if (!applied.ok) {

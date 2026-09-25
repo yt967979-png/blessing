@@ -40,8 +40,21 @@ export const ProductGrid = () => {
         const matchesTitle = product.title?.toLowerCase().includes(q);
         const matchesSubject = product.subject?.toLowerCase().includes(q);
         const matchesCat = product.category?.toLowerCase().includes(q);
-        const matchesCombo = (q.includes('combo') || q.includes('5 in 1') || q.includes('5-in-1')) && isComboItem(product);
-        if (!matchesTitle && !matchesSubject && !matchesCat && !matchesCombo) {
+        const matchesComboSub =
+          isComboItem(product) &&
+          Array.isArray(product.comboSubjects) &&
+          product.comboSubjects.some((sub) => sub.toLowerCase().includes(q));
+        const matchesCombo =
+          (q.includes('combo') ||
+            q.includes('all in one') ||
+            q.includes('all-in-one') ||
+            q.includes('all in 1') ||
+            q.includes('full set') ||
+            q.includes('box set') ||
+            q.includes('5 in 1') ||
+            q.includes('6 in 1')) &&
+          isComboItem(product);
+        if (!matchesTitle && !matchesSubject && !matchesCat && !matchesCombo && !matchesComboSub) {
           return false;
         }
       }

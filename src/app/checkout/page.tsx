@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
@@ -18,6 +18,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
+import { authHeaders } from '@/lib/clientAuth';
 import { createUserAddress, migrateLocalAddressesToDb, updateUserAddress, type SavedAddress } from '@/lib/addresses';
 import { pincodeDeliveryMessage } from '@/lib/pincode';
 import { isValidMobileNumber, addressHasRequiredAlternate, normalizeRequiredAlternateMobile } from '@/lib/authValidation';
@@ -28,6 +29,8 @@ import { MIN_BOOKS_PER_ORDER, isMoqSatisfied, cartHasCombo } from '@/lib/deliver
 import { Header } from '@/components/layout/Header';
 import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
 import { Footer } from '@/components/layout/Footer';
+import { SwiggyCouponsModal } from '@/components/coupons/SwiggyCouponsModal';
+import { useCouponCatalogSync } from '@/hooks/useCouponCatalogSync';
 
 type Step = 1 | 2 | 3;
 
@@ -81,6 +84,7 @@ export default function CheckoutPage() {
   } | null>(null);
   const [couponLoading, setCouponLoading] = useState(false);
   const [couponError, setCouponError] = useState<string | null>(null);
+  const [showCouponsModal, setShowCouponsModal] = useState(false);
 
   interface AvailableOffer {
     id: string;
@@ -95,27 +99,47 @@ export default function CheckoutPage() {
   }
   const [availableOffers, setAvailableOffers] = useState<AvailableOffer[]>([]);
 
-  // Fetch active promotional coupons
-  useEffect(() => {
-    let cancelled = false;
-    async function loadOffers() {
-      try {
-        const res = await fetch('/api/coupons/available', {
-          headers: user?.token ? { Authorization: `Bearer ${user.token}` } : {},
-        });
-        const data = await res.json();
-        if (!cancelled && Array.isArray(data?.coupons)) {
-          setAvailableOffers(data.coupons);
-        }
-      } catch {}
-    }
-    loadOffers();
-    return () => {
-      cancelled = true;
-    };
-  }, [user?.token]);
+  // Real-time synchronization for active promotional coupons
+  const loadOffers = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/coupons/available?t=${Date.now()}`, {
+        cache: 'no-store',
+        credentials: 'include',
+        headers: authHeaders(user),
+      });
+      const data = await res.json().catch(() => ({}));
+      const fresh: AvailableOffer[] = Array.isArray(data?.coupons) ? data.coupons : [];
+      setAvailableOffers(fresh);
 
-  const finalPayable = Math.max(0, cartGrandTotal - (appliedCoupon?.discountAmount || 0));
+      // Instantly clear/remove applied coupon if turned off or deleted by admin
+      setAppliedCoupon((prev) => {
+        if (!prev) return null;
+        const stillValid = fresh.some(
+          (c) => c.code.toUpperCase() === prev.code.toUpperCase() && !c.alreadyUsed
+        );
+        if (!stillValid) {
+          showToast(`Coupon ${prev.code} is no longer active.`);
+          return null;
+        }
+        return prev;
+      });
+    } catch {
+      setAvailableOffers([]);
+    }
+  }, [user, showToast]);
+
+  useEffect(() => {
+    void loadOffers();
+  }, [loadOffers]);
+
+  // Synchronize in real time with zero refresh needed
+  useCouponCatalogSync(loadOffers);
+
+  // Align client discount with Razorpay gateway minimum (₹1.00 / 100 paise) so customers are never blocked
+  const effectiveDiscount = appliedCoupon
+    ? Math.min(appliedCoupon.discountAmount, Math.max(0, cartGrandTotal - 1))
+    : 0;
+  const finalPayable = cartGrandTotal > 0 ? Math.max(1, cartGrandTotal - effectiveDiscount) : 0;
 
   // Restore draft address from localStorage if user reloaded or navigated away
   useEffect(() => {
@@ -154,9 +178,9 @@ export default function CheckoutPage() {
     }
   }, []);
 
-  const handleApplyCoupon = async (explicitCode?: unknown) => {
+  const handleApplyCoupon = async (explicitCode?: unknown): Promise<{ ok: boolean; error?: string }> => {
     const code = (typeof explicitCode === 'string' ? explicitCode : couponInput).trim().toUpperCase();
-    if (!code) return;
+    if (!code) return { ok: false, error: 'Please enter a coupon code' };
     setCouponInput(code);
     setCouponLoading(true);
     setCouponError(null);
@@ -164,10 +188,7 @@ export default function CheckoutPage() {
       const res = await fetch('/api/coupons/validate', {
         method: 'POST',
         credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(user?.token ? { Authorization: `Bearer ${user.token}` } : {}),
-        },
+        headers: authHeaders(user),
         body: JSON.stringify({
           code,
           cartQty: effectiveCartCount || cartCount,
@@ -178,8 +199,9 @@ export default function CheckoutPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setCouponError(data.error || 'Failed to apply coupon');
-        return;
+        const err = data.error || 'Failed to apply coupon';
+        setCouponError(err);
+        return { ok: false, error: err };
       }
       setAppliedCoupon({
         code: data.code,
@@ -187,29 +209,17 @@ export default function CheckoutPage() {
         message: data.message,
       });
       showToast(data.message);
+      return { ok: true };
     } catch {
-      setCouponError('Network error applying coupon');
+      const netErr = 'Network error applying coupon';
+      setCouponError(netErr);
+      return { ok: false, error: netErr };
     } finally {
       setCouponLoading(false);
     }
   };
 
-  const eligibleOffers = (availableOffers.length > 0
-    ? availableOffers
-    : [
-        {
-          id: 'bpgfirst',
-          code: 'BPGFIRST',
-          title: 'Special First Order Discount',
-          discountType: 'flat' as const,
-          discountValue: 150,
-          minCartQty: 4,
-          minOrderAmount: 0,
-          maxDiscountAmount: null,
-          alreadyUsed: false,
-        },
-      ]
-  ).filter((c) => {
+  const eligibleOffers = availableOffers.filter((c) => {
     if (c.alreadyUsed) return false;
     const meetsQty = hasComboInCart || (effectiveCartCount || cartCount) >= c.minCartQty;
     const meetsSubtotal = cartTotal >= c.minOrderAmount;
@@ -521,7 +531,7 @@ export default function CheckoutPage() {
         idempotencyKeyRef.current = `bpg-${user.id}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
       }
       const baseAmount = checkoutTotal > 0 ? checkoutTotal : cartGrandTotal > 0 ? cartGrandTotal : cartTotal;
-      const finalAmount = Math.max(0, baseAmount - (appliedCoupon?.discountAmount || 0));
+      const finalAmount = Math.max(1, baseAmount - effectiveDiscount);
 
       const processOrderCompletion = async (payId?: string, rzpOrderId?: string, rzpSignature?: string) => {
         const orderRes = await fetch('/api/orders', {
@@ -1198,7 +1208,16 @@ export default function CheckoutPage() {
                     <div className="flex items-center gap-2">
                       <Check className="w-4 h-4 text-emerald-600 shrink-0" />
                       <div>
-                        <span className="font-mono font-black text-xs text-emerald-900">{appliedCoupon.code}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-black text-xs text-emerald-900">{appliedCoupon.code}</span>
+                          <button
+                            type="button"
+                            onClick={() => setShowCouponsModal(true)}
+                            className="text-[10px] font-bold text-blue-700 hover:underline cursor-pointer"
+                          >
+                            Change offer
+                          </button>
+                        </div>
                         <p className="text-[10px] text-emerald-700 font-semibold">{appliedCoupon.message}</p>
                       </div>
                     </div>
@@ -1250,12 +1269,14 @@ export default function CheckoutPage() {
                       ) : (
                         <span />
                       )}
-                      <Link
-                        href="/profile?tab=coupons"
-                        className="font-bold text-blue-700 hover:underline"
+                      <button
+                        type="button"
+                        onClick={() => setShowCouponsModal(true)}
+                        className="font-bold text-blue-700 hover:text-blue-800 hover:underline cursor-pointer flex items-center gap-0.5"
                       >
-                        All coupons
-                      </Link>
+                        <span>All coupons</span>
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   </div>
                 )}
@@ -1300,18 +1321,28 @@ export default function CheckoutPage() {
                     </button>
                   </div>
                   {eligibleOffers.length > 1 && (
-                    <div className="mt-2.5 pt-2 border-t border-emerald-200/70 flex items-center gap-1.5 flex-wrap text-[10px]">
-                      <span className="text-slate-600 font-extrabold">Other offers:</span>
-                      {eligibleOffers.slice(1).map((c) => (
-                        <button
-                          key={c.code}
-                          type="button"
-                          onClick={() => void handleApplyCoupon(c.code)}
-                          className="font-mono font-black text-blue-700 bg-white border border-blue-200 px-2 py-0.5 rounded-md hover:bg-blue-50 cursor-pointer shadow-2xs"
-                        >
-                          {c.code} (-₹{c.discountValue})
-                        </button>
-                      ))}
+                    <div className="mt-2.5 pt-2 border-t border-emerald-200/70 flex items-center justify-between gap-1.5 flex-wrap text-[10px]">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-slate-600 font-extrabold">Other offers:</span>
+                        {eligibleOffers.slice(1, 3).map((c) => (
+                          <button
+                            key={c.code}
+                            type="button"
+                            onClick={() => void handleApplyCoupon(c.code)}
+                            className="font-mono font-black text-blue-700 bg-white border border-blue-200 px-2 py-0.5 rounded-md hover:bg-blue-50 cursor-pointer shadow-2xs"
+                          >
+                            {c.code} (-₹{c.discountValue})
+                          </button>
+                        ))}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowCouponsModal(true)}
+                        className="font-bold text-emerald-800 hover:underline cursor-pointer flex items-center gap-0.5 ml-auto"
+                      >
+                        <span>View all offers</span>
+                        <ChevronRight className="w-3 h-3" />
+                      </button>
                     </div>
                   )}
                 </div>
@@ -1328,7 +1359,7 @@ export default function CheckoutPage() {
                       <Tag className="w-3.5 h-3.5" />
                       Coupon Discount ({appliedCoupon.code})
                     </span>
-                    <span>-₹{appliedCoupon.discountAmount}</span>
+                    <span>-₹{effectiveDiscount}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-slate-600">
@@ -1429,6 +1460,22 @@ export default function CheckoutPage() {
           </div>
         )}
       </div>
+
+      <SwiggyCouponsModal
+        isOpen={showCouponsModal}
+        onClose={() => setShowCouponsModal(false)}
+        availableCoupons={availableOffers}
+        appliedCoupon={appliedCoupon}
+        cartTotal={cartTotal}
+        cartCount={cartCount}
+        effectiveCartCount={effectiveCartCount}
+        hasCombo={hasComboInCart}
+        onApplyCoupon={async (code: string) => {
+          return await handleApplyCoupon(code);
+        }}
+        onRemoveCoupon={handleRemoveCoupon}
+        isApplying={couponLoading}
+      />
     </main>
   );
 }

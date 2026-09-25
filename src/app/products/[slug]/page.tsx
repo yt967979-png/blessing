@@ -55,6 +55,7 @@ async function getBookMeta(slug: string) {
       `SELECT b.id, b.slug, b.title, b.description,
               b.category_id,
               b.subject,
+              b.combo_subjects,
               CASE
                 WHEN b.cover_image IS NULL OR b.cover_image = '' THEN NULL
                 WHEN b.cover_image LIKE 'data:%' THEN NULL
@@ -182,6 +183,18 @@ function mapBookToClientProduct(book: any) {
       ? String(book.cover_image)
       : 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80';
 
+  let comboSubjects: string[] | undefined = undefined;
+  if (book.combo_subjects) {
+    if (Array.isArray(book.combo_subjects)) {
+      comboSubjects = book.combo_subjects;
+    } else if (typeof book.combo_subjects === 'string') {
+      try {
+        const parsed = JSON.parse(book.combo_subjects);
+        if (Array.isArray(parsed)) comboSubjects = parsed;
+      } catch {}
+    }
+  }
+
   return {
     id: book.id,
     slug: book.slug || book.id,
@@ -205,6 +218,7 @@ function mapBookToClientProduct(book: any) {
     hoverImage: safeImg,
     description: book.description || `Complete ${book.class_standard || '10th'} Standard guide book for exam success.`,
     samplePdfUrl: book.sample_pdf_url || null,
+    comboSubjects: comboSubjects || undefined,
     inStock: isBookInStock(book),
     stock: Math.max(0, Math.floor(Number(book.stock) || 0)),
     features: ['Solved Papers', 'Chapter Notes'],

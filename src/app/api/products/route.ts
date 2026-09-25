@@ -140,6 +140,18 @@ function mapCatalogRows(rows: any[]) {
     extractedClass = extractedClass.toLowerCase();
     const safeImg = safeCatalogImage(d.cover_image);
 
+    let comboSubjects: string[] | undefined = undefined;
+    if (d.combo_subjects) {
+      if (Array.isArray(d.combo_subjects)) {
+        comboSubjects = d.combo_subjects;
+      } else if (typeof d.combo_subjects === 'string') {
+        try {
+          const parsed = JSON.parse(d.combo_subjects);
+          if (Array.isArray(parsed)) comboSubjects = parsed;
+        } catch {}
+      }
+    }
+
     return {
       id: d.id,
       slug: d.slug || d.id,
@@ -162,6 +174,7 @@ function mapCatalogRows(rows: any[]) {
       image: safeImg,
       hoverImage: safeImg,
       samplePdfUrl: d.sample_pdf_url || null,
+      comboSubjects: comboSubjects || undefined,
       description: d.description || `Complete ${extractedClass} Standard guide book for exam success.`,
       features: ['Solved Papers', 'Chapter Notes'],
       inStock: mapBookInStock(d),
@@ -169,6 +182,15 @@ function mapCatalogRows(rows: any[]) {
       isBestSeller: String(d.badge || '').toUpperCase().includes('BEST'),
     };
   });
+}
+
+let booksColumnsChecked = false;
+async function ensureBooksColumns() {
+  if (booksColumnsChecked) return;
+  booksColumnsChecked = true;
+  try {
+    await queryDb(`ALTER TABLE books ADD COLUMN IF NOT EXISTS combo_subjects JSONB DEFAULT '[]'::jsonb;`);
+  } catch {}
 }
 
 /** Always 200 JSON for the shop — never surface DB/schema faults as HTTP 500. */
@@ -259,10 +281,12 @@ export async function GET(request: Request) {
     };
 
     const loadPrimary = async () => {
+      await ensureBooksColumns();
       const { where, params } = buildFilters();
       const sql = `
         SELECT b.id, b.slug, b.title, b.subject, b.price, b.discount_price, b.stock, b.status,
                b.badge, b.description, b.category_id, b.created_at, b.sample_pdf_url,
+               b.combo_subjects,
                CASE
                  WHEN b.cover_image IS NULL OR b.cover_image = '' THEN NULL
                  WHEN b.cover_image LIKE 'data:%' THEN NULL
@@ -286,6 +310,7 @@ export async function GET(request: Request) {
       const sql = `
         SELECT b.id, b.slug, b.title, b.subject, b.price, b.discount_price, b.stock, b.status,
                b.badge, b.description, b.category_id, b.created_at, b.sample_pdf_url,
+               '[]'::jsonb AS combo_subjects,
                NULL::text AS cover_image,
                0::int as review_count,
                0::numeric as avg_rating
@@ -358,7 +383,7 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json().catch(() => ({}));
-    const { title, cls, category, price, mrp, badge, image, description, stock, subject, status, samplePdfUrl, sample_pdf_url } = body;
+    const { title, cls, category, price, mrp, badge, image, description, stock, subject, status, samplePdfUrl, sample_pdf_url, comboSubjects, combo_subjects } = body;
 
     if (!title || price === undefined || price === null || price === '') {
       return NextResponse.json({ error: 'Title and price are required' }, { status: 400 });
@@ -394,15 +419,21 @@ export async function POST(request: Request) {
     const finalSubject = String(subject || 'General').trim();
 
     const finalPdf = String(samplePdfUrl || sample_pdf_url || '').trim() || null;
+    const finalComboSubjects = Array.isArray(comboSubjects)
+      ? JSON.stringify(comboSubjects)
+      : Array.isArray(combo_subjects)
+      ? JSON.stringify(combo_subjects)
+      : '[]';
 
     // queryDb is a function — wrap so helpers that expect client.query work
     const db = { query: (text: string, params?: any[]) => queryDb(text, params) };
     await ensureDefaultCategories(db);
     await ensureCategory(categoryId, cls || '10th', category || 'guide');
+    await ensureBooksColumns();
 
     const sql = `
-      INSERT INTO books (id, title, slug, category_id, subject, price, discount_price, cover_image, description, status, featured, badge, stock, sample_pdf_url)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, TRUE, $11, $12, $13)
+      INSERT INTO books (id, title, slug, category_id, subject, price, discount_price, cover_image, description, status, featured, badge, stock, sample_pdf_url, combo_subjects)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, TRUE, $11, $12, $13, $14::jsonb)
       RETURNING *
     `;
     const res = await queryDb(sql, [
@@ -419,6 +450,7 @@ export async function POST(request: Request) {
       finalBadge,
       stockQty,
       finalPdf,
+      finalComboSubjects,
     ]);
     await invalidateProductsCache();
     void recordAdminAudit(
@@ -455,7 +487,7 @@ export async function PATCH(request: Request) {
   if (!auth.isAdmin) return forbiddenResponse(auth.error);
 
   try {
-    const { id, title, cls, category, subject, price, mrp, inStock, stock, description, image, badge, hasDiscount, samplePdfUrl, sample_pdf_url } = await request.json().catch(() => ({}));
+    const { id, title, cls, category, subject, price, mrp, inStock, stock, description, image, badge, hasDiscount, samplePdfUrl, sample_pdf_url, comboSubjects, combo_subjects } = await request.json().catch(() => ({}));
     if (!id) return NextResponse.json({ error: 'Product id is required' }, { status: 400 });
 
     const fields: string[] = [];
@@ -507,6 +539,13 @@ export async function PATCH(request: Request) {
       values.push(pdf);
     }
     if (badge !== undefined) { fields.push(`badge = $${idx++}`); values.push(String(badge || '').trim().slice(0, 100)); }
+    if (comboSubjects !== undefined || combo_subjects !== undefined) {
+      await ensureBooksColumns();
+      const raw = comboSubjects !== undefined ? comboSubjects : combo_subjects;
+      const arr = Array.isArray(raw) ? raw : [];
+      fields.push(`combo_subjects = $${idx++}::jsonb`);
+      values.push(JSON.stringify(arr));
+    }
     let finalStatus: string | undefined = undefined;
     let finalStock: number | undefined = undefined;
 

@@ -11,6 +11,9 @@ export interface ReviewRow {
   images: string[] | null;
   helpful_count?: number;
   verified_purchase: boolean;
+  district?: string | null;
+  student_class?: string | null;
+  reviewer_type?: string | null;
   created_at: string | Date;
   updated_at: string | Date | null;
 }
@@ -37,6 +40,9 @@ export async function ensureReviewSchema(client: any) {
       ALTER TABLE reviews ADD COLUMN IF NOT EXISTS helpful_count INT DEFAULT 0;
       ALTER TABLE reviews ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
       ALTER TABLE reviews ADD COLUMN IF NOT EXISTS verified_purchase BOOLEAN DEFAULT TRUE;
+      ALTER TABLE reviews ADD COLUMN IF NOT EXISTS district VARCHAR(100);
+      ALTER TABLE reviews ADD COLUMN IF NOT EXISTS student_class VARCHAR(50);
+      ALTER TABLE reviews ADD COLUMN IF NOT EXISTS reviewer_type VARCHAR(50);
       CREATE UNIQUE INDEX IF NOT EXISTS idx_reviews_user_book
         ON reviews (user_id, book_id)
         WHERE user_id IS NOT NULL AND book_id IS NOT NULL;
@@ -59,7 +65,44 @@ function parseImages(raw: unknown): string[] {
   return [];
 }
 
+const TN_DISTRICTS = [
+  'Madurai',
+  'Chennai',
+  'Coimbatore',
+  'Tirunelveli',
+  'Salem',
+  'Tiruchirappalli',
+  'Erode',
+  'Vellore',
+  'Thanjavur',
+  'Dindigul',
+  'Kanyakumari',
+  'Theni',
+  'Virudhunagar',
+  'Tiruppur',
+];
+
+function stableFallbackDistrict(seed: string): string {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) {
+    hash = (hash << 5) - hash + seed.charCodeAt(i);
+    hash |= 0;
+  }
+  const idx = Math.abs(hash) % TN_DISTRICTS.length;
+  return TN_DISTRICTS[idx];
+}
+
 export function mapPublicReview(r: ReviewRow) {
+  const seed = `${r.id || ''}-${r.user_name || ''}`;
+  const district = r.district && r.district.trim() ? r.district.trim() : stableFallbackDistrict(seed);
+  const reviewerType = r.reviewer_type && r.reviewer_type.trim() ? r.reviewer_type.trim() : (seed.length % 2 === 0 ? 'Parent' : 'Student');
+  const studentClass = r.student_class && r.student_class.trim() ? r.student_class.trim() : null;
+
+  const roleText = studentClass
+    ? `${studentClass} ${reviewerType}`
+    : reviewerType;
+  const badgeText = `${roleText}, ${district}`;
+
   return {
     id: r.id,
     studentName: r.user_name || 'Verified Student',
@@ -68,6 +111,10 @@ export function mapPublicReview(r: ReviewRow) {
     images: parseImages(r.images),
     helpfulCount: Number(r.helpful_count || 0),
     verifiedPurchase: r.verified_purchase !== false,
+    district,
+    studentClass,
+    reviewerType,
+    badgeText,
     createdAt: new Date(r.created_at).toLocaleDateString('en-IN', {
       day: 'numeric',
       month: 'short',

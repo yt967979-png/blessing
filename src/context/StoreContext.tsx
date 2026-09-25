@@ -26,6 +26,7 @@ export interface Product {
   inStock: boolean;
   stock?: number;
   samplePdfUrl?: string | null;
+  comboSubjects?: string[];
   isNew?: boolean;
   isBestSeller?: boolean;
   isTrending?: boolean;
@@ -1585,6 +1586,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       withDerived.stock = qty;
       withDerived.inStock = qty > 0;
     }
+    if (rest.comboSubjects !== undefined) {
+      withDerived.comboSubjects = rest.comboSubjects;
+    }
     recentAdminEditsRef.current.set(String(id), Date.now());
     const previousProducts = products;
     setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, ...withDerived } : p)));
@@ -1715,6 +1719,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       stock: Math.max(0, Math.floor(Number(newProdData.stock) || 0)),
       isBestSeller: String(newProdData.badge || '').toUpperCase().includes('BEST'),
       samplePdfUrl: (newProdData as any).samplePdfUrl || null,
+      comboSubjects: newProdData.comboSubjects || [],
     };
 
     setProducts((prev) => [tempProduct, ...prev]);
@@ -1737,6 +1742,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           subject: (newProdData as any).subject,
           status: (newProdData as any).status,
           samplePdfUrl: (newProdData as any).samplePdfUrl,
+          comboSubjects: newProdData.comboSubjects || [],
         }),
       });
       const data = await res.json().catch(() => ({}));

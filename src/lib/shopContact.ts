@@ -50,3 +50,10 @@ export function shopWhatsAppChatUrl(prefill?: string): string {
   if (!prefill) return `https://wa.me/${phone}`;
   return `https://wa.me/${phone}?text=${encodeURIComponent(prefill)}`;
 }
+
+/** Pre-filled WhatsApp URL for instant sample chapter PDF requests */
+export function samplePdfWhatsAppUrl(bookTitle: string, standard?: string): string {
+  const stdText = standard ? ` (${standard} Standard)` : '';
+  const text = `Hi Blessing Power Guide, please send me the sample chapter PDF for "${bookTitle}"${stdText}. Thank you!`;
+  return shopWhatsAppChatUrl(text);
+}

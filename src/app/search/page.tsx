@@ -96,10 +96,22 @@ function SearchContent() {
         const matchTitle = p.title.toLowerCase().includes(q);
         const matchSubject = p.subject?.toLowerCase().includes(q) || false;
         const matchClass = p.cls?.toLowerCase().includes(q) || false;
+        const matchComboSub =
+          isComboItem(p) &&
+          Array.isArray(p.comboSubjects) &&
+          p.comboSubjects.some((sub) => sub.toLowerCase().includes(q));
         const matchCategory =
           p.category?.toLowerCase().includes(q) ||
-          ((q.includes('combo') || q.includes('5 in 1') || q.includes('5-in-1')) && isComboItem(p));
-        if (!matchTitle && !matchSubject && !matchClass && !matchCategory) return false;
+          ((q.includes('combo') ||
+            q.includes('all in one') ||
+            q.includes('all-in-one') ||
+            q.includes('all in 1') ||
+            q.includes('full set') ||
+            q.includes('box set') ||
+            q.includes('5 in 1') ||
+            q.includes('6 in 1')) &&
+            isComboItem(p));
+        if (!matchTitle && !matchSubject && !matchClass && !matchCategory && !matchComboSub) return false;
       }
 
       return true;

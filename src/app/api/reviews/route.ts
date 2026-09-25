@@ -243,13 +243,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    let district = String(body.district || '').trim();
+    if (!district && purchase.orderId) {
+      try {
+        const oRes = await queryDb('SELECT shipping_address FROM orders WHERE id = $1', [purchase.orderId]);
+        const sAddr = oRes.rows[0]?.shipping_address;
+        if (sAddr) {
+          const parsed = typeof sAddr === 'string' ? JSON.parse(sAddr) : sAddr;
+          district = parsed.district || parsed.city || '';
+        }
+      } catch {
+        /* best effort */
+      }
+    }
+
+    const reviewerType = String(body.reviewerType || 'Parent / Student').trim();
+    const studentClass = String(body.studentClass || '').trim();
+
     const userRes = await queryDb(`SELECT name FROM users WHERE id = $1`, [session.userId]);
     const userName = userRes.rows[0]?.name || 'Verified Student';
 
     const revId = `rev-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    await queryDb(
-      `INSERT INTO reviews (id, user_id, user_name, book_id, order_id, rating, review, images, verified_purchase, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, TRUE, NOW(), NOW())`,
+    const insertRes = await queryDb(
+      `INSERT INTO reviews (id, user_id, user_name, book_id, order_id, rating, review, images, verified_purchase, district, student_class, reviewer_type, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, TRUE, $9, $10, $11, NOW(), NOW())
+       RETURNING *`,
       [
         revId,
         session.userId,
@@ -259,6 +277,9 @@ export async function POST(request: NextRequest) {
         rating,
         comment,
         JSON.stringify(images),
+        district || null,
+        studentClass || null,
+        reviewerType || null,
       ]
     );
 
@@ -267,12 +288,8 @@ export async function POST(request: NextRequest) {
       success: true,
       message: 'Thank you! Your verified review is published.',
       review: {
-        id: revId,
-        studentName: userName,
-        rating,
-        comment,
-        images,
-        verifiedPurchase: true,
+        ...mapPublicReview(insertRes.rows[0]),
+        isOwn: true,
       },
       stats: { count: stats.count, avgRating: stats.avgRating },
     });

@@ -8,7 +8,7 @@ import { shopWhatsAppChatUrl } from '@/lib/shopContact';
 /** Desktop floating message icon → opens shop WhatsApp chat (wa.me only). */
 export const FloatingActions = () => {
   const pathname = usePathname();
-  if (pathname?.startsWith('/admin')) return null;
+  if (pathname?.startsWith('/admin') || pathname?.startsWith('/checkout')) return null;
 
   const isPDP = pathname?.startsWith('/products/');
 
