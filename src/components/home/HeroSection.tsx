@@ -18,17 +18,6 @@ import { BrandLogo } from '@/components/ui/BrandLogo';
 import { imageNeedsUnoptimized } from '@/lib/productImage';
 import { useCouponCatalogSync } from '@/hooks/useCouponCatalogSync';
 
-function pickHeroBook(products: Product[]): Product | null {
-  const withCover = products.filter((p) => String(p.image || '').trim());
-  return (
-    withCover.find((p) => p.isBestSeller) ||
-    withCover.find((p) => p.isTrending) ||
-    withCover.find((p) => p.inStock !== false) ||
-    withCover[0] ||
-    null
-  );
-}
-
 function HeroShowcase({
   size,
   book,
@@ -51,7 +40,7 @@ function HeroShowcase({
       : 'w-[6.5rem] h-[6.5rem] rounded-full shadow-lg';
 
   return (
-    <div className={`hero-showcase ${box}`}>
+    <div className={`hero-showcase ${box} group cursor-pointer`}>
       <div className={`hero-showcase-inner ${box} ${showBook && canFlip ? 'is-book' : ''}`}>
         <div className="hero-showcase-face hero-showcase-logo flex items-center justify-center rounded-full bg-slate-950 p-1 md:p-2 shadow-2xl border border-amber-400/30 overflow-hidden">
           <BrandLogo size={logoSize} priority className={logoClass} />
@@ -59,7 +48,7 @@ function HeroShowcase({
         {book?.image ? (
           <Link
             href={`/products/${book.slug}`}
-            className="hero-showcase-face hero-showcase-book flex items-center justify-center rounded-[28%] bg-white p-3 md:p-4 shadow-xl border border-white/30 overflow-hidden"
+            className="hero-showcase-face hero-showcase-book flex flex-col items-center justify-center rounded-[28%] bg-white p-3 md:p-4 shadow-xl border border-white/30 overflow-hidden relative group"
             aria-label={book.title}
           >
             <Image
@@ -68,9 +57,14 @@ function HeroShowcase({
               width={size === 'lg' ? 280 : 120}
               height={size === 'lg' ? 280 : 120}
               priority={size === 'lg'}
-              className="h-full w-full object-contain"
+              className="h-full w-full object-contain transition-transform duration-300 group-hover:scale-105"
               unoptimized={imageNeedsUnoptimized(book.image)}
             />
+            {size === 'lg' && (
+              <span className="absolute bottom-2.5 inset-x-3 bg-slate-900/90 backdrop-blur-xs text-amber-300 text-[10.5px] font-black py-1 px-2.5 rounded-full text-center truncate shadow-lg border border-amber-400/40">
+                {book.title}
+              </span>
+            )}
           </Link>
         ) : null}
       </div>
@@ -81,21 +75,77 @@ function HeroShowcase({
 export const HeroSection = () => {
   const { setSelectedClass, setSelectedCategory, products } = useStore();
   const [heroTitle, setHeroTitle] = useState('');
-  const heroBook = useMemo(() => pickHeroBook(products), [products]);
+
+  // Collect all available products that have a valid cover image
+  const booksWithCovers = useMemo(() => {
+    return products.filter((p) => Boolean(String(p.image || (p as any).cover_image || '').trim()));
+  }, [products]);
+
+  // Current active book displayed on the reverse flip face
+  const [activeBook, setActiveBook] = useState<Product | null>(null);
   const [showBook, setShowBook] = useState(false);
 
+  // Initialize active book randomly as soon as catalog products load
   useEffect(() => {
-    if (!heroBook?.image) {
+    if (booksWithCovers.length > 0 && !activeBook) {
+      const initial = booksWithCovers[Math.floor(Math.random() * booksWithCovers.length)];
+      setActiveBook(initial);
+    }
+  }, [booksWithCovers, activeBook]);
+
+  // Continuously rotate: Logo -> Book -> Logo -> Different Random Book -> repeat
+  useEffect(() => {
+    if (booksWithCovers.length === 0) {
       setShowBook(false);
       return;
     }
-    const start = window.setTimeout(() => setShowBook(true), 2400);
-    const id = window.setInterval(() => setShowBook((v) => !v), 5200);
-    return () => {
-      window.clearTimeout(start);
-      window.clearInterval(id);
+
+    let isMounted = true;
+    let flipTimeout: NodeJS.Timeout;
+    let switchTimeout: NodeJS.Timeout;
+
+    const runFlipCycle = () => {
+      // 1. Flip to reveal the current book cover
+      setShowBook(true);
+
+      // 2. Stay on book cover for 3.6 seconds
+      flipTimeout = setTimeout(() => {
+        if (!isMounted) return;
+        // 3. Flip back to the golden BPG logo
+        setShowBook(false);
+
+        // 4. After 900ms (when 180° flip completes and book face is completely hidden),
+        // randomly pick the next book from all available books (never repeat same book consecutively if > 1)
+        switchTimeout = setTimeout(() => {
+          if (!isMounted) return;
+          setActiveBook((prev) => {
+            if (booksWithCovers.length <= 1) return booksWithCovers[0] || null;
+            const pool = booksWithCovers.filter((b) => b.id !== prev?.id);
+            const next = pool[Math.floor(Math.random() * pool.length)] || booksWithCovers[0];
+            return next;
+          });
+
+          // 5. Rest on the golden logo for 2.0 seconds, then flip to the newly selected book
+          flipTimeout = setTimeout(() => {
+            if (!isMounted) return;
+            runFlipCycle();
+          }, 2000);
+        }, 900);
+      }, 3600);
     };
-  }, [heroBook?.id, heroBook?.image]);
+
+    // Initial flip starts 2 seconds after page load
+    const initialTimer = setTimeout(() => {
+      runFlipCycle();
+    }, 2000);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(initialTimer);
+      clearTimeout(flipTimeout);
+      clearTimeout(switchTimeout);
+    };
+  }, [booksWithCovers]);
 
   const loadHeroOffer = useCallback(async () => {
     try {
@@ -181,7 +231,7 @@ export const HeroSection = () => {
             ) : null}
 
             <div className="sm:hidden flex justify-center mb-5">
-              <HeroShowcase size="sm" book={heroBook} showBook={showBook} />
+              <HeroShowcase size="sm" book={activeBook} showBook={showBook} />
             </div>
 
             <div className="grid grid-cols-3 gap-2.5 mb-6 max-w-md mx-auto lg:mx-0">
@@ -246,7 +296,7 @@ export const HeroSection = () => {
 
           <div className="hidden sm:flex lg:col-span-5 relative justify-center items-center">
             <div className="absolute w-72 h-72 bg-amber-400/20 rounded-full blur-2xl pointer-events-none" />
-            <HeroShowcase size="lg" book={heroBook} showBook={showBook} />
+            <HeroShowcase size="lg" book={activeBook} showBook={showBook} />
           </div>
         </div>
       </div>
