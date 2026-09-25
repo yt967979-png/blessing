@@ -33,6 +33,7 @@ interface OrderItem {
   qty: number;
   price?: number;
   subtotal?: number;
+  medium?: string;
 }
 
 interface Order {
@@ -639,7 +640,14 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
                   {activeDrawerOrder.items?.map((item, idx) => (
                     <div key={idx} className="py-2 flex justify-between items-center">
                       <div>
-                        <span className="font-bold text-slate-900 block">{item.title}</span>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-bold text-slate-900 block">{item.title}</span>
+                          {item.medium && (
+                            <span className="text-[9px] font-black px-1.5 py-0.2 rounded bg-blue-100 text-blue-900">
+                              {item.medium}
+                            </span>
+                          )}
+                        </div>
                         <span className="text-[10px] text-slate-500 font-mono">
                           Qty: {item.qty} {item.price ? `• ₹${item.price} each` : ''}
                         </span>

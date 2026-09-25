@@ -21,6 +21,8 @@ export interface Product {
   inStock: boolean;
   stock?: number;
   samplePdfUrl?: string | null;
+  language?: string;
+  medium?: string;
   isNew?: boolean;
   isBestSeller?: boolean;
   isTrending?: boolean;
@@ -44,6 +46,7 @@ export const CLASS_COLORS: Record<string, string> = {
 
 export interface CartItem extends Product {
   qty: number;
+  selectedMedium?: string;
 }
 
 export interface UserData {

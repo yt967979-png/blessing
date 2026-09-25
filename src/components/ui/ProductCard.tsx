@@ -27,6 +27,20 @@ export const ProductCard = ({ product }: { product: Product }) => {
   } = useStore();
 
   const [isAdded, setIsAdded] = useState(false);
+  const rawLang = (product.language || 'Both').trim();
+  const isMultiMedium = rawLang.toLowerCase() === 'both';
+  const defaultSelectedMedium = rawLang.toLowerCase().includes('english')
+    ? 'English Medium'
+    : 'Tamil Medium';
+  const [selectedMedium, setSelectedMedium] = useState<string>(defaultSelectedMedium);
+
+  const finalMedium = isMultiMedium
+    ? selectedMedium
+    : rawLang.toLowerCase().includes('tamil')
+    ? 'Tamil Medium'
+    : rawLang.toLowerCase().includes('english')
+    ? 'English Medium'
+    : rawLang;
 
   const isWishlisted = Boolean(product?.id && wishlist.some((id) => String(id) === String(product.id)));
   const rupeesSaved = product.mrp - product.price;
@@ -42,7 +56,7 @@ export const ProductCard = ({ product }: { product: Product }) => {
 
   const handleAddToCart = () => {
     if (isOutOfStock) return;
-    addToCart(product);
+    addToCart(product, 1, finalMedium);
     setIsAdded(true);
     setTimeout(() => setIsAdded(false), 1800);
   };
@@ -223,6 +237,60 @@ export const ProductCard = ({ product }: { product: Product }) => {
         </button>
       )}
 
+      {/* Medium / Language selector or badge */}
+      {isMultiMedium ? (
+        <div className="mb-2 p-0.5 bg-slate-100/90 rounded-xl flex items-center border border-slate-200">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setSelectedMedium('Tamil Medium');
+            }}
+            className={`flex-1 py-1 px-1 rounded-lg text-[10px] font-black transition-all text-center cursor-pointer ${
+              selectedMedium === 'Tamil Medium'
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            தமிழ் வழி
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setSelectedMedium('English Medium');
+            }}
+            className={`flex-1 py-1 px-1 rounded-lg text-[10px] font-black transition-all text-center cursor-pointer ${
+              selectedMedium === 'English Medium'
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            English
+          </button>
+        </div>
+      ) : (
+        <div className="mb-2 flex items-center">
+          <span
+            className={`text-[9.5px] font-black px-2 py-0.5 rounded-md ${
+              rawLang.toLowerCase().includes('tamil')
+                ? 'bg-amber-50 text-amber-900 border border-amber-200'
+                : rawLang.toLowerCase().includes('english')
+                ? 'bg-emerald-50 text-emerald-900 border border-emerald-200'
+                : 'bg-indigo-50 text-indigo-900 border border-indigo-200'
+            }`}
+          >
+            {rawLang.toLowerCase().includes('tamil')
+              ? '📘 தமிழ் வழி (Tamil)'
+              : rawLang.toLowerCase().includes('english')
+              ? '📗 English Medium'
+              : '📙 Bilingual Edition'}
+          </span>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-1.5 sm:gap-2 mt-auto">
         <button
           type="button"
@@ -251,7 +319,7 @@ export const ProductCard = ({ product }: { product: Product }) => {
           disabled={isOutOfStock}
           onClick={() => {
             if (isOutOfStock) return;
-            addToCart(product);
+            addToCart(product, 1, finalMedium);
             if (!user) {
               setIsAuthOpen(true);
               showToast('Book added to cart! Please sign in with Google to proceed.');

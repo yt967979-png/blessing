@@ -1410,6 +1410,8 @@ async function runSchemaInit(client: any) {
       `ALTER TABLE books ADD COLUMN IF NOT EXISTS badge VARCHAR(100) DEFAULT ''`,
       `ALTER TABLE books ADD COLUMN IF NOT EXISTS stock INT DEFAULT 50`,
       `ALTER TABLE books ADD COLUMN IF NOT EXISTS discount_price NUMERIC`,
+      `ALTER TABLE books ADD COLUMN IF NOT EXISTS language VARCHAR(50) DEFAULT 'Both'`,
+      `ALTER TABLE order_items ADD COLUMN IF NOT EXISTS medium VARCHAR(50)`,
       `ALTER TABLE stock_holds ADD COLUMN IF NOT EXISTS razorpay_order_id VARCHAR(255)`,
       `ALTER TABLE stock_holds ADD COLUMN IF NOT EXISTS release_reason VARCHAR(100)`,
       `ALTER TABLE stock_holds ADD COLUMN IF NOT EXISTS released_at TIMESTAMP`,

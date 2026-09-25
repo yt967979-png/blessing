@@ -152,7 +152,7 @@ export async function finalizeOrderFromPayment(opts: FinalizeOrderOptions): Prom
 
     let userId = sessionRow?.user_id || null;
     let shippingAddressObj: any = null;
-    let itemsToInsert: Array<{ id: string; bookId: string; title: string; price: number; qty: number; subtotal: number }> = [];
+    let itemsToInsert: Array<{ id: string; bookId: string; title: string; price: number; qty: number; subtotal: number; medium?: string | null }> = [];
     let subtotal = 0;
     let discountAmount = 0;
     let shippingFee = 0;
@@ -188,10 +188,14 @@ export async function finalizeOrderFromPayment(opts: FinalizeOrderOptions): Prom
       itemsToInsert = cartSnapshot.map((item: any) => {
         const p = Number(item.price || 0);
         const q = Number(item.qty || 1);
+        const med = item.selectedMedium || item.medium || null;
+        const baseTitle = String(item.title || item.book_title || 'Educational Guide');
+        const titleWithMed = med && !baseTitle.includes(med) ? `${baseTitle} (${med})` : baseTitle;
         return {
           id: `item-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
           bookId: String(item.id || item.book_id || ''),
-          title: String(item.title || item.book_title || 'Educational Guide'),
+          title: titleWithMed,
+          medium: med,
           price: p,
           qty: q,
           subtotal: Number(item.subtotal || p * q),
@@ -303,9 +307,9 @@ export async function finalizeOrderFromPayment(opts: FinalizeOrderOptions): Prom
     // 4. INSERT ORDER ITEMS
     for (const it of itemsToInsert) {
       await client.query(
-        `INSERT INTO order_items (id, order_id, book_id, book_title, book_price, quantity, subtotal)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [it.id, orderId, it.bookId, it.title, it.price, it.qty, it.subtotal]
+        `INSERT INTO order_items (id, order_id, book_id, book_title, book_price, quantity, subtotal, medium)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [it.id, orderId, it.bookId, it.title, it.price, it.qty, it.subtotal, it.medium || null]
       );
     }
 

@@ -30,10 +30,13 @@ export interface Product {
   isNew?: boolean;
   isBestSeller?: boolean;
   isTrending?: boolean;
+  language?: string;
+  medium?: string;
 }
 
 export interface CartItem extends Product {
   qty: number;
+  selectedMedium?: string;
 }
 
 /** Payload shape pushed by `/api/stock/stream` on every `STOCK_CHANGED` event. */
@@ -87,7 +90,7 @@ interface StoreContextType {
   setIsAuthOpen: (open: boolean) => void;
   isProfileOpen: boolean;
   setIsProfileOpen: (open: boolean) => void;
-  addToCart: (product: Product, qty?: number) => void;
+  addToCart: (product: Product, qty?: number, selectedMedium?: string) => void;
   updateQty: (id: string | number, delta: number) => void;
   removeFromCart: (id: string | number) => void;
   clearCart: () => void;
@@ -946,7 +949,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return headers;
   };
 
-  const addToCart = (product: Product, qty: number = 1) => {
+  const addToCart = (product: Product, qty: number = 1, selectedMedium?: string) => {
     // Prefer the freshest catalog snapshot (kept live by the 15s poll) over
     // whatever stale product object the caller passed in.
     const live = productsRef.current.find((p) => String(p.id) === String(product.id)) || product;
@@ -955,10 +958,13 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       return;
     }
     const stockLimit = typeof live.stock === 'number' ? Math.max(0, live.stock) : Infinity;
+    const finalMedium = selectedMedium || (live.language && live.language !== 'Both' ? live.language : undefined);
 
     let toastMsg = '';
     setCart((prev) => {
-      const existing = prev.find((item) => String(item.id) === String(product.id));
+      const existing = prev.find(
+        (item) => String(item.id) === String(product.id) && (item.selectedMedium === finalMedium || !finalMedium)
+      );
       const currentQty = existing ? existing.qty : 0;
       const desiredQty = currentQty + qty;
       const finalQty = Math.min(desiredQty, stockLimit);
@@ -968,17 +974,19 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         return prev;
       }
 
+      const mediumLabel = finalMedium ? ` [${finalMedium}]` : '';
       toastMsg =
         finalQty < desiredQty
           ? `⚠️ Only ${stockLimit} of "${live.title}" left — added up to the limit`
-          : `✓ Added "${live.title}" to cart!`;
+          : `✓ Added "${live.title}"${mediumLabel} to cart!`;
 
       const updated: CartItem[] = existing
         ? prev.map((item) =>
-            String(item.id) === String(product.id)
+            item === existing
               ? {
                   ...item,
                   qty: finalQty,
+                  selectedMedium: finalMedium || item.selectedMedium,
                   stock: live.stock,
                   inStock: live.inStock,
                   price: live.price,
@@ -987,7 +995,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 }
               : item
           )
-        : [...prev, { ...live, qty: finalQty }];
+        : [...prev, { ...live, qty: finalQty, selectedMedium: finalMedium }];
       try {
         localStorage.setItem('bpg_cart_next', JSON.stringify(updated));
       } catch {}
@@ -1004,7 +1012,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           body: JSON.stringify({
             phone: p,
             name: user?.name || 'Student',
-            cart: updated.map((c) => ({ id: c.id, title: c.title, qty: c.qty, price: c.price })),
+            cart: updated.map((c) => ({
+              id: c.id,
+              title: c.selectedMedium ? `${c.title} (${c.selectedMedium})` : c.title,
+              qty: c.qty,
+              price: c.price,
+            })),
             cleared: false,
           }),
         }).catch(() => {});
@@ -1012,7 +1025,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
       return updated;
     });
-    showToast(toastMsg);
+    if (toastMsg) showToast(toastMsg);
   };
 
   const requestCheckout = (open: boolean) => {

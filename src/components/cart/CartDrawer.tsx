@@ -147,7 +147,18 @@ export const CartDrawer = () => {
                         />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <h4 className="font-heading font-bold text-xs text-[#001B3A] truncate">{item.title}</h4>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <h4 className="font-heading font-bold text-xs text-[#001B3A] truncate">{item.title}</h4>
+                          {item.selectedMedium && (
+                            <span className={`inline-block text-[9px] font-black px-1.5 py-0.2 rounded shrink-0 ${
+                              item.selectedMedium.toLowerCase().includes('tamil')
+                                ? 'bg-amber-100 text-amber-900 border border-amber-200'
+                                : 'bg-emerald-100 text-emerald-900 border border-emerald-200'
+                            }`}>
+                              {item.selectedMedium}
+                            </span>
+                          )}
+                        </div>
                         <div className="font-extrabold text-sm text-slate-900 mt-0.5">
                           ₹{item.price * item.qty}
                           <span className="text-[10px] text-slate-400 font-normal ml-1">(₹{item.price} each)</span>

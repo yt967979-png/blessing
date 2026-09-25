@@ -180,6 +180,7 @@ function mapCatalogRows(rows: any[]) {
       inStock: mapBookInStock(d),
       stock: Number(d.stock ?? 0),
       isBestSeller: String(d.badge || '').toUpperCase().includes('BEST'),
+      language: d.language || 'Both',
     };
   });
 }
@@ -190,6 +191,8 @@ async function ensureBooksColumns() {
   booksColumnsChecked = true;
   try {
     await queryDb(`ALTER TABLE books ADD COLUMN IF NOT EXISTS combo_subjects JSONB DEFAULT '[]'::jsonb;`);
+    await queryDb(`ALTER TABLE books ADD COLUMN IF NOT EXISTS language VARCHAR(50) DEFAULT 'Both';`);
+    await queryDb(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS medium VARCHAR(50);`);
   } catch {}
 }
 
@@ -286,7 +289,7 @@ export async function GET(request: Request) {
       const sql = `
         SELECT b.id, b.slug, b.title, b.subject, b.price, b.discount_price, b.stock, b.status,
                b.badge, b.description, b.category_id, b.created_at, b.sample_pdf_url,
-               b.combo_subjects,
+               b.combo_subjects, b.language,
                CASE
                  WHEN b.cover_image IS NULL OR b.cover_image = '' THEN NULL
                  WHEN b.cover_image LIKE 'data:%' THEN NULL
@@ -310,7 +313,7 @@ export async function GET(request: Request) {
       const sql = `
         SELECT b.id, b.slug, b.title, b.subject, b.price, b.discount_price, b.stock, b.status,
                b.badge, b.description, b.category_id, b.created_at, b.sample_pdf_url,
-               '[]'::jsonb AS combo_subjects,
+               '[]'::jsonb AS combo_subjects, COALESCE(b.language, 'Both') AS language,
                NULL::text AS cover_image,
                0::int as review_count,
                0::numeric as avg_rating
@@ -383,7 +386,7 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json().catch(() => ({}));
-    const { title, cls, category, price, mrp, badge, image, description, stock, subject, status, samplePdfUrl, sample_pdf_url, comboSubjects, combo_subjects } = body;
+    const { title, cls, category, price, mrp, badge, image, description, stock, subject, status, samplePdfUrl, sample_pdf_url, comboSubjects, combo_subjects, language, medium } = body;
 
     if (!title || price === undefined || price === null || price === '') {
       return NextResponse.json({ error: 'Title and price are required' }, { status: 400 });
@@ -417,6 +420,7 @@ export async function POST(request: Request) {
     const finalDesc = description || `Complete ${cls || '10th'} Standard ${title} guide.`;
     const finalBadge = String(badge || '').trim().slice(0, 100);
     const finalSubject = String(subject || 'General').trim();
+    const finalLanguage = String(language || medium || 'Both').trim();
 
     const finalPdf = String(samplePdfUrl || sample_pdf_url || '').trim() || null;
     const finalComboSubjects = Array.isArray(comboSubjects)
@@ -432,8 +436,8 @@ export async function POST(request: Request) {
     await ensureBooksColumns();
 
     const sql = `
-      INSERT INTO books (id, title, slug, category_id, subject, price, discount_price, cover_image, description, status, featured, badge, stock, sample_pdf_url, combo_subjects)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, TRUE, $11, $12, $13, $14::jsonb)
+      INSERT INTO books (id, title, slug, category_id, subject, price, discount_price, cover_image, description, status, featured, badge, stock, sample_pdf_url, combo_subjects, language)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, TRUE, $11, $12, $13, $14::jsonb, $15)
       RETURNING *
     `;
     const res = await queryDb(sql, [
@@ -451,6 +455,7 @@ export async function POST(request: Request) {
       stockQty,
       finalPdf,
       finalComboSubjects,
+      finalLanguage,
     ]);
     await invalidateProductsCache();
     void recordAdminAudit(
@@ -487,7 +492,7 @@ export async function PATCH(request: Request) {
   if (!auth.isAdmin) return forbiddenResponse(auth.error);
 
   try {
-    const { id, title, cls, category, subject, price, mrp, inStock, stock, description, image, badge, hasDiscount, samplePdfUrl, sample_pdf_url, comboSubjects, combo_subjects } = await request.json().catch(() => ({}));
+    const { id, title, cls, category, subject, price, mrp, inStock, stock, description, image, badge, hasDiscount, samplePdfUrl, sample_pdf_url, comboSubjects, combo_subjects, language, medium } = await request.json().catch(() => ({}));
     if (!id) return NextResponse.json({ error: 'Product id is required' }, { status: 400 });
 
     const fields: string[] = [];
@@ -498,6 +503,11 @@ export async function PATCH(request: Request) {
     if (subject !== undefined) {
       fields.push(`subject = $${idx++}`);
       values.push(String(subject || 'General').trim());
+    }
+    if (language !== undefined || medium !== undefined) {
+      await ensureBooksColumns();
+      fields.push(`language = $${idx++}`);
+      values.push(String(language || medium || 'Both').trim());
     }
     if (cls !== undefined || category !== undefined) {
       const targetCls = cls ? String(cls).trim().toLowerCase() : undefined;

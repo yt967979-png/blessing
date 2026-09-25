@@ -1113,7 +1113,18 @@ export default function CheckoutPage() {
                         unoptimized={imageNeedsUnoptimized(item.image || '')}
                       />
                       <div className="flex-1 min-w-0">
-                        <p className="font-bold text-slate-900 truncate">{item.title}</p>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className="font-bold text-slate-900 truncate">{item.title}</p>
+                          {item.selectedMedium && (
+                            <span className={`inline-block text-[9px] font-black px-1.5 py-0.2 rounded shrink-0 ${
+                              item.selectedMedium.toLowerCase().includes('tamil')
+                                ? 'bg-amber-100 text-amber-900 border border-amber-200'
+                                : 'bg-emerald-100 text-emerald-900 border border-emerald-200'
+                            }`}>
+                              {item.selectedMedium}
+                            </span>
+                          )}
+                        </div>
                         <p className="text-slate-500">
                           Qty {item.qty} · ₹{item.price * item.qty}
                         </p>

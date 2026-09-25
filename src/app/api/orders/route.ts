@@ -172,7 +172,8 @@ export async function GET(request: Request) {
                    'title', oi.book_title,
                    'price', oi.book_price,
                    'qty', oi.quantity,
-                   'subtotal', oi.subtotal
+                   'subtotal', oi.subtotal,
+                   'medium', oi.medium
                  )
                ) FILTER (WHERE oi.id IS NOT NULL), '[]'
              ) as items

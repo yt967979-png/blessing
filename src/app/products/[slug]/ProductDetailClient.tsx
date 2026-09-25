@@ -109,16 +109,42 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
   const [isMobileAdded, setIsMobileAdded] = useState(false);
   const minOrderMsg = minOrderCheckoutMessage(cartCount);
 
+  const rawLang = (product?.language || 'Both').trim();
+  const isMultiMedium = rawLang.toLowerCase() === 'both';
+  const defaultSelectedMedium = rawLang.toLowerCase().includes('english')
+    ? 'English Medium'
+    : 'Tamil Medium';
+  const [selectedMedium, setSelectedMedium] = useState<string>(defaultSelectedMedium);
+
+  useEffect(() => {
+    if (product?.language) {
+      const l = product.language.trim().toLowerCase();
+      if (l.includes('english')) {
+        setSelectedMedium('English Medium');
+      } else if (l.includes('tamil')) {
+        setSelectedMedium('Tamil Medium');
+      }
+    }
+  }, [product?.language]);
+
+  const finalMedium = isMultiMedium
+    ? selectedMedium
+    : rawLang.toLowerCase().includes('tamil')
+    ? 'Tamil Medium'
+    : rawLang.toLowerCase().includes('english')
+    ? 'English Medium'
+    : rawLang;
+
   const handleMobileAddToCart = () => {
     if (!product || product.inStock === false) return;
-    addToCart(product);
+    addToCart(product, 1, finalMedium);
     setIsMobileAdded(true);
     setTimeout(() => setIsMobileAdded(false), 1800);
   };
 
   const tryBuyNow = () => {
     if (!product) return;
-    addToCart(product);
+    addToCart(product, 1, finalMedium);
     if (!user) {
       setIsAuthOpen(true);
       showToast('Book added to cart! Please sign in with Google to proceed.');
@@ -805,6 +831,79 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
               </div>
             </div>
 
+            {/* Medium / Language Selection Box */}
+            <div className="mb-5 p-3.5 rounded-2xl bg-gradient-to-r from-blue-50/70 via-slate-50 to-indigo-50/60 border border-blue-200/80 shadow-2xs">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                  <span>🌐 Medium / பயிற்று மொழி</span>
+                </span>
+                {isMultiMedium && (
+                  <span className="text-[10px] font-extrabold text-blue-700 bg-blue-100/90 px-2 py-0.5 rounded-full">
+                    Choose below
+                  </span>
+                )}
+              </div>
+
+              {isMultiMedium ? (
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedMedium('Tamil Medium')}
+                    className={`p-2.5 rounded-xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between ${
+                      selectedMedium === 'Tamil Medium'
+                        ? 'border-blue-600 bg-blue-600 text-white shadow-md shadow-blue-600/20'
+                        : 'border-slate-200 bg-white text-slate-700 hover:border-blue-300'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-black font-tamil">தமிழ் வழி</span>
+                      {selectedMedium === 'Tamil Medium' && <CheckCircle className="w-4 h-4 text-white" />}
+                    </div>
+                    <span className={`text-[10px] font-bold mt-0.5 ${selectedMedium === 'Tamil Medium' ? 'text-blue-100' : 'text-slate-500'}`}>
+                      Tamil Medium
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSelectedMedium('English Medium')}
+                    className={`p-2.5 rounded-xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between ${
+                      selectedMedium === 'English Medium'
+                        ? 'border-blue-600 bg-blue-600 text-white shadow-md shadow-blue-600/20'
+                        : 'border-slate-200 bg-white text-slate-700 hover:border-blue-300'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-black">English Med</span>
+                      {selectedMedium === 'English Medium' && <CheckCircle className="w-4 h-4 text-white" />}
+                    </div>
+                    <span className={`text-[10px] font-bold mt-0.5 ${selectedMedium === 'English Medium' ? 'text-blue-100' : 'text-slate-500'}`}>
+                      English Medium
+                    </span>
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 p-2.5 bg-white rounded-xl border border-slate-200">
+                  <span className={`text-xs font-black px-2.5 py-1 rounded-lg ${
+                    rawLang.toLowerCase().includes('tamil')
+                      ? 'bg-amber-100 text-amber-900 border border-amber-200'
+                      : rawLang.toLowerCase().includes('english')
+                      ? 'bg-emerald-100 text-emerald-900 border border-emerald-200'
+                      : 'bg-indigo-100 text-indigo-900 border border-indigo-200'
+                  }`}>
+                    {rawLang.toLowerCase().includes('tamil')
+                      ? '📘 தமிழ் வழி (Tamil Medium Only)'
+                      : rawLang.toLowerCase().includes('english')
+                      ? '📗 English Medium Only'
+                      : '📙 Bilingual Edition (தமிழ் & English Combined)'}
+                  </span>
+                  <span className="text-[11px] text-slate-500 font-semibold truncate">
+                    Ready to order
+                  </span>
+                </div>
+              )}
+            </div>
+
             {/* Actions — desktop/tablet; mobile uses sticky bar below */}
             <div className="hidden sm:flex gap-3 mt-auto">
               {product.inStock === false ? (
@@ -819,7 +918,7 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
                   <button
                     type="button"
                     onClick={() => {
-                      addToCart(product);
+                      addToCart(product, 1, finalMedium);
                     }}
                     className="flex-1 bg-[#0044AA] text-white font-extrabold text-sm py-3.5 px-4 rounded-xl shadow-md flex items-center justify-center gap-2 uppercase tracking-wider min-h-12"
                   >
@@ -1445,6 +1544,28 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
                 <span className="text-slate-500">ST Courier</span>
               )}
             </div>
+            {isMultiMedium && product.inStock !== false && (
+              <div className="flex items-center rounded-lg bg-slate-200/80 p-0.5 mt-1 border border-slate-300/70">
+                <button
+                  type="button"
+                  onClick={() => setSelectedMedium('Tamil Medium')}
+                  className={`px-1.5 py-0.5 rounded text-[8.5px] font-black transition-all ${
+                    selectedMedium === 'Tamil Medium' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600'
+                  }`}
+                >
+                  தமிழ்
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedMedium('English Medium')}
+                  className={`px-1.5 py-0.5 rounded text-[8.5px] font-black transition-all ${
+                    selectedMedium === 'English Medium' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600'
+                  }`}
+                >
+                  Eng
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Action Buttons */}

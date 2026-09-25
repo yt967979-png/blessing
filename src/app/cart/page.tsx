@@ -248,7 +248,18 @@ export default function CartPage() {
                       unoptimized={imageNeedsUnoptimized(item.image || '')}
                     />
                     <div className="flex-1 min-w-0">
-                      <span className="text-[10px] font-bold text-blue-600 uppercase">{item.cls} Standard</span>
+                      <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                        <span className="text-[10px] font-bold text-blue-600 uppercase">{item.cls} Standard</span>
+                        {item.selectedMedium && (
+                          <span className={`text-[9.5px] font-black px-1.5 py-0.2 rounded ${
+                            item.selectedMedium.toLowerCase().includes('tamil')
+                              ? 'bg-amber-100 text-amber-900 border border-amber-200'
+                              : 'bg-emerald-100 text-emerald-900 border border-emerald-200'
+                          }`}>
+                            {item.selectedMedium}
+                          </span>
+                        )}
+                      </div>
                       <h3 className="font-heading font-bold text-sm text-[#001B3A] truncate">{item.title}</h3>
 
                       <div className="flex items-baseline gap-2 mt-1">

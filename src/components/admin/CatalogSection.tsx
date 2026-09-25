@@ -143,6 +143,7 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
   const [editTitle, setEditTitle] = useState<string>('');
   const [editBadge, setEditBadge] = useState<string>('');
   const [editImage, setEditImage] = useState<string>('');
+  const [editMedium, setEditMedium] = useState<string>('Both');
   const [editImageUploading, setEditImageUploading] = useState<boolean>(false);
   const editImageInputRef = useRef<HTMLInputElement>(null);
   const [editComboSubjects, setEditComboSubjects] = useState<string[]>([]);
@@ -151,6 +152,7 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
   // New publication modal states
   const [newTitle, setNewTitle] = useState('');
   const [newCls, setNewCls] = useState('10th');
+  const [newMedium, setNewMedium] = useState<string>('Both');
   const [selectedSubjectOption, setSelectedSubjectOption] = useState('Mathematics');
   const [customSubjectText, setCustomSubjectText] = useState('');
   const [selectedComboSubjects, setSelectedComboSubjects] = useState<string[]>([
@@ -254,6 +256,7 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
     setEditSamplePdf(p.samplePdfUrl || '');
     setEditCls(p.cls || '10th');
     setEditSubject(p.subject || 'Mathematics');
+    setEditMedium(p.language || 'Both');
     const initialSubs =
       p.comboSubjects && p.comboSubjects.length > 0
         ? p.comboSubjects
@@ -312,6 +315,7 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
         image: editImage.trim() || undefined,
         cls: editCls,
         subject: editSubject,
+        language: editMedium,
         category: isCombo ? 'combo' : 'guide',
         comboSubjects: isCombo ? editComboSubjects : undefined,
         price: numPrice,
@@ -480,6 +484,7 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
         cls: newCls,
         category: isCombo ? 'combo' : 'guide',
         subject: resolvedSubject,
+        language: newMedium,
         comboSubjects: isCombo ? selectedComboSubjects : undefined,
         price: numPrice,
         mrp: numMrp,
@@ -723,6 +728,17 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                                     <option value="Combo Set">Combo Set</option>
                                     <option value="New Edition">New Edition</option>
                                   </select>
+                                  <select
+                                    value={editMedium}
+                                    onChange={(e) => setEditMedium(e.target.value)}
+                                    className="px-2 py-0.5 bg-emerald-50 text-emerald-900 border border-emerald-300 rounded text-[10px] font-bold outline-none cursor-pointer"
+                                    title="Medium / Language"
+                                  >
+                                    <option value="Both">🌐 Tamil & English</option>
+                                    <option value="Tamil">📘 Tamil Only (தமிழ் வழி)</option>
+                                    <option value="English">📗 English Medium Only</option>
+                                    <option value="Bilingual">📙 Bilingual (இருமொழி)</option>
+                                  </select>
                                   <input
                                     ref={editImageInputRef}
                                     type="file"
@@ -752,6 +768,15 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                                       {p.badge}
                                     </span>
                                   )}
+                                  <span className={`inline-block text-[9px] font-bold px-2 py-0.5 rounded-md ${
+                                    (p.language || 'Both') === 'Tamil'
+                                      ? 'bg-amber-100 text-amber-900 border border-amber-200'
+                                      : (p.language || 'Both') === 'English'
+                                      ? 'bg-emerald-100 text-emerald-900 border border-emerald-200'
+                                      : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                                  }`}>
+                                    {(p.language || 'Both') === 'Both' ? '🌐 Tamil & Eng' : (p.language || 'Both') === 'Tamil' ? '📘 தமிழ் வழி' : (p.language || 'Both') === 'English' ? '📗 English Med' : '📙 Bilingual'}
+                                  </span>
                                   {p.samplePdfUrl && (
                                     <a
                                       href={p.samplePdfUrl}
@@ -1479,6 +1504,32 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                       <option value="__custom__">+ Add Custom Subject...</option>
                     </select>
                   </div>
+                </div>
+
+                {/* Medium / Language Selector */}
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Available Medium / Language *
+                  </label>
+                  <select
+                    value={newMedium}
+                    onChange={(e) => setNewMedium(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl outline-none focus:border-[#2874f0] text-slate-900 cursor-pointer font-semibold shadow-2xs"
+                  >
+                    <option value="Both">Both Tamil & English (Student can choose)</option>
+                    <option value="Tamil Medium">Tamil Medium Only (தமிழ் வழி)</option>
+                    <option value="English Medium">English Medium Only (ஆங்கில வழி)</option>
+                    <option value="Bilingual">Bilingual (Combined Tamil & English)</option>
+                  </select>
+                  <p className="text-[10.5px] text-slate-500 mt-1">
+                    {newMedium === 'Both'
+                      ? '💡 When adding to cart, student can choose Tamil Medium or English Medium.'
+                      : newMedium === 'Tamil Medium'
+                      ? '📘 Displayed as Tamil Medium only. Added directly to cart.'
+                      : newMedium === 'English Medium'
+                      ? '📗 Displayed as English Medium only. Added directly to cart.'
+                      : '📚 Single guide book with both languages inside.'}
+                  </p>
                 </div>
 
                 {/* Custom Subject Input */}
