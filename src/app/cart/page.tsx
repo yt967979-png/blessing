@@ -86,6 +86,12 @@ export default function CartPage() {
 
   const freeDeliveryProgress = isComboInCart ? 100 : Math.min(100, Math.round((cartCount / 5) * 100));
 
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   // Instant stock re-check the moment a customer opens the cart page.
   useEffect(() => {
     void validateCartStock();
@@ -106,6 +112,40 @@ export default function CartPage() {
       setPincodeMsg(`⚠️ ${result.message}`);
     }
   };
+
+  if (!mounted) {
+    return (
+      <main className="min-h-screen bg-slate-50 flex flex-col page-mobile-nav">
+        <AnnouncementBar />
+        <Header />
+        <div className="max-w-7xl mx-auto px-4 py-8 flex-1 w-full pb-36 lg:pb-8">
+          <div className="h-8 w-48 bg-slate-200 rounded-lg animate-pulse mb-8" />
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            <div className="lg:col-span-8 space-y-4">
+              {[1, 2].map((i) => (
+                <div key={i} className="bg-white border border-slate-200 rounded-2xl p-6 flex gap-6 items-center animate-pulse">
+                  <div className="w-20 h-20 bg-slate-100 rounded-xl shrink-0" />
+                  <div className="flex-1 space-y-2 py-1">
+                    <div className="h-4 w-3/4 bg-slate-100 rounded" />
+                    <div className="h-3 w-1/3 bg-slate-100 rounded" />
+                    <div className="h-8 w-24 bg-slate-100 rounded-lg mt-3" />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="lg:col-span-4">
+              <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-4 animate-pulse">
+                <div className="h-5 w-32 bg-slate-100 rounded" />
+                <div className="h-20 bg-slate-50 rounded-xl" />
+                <div className="h-12 bg-slate-200 rounded-xl" />
+              </div>
+            </div>
+          </div>
+        </div>
+        <Footer />
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-slate-50 flex flex-col page-mobile-nav">

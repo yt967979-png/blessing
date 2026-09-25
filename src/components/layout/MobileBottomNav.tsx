@@ -12,6 +12,11 @@ export const MobileBottomNav = () => {
   const router = useRouter();
   const { cartCount, user, setIsAuthOpen, isCheckoutOpen, isAuthOpen } = useStore();
   const cartBump = useCartBadgeBump(cartCount);
+  const [mounted, setMounted] = React.useState(false);
+
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
 
   if (pathname.startsWith('/admin') || pathname.startsWith('/checkout') || pathname.startsWith('/products/')) return null;
   if (isCheckoutOpen || isAuthOpen) return null;
@@ -59,12 +64,12 @@ export const MobileBottomNav = () => {
       href: '/cart',
       active: isCart,
       icon: ShoppingBag,
-      badge: cartCount,
+      badge: mounted ? cartCount : undefined,
       onEnter: () => router.prefetch('/cart'),
     },
     {
       key: 'account',
-      label: user ? 'Profile' : 'Login',
+      label: mounted && user ? 'Profile' : 'Login',
       active: isAccount,
       icon: User,
       onClick: handleAccountClick,

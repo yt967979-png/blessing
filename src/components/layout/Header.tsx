@@ -457,10 +457,10 @@ export const Header = () => {
           >
             <Heart
               className={`w-5 h-5 ${
-                wishlistCount > 0 ? 'text-red-500 fill-red-500' : 'text-slate-700'
+                mounted && wishlistCount > 0 ? 'text-red-500 fill-red-500' : 'text-slate-700'
               }`}
             />
-            {wishlistCount > 0 && (
+            {mounted && wishlistCount > 0 && (
               <span className="absolute top-0.5 right-0.5 w-4 h-4 bg-red-500 text-white text-[10px] font-extrabold rounded-full flex items-center justify-center shadow-xs">
                 {wishlistCount}
               </span>
@@ -474,7 +474,7 @@ export const Header = () => {
             aria-label="Cart"
           >
             <ShoppingBag className="w-5 h-5" />
-            {cartCount > 0 && (
+            {mounted && cartCount > 0 && (
               <span
                 className={`absolute top-0.5 right-0.5 w-4 h-4 bg-red-500 text-white text-[10px] font-extrabold rounded-full flex items-center justify-center shadow-xs ${
                   cartBump ? 'cart-badge-bump' : ''

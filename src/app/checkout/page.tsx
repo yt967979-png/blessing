@@ -57,6 +57,12 @@ export default function CheckoutPage() {
   } = useStore();
   const hasBlockingItem = anyCartItemBlocking(cart, products);
 
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const [step, setStep] = useState<Step>(1);
   const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
   const [selectedAddrId, setSelectedAddrId] = useState('new');
@@ -790,6 +796,24 @@ export default function CheckoutPage() {
       release();
     }
   };
+
+  if (!mounted) {
+    return (
+      <main className="min-h-screen bg-slate-50 flex flex-col pb-24 sm:pb-0">
+        <AnnouncementBar />
+        <Header />
+        <div className="max-w-4xl mx-auto px-3 sm:px-4 py-5 sm:py-8 w-full flex-1">
+          <div className="h-8 w-40 bg-slate-200 rounded-lg animate-pulse mb-8" />
+          <div className="max-w-2xl mx-auto bg-white rounded-3xl p-8 border border-slate-200 space-y-6 animate-pulse">
+            <div className="h-6 w-1/3 bg-slate-100 rounded" />
+            <div className="h-24 bg-slate-50 rounded-xl" />
+            <div className="h-12 w-48 bg-slate-200 rounded-xl" />
+          </div>
+        </div>
+        <Footer />
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-slate-50 flex flex-col pb-24 sm:pb-0">

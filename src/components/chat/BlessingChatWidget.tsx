@@ -149,9 +149,9 @@ export const BlessingChatWidget: React.FC = () => {
     }
   }, [isStorefront, loadConversation]);
 
-  // Connect SSE for real-time messages & updates
+  // Connect SSE for real-time messages & updates only when widget is open (preserves browser HTTP connections)
   useEffect(() => {
-    if (!isStorefront || !conversation?.id) return;
+    if (!isStorefront || !conversation?.id || !isOpen) return;
 
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
@@ -234,7 +234,7 @@ export const BlessingChatWidget: React.FC = () => {
       es.close();
       eventSourceRef.current = null;
     };
-  }, [isStorefront, conversation?.id, user?.token]);
+  }, [isStorefront, conversation?.id, isOpen, user?.token]);
 
   // Send message handler
   const handleSendMessage = async (textToSend?: string) => {

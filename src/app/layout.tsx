@@ -104,10 +104,8 @@ export default function RootLayout({
                       msg.indexOf('ChunkLoadError') !== -1 ||
                       msg.indexOf('Failed to fetch dynamically imported module') !== -1
                     );
-                    var isStaleScript = target && target.tagName === 'SCRIPT' &&
-                      typeof src === 'string' && src.indexOf('/_next/static/') !== -1;
 
-                    if (isChunkErr || isStaleScript) {
+                    if (isChunkErr) {
                       var now = Date.now();
                       var lastReload = parseInt(sessionStorage.getItem('bpg_last_chunk_reload') || '0', 10);
                       // Strict throttle: reload at most once every 30 seconds to prevent infinite reload loops
