@@ -43,6 +43,14 @@ export async function startLeaderBackgroundServices() {
         const dl = await retryFailedWebhookEvents();
         if (dl.resolved > 0) console.log(`[dead-letter-replay] replayed ${dl.replayed}, resolved ${dl.resolved} webhook event(s)`);
         
+        try {
+          const { reconcilePendingCheckoutSessions } = await import('@/lib/paymentReconciler');
+          const cs = await reconcilePendingCheckoutSessions();
+          if (cs.reconciled > 0) console.log(`[checkout-reconcile] auto-finalized ${cs.reconciled} pending checkout session(s)`);
+        } catch (csErr: any) {
+          console.warn('[checkout-reconcile]', csErr?.message || csErr);
+        }
+        
         const { recordJobHeartbeat } = await import('@/lib/jobHeartbeat');
         await recordJobHeartbeat({ jobName: 'reconcileUnfinalizedRefunds', durationMs: Date.now() - t0, status: 'ok', details: { reconciledOrders: rec, deadLetterResolved: dl.resolved } });
       } catch (e: any) {
