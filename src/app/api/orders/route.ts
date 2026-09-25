@@ -450,10 +450,15 @@ export async function POST(request: Request) {
 
     for (const item of verifiedItems) {
       const itemId = `item-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const rawMatch = Array.isArray(items) ? items.find((ri: any) => String(ri.id) === String(item.id)) : null;
+      const med = rawMatch?.selectedMedium || rawMatch?.medium || null;
+      const baseTitle = String(item.title || 'Educational Guide');
+      const titleWithMed = med && !baseTitle.includes(med) ? `${baseTitle} (${med})` : baseTitle;
+
       await client.query(
-        `INSERT INTO order_items (id, order_id, book_id, book_title, book_price, quantity, subtotal)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [itemId, id, item.id, item.title, item.price, item.qty, item.subtotal]
+        `INSERT INTO order_items (id, order_id, book_id, book_title, book_price, quantity, subtotal, medium)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [itemId, id, item.id, titleWithMed, item.price, item.qty, item.subtotal, med]
       );
 
       const heldQty = heldQtyByBook.get(String(item.id)) || 0;

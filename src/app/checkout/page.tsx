@@ -627,7 +627,13 @@ export default function CheckoutPage() {
               address: selectedAddress.address,
               city: selectedAddress.city || 'Chennai',
               pincode: selectedAddress.pincode || '600012',
-              items: cart.map((i) => ({ id: i.id, qty: i.qty, price: i.price })),
+              items: cart.map((i) => ({
+                id: i.id,
+                qty: i.qty,
+                price: i.price,
+                title: i.title,
+                medium: i.selectedMedium || (i as any).medium || null,
+              })),
               paymentMethod: 'Razorpay UPI / Online',
               razorpayPaymentId: payId || null,
               razorpayOrderId: rzpOrderId || null,
@@ -690,7 +696,13 @@ export default function CheckoutPage() {
       };
 
       // Online Razorpay Payment Flow
-      const cartPayload = cart.map((i) => ({ id: i.id, qty: i.qty }));
+      const cartPayload = cart.map((i) => ({
+        id: i.id,
+        qty: i.qty,
+        title: i.title,
+        price: i.price,
+        selectedMedium: i.selectedMedium || (i as any).medium || null,
+      }));
       const res = await fetch('/api/razorpay', {
         method: 'POST',
         headers: {

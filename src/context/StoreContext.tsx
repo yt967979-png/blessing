@@ -1209,7 +1209,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
       return next;
     });
-    addToCart(item, item.qty);
+    addToCart(item, item.qty, item.selectedMedium);
   };
 
   const clearCart = useCallback(() => {

@@ -144,13 +144,19 @@ export async function POST(request: Request) {
         }
       }
 
-      const cartSnapshot = checkout.verifiedItems.map((i: any) => ({
-        id: i.id,
-        title: i.title,
-        price: i.price,
-        qty: i.qty,
-        subtotal: i.subtotal,
-      }));
+      const cartSnapshot = checkout.verifiedItems.map((i: any) => {
+        const raw = Array.isArray(items) ? items.find((ri: any) => String(ri.id) === String(i.id)) : null;
+        const med = raw?.selectedMedium || raw?.medium || null;
+        return {
+          id: i.id,
+          title: i.title,
+          price: i.price,
+          qty: i.qty,
+          subtotal: i.subtotal,
+          selectedMedium: med,
+          medium: med,
+        };
+      });
       const priceSnapshot = {
         subtotal: checkout.subtotal,
         discountAmount: checkout.discountAmount,

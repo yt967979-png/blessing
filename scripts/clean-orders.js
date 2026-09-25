@@ -73,7 +73,14 @@ async function cleanOrders() {
     await client.query('DELETE FROM order_items');
     await client.query('DELETE FROM stock_holds');
     await client.query('UPDATE reviews SET order_id = NULL WHERE order_id IS NOT NULL');
-    await client.query('DELETE FROM orders');
+    // NEVER delete real confirmed customer orders (like Jo Princy's real order)
+    const REAL_ORDER_NUMBERS = ['BPG-TFTZ-M1QR'];
+    await client.query(
+      `DELETE FROM orders 
+       WHERE payment_status NOT ILIKE '%confirm%' 
+         AND order_number NOT IN (${REAL_ORDER_NUMBERS.map((_, i) => `$${i + 1}`).join(', ')})`,
+      REAL_ORDER_NUMBERS
+    );
 
     await client.query('COMMIT');
 
