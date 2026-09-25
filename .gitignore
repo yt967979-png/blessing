@@ -55,3 +55,10 @@ whatsapp_session/
 public/whatsapp_qr.png
 public/whatsapp_status.json
 
+# backups and database dumps
+backups/
+*.dump
+*.sql
+*.env
+
+

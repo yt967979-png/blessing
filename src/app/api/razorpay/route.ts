@@ -10,8 +10,16 @@ import { priceCheckoutOrder } from '@/lib/checkoutPricing';
 import { verifyRazorpayPayment } from '@/lib/orderPricing';
 import { createStockHolds, attachRazorpayOrderId, releaseStockHolds, STOCK_HOLD_TTL_MINUTES } from '@/lib/stockHold';
 import { recordSystemError } from '@/lib/errorMonitor';
+import { IS_CHECKOUT_PAUSED, CHECKOUT_PAUSE_MESSAGE } from '@/lib/checkoutControl';
 
 export async function POST(request: Request) {
+  if (IS_CHECKOUT_PAUSED) {
+    return NextResponse.json(
+      { error: CHECKOUT_PAUSE_MESSAGE, blocked: true },
+      { status: 503 }
+    );
+  }
+
   const session = await getAuthenticatedUser(request);
   if (!session) return unauthorizedResponse('Please login to pay.');
 

@@ -28,17 +28,31 @@ export const ProductCard = ({ product }: { product: Product }) => {
 
   const [isAdded, setIsAdded] = useState(false);
   const rawLang = (product.language || 'Both').trim();
-  const isMultiMedium = rawLang.toLowerCase() === 'both';
-  const defaultSelectedMedium = rawLang.toLowerCase().includes('english')
+  const lowerLang = rawLang.toLowerCase();
+  const isMultiMedium =
+    lowerLang === 'both' ||
+    lowerLang.includes('both') ||
+    (lowerLang.includes('tamil') && lowerLang.includes('english'));
+
+  const defaultSelectedMedium = lowerLang.includes('english') && !lowerLang.includes('tamil')
     ? 'English Medium'
     : 'Tamil Medium';
   const [selectedMedium, setSelectedMedium] = useState<string>(defaultSelectedMedium);
 
+  React.useEffect(() => {
+    const l = (product.language || 'Both').trim().toLowerCase();
+    if (l.includes('english') && !l.includes('tamil')) {
+      setSelectedMedium('English Medium');
+    } else if (l.includes('tamil') && !l.includes('english')) {
+      setSelectedMedium('Tamil Medium');
+    }
+  }, [product.language]);
+
   const finalMedium = isMultiMedium
     ? selectedMedium
-    : rawLang.toLowerCase().includes('tamil')
+    : lowerLang.includes('tamil')
     ? 'Tamil Medium'
-    : rawLang.toLowerCase().includes('english')
+    : lowerLang.includes('english')
     ? 'English Medium'
     : rawLang;
 

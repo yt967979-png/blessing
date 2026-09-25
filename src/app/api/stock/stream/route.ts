@@ -24,6 +24,11 @@ export interface StockChangeEntry {
   price?: number;
   mrp?: number;
   discount?: number;
+  language?: string;
+  title?: string;
+  badge?: string;
+  samplePdfUrl?: string | null;
+  coverImage?: string;
 }
 
 const clients = new Set<ReadableStreamDefaultController>();
@@ -49,7 +54,7 @@ export function broadcastStockChange(data: any) {
 }
 
 /**
- * Call this right after committing any change to `books.stock` / `books.status` / `books.price`.
+ * Call this right after committing any change to `books.stock` / `books.status` / `books.price` / `books.language`.
  * Re-reads the affected rows (authoritative post-commit snapshot) and pushes
  * them to every replica's SSE clients via Postgres NOTIFY — cheap, batched,
  * and correct even when the writer and the SSE connection are on different
@@ -60,7 +65,7 @@ export async function notifyStockChanged(bookIds: Array<string | number | null |
   if (ids.length === 0) return;
   try {
     const res = await queryDb(
-      `SELECT id, price, discount_price, stock, status FROM books WHERE id = ANY($1::text[])`,
+      `SELECT id, price, discount_price, stock, status, language, title, badge, sample_pdf_url, cover_image FROM books WHERE id = ANY($1::text[])`,
       [ids]
     );
     const books: StockChangeEntry[] = (res.rows || []).map((r: any) => {
@@ -73,6 +78,11 @@ export async function notifyStockChanged(bookIds: Array<string | number | null |
         price,
         mrp,
         discount,
+        language: r.language || 'Both',
+        title: r.title != null ? String(r.title) : undefined,
+        badge: r.badge != null ? String(r.badge) : undefined,
+        samplePdfUrl: r.sample_pdf_url != null ? String(r.sample_pdf_url) : null,
+        coverImage: r.cover_image != null ? String(r.cover_image) : undefined,
       };
     });
     if (books.length === 0) return;

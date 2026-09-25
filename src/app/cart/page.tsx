@@ -29,6 +29,7 @@ import { MIN_BOOKS_PER_ORDER, booksUntilMinOrder, minOrderCheckoutMessage, cartH
 import { Header } from '@/components/layout/Header';
 import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
 import { Footer } from '@/components/layout/Footer';
+import { IS_CHECKOUT_PAUSED, CHECKOUT_PAUSE_MESSAGE } from '@/lib/checkoutControl';
 
 export default function CartPage() {
   const router = useRouter();
@@ -444,8 +445,19 @@ export default function CartPage() {
                     </div>
                   )}
 
+                  {IS_CHECKOUT_PAUSED && (
+                    <div className="bg-amber-50 border border-amber-300 rounded-xl p-3 text-xs text-amber-900 font-bold flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                      <span>Online checkout is temporarily paused. Contact us on WhatsApp (+91-9486017820) to place orders directly.</span>
+                    </div>
+                  )}
+
                   <button
                     onClick={async () => {
+                      if (IS_CHECKOUT_PAUSED) {
+                        showToast(CHECKOUT_PAUSE_MESSAGE);
+                        return;
+                      }
                       if (!user) {
                         setIsAuthOpen(true);
                         return;
@@ -459,10 +471,12 @@ export default function CartPage() {
                       setIsCheckoutOpen(true);
                       router.push('/checkout');
                     }}
-                    disabled={!pincodeOk || hasBlockingItem || booksNeeded > 0}
+                    disabled={IS_CHECKOUT_PAUSED || !pincodeOk || hasBlockingItem || booksNeeded > 0}
                     className="w-full bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 disabled:opacity-50 text-[#001B3A] font-extrabold text-xs py-3.5 rounded-xl shadow-md uppercase tracking-wider transition-colors min-h-12"
                   >
-                    {booksNeeded > 0
+                    {IS_CHECKOUT_PAUSED
+                      ? 'CHECKOUT TEMPORARILY PAUSED'
+                      : booksNeeded > 0
                       ? `Add ${booksNeeded} more book${booksNeeded === 1 ? '' : 's'} (min ${MIN_BOOKS_PER_ORDER})`
                       : 'PLACE ORDER'}
                   </button>

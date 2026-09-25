@@ -91,21 +91,46 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
   const [helpfulVoted, setHelpfulVoted] = useState<Record<string, boolean>>({});
   const [lightboxImg, setLightboxImg] = useState<string | null>(null);
 
-  const storeProduct = products.find((p: any) => p.slug === slug || p.id === slug) || null;
-  // dbProduct is fetched once; storeProduct is kept live by the catalog poll in
-  // StoreContext — always prefer its stock/inStock so this page reflects an
-  // admin stock change without a manual refresh.
-  const product = dbProduct
-    ? {
-        ...dbProduct,
-        price: storeProduct && typeof storeProduct.price === 'number' ? storeProduct.price : dbProduct.price,
-        mrp: storeProduct && typeof storeProduct.mrp === 'number' ? storeProduct.mrp : dbProduct.mrp,
-        discount: storeProduct && typeof storeProduct.discount === 'number' ? storeProduct.discount : dbProduct.discount,
-        inStock: storeProduct ? storeProduct.inStock : dbProduct.inStock,
-        stock: storeProduct ? storeProduct.stock : dbProduct.stock,
-        language: storeProduct?.language || dbProduct.language || 'Both',
-      }
-    : storeProduct;
+  const normalizedSlug = useMemo(() => {
+    return decodeURIComponent(String(slug || ''))
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-');
+  }, [slug]);
+
+  const storeProduct = useMemo(() => {
+    return (
+      products.find((p: any) => {
+        if (dbProduct?.id && String(p.id) === String(dbProduct.id)) return true;
+        if (String(p.id) === String(slug)) return true;
+        const pSlug = decodeURIComponent(String(p.slug || ''))
+          .trim()
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-');
+        return pSlug && normalizedSlug && pSlug === normalizedSlug;
+      }) || null
+    );
+  }, [products, dbProduct?.id, slug, normalizedSlug]);
+
+  // storeProduct is kept live in realtime by the SSE stock/catalog stream in
+  // StoreContext — merge with dbProduct so any admin edit (price, stock, language,
+  // badge, title, samplePdf) updates this page instantly with 0 refresh.
+  const product = useMemo(() => {
+    if (!dbProduct && !storeProduct) return null;
+    if (!dbProduct) return storeProduct;
+    if (!storeProduct) return dbProduct;
+    return {
+      ...dbProduct,
+      ...storeProduct,
+      description: dbProduct.description || storeProduct.description,
+      features:
+        Array.isArray(dbProduct.features) && dbProduct.features.length > 0
+          ? dbProduct.features
+          : storeProduct.features || ['Solved Papers', 'Chapter Notes'],
+      samplePdfUrl: storeProduct.samplePdfUrl !== undefined ? storeProduct.samplePdfUrl : dbProduct.samplePdfUrl,
+      image: storeProduct.image || dbProduct.image,
+    };
+  }, [dbProduct, storeProduct]);
   const [activeImg, setActiveImg] = useState('');
   const [isMobileAdded, setIsMobileAdded] = useState(false);
   const minOrderMsg = minOrderCheckoutMessage(cartCount);
@@ -235,8 +260,35 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
       cancelled = true;
     };
     // products omitted on purpose — snapshot only at slug/auth change
-     
   }, [slug, user?.token]);
+
+  // Listen for realtime catalog & stock change events pushed via SSE / StoreContext
+  useEffect(() => {
+    const handleLiveCatalogChange = (e: any) => {
+      const bookIds = e?.detail?.bookIds || (Array.isArray(e?.detail) ? e.detail.map((b: any) => String(b.id)) : []);
+      const currentId = dbProduct?.id || storeProduct?.id;
+      if (bookIds && bookIds.length > 0 && currentId) {
+        if (!bookIds.map(String).includes(String(currentId))) {
+          return;
+        }
+      }
+      fetch(`/api/products?slug=${encodeURIComponent(slug)}&fresh=1`)
+        .then((res) => (res.ok ? res.json() : null))
+        .then((list) => {
+          if (Array.isArray(list) && list.length > 0) {
+            setDbProduct(list[0]);
+          }
+        })
+        .catch(() => {});
+    };
+
+    window.addEventListener('bpg:catalog-changed', handleLiveCatalogChange);
+    window.addEventListener('bpg:stock-changed', handleLiveCatalogChange);
+    return () => {
+      window.removeEventListener('bpg:catalog-changed', handleLiveCatalogChange);
+      window.removeEventListener('bpg:stock-changed', handleLiveCatalogChange);
+    };
+  }, [slug, dbProduct?.id, storeProduct?.id]);
 
   useEffect(() => {
     if (product?.image) {

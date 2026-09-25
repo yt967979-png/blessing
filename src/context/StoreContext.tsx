@@ -48,6 +48,11 @@ interface StockPushEntry {
   price?: number;
   mrp?: number;
   discount?: number;
+  language?: string;
+  title?: string;
+  badge?: string;
+  samplePdfUrl?: string | null;
+  coverImage?: string;
 }
 
 export interface UserData {
@@ -258,13 +263,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         if (!Array.isArray(data)) return;
         if (data.length === 0 && productsRef.current.length > 0) return;
 
-        // Admin-aware merge: if any product was recently edited by the admin,
-        // preserve the local optimistic state for that product instead of
-        // overwriting it with the server response (which may be fractionally stale
-        // due to cache/CDN or just reflect the same data we already set).
-        const hasRecentEdits = recentAdminEditsRef.current.size > 0;
+        // Admin-aware merge: only protect in-flight edits if not a forced fresh load,
+        // and only for at most 2 seconds while network completes.
+        const hasRecentEdits = !forceFresh && recentAdminEditsRef.current.size > 0;
         if (hasRecentEdits) {
-          const editCutoff = Date.now() - 30_000;
+          const editCutoff = Date.now() - 2_000;
           const protectedIds = new Set<string>();
           for (const [pid, ts] of recentAdminEditsRef.current) {
             if (ts > editCutoff) protectedIds.add(pid);
@@ -519,20 +522,27 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const next = prev.map((p) => {
         const upd = byId.get(String(p.id));
         if (!upd) return p;
-        const lastEdit = recentAdminEditsRef.current.get(String(p.id)) || 0;
-        if (Date.now() - lastEdit < 30000) {
-          return p;
-        }
+
         const newPrice = typeof upd.price === 'number' && Number.isFinite(upd.price) && upd.price > 0 ? upd.price : p.price;
         const newMrp = typeof upd.mrp === 'number' && Number.isFinite(upd.mrp) && upd.mrp > 0 ? upd.mrp : p.mrp;
         const newDiscount = typeof upd.discount === 'number' ? upd.discount : p.discount;
+        const newLanguage = upd.language !== undefined ? upd.language : p.language;
+        const newTitle = upd.title !== undefined ? upd.title : p.title;
+        const newBadge = upd.badge !== undefined ? upd.badge : p.badge;
+        const newSamplePdf = upd.samplePdfUrl !== undefined ? upd.samplePdfUrl : p.samplePdfUrl;
+        const newImage = upd.coverImage !== undefined ? upd.coverImage : p.image;
 
         if (
           p.stock === upd.stock &&
           p.inStock === upd.inStock &&
           p.price === newPrice &&
           p.mrp === newMrp &&
-          p.discount === newDiscount
+          p.discount === newDiscount &&
+          p.language === newLanguage &&
+          p.title === newTitle &&
+          p.badge === newBadge &&
+          p.samplePdfUrl === newSamplePdf &&
+          p.image === newImage
         ) {
           return p;
         }
@@ -544,6 +554,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           price: newPrice,
           mrp: newMrp,
           discount: newDiscount,
+          language: newLanguage,
+          title: newTitle,
+          badge: newBadge,
+          samplePdfUrl: newSamplePdf,
+          image: newImage,
         };
       });
       if (changed) writeCatalogCache(next);
@@ -565,6 +580,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         const newPrice = typeof upd.price === 'number' && Number.isFinite(upd.price) && upd.price > 0 ? upd.price : item.price;
         const newMrp = typeof upd.mrp === 'number' && Number.isFinite(upd.mrp) && upd.mrp > 0 ? upd.mrp : item.mrp;
         const newDiscount = typeof upd.discount === 'number' ? upd.discount : item.discount;
+        const newTitle = upd.title !== undefined ? upd.title : item.title;
+        const newImage = upd.coverImage !== undefined ? upd.coverImage : item.image;
 
         if (
           item.stock === upd.stock &&
@@ -572,7 +589,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           clampedQty === item.qty &&
           item.price === newPrice &&
           item.mrp === newMrp &&
-          item.discount === newDiscount
+          item.discount === newDiscount &&
+          item.title === newTitle &&
+          item.image === newImage
         ) {
           return item;
         }
@@ -593,6 +612,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           price: newPrice,
           mrp: newMrp,
           discount: newDiscount,
+          title: newTitle,
+          image: newImage,
         };
       });
       if (changed) {
@@ -614,12 +635,16 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         const newPrice = typeof upd.price === 'number' && Number.isFinite(upd.price) && upd.price > 0 ? upd.price : item.price;
         const newMrp = typeof upd.mrp === 'number' && Number.isFinite(upd.mrp) && upd.mrp > 0 ? upd.mrp : item.mrp;
         const newDiscount = typeof upd.discount === 'number' ? upd.discount : item.discount;
+        const newTitle = upd.title !== undefined ? upd.title : item.title;
+        const newImage = upd.coverImage !== undefined ? upd.coverImage : item.image;
         if (
           item.stock === upd.stock &&
           item.inStock === upd.inStock &&
           item.price === newPrice &&
           item.mrp === newMrp &&
-          item.discount === newDiscount
+          item.discount === newDiscount &&
+          item.title === newTitle &&
+          item.image === newImage
         ) {
           return item;
         }
@@ -631,6 +656,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           price: newPrice,
           mrp: newMrp,
           discount: newDiscount,
+          title: newTitle,
+          image: newImage,
         };
       });
       if (changed) {
@@ -682,19 +709,13 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             return;
           }
           if (data?.type === 'CATALOG_CHANGED') {
-            // Only do a full refresh if admin has NOT recently edited a product.
-            // The optimistic local state is already correct; a full refetch would
-            // cause a flicker as the entire products array gets replaced.
-            const editCutoff = Date.now() - 30_000;
-            let hasRecentEdit = false;
-            for (const [, ts] of recentAdminEditsRef.current) {
-              if (ts > editCutoff) { hasRecentEdit = true; break; }
-            }
-            if (!hasRecentEdit) refreshProducts(true);
+            refreshProducts(true);
+            window.dispatchEvent(new CustomEvent('bpg:catalog-changed', { detail: data }));
             return;
           }
           if (data?.type === 'STOCK_CHANGED' && Array.isArray(data.books)) {
             applyStockPush(data.books);
+            window.dispatchEvent(new CustomEvent('bpg:stock-changed', { detail: data.books }));
           }
         } catch {
           /* ignore malformed frame */
@@ -936,7 +957,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         live &&
         (live.price !== quickViewProduct.price ||
           live.mrp !== quickViewProduct.mrp ||
-          live.inStock !== quickViewProduct.inStock)
+          live.inStock !== quickViewProduct.inStock ||
+          live.stock !== quickViewProduct.stock ||
+          live.title !== quickViewProduct.title ||
+          live.badge !== quickViewProduct.badge ||
+          live.image !== quickViewProduct.image ||
+          live.language !== quickViewProduct.language)
       ) {
         setQuickViewProduct(live);
       }
@@ -1680,6 +1706,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       try {
         sessionStorage.removeItem(CATALOG_CACHE_KEY);
       } catch {}
+      recentAdminEditsRef.current.delete(String(id));
       // Do NOT call refreshProducts here — the server PATCH already triggers
       // notifyCatalogChanged → SSE CATALOG_CHANGED → refreshProducts.
       // Calling it here too causes a double-refresh flicker.

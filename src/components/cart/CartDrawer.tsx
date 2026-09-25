@@ -10,6 +10,7 @@ import { getSTCourierDeliveryEstimate } from '@/lib/deliveryEstimator';
 import { getCartItemStockState, anyCartItemBlocking } from '@/lib/cartStock';
 import { imageNeedsUnoptimized } from '@/lib/productImage';
 import { cartHasCombo, isMoqSatisfied as checkMoqSatisfied } from '@/lib/deliveryRules';
+import { IS_CHECKOUT_PAUSED, CHECKOUT_PAUSE_MESSAGE } from '@/lib/checkoutControl';
 
 export const CartDrawer = () => {
   const {
@@ -229,6 +230,10 @@ export const CartDrawer = () => {
                   <p className="text-[10px] font-bold text-red-600 text-center flex items-center justify-center gap-1">
                     <AlertTriangle className="w-3.5 h-3.5" /> Fix out-of-stock items before checkout
                   </p>
+                ) : IS_CHECKOUT_PAUSED ? (
+                  <p className="text-[11px] font-extrabold text-amber-900 text-center bg-amber-50 border border-amber-300 p-2.5 rounded-xl">
+                    ⚠️ Online checkout is temporarily paused. Contact us on WhatsApp for orders.
+                  </p>
                 ) : !isMoqSatisfied ? (
                   <p className="text-[11px] font-extrabold text-amber-700 text-center bg-amber-50 border border-amber-200 p-2 rounded-lg">
                     ⚠️ Minimum order requirement: 4 books (Add {booksToMoq} more)
@@ -238,8 +243,12 @@ export const CartDrawer = () => {
                 <motion.button
                   whileTap={{ scale: 0.97 }}
                   type="button"
-                  disabled={hasBlockingItem || !isMoqSatisfied}
+                  disabled={IS_CHECKOUT_PAUSED || hasBlockingItem || !isMoqSatisfied}
                   onClick={() => {
+                    if (IS_CHECKOUT_PAUSED) {
+                      showToast(CHECKOUT_PAUSE_MESSAGE);
+                      return;
+                    }
                     setIsCartOpen(false);
                     if (!user) {
                       setIsAuthOpen(true);
@@ -250,7 +259,9 @@ export const CartDrawer = () => {
                   }}
                   className="w-full bg-gradient-to-r from-amber-400 via-amber-500 to-amber-400 text-[#001B3A] font-extrabold text-xs py-3.5 rounded-xl shadow-md hover:shadow-lg transition-all uppercase tracking-wider text-center min-h-12 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                 >
-                  {!isMoqSatisfied
+                  {IS_CHECKOUT_PAUSED
+                    ? 'CHECKOUT TEMPORARILY PAUSED'
+                    : !isMoqSatisfied
                     ? `ADD ${booksToMoq} MORE BOOK${booksToMoq > 1 ? 'S' : ''} TO CHECKOUT`
                     : user
                     ? 'PROCEED TO CHECKOUT'

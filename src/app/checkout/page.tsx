@@ -31,6 +31,7 @@ import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
 import { Footer } from '@/components/layout/Footer';
 import { SwiggyCouponsModal } from '@/components/coupons/SwiggyCouponsModal';
 import { useCouponCatalogSync } from '@/hooks/useCouponCatalogSync';
+import { IS_CHECKOUT_PAUSED, CHECKOUT_PAUSE_MESSAGE } from '@/lib/checkoutControl';
 
 type Step = 1 | 2 | 3;
 
@@ -479,6 +480,10 @@ export default function CheckoutPage() {
   };
 
   const handlePlaceOrder = async () => {
+    if (IS_CHECKOUT_PAUSED) {
+      showToast(CHECKOUT_PAUSE_MESSAGE);
+      return;
+    }
     if (orderSubmitLock.current || isPlacingOrder || !user) return;
     if (!isMoqSatisfied(cart)) {
       showToast(`Minimum order quantity is ${MIN_BOOKS_PER_ORDER} book(s) (or 1 Combo Pack).`);
@@ -829,6 +834,26 @@ export default function CheckoutPage() {
               <Link href="/search" className="inline-block mt-2 font-bold text-[#0044AA] hover:underline cursor-pointer">
                 + Browse Guides & Add to Cart →
               </Link>
+            </div>
+          </div>
+        )}
+
+        {IS_CHECKOUT_PAUSED && (
+          <div className="max-w-2xl mx-auto mb-5 p-4 rounded-2xl bg-amber-500/10 border-2 border-amber-500/40 text-amber-950 flex items-start gap-3 shadow-xs">
+            <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-heading font-black text-sm text-amber-950">Online Checkout Temporarily Paused</p>
+              <p className="text-xs text-amber-900 mt-1 leading-relaxed">
+                We have temporarily paused online order processing. If you wish to place an order or have questions about books, please contact us directly on WhatsApp at{' '}
+                <a
+                  href="https://wa.me/919486017820"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-black text-emerald-700 underline"
+                >
+                  +91-9486017820
+                </a>.
+              </p>
             </div>
           </div>
         )}
@@ -1472,11 +1497,15 @@ export default function CheckoutPage() {
 
               <button
                 type="button"
-                disabled={isPlacingOrder || cart.length === 0 || !isMoqSatisfied(cart) || hasBlockingItem}
+                disabled={IS_CHECKOUT_PAUSED || isPlacingOrder || cart.length === 0 || !isMoqSatisfied(cart) || hasBlockingItem}
                 onClick={() => void handlePlaceOrder()}
                 className="hidden sm:flex w-full items-center justify-center bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 hover:from-amber-500 hover:to-amber-700 text-[#001B3A] font-black text-sm py-4 rounded-xl uppercase tracking-wider shadow-lg shadow-amber-500/20 disabled:opacity-60 transition-all hover:scale-[1.01] min-h-12 touch-manipulation"
               >
-                {isPlacingOrder ? 'Opening Razorpay…' : `Confirm order · Pay ₹${finalPayable}`}
+                {IS_CHECKOUT_PAUSED
+                  ? 'Online Checkout Paused'
+                  : isPlacingOrder
+                  ? 'Opening Razorpay…'
+                  : `Confirm order · Pay ₹${finalPayable}`}
               </button>
               <button
                 type="button"
@@ -1537,11 +1566,11 @@ export default function CheckoutPage() {
             </div>
             <button
               type="button"
-              disabled={isPlacingOrder || cart.length === 0 || !isMoqSatisfied(cart) || hasBlockingItem}
+              disabled={IS_CHECKOUT_PAUSED || isPlacingOrder || cart.length === 0 || !isMoqSatisfied(cart) || hasBlockingItem}
               onClick={() => void handlePlaceOrder()}
               className="flex-1 bg-gradient-to-r from-amber-400 to-amber-500 disabled:opacity-50 text-[#001B3A] font-extrabold text-xs py-3.5 rounded-xl uppercase tracking-wider min-h-12 touch-manipulation"
             >
-              {isPlacingOrder ? 'Opening Razorpay…' : 'Confirm order'}
+              {IS_CHECKOUT_PAUSED ? 'Checkout Paused' : isPlacingOrder ? 'Opening Razorpay…' : 'Confirm order'}
             </button>
           </div>
         )}
