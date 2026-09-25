@@ -103,17 +103,17 @@ export const Footer = () => {
               </Link>
             </li>
             <li>
-              <Link href="/search" className="hover:text-amber-400 transition-colors flex items-center gap-1.5">
+              <Link href="/search" prefetch={false} className="hover:text-amber-400 transition-colors flex items-center gap-1.5">
                 <span>•</span> Book Catalog
               </Link>
             </li>
             <li>
-              <Link href="/orders" className="hover:text-amber-400 transition-colors flex items-center gap-1.5">
+              <Link href="/orders" prefetch={false} className="hover:text-amber-400 transition-colors flex items-center gap-1.5">
                 <span>•</span> My Orders &amp; Track
               </Link>
             </li>
             <li>
-              <Link href="/cart" className="hover:text-amber-400 transition-colors flex items-center gap-1.5">
+              <Link href="/cart" prefetch={false} className="hover:text-amber-400 transition-colors flex items-center gap-1.5">
                 <span>•</span> Shopping Cart
               </Link>
             </li>
@@ -127,17 +127,17 @@ export const Footer = () => {
           </h4>
           <ul className="space-y-2.5 font-semibold text-slate-300 text-xs">
             <li>
-              <Link href="/shipping-policy" className="hover:text-amber-400 transition-colors flex items-center gap-1.5">
+              <Link href="/shipping-policy" prefetch={false} className="hover:text-amber-400 transition-colors flex items-center gap-1.5">
                 <span>•</span> Shipping &amp; ST Courier Policy
               </Link>
             </li>
             <li>
-              <Link href="/privacy-policy" className="hover:text-amber-400 transition-colors flex items-center gap-1.5">
+              <Link href="/privacy-policy" prefetch={false} className="hover:text-amber-400 transition-colors flex items-center gap-1.5">
                 <span>•</span> Privacy Policy
               </Link>
             </li>
             <li>
-              <Link href="/terms-of-service" className="hover:text-amber-400 transition-colors flex items-center gap-1.5">
+              <Link href="/terms-of-service" prefetch={false} className="hover:text-amber-400 transition-colors flex items-center gap-1.5">
                 <span>•</span> Terms &amp; Conditions
               </Link>
             </li>

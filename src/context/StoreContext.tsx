@@ -482,12 +482,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     // Initial ping on mount after slight delay so it doesn't compete with catalog fetch
     const initialTimer = setTimeout(sendPing, 1500);
 
-    // Periodic heartbeat every 25s while tab is visible
+    // Periodic heartbeat every 60s while tab is visible (avoids connection churn)
     const interval = setInterval(() => {
       if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
         sendPing();
       }
-    }, 25000);
+    }, 60000);
 
     // Ping on re-focusing the tab
     const handleVis = () => {
@@ -771,10 +771,10 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       } catch {}
     };
 
-    // Poll live stock delta every 20s (or every 10s if SSE is temporarily disconnected)
+    // Safety fallback: if SSE is disconnected, poll every 30s; if SSE is active, only lightweight check every 90s
     const stockInterval = setInterval(() => {
       void pollLiveStock();
-    }, sseConnectedRef.current ? 20_000 : 10_000);
+    }, sseConnectedRef.current ? 90_000 : 30_000);
 
     // Full catalog refresh only once every 3 minutes as an ultimate safety net
     const catalogSafetyInterval = setInterval(() => {
@@ -1378,7 +1378,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // customer is browsing the cart/checkout in another tab.
   useEffect(() => {
     if (!hydrated || cart.length === 0) return;
-    const POLL_MS = 8_000;
+    const POLL_MS = 60_000;
     const interval = setInterval(() => {
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
       void validateCartStock();

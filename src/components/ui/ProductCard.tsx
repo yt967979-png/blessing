@@ -12,7 +12,7 @@ import { MIN_BOOKS_PER_ORDER, booksUntilMinOrder, isComboItem } from '@/lib/deli
 import { getComboIncludedSubjects } from '@/lib/comboMetadata';
 import { openSamplePdfModal } from '@/components/books/SampleChapterReaderModal';
 
-export const ProductCard = ({ product }: { product: Product }) => {
+export const ProductCard = React.memo(function ProductCard({ product }: { product: Product }) {
   const router = useRouter();
   const {
     wishlist,
@@ -361,4 +361,4 @@ export const ProductCard = ({ product }: { product: Product }) => {
       </div>
     </article>
   );
-};
+});
