@@ -55,6 +55,7 @@ async function getBookMeta(slug: string) {
       `SELECT b.id, b.slug, b.title, b.description,
               b.category_id,
               b.subject,
+              b.language,
               b.combo_subjects,
               CASE
                 WHEN b.cover_image IS NULL OR b.cover_image = '' THEN NULL
@@ -203,6 +204,7 @@ function mapBookToClientProduct(book: any) {
     cls: book.class_standard || '10th',
     category: book.category_id === 'cat-combos' ? 'combo' : 'guide',
     subject: book.subject || 'General',
+    language: book.language || 'Both',
     price,
     mrp,
     discount,

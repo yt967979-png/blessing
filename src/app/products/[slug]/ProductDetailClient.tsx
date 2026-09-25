@@ -103,6 +103,7 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
         discount: storeProduct && typeof storeProduct.discount === 'number' ? storeProduct.discount : dbProduct.discount,
         inStock: storeProduct ? storeProduct.inStock : dbProduct.inStock,
         stock: storeProduct ? storeProduct.stock : dbProduct.stock,
+        language: storeProduct?.language || dbProduct.language || 'Both',
       }
     : storeProduct;
   const [activeImg, setActiveImg] = useState('');
@@ -110,8 +111,13 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
   const minOrderMsg = minOrderCheckoutMessage(cartCount);
 
   const rawLang = (product?.language || 'Both').trim();
-  const isMultiMedium = rawLang.toLowerCase() === 'both';
-  const defaultSelectedMedium = rawLang.toLowerCase().includes('english')
+  const lowerLang = rawLang.toLowerCase();
+  const isMultiMedium =
+    lowerLang === 'both' ||
+    lowerLang.includes('both') ||
+    (lowerLang.includes('tamil') && lowerLang.includes('english'));
+
+  const defaultSelectedMedium = lowerLang.includes('english') && !lowerLang.includes('tamil')
     ? 'English Medium'
     : 'Tamil Medium';
   const [selectedMedium, setSelectedMedium] = useState<string>(defaultSelectedMedium);
@@ -119,9 +125,9 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
   useEffect(() => {
     if (product?.language) {
       const l = product.language.trim().toLowerCase();
-      if (l.includes('english')) {
+      if (l.includes('english') && !l.includes('tamil')) {
         setSelectedMedium('English Medium');
-      } else if (l.includes('tamil')) {
+      } else if (l.includes('tamil') && !l.includes('english')) {
         setSelectedMedium('Tamil Medium');
       }
     }
@@ -129,9 +135,9 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
 
   const finalMedium = isMultiMedium
     ? selectedMedium
-    : rawLang.toLowerCase().includes('tamil')
+    : lowerLang.includes('tamil')
     ? 'Tamil Medium'
-    : rawLang.toLowerCase().includes('english')
+    : lowerLang.includes('english')
     ? 'English Medium'
     : rawLang;
 
@@ -187,15 +193,13 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
       // Catalog snapshot at request start — enables parallel reviews when already warm
       const knownId = initialProduct?.id || products.find((p: any) => p.slug === slug || p.id === slug)?.id;
 
-      const productPromise = initialProduct
-        ? Promise.resolve(initialProduct)
-        : fetch(`/api/products?slug=${encodeURIComponent(slug)}`)
-            .then(async (res) => {
-              if (!res.ok) return null;
-              const list = await res.json();
-              return Array.isArray(list) && list.length > 0 ? list[0] : null;
-            })
-            .catch(() => null);
+      const productPromise = fetch(`/api/products?slug=${encodeURIComponent(slug)}&fresh=1`)
+        .then(async (res) => {
+          if (!res.ok) return initialProduct || null;
+          const list = await res.json();
+          return Array.isArray(list) && list.length > 0 ? list[0] : initialProduct || null;
+        })
+        .catch(() => initialProduct || null);
 
       const reviewsPromise = knownId
         ? fetch(`/api/reviews?bookId=${knownId}&stats=1`, { headers: reviewHeaders })
