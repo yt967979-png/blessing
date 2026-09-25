@@ -1334,6 +1334,35 @@ async function runSchemaInit(client: any) {
         CREATE UNIQUE INDEX IF NOT EXISTS uq_orders_razorpay_payment_id
           ON orders (razorpay_payment_id) WHERE razorpay_payment_id IS NOT NULL AND razorpay_payment_id <> '';
 
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_orders_razorpay_order_id
+          ON orders (razorpay_order_id) WHERE razorpay_order_id IS NOT NULL AND razorpay_order_id <> '';
+
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_payments_payment_id
+          ON payments (payment_id) WHERE payment_id IS NOT NULL AND payment_id <> '';
+
+        CREATE TABLE IF NOT EXISTS checkout_sessions (
+          id VARCHAR(255) PRIMARY KEY,
+          user_id VARCHAR(255) NOT NULL,
+          razorpay_order_id VARCHAR(255) UNIQUE NOT NULL,
+          hold_group_id VARCHAR(255),
+          status VARCHAR(50) DEFAULT 'PAYMENT_PENDING',
+          cart_snapshot JSONB NOT NULL,
+          price_snapshot JSONB NOT NULL,
+          shipping_address JSONB NOT NULL,
+          subtotal NUMERIC NOT NULL,
+          discount NUMERIC DEFAULT 0,
+          shipping_fee NUMERIC DEFAULT 0,
+          total_amount NUMERIC NOT NULL,
+          coupon_code VARCHAR(50),
+          coupon_id VARCHAR(255),
+          order_id VARCHAR(255),
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_checkout_sessions_rzp_order ON checkout_sessions(razorpay_order_id);
+        CREATE INDEX IF NOT EXISTS idx_checkout_sessions_user ON checkout_sessions(user_id);
+        CREATE INDEX IF NOT EXISTS idx_checkout_sessions_status ON checkout_sessions(status);
+
         CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders (user_id);
         CREATE INDEX IF NOT EXISTS idx_orders_status ON orders (order_status);
         CREATE INDEX IF NOT EXISTS idx_orders_created ON orders (ordered_at DESC);
@@ -1385,6 +1414,30 @@ async function runSchemaInit(client: any) {
       `ALTER TABLE stock_holds ADD COLUMN IF NOT EXISTS release_reason VARCHAR(100)`,
       `ALTER TABLE stock_holds ADD COLUMN IF NOT EXISTS released_at TIMESTAMP`,
       `ALTER TABLE support_messages ADD COLUMN IF NOT EXISTS metadata JSONB`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS uq_orders_razorpay_order_id ON orders (razorpay_order_id) WHERE razorpay_order_id IS NOT NULL AND razorpay_order_id <> ''`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS uq_payments_payment_id ON payments (payment_id) WHERE payment_id IS NOT NULL AND payment_id <> ''`,
+      `CREATE TABLE IF NOT EXISTS checkout_sessions (
+        id VARCHAR(255) PRIMARY KEY,
+        user_id VARCHAR(255) NOT NULL,
+        razorpay_order_id VARCHAR(255) UNIQUE NOT NULL,
+        hold_group_id VARCHAR(255),
+        status VARCHAR(50) DEFAULT 'PAYMENT_PENDING',
+        cart_snapshot JSONB NOT NULL,
+        price_snapshot JSONB NOT NULL,
+        shipping_address JSONB NOT NULL,
+        subtotal NUMERIC NOT NULL,
+        discount NUMERIC DEFAULT 0,
+        shipping_fee NUMERIC DEFAULT 0,
+        total_amount NUMERIC NOT NULL,
+        coupon_code VARCHAR(50),
+        coupon_id VARCHAR(255),
+        order_id VARCHAR(255),
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_checkout_sessions_rzp_order ON checkout_sessions(razorpay_order_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_checkout_sessions_user ON checkout_sessions(user_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_checkout_sessions_status ON checkout_sessions(status)`,
       `UPDATE courier_tracking SET awb_number = COALESCE(NULLIF(awb_number, ''), docket_number) WHERE awb_number IS NULL OR awb_number = ''`,
       `UPDATE courier_tracking SET status = COALESCE(NULLIF(status, ''), current_status) WHERE status IS NULL OR status = ''`,
       `UPDATE orders SET ordered_at = COALESCE(ordered_at, created_at, updated_at, NOW()) WHERE ordered_at IS NULL`,

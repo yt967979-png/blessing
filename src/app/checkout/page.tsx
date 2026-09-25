@@ -155,6 +155,26 @@ export default function CheckoutPage() {
     } catch {}
   }, []);
 
+  // Check if a previous mobile UPI payment completed while the tab was asleep/reloading
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const pendingRzpId = sessionStorage.getItem('bpg_pending_rzp_order');
+      if (pendingRzpId) {
+        fetch(`/api/checkout/status?orderId=${encodeURIComponent(pendingRzpId)}`)
+          .then((r) => r.json())
+          .then((d) => {
+            if (d.status === 'ORDER_CONFIRMED' && d.orderId) {
+              sessionStorage.removeItem('bpg_pending_rzp_order');
+              clearCartAfterOrder();
+              router.push(`/orders?orderId=${encodeURIComponent(d.orderId)}`);
+            }
+          })
+          .catch(() => {});
+      }
+    } catch {}
+  }, [clearCartAfterOrder, router]);
+
   // Persist draft address on input changes
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -534,74 +554,124 @@ export default function CheckoutPage() {
       const finalAmount = Math.max(1, baseAmount - effectiveDiscount);
 
       const processOrderCompletion = async (payId?: string, rzpOrderId?: string, rzpSignature?: string) => {
-        const orderRes = await fetch('/api/orders', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(user.token ? { Authorization: `Bearer ${user.token}` } : {}),
-          },
-          body: JSON.stringify({
-            userId: user.id,
-            customerName: selectedAddress.name || user.name || 'Customer',
-            customerPhone: selectedAddress.phone || user.phone || '',
-            alternatePhone: selectedAddress.alternatePhone || '',
-            address: selectedAddress.address,
-            city: selectedAddress.city || 'Chennai',
-            pincode: selectedAddress.pincode || '600012',
-            items: cart.map((i) => ({ id: i.id, qty: i.qty, price: i.price })),
-            paymentMethod: 'Razorpay UPI / Online',
-            razorpayPaymentId: payId || null,
-            razorpayOrderId: rzpOrderId || null,
-            razorpaySignature: rzpSignature || null,
-            idempotencyKey: idempotencyKeyRef.current,
-            couponCode: appliedCoupon?.code || null,
-          }),
-        });
-        const orderData = await orderRes.json();
-        if (!orderRes.ok) {
-          showToast(`❌ ${orderData.error || 'Order failed'}`);
-          // Order confirm failed after payment was captured — the server
-          // already refunds the payment (see /api/orders); the stock hold
-          // itself rolls back to 'held' automatically (same DB transaction),
-          // so it's still eligible for the TTL sweeper. Nothing to release
-          // here since this razorpay_order_id can't be retried once failed.
-          pendingRazorpayOrderIdRef.current = null;
-          return false;
+        let serverOrderId: string | null = null;
+        let confirmedTotal = finalAmount;
+        let orderStatus = 'Confirmed';
+        let paymentStatus = 'Payment Confirmed';
+
+        // 1. First attempt: Server-authoritative checkout status / signature verification
+        try {
+          const statusRes = await fetch('/api/checkout/status', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(user.token ? { Authorization: `Bearer ${user.token}` } : {}),
+            },
+            body: JSON.stringify({
+              razorpayOrderId: rzpOrderId,
+              razorpayPaymentId: payId,
+              razorpaySignature: rzpSignature,
+            }),
+          });
+          const statusData = await statusRes.json();
+          if (statusRes.ok && statusData.orderId) {
+            serverOrderId = statusData.orderId;
+            confirmedTotal = Number(statusData.totalAmount || finalAmount);
+          }
+        } catch (_) {}
+
+        // 2. Second attempt: If status wasn't immediately ready, poll status endpoint for up to 5 seconds
+        if (!serverOrderId && rzpOrderId) {
+          for (let attempt = 0; attempt < 5; attempt++) {
+            await new Promise((r) => setTimeout(r, 1000));
+            try {
+              const pollRes = await fetch(`/api/checkout/status?orderId=${encodeURIComponent(rzpOrderId)}`, {
+                headers: user.token ? { Authorization: `Bearer ${user.token}` } : {},
+              });
+              const pollData = await pollRes.json();
+              if (pollData.status === 'ORDER_CONFIRMED' && pollData.orderId) {
+                serverOrderId = pollData.orderId;
+                confirmedTotal = Number(pollData.totalAmount || finalAmount);
+                break;
+              }
+            } catch (_) {}
+          }
         }
-        const serverOrderId = orderData.orderId;
+
+        // 3. Fallback: call /api/orders if status endpoint did not finalize
         if (!serverOrderId) {
-          showToast('❌ Order was not saved');
-          pendingRazorpayOrderIdRef.current = null;
-          return false;
+          const orderRes = await fetch('/api/orders', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(user.token ? { Authorization: `Bearer ${user.token}` } : {}),
+            },
+            body: JSON.stringify({
+              userId: user.id,
+              customerName: selectedAddress.name || user.name || 'Customer',
+              customerPhone: selectedAddress.phone || user.phone || '',
+              alternatePhone: selectedAddress.alternatePhone || '',
+              address: selectedAddress.address,
+              city: selectedAddress.city || 'Chennai',
+              pincode: selectedAddress.pincode || '600012',
+              items: cart.map((i) => ({ id: i.id, qty: i.qty, price: i.price })),
+              paymentMethod: 'Razorpay UPI / Online',
+              razorpayPaymentId: payId || null,
+              razorpayOrderId: rzpOrderId || null,
+              razorpaySignature: rzpSignature || null,
+              idempotencyKey: idempotencyKeyRef.current,
+              couponCode: appliedCoupon?.code || null,
+            }),
+          });
+          const orderData = await orderRes.json();
+          if (orderRes.ok && orderData.orderId) {
+            serverOrderId = orderData.orderId;
+            confirmedTotal = Number(orderData.totalAmount ?? finalAmount);
+            orderStatus = orderData.status || 'Confirmed';
+            paymentStatus = orderData.paymentStatus || 'Payment Confirmed';
+          } else if (!orderRes.ok) {
+            showToast(`❌ ${orderData.error || 'Order failed'}`);
+            pendingRazorpayOrderIdRef.current = null;
+            return false;
+          }
         }
-        // Payment confirmed and order created — the hold is now permanently
-        // 'confirmed' server-side, nothing left to release for this attempt.
+
+        if (!serverOrderId) {
+          showToast('❌ Order verification in progress. Please check your orders page.');
+          pendingRazorpayOrderIdRef.current = null;
+          router.push('/orders');
+          return true;
+        }
+
         pendingRazorpayOrderIdRef.current = null;
+        try {
+          sessionStorage.removeItem('bpg_pending_rzp_order');
+        } catch {}
         clearCartAfterOrder();
         try {
           localStorage.removeItem('bpg_checkout_phone');
+          localStorage.removeItem('bpg_checkout_addr_draft');
         } catch {}
         idempotencyKeyRef.current = null;
+
         setOrderSuccessData({
           orderId: serverOrderId,
-          totalAmount: Number(orderData.totalAmount ?? finalAmount),
+          totalAmount: confirmedTotal,
           customerName: selectedAddress.name || user.name || 'Customer',
           address: selectedAddress.address,
           city: selectedAddress.city || 'Chennai',
           phone: selectedAddress.phone || user.phone || '',
           paymentMethod: 'Razorpay UPI / Online',
-          paymentStatus: orderData.paymentStatus || 'Payment Confirmed',
-          status: orderData.status || 'Confirmed',
+          paymentStatus: paymentStatus,
+          status: orderStatus,
           items: cart.map((i) => ({
             title: i.title,
             qty: i.qty,
             price: i.price,
           })),
         });
-        if (!orderData.duplicate) showToast(`🎉 Order #${serverOrderId} confirmed!`);
-        try {
-          localStorage.removeItem('bpg_checkout_addr_draft');
-        } catch {}
+
+        showToast(`🎉 Order #${serverOrderId} confirmed!`);
         router.push(`/orders?orderId=${encodeURIComponent(serverOrderId)}`);
         return true;
       };
@@ -616,6 +686,7 @@ export default function CheckoutPage() {
         },
         body: JSON.stringify({
           items: cartPayload,
+          address: selectedAddress,
           couponCode: appliedCoupon?.code || null,
           receipt: `rcpt-${Date.now()}`,
         }),
@@ -627,6 +698,10 @@ export default function CheckoutPage() {
         release();
         return;
       }
+
+      try {
+        sessionStorage.setItem('bpg_pending_rzp_order', rzpData.orderId);
+      } catch {}
 
       if (typeof rzpData.discountAmount === 'number' && appliedCoupon) {
         setAppliedCoupon((prev) =>

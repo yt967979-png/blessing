@@ -21,7 +21,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { items, couponCode, receipt } = await request.json().catch(() => ({}));
+    const { items, couponCode, receipt, address } = await request.json().catch(() => ({}));
     if (!Array.isArray(items) || items.length === 0) {
       return NextResponse.json({ error: 'Cart is empty' }, { status: 400 });
     }
@@ -114,6 +114,75 @@ export async function POST(request: Request) {
     // Link the hold group to the real Razorpay order id so confirm/release
     // (order placement, webhook, TTL sweep) can find it going forward.
     await attachRazorpayOrderId(hold.holdGroupId, rzpData.id);
+
+    // Persist immutable server-authoritative checkout session snapshot
+    try {
+      let resolvedAddress = address || null;
+      if (!resolvedAddress) {
+        const addrRes = await queryDb(
+          `SELECT * FROM addresses WHERE user_id = $1 ORDER BY is_default DESC, created_at DESC LIMIT 1`,
+          [session.userId]
+        );
+        if (addrRes.rows.length > 0) {
+          const a = addrRes.rows[0];
+          resolvedAddress = {
+            name: a.full_name,
+            phone: a.phone,
+            alternatePhone: a.alternate_phone || '',
+            address: a.address_line1 + (a.address_line2 ? ', ' + a.address_line2 : ''),
+            city: a.city,
+            pincode: a.pincode,
+          };
+        }
+      }
+
+      const cartSnapshot = checkout.verifiedItems.map((i: any) => ({
+        id: i.id,
+        title: i.title,
+        price: i.price,
+        qty: i.qty,
+        subtotal: i.subtotal,
+      }));
+      const priceSnapshot = {
+        subtotal: checkout.subtotal,
+        discountAmount: checkout.discountAmount,
+        shippingFee: checkout.shippingFee,
+        totalAmount: checkout.totalAmount,
+      };
+
+      const sessionId = `cs-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      await queryDb(
+        `INSERT INTO checkout_sessions (
+          id, user_id, razorpay_order_id, hold_group_id, status,
+          cart_snapshot, price_snapshot, shipping_address,
+          subtotal, discount, shipping_fee, total_amount,
+          coupon_code, coupon_id
+        ) VALUES ($1, $2, $3, $4, 'PAYMENT_PENDING', $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        ON CONFLICT (razorpay_order_id) DO UPDATE SET
+          cart_snapshot = EXCLUDED.cart_snapshot,
+          price_snapshot = EXCLUDED.price_snapshot,
+          shipping_address = EXCLUDED.shipping_address,
+          total_amount = EXCLUDED.total_amount,
+          updated_at = NOW()`,
+        [
+          sessionId,
+          session.userId,
+          rzpData.id,
+          hold.holdGroupId,
+          JSON.stringify(cartSnapshot),
+          JSON.stringify(priceSnapshot),
+          JSON.stringify(resolvedAddress || {}),
+          checkout.subtotal,
+          checkout.discountAmount,
+          checkout.shippingFee,
+          checkout.totalAmount,
+          checkout.appliedCoupon?.code || null,
+          checkout.appliedCoupon?.id || null,
+        ]
+      );
+    } catch (csErr: any) {
+      console.warn('[razorpay] Could not write checkout_sessions snapshot:', csErr?.message || csErr);
+    }
 
     return NextResponse.json({
       orderId: rzpData.id,

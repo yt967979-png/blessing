@@ -14,6 +14,7 @@
 import { queryDb } from '@/lib/db';
 import { refundRazorpayPayment } from '@/lib/razorpayRefund';
 import { releaseStockHolds } from '@/lib/stockHold';
+import { finalizeOrderFromPayment } from '@/lib/orderFinalizer';
 
 export async function refundStaleOrphanCaptures(maxAgeMinutes = 10): Promise<number> {
   let refunded = 0;
@@ -44,6 +45,22 @@ export async function refundStaleOrphanCaptures(maxAgeMinutes = 10): Promise<num
           matched.rows[0].id,
         ]).catch(() => {});
         continue;
+      }
+
+      // Prioritize order fulfillment over refund: try to finalize and rescue the order first
+      const rzpOrderId = String(row.transaction_id || '').trim();
+      if (rzpOrderId && rzpOrderId !== paymentId) {
+        const finalization = await finalizeOrderFromPayment({
+          razorpayOrderId: rzpOrderId,
+          razorpayPaymentId: paymentId,
+          source: 'background_reconciliation',
+        });
+        if (finalization.ok) {
+          console.log(
+            `[orphan-refund] Rescued and finalized order ${finalization.orderNumber} for orphan payment ${paymentId}`
+          );
+          continue;
+        }
       }
 
       // ATOMIC CLAIM: Only the single worker that successfully updates status from 'ORPHAN_CAPTURED'

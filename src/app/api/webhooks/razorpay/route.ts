@@ -5,6 +5,7 @@ import { isOrderCancelled } from '@/lib/orderStatus';
 import { refundRazorpayPayment } from '@/lib/razorpayRefund';
 import { confirmStockHolds, releaseStockHolds } from '@/lib/stockHold';
 import { recordSystemError } from '@/lib/errorMonitor';
+import { finalizeOrderFromPayment } from '@/lib/orderFinalizer';
 
 /**
  * Grace window before an orphan capture (payment succeeded, no matching order
@@ -253,362 +254,35 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, action: 'refund_processed_recorded', paymentId: refundPayId });
     }
 
-    // Payment is captured — keep the reserved stock no matter what happens
-    // below. Covers the "client closed the tab before POST /api/orders ran"
-    // orphan case: without this, the TTL sweeper would eventually release
-    // stock that was actually paid for. Idempotent no-op if already confirmed.
-    if (effectiveOrderId) {
-      try {
-        await confirmStockHolds(effectiveOrderId);
-      } catch (err: any) {
-        console.warn('[razorpay-webhook] confirmStockHolds failed:', err?.message || err);
-      }
-    }
+    // Payment is captured — finalize the order through the server-authoritative engine
+    releaseDbClient(client);
 
-    let order: any = null;
+    const finalization = await finalizeOrderFromPayment({
+      razorpayOrderId: effectiveOrderId,
+      razorpayPaymentId: effectivePaymentId,
+      amountRupees,
+      source: 'webhook',
+    });
 
-    if (effectivePaymentId) {
-      const byPay = await client.query(
-        `SELECT id, order_number, order_status, payment_status, razorpay_payment_id, razorpay_order_id
-         FROM orders WHERE razorpay_payment_id = $1 LIMIT 1`,
-        [effectivePaymentId]
-      );
-      if (byPay.rows.length) order = byPay.rows[0];
-    }
-
-    if (!order && effectiveOrderId) {
-      const byRzp = await client.query(
-        `SELECT id, order_number, order_status, payment_status, razorpay_payment_id, razorpay_order_id
-         FROM orders WHERE razorpay_order_id = $1 LIMIT 1`,
-        [effectiveOrderId]
-      );
-      if (byRzp.rows.length) order = byRzp.rows[0];
-    }
-
-    if (order) {
-      if (isOrderCancelled(order.order_status)) {
-        return NextResponse.json({
-          ok: true,
-          orderId: order.order_number,
-          action: 'noop_cancelled',
-        });
-      }
-
-      const ps = String(order.payment_status || '').toLowerCase();
-      const alreadyPaid =
-        ps.includes('confirm') || ps.includes('paid') || ps.includes('success');
-      const samePayment =
-        effectivePaymentId &&
-        String(order.razorpay_payment_id || '') === effectivePaymentId;
-
-      if (alreadyPaid && (samePayment || !effectivePaymentId)) {
-        return NextResponse.json({
-          ok: true,
-          orderId: order.order_number,
-          action: 'noop_already_paid',
-        });
-      }
-
-      // Heal: link payment_id if missing; mark Payment Confirmed
-      await client.query(
-        `UPDATE orders
-         SET payment_status = 'Payment Confirmed',
-             razorpay_payment_id = COALESCE(NULLIF(razorpay_payment_id, ''), $1),
-             razorpay_order_id = COALESCE(NULLIF(razorpay_order_id, ''), $2),
-             updated_at = NOW()
-         WHERE id = $3`,
-        [effectivePaymentId || null, effectiveOrderId || null, order.id]
-      );
-
-      if (effectivePaymentId) {
-        const existingPay = await client.query(
-          `SELECT id FROM payments WHERE payment_id = $1 LIMIT 1`,
-          [effectivePaymentId]
-        );
-        if (!existingPay.rows.length) {
-          await client.query(
-            `INSERT INTO payments (id, order_id, payment_id, transaction_id, amount, status)
-             VALUES ($1, $2, $3, $4, $5, 'SUCCESS')`,
-            [
-              `pay-wh-${Date.now()}`,
-              order.id,
-              effectivePaymentId,
-              effectiveOrderId || effectivePaymentId,
-              amountRupees || 0,
-            ]
-          );
-        }
-      }
-
-      try {
-        await client.query(
-          `INSERT INTO order_timeline (id, order_id, status, remarks)
-           VALUES ($1, $2, 'Payment Confirmed', $3)`,
-          [
-            `tl-wh-${Date.now()}`,
-            order.id,
-            `Razorpay webhook ${eventName}: payment confirmed${effectivePaymentId ? ` (${effectivePaymentId})` : ''}`,
-          ]
-        );
-      } catch {
-        /* timeline optional */
-      }
-
-      // Alert connected admin dashboards in real time
-      try {
-        const { broadcastOrderChange, notifyOrderChanged } = await import('@/app/api/orders/stream/route');
-        const orderEvent = {
-          type: 'ORDER_CREATED',
-          orderId: order.order_number,
-          status: 'Payment Confirmed',
-          userId: String(order.user_id || ''),
-          timestamp: Date.now(),
-        };
-        broadcastOrderChange(orderEvent);
-        await notifyOrderChanged(orderEvent);
-      } catch (_) {}
-
+    if (finalization.ok) {
       return NextResponse.json({
         ok: true,
-        orderId: order.order_number,
-        action: 'healed_payment_status',
+        action: finalization.isDuplicate ? 'noop_already_finalized' : 'order_finalized',
+        orderNumber: finalization.orderNumber,
+        orderId: finalization.orderId,
       });
     }
 
-    // Orphan capture — payment succeeded but no local order yet (e.g. mobile UPI app-switch drop)
     console.warn(
-      `[razorpay-webhook] Orphan ${eventName}: payment=${effectivePaymentId || 'n/a'} rzp_order=${effectiveOrderId || 'n/a'} amount=${amountRupees}`
+      `[razorpay-webhook] Orphan ${eventName}: payment=${effectivePaymentId || 'n/a'} rzp_order=${effectiveOrderId || 'n/a'} amount=${amountRupees} - ${finalization.error}`
     );
-
-    // AUTO-HEAL: Reconstruct and fulfill order from stock holds and customer address
-    if (isCapture && effectiveOrderId) {
-      try {
-        const holdsRes = await client.query(
-          `SELECT sh.book_id, sh.qty, sh.user_id, b.title, b.price, b.discount_price
-           FROM stock_holds sh
-           LEFT JOIN books b ON b.id = sh.book_id
-           WHERE sh.razorpay_order_id = $1`,
-          [effectiveOrderId]
-        );
-
-        if (holdsRes.rows.length > 0) {
-          const holdUserId = holdsRes.rows[0].user_id;
-          let addrRes: any = { rows: [] };
-          let customerDetails: any = null;
-
-          if (holdUserId) {
-            addrRes = await client.query(
-              `SELECT * FROM addresses WHERE user_id = $1 ORDER BY is_default DESC, created_at DESC LIMIT 1`,
-              [holdUserId]
-            );
-            const userRes = await client.query(`SELECT id, name, email, phone FROM users WHERE id = $1`, [holdUserId]);
-            if (userRes.rows.length > 0) {
-              customerDetails = userRes.rows[0];
-            }
-          }
-
-          if (addrRes.rows.length > 0 && customerDetails) {
-            const addr = addrRes.rows[0];
-            const orderId = `ord-${Date.now()}`;
-            const orderNumber =
-              'BPG-' +
-              Date.now().toString(36).toUpperCase().slice(-5) +
-              Math.random().toString(36).slice(2, 5).toUpperCase();
-            const ymd = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-            const internalShipmentId = `SHP-${ymd}-${Math.floor(100000 + Math.random() * 900000)}`;
-
-            const shippingAddressObj = JSON.stringify({
-              name: addr.full_name || customerDetails.name || 'Customer',
-              phone: addr.phone || customerDetails.phone || '',
-              alternatePhone: addr.alternate_phone || '',
-              address: addr.address_line1 + (addr.address_line2 ? ', ' + addr.address_line2 : ''),
-              city: addr.city || 'Chennai',
-              pincode: addr.pincode || '',
-            });
-
-            const { generateNextGstInvoiceNumber } = await import('@/lib/invoiceGenerator');
-            const invoiceNumber = await generateNextGstInvoiceNumber(client);
-
-            let subtotal = 0;
-            const itemsToInsert = holdsRes.rows.map((row: any) => {
-              const unitPrice = Number(row.discount_price || row.price || 0);
-              const qty = Number(row.qty || 1);
-              const lineSubtotal = unitPrice * qty;
-              subtotal += lineSubtotal;
-              return {
-                id: `item-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-                bookId: row.book_id,
-                title: row.title || 'Educational Guide',
-                price: unitPrice,
-                qty,
-                subtotal: lineSubtotal,
-              };
-            });
-
-            const orderTotal = amountRupees > 0 ? amountRupees : subtotal;
-
-            await client.query('BEGIN');
-
-            await client.query(
-              `INSERT INTO orders (
-                id, order_number, user_id, address_id, subtotal, discount, shipping_charge, total_amount,
-                payment_method, payment_status, order_status, courier_name, shipment_id,
-                shipping_address, razorpay_order_id, razorpay_payment_id, invoice_number,
-                ordered_at, created_at, updated_at
-              ) VALUES (
-                $1, $2, $3, $4, $5, 0, 0, $6,
-                'Razorpay UPI', 'Payment Confirmed', 'Confirmed', 'ST Courier Express', $7,
-                $8, $9, $10, $11,
-                NOW(), NOW(), NOW()
-              )`,
-              [
-                orderId,
-                orderNumber,
-                holdUserId,
-                addr.id,
-                subtotal,
-                orderTotal,
-                internalShipmentId,
-                shippingAddressObj,
-                effectiveOrderId,
-                effectivePaymentId || null,
-                invoiceNumber,
-              ]
-            );
-
-            for (const item of itemsToInsert) {
-              await client.query(
-                `INSERT INTO order_items (id, order_id, book_id, book_title, book_price, quantity, subtotal)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-                [item.id, orderId, item.bookId, item.title, item.price, item.qty, item.subtotal]
-              );
-            }
-
-            if (effectivePaymentId) {
-              const existingPay = await client.query(
-                `SELECT id FROM payments WHERE payment_id = $1 LIMIT 1`,
-                [effectivePaymentId]
-              );
-              if (existingPay.rows.length) {
-                await client.query(
-                  `UPDATE payments SET order_id = $1, status = 'SUCCESS' WHERE payment_id = $2`,
-                  [orderId, effectivePaymentId]
-                );
-              } else {
-                await client.query(
-                  `INSERT INTO payments (id, order_id, payment_id, transaction_id, amount, status)
-                   VALUES ($1, $2, $3, $4, $5, 'SUCCESS')`,
-                  [
-                    `pay-wh-${Date.now()}`,
-                    orderId,
-                    effectivePaymentId,
-                    effectiveOrderId,
-                    orderTotal,
-                  ]
-                );
-              }
-            }
-
-            await client.query(
-              `INSERT INTO order_timeline (id, order_id, status, remarks)
-               VALUES ($1, $2, 'Payment Confirmed', $3)`,
-              [
-                `tl-wh-${Date.now()}`,
-                orderId,
-                `Order auto-recovered from Razorpay webhook (${eventName}) after mobile app-switch redirect.`,
-              ]
-            );
-
-            if (customerDetails.phone) {
-              const phoneDigits = String(customerDetails.phone).replace(/\D/g, '').slice(-10);
-              await client.query(
-                `DELETE FROM abandoned_carts WHERE phone LIKE $1 OR user_id = $2`,
-                [`%${phoneDigits}%`, holdUserId]
-              ).catch(() => {});
-            }
-
-            await client.query('COMMIT');
-
-            try {
-              const { broadcastOrderChange, notifyOrderChanged } = await import('@/app/api/orders/stream/route');
-              const orderEvent = {
-                type: 'ORDER_CREATED',
-                orderId: orderNumber,
-                status: 'Payment Confirmed',
-                userId: String(holdUserId),
-                timestamp: Date.now(),
-              };
-              broadcastOrderChange(orderEvent);
-              await notifyOrderChanged(orderEvent);
-            } catch (_) {}
-
-            return NextResponse.json({
-              ok: true,
-              action: 'auto_healed_and_created_order',
-              orderNumber,
-              orderId,
-              paymentId: effectivePaymentId,
-            });
-          }
-        }
-      } catch (autoHealErr: any) {
-        console.error('[razorpay-webhook] autoHeal order error:', autoHealErr?.message || autoHealErr);
-        try {
-          await client.query('ROLLBACK');
-        } catch (_) {}
-      }
-    }
-
-    if (effectivePaymentId) {
-      const existingPay = await client.query(
-        `SELECT id, status, paid_at FROM payments WHERE payment_id = $1 LIMIT 1`,
-        [effectivePaymentId]
-      );
-
-      if (!existingPay.rows.length) {
-        // First sighting — too fresh to refund. Place-order is usually seconds
-        // away from committing; give it the full grace window before healing.
-        await client.query(
-          `INSERT INTO payments (id, order_id, payment_id, transaction_id, amount, status)
-           VALUES ($1, NULL, $2, $3, $4, 'ORPHAN_CAPTURED')`,
-          [
-            `pay-orphan-${Date.now()}`,
-            effectivePaymentId,
-            effectiveOrderId || effectivePaymentId,
-            amountRupees || 0,
-          ]
-        ).catch((err: any) => {
-          console.warn('[razorpay-webhook] Could not persist orphan payment row:', err?.message || err);
-        });
-        return NextResponse.json({
-          ok: true,
-          action: 'orphan_logged',
-          paymentId: effectivePaymentId,
-          note: 'No matching order yet — will auto-refund if still orphaned past the grace window (background sweep also covers this).',
-        });
-      }
-
-      const existingStatus = String(existingPay.rows[0]?.status || '').toUpperCase();
-      if (existingStatus.includes('REFUND')) {
-        return NextResponse.json({ ok: true, action: 'noop_already_refunded', paymentId: effectivePaymentId });
-      }
-
-      if (existingStatus === 'ORPHAN_CAPTURED') {
-        return NextResponse.json({
-          ok: true,
-          action: 'orphan_pending_reconciliation',
-          paymentId: effectivePaymentId,
-          note: 'Payment captured without local order — retained in database for admin reconciliation or manual refund.',
-        });
-      }
-    }
 
     return NextResponse.json({
       ok: true,
       action: 'orphan_logged',
       paymentId: effectivePaymentId || null,
       razorpayOrderId: effectiveOrderId || null,
-      note: 'No matching order — admin can reconcile or refund manually.',
+      note: finalization.error,
     });
   } catch (err: any) {
     console.error('[razorpay-webhook]', err?.message || err);
