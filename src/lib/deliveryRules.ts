@@ -8,7 +8,7 @@ export function isComboItem(item: any): boolean {
   if (!item) return false;
   if (item.category === 'combo') return true;
   if (item.category_id === 'cat-combos') return true;
-  const title = String(item.title || '').toLowerCase();
+  const title = String(item.title || item.name || '').toLowerCase();
   return (
     title.includes('combo') ||
     title.includes('5 in 1') ||

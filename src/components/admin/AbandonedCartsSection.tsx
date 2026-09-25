@@ -405,7 +405,7 @@ export const AbandonedCartsSection: React.FC<AbandonedCartsSectionProps> = ({
                     {cart.shippingFee && cart.shippingFee > 0 ? (
                       <span>Books: ₹{cart.subtotal || (cart.totalAmount - cart.shippingFee)} + Shipping: ₹{cart.shippingFee}</span>
                     ) : (
-                      <span>{cart.totalQty} {cart.totalQty === 1 ? 'book' : 'books'} · Free Delivery</span>
+                      <span className="text-emerald-600 font-bold">100% Free Delivery 🎉</span>
                     )}
                   </div>
                 </div>

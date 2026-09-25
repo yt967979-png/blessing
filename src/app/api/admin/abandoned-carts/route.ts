@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDbClient, releaseDbClient } from '@/lib/db';
 import { verifyAdminRequest, forbiddenResponse, unauthorizedResponse } from '@/lib/serverSecurity';
-import { deliveryFeeForQty } from '@/lib/deliveryRules';
+import { deliveryFeeForCart, cartHasCombo } from '@/lib/deliveryRules';
 
 export async function GET(request: NextRequest) {
   const auth = await verifyAdminRequest(request);
@@ -61,7 +61,8 @@ export async function GET(request: NextRequest) {
         (sum: number, item: any) => sum + Number(item.qty || 1),
         0
       );
-      const shippingFee = deliveryFeeForQty(totalQty);
+      const hasCombo = cartHasCombo(items);
+      const shippingFee = deliveryFeeForCart(items);
       const totalAmount = subtotal + shippingFee;
 
       return {
