@@ -1,8 +1,21 @@
 import type { Metadata } from 'next';
 import Script from 'next/script';
+import { Outfit, Plus_Jakarta_Sans } from 'next/font/google';
 import './globals.css';
 import { StoreProvider } from '@/context/StoreContext';
 import { ClientChrome } from '@/components/layout/ClientChrome';
+
+const outfit = Outfit({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-outfit',
+});
+
+const plusJakartaSans = Plus_Jakarta_Sans({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-sans',
+});
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://blessingpowerguide.in';
 
@@ -85,15 +98,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
-        />
-      </head>
-      <body className="antialiased" suppressHydrationWarning>
+      <body className={`${outfit.variable} ${plusJakartaSans.variable} antialiased`} suppressHydrationWarning>
         <StoreProvider>
           <ClientChrome>{children}</ClientChrome>
         </StoreProvider>

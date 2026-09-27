@@ -3,6 +3,8 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { userNeedsProfile } from '@/lib/userProfile';
 import { deliveryFeeForQty, cartHasCombo, effectiveBookCount, isMoqSatisfied } from '@/lib/deliveryRules';
+import { IS_CHECKOUT_PAUSED, DEFAULT_CHECKOUT_PAUSE_MESSAGE } from '@/lib/checkoutConstants';
+import { authHeaders } from '@/lib/clientAuth';
 
 export interface Product {
   id: string | number;
@@ -133,6 +135,11 @@ interface StoreContextType {
   orderSuccessData: any | null;
   setOrderSuccessData: (data: any | null) => void;
   showToast: (msg: string) => void;
+  isCheckoutPaused: boolean;
+  checkoutPauseMessage: string;
+  isCheckoutControlLoading: boolean;
+  refreshCheckoutControl: () => Promise<void>;
+  toggleCheckoutPause: (paused: boolean, customMessage?: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
@@ -182,6 +189,60 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [orderSuccessData, setOrderSuccessData] = useState<any | null>(null);
+  const [isCheckoutPaused, setIsCheckoutPaused] = useState<boolean>(IS_CHECKOUT_PAUSED);
+  const [checkoutPauseMessage, setCheckoutPauseMessage] = useState<string>(DEFAULT_CHECKOUT_PAUSE_MESSAGE);
+  const [isCheckoutControlLoading, setIsCheckoutControlLoading] = useState<boolean>(false);
+
+  const refreshCheckoutControl = useCallback(async () => {
+    try {
+      const res = await fetch('/api/checkout/control', { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        if (typeof data.paused === 'boolean') {
+          setIsCheckoutPaused(data.paused);
+        }
+        if (data.message) {
+          setCheckoutPauseMessage(data.message);
+        }
+      }
+    } catch {
+      /* ignore network blip */
+    }
+  }, []);
+
+  const toggleCheckoutPause = useCallback(
+    async (paused: boolean, customMessage?: string) => {
+      setIsCheckoutControlLoading(true);
+      try {
+        const res = await fetch('/api/checkout/control', {
+          method: 'POST',
+          headers: authHeaders(user),
+          credentials: 'include',
+          body: JSON.stringify({ paused, message: customMessage }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          throw new Error(data.error || 'Failed to update checkout status');
+        }
+        setIsCheckoutPaused(data.paused);
+        if (data.message) {
+          setCheckoutPauseMessage(data.message);
+        }
+        return { success: true };
+      } catch (err: any) {
+        return { success: false, error: err?.message || 'Failed to update checkout status' };
+      } finally {
+        setIsCheckoutControlLoading(false);
+      }
+    },
+    [user]
+  );
+
+  useEffect(() => {
+    void refreshCheckoutControl();
+    const interval = setInterval(refreshCheckoutControl, 30000);
+    return () => clearInterval(interval);
+  }, [refreshCheckoutControl]);
 
   const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -1055,6 +1116,10 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const requestCheckout = (open: boolean) => {
+    if (open && isCheckoutPaused) {
+      showToast(checkoutPauseMessage || DEFAULT_CHECKOUT_PAUSE_MESSAGE);
+      return;
+    }
     if (open && !user) {
       setIsAuthOpen(true);
       showToast('Please continue with Google to place an order');
@@ -1335,6 +1400,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             messages.push(r.message || `Only ${r.allowedQty} of "${item.title}" available — quantity updated`);
             next.push({
               ...item,
+              title: r.title || item.title,
+              category: (r.category as any) || item.category,
               qty: r.allowedQty,
               stock: r.availableStock,
               inStock: true,
@@ -1345,6 +1412,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           } else {
             next.push({
               ...item,
+              title: r.title || item.title,
+              category: (r.category as any) || item.category,
               stock: r.availableStock,
               inStock: r.inStock,
               price: livePrice,
@@ -1385,6 +1454,56 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }, POLL_MS);
     return () => clearInterval(interval);
   }, [hydrated, cart.length, validateCartStock]);
+
+  // Synchronize cart items with live catalog products (reconciles price, mrp, category, inStock, and drops ghost/deleted books)
+  useEffect(() => {
+    if (!hydrated || products.length === 0 || cart.length === 0) return;
+    setCart((prev) => {
+      let changed = false;
+      const next: CartItem[] = [];
+      for (const item of prev) {
+        const live = products.find((p) => String(p.id) === String(item.id) || String(p.slug) === String(item.slug));
+        if (!live) {
+          // If the book does not exist in the live catalog, drop the ghost entry!
+          changed = true;
+          continue;
+        }
+        const priceChanged = live.price !== item.price;
+        const mrpChanged = live.mrp !== item.mrp;
+        const catChanged = live.category !== item.category;
+        const titleChanged = live.title !== item.title;
+        const stockChanged = live.stock !== item.stock || live.inStock !== item.inStock;
+
+        if (priceChanged || mrpChanged || catChanged || titleChanged || stockChanged) {
+          changed = true;
+          next.push({
+            ...item,
+            id: live.id,
+            slug: live.slug,
+            title: live.title,
+            price: live.price,
+            mrp: live.mrp,
+            discount: live.discount,
+            category: live.category,
+            cls: live.cls,
+            subject: live.subject,
+            inStock: live.inStock,
+            stock: live.stock,
+            image: live.image,
+          });
+        } else {
+          next.push(item);
+        }
+      }
+      if (changed) {
+        try {
+          localStorage.setItem('bpg_cart_next', JSON.stringify(next));
+        } catch {}
+        return next;
+      }
+      return prev;
+    });
+  }, [hydrated, products]);
 
   const toggleWishlist = (id: string | number) => {
     const sId = String(id);
@@ -1939,6 +2058,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         orderSuccessData,
         setOrderSuccessData,
         showToast,
+        isCheckoutPaused,
+        checkoutPauseMessage,
+        isCheckoutControlLoading,
+        refreshCheckoutControl,
+        toggleCheckoutPause,
       }}
     >
       {children}

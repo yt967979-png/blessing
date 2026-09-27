@@ -35,6 +35,7 @@ import {
   ALL_COMBO_SUBJECT_DEFINITIONS,
   getComboIncludedSubjects,
 } from '@/lib/comboMetadata';
+import { isComboItem } from '@/lib/deliveryRules';
 
 export interface StockHoldItem {
   id: string;
@@ -85,6 +86,65 @@ const DEFAULT_SUBJECTS = [
   'Geography',
   'All-in-One Full Set (Combo)',
 ];
+
+export function isProductOrEditACombo(item: {
+  subject?: string | null;
+  title?: string | null;
+  category?: string | null;
+  category_id?: string | null;
+  comboSubjects?: string[] | null;
+  combo_subjects?: string[] | null;
+}): boolean {
+  const subj = String(item.subject || '').trim().toLowerCase();
+  const title = String(item.title || '').trim().toLowerCase();
+
+  // 1. Single subject guides can NEVER be combos (Tamil, English, Mathematics, Science, etc.)
+  const singleSubjects = [
+    'tamil',
+    'english',
+    'mathematics',
+    'maths',
+    'science',
+    'social science',
+    'social',
+    'physics',
+    'chemistry',
+    'biology',
+    'computer science',
+    'commerce',
+    'accountancy',
+    'economics',
+    'business mathematics',
+    'history',
+    'geography',
+  ];
+  if (singleSubjects.includes(subj)) {
+    return false;
+  }
+
+  // 2. Explicit Combo Subject option
+  if (subj === 'all-in-one full set (combo)' || subj.includes('combo') || subj.includes('all-in-one')) {
+    return true;
+  }
+
+  // 3. Explicit Combo title keywords (only when subject is not a single subject)
+  const isComboTitle =
+    title.includes('combo') ||
+    title.includes('5 in 1') ||
+    title.includes('5-in-1') ||
+    title.includes('6 in 1') ||
+    title.includes('6-in-1') ||
+    title.includes('7 in 1') ||
+    title.includes('7-in-1') ||
+    title.includes('all in one') ||
+    title.includes('all-in-one') ||
+    title.includes('full set');
+
+  if (isComboTitle) return true;
+
+  // 4. Strict check with isComboItem
+  return isComboItem(item);
+}
 
 export const COMBO_PRESETS = [
   {
@@ -257,10 +317,12 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
     setEditCls(p.cls || '10th');
     setEditSubject(p.subject || 'Mathematics');
     setEditMedium(p.language || 'Both');
-    const initialSubs =
-      p.comboSubjects && p.comboSubjects.length > 0
-        ? p.comboSubjects
-        : getComboIncludedSubjects(p).map((s) => s.name);
+    const isCombo = isProductOrEditACombo(p);
+    const initialSubs = isCombo
+      ? (p.comboSubjects && p.comboSubjects.length > 0
+          ? p.comboSubjects
+          : getComboIncludedSubjects(p).map((s) => s.name))
+      : [];
     setEditComboSubjects(initialSubs);
     setEditCustomComboSubjectInput('');
   };
@@ -304,20 +366,23 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
     const numPrice = Number(editPrice);
     const numMrp = Number(editMrp);
     const numStock = Math.max(0, parseInt(String(editStock), 10) || 0);
-    const isCombo =
-      editSubject === 'All-in-One Full Set (Combo)' ||
-      editTitle.toLowerCase().includes('combo') ||
-      editComboSubjects.length > 0;
+    const isCombo = isProductOrEditACombo({
+      subject: editSubject,
+      title: editTitle,
+    });
+    const cleanComboSubjects = isCombo ? editComboSubjects : [];
     try {
       await onUpdateProduct(id, {
         title: editTitle.trim(),
         badge: editBadge.trim(),
         image: editImage.trim() || undefined,
         cls: editCls,
-        subject: editSubject,
+        subject: editSubject.trim(),
         language: editMedium,
         category: isCombo ? 'combo' : 'guide',
-        comboSubjects: isCombo ? editComboSubjects : undefined,
+        category_id: isCombo ? 'cat-combos' : `cat-${String(editCls).toLowerCase().trim()}`,
+        comboSubjects: cleanComboSubjects,
+        combo_subjects: cleanComboSubjects,
         price: numPrice,
         mrp: numMrp,
         stock: numStock,
@@ -468,9 +533,10 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
       return;
     }
 
-    const isCombo =
-      selectedSubjectOption === 'All-in-One Full Set (Combo)' ||
-      resolvedSubject.toLowerCase().includes('combo');
+    const isCombo = isProductOrEditACombo({
+      title: newTitle,
+      subject: resolvedSubject,
+    });
 
     if (isCombo && selectedComboSubjects.length === 0) {
       onShowToast('⚠️ Please tick at least 1 subject for this combo pack');
@@ -546,6 +612,13 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
 
   return (
     <div className="space-y-4">
+      {/* Subject suggestions datalist for edit inputs */}
+      <datalist id="admin-subject-options">
+        {DEFAULT_SUBJECTS.map((s) => (
+          <option key={s} value={s} />
+        ))}
+      </datalist>
+
       {/* Active Student Holds Banner (If any) */}
       {(activeStockHolds?.count ?? 0) > 0 && (
         <div className="bg-blue-50/80 border border-blue-200 rounded-2xl p-4 text-xs">
@@ -822,7 +895,7 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                                 )}
                               </div>
                             )}
-                            {isEditing && (editSubject === 'All-in-One Full Set (Combo)' || p.category === 'combo' || p.title.toLowerCase().includes('combo') || editComboSubjects.length > 0) && (
+                            {isEditing && isProductOrEditACombo({ subject: editSubject, title: editTitle }) && (
                               <div className="mt-3 p-3 bg-purple-50/80 border border-purple-200 rounded-xl space-y-2">
                                 <div className="flex items-center justify-between">
                                   <div className="flex items-center gap-1.5">
@@ -965,9 +1038,16 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                             </select>
                             <input
                               type="text"
+                              list="admin-subject-options"
                               value={editSubject}
-                              onChange={(e) => setEditSubject(e.target.value)}
-                              placeholder="Subject (e.g. Mathematics)"
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setEditSubject(val);
+                                if (isProductOrEditACombo({ subject: val, title: editTitle }) && editComboSubjects.length === 0) {
+                                  setEditComboSubjects(getComboIncludedSubjects({ cls: editCls, title: editTitle }).map((s) => s.name));
+                                }
+                              }}
+                              placeholder="Subject (e.g. Tamil)"
                               className="w-full px-2 py-1 bg-white border border-slate-300 rounded-lg text-xs font-medium outline-none focus:border-[#2874f0]"
                             />
                           </div>
@@ -1181,15 +1261,22 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                         <label className="text-[11px] font-bold text-slate-700 block mb-1">Subject</label>
                         <input
                           type="text"
+                          list="admin-subject-options"
                           value={editSubject}
-                          onChange={(e) => setEditSubject(e.target.value)}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setEditSubject(val);
+                            if (isProductOrEditACombo({ subject: val, title: editTitle }) && editComboSubjects.length === 0) {
+                              setEditComboSubjects(getComboIncludedSubjects({ cls: editCls, title: editTitle }).map((s) => s.name));
+                            }
+                          }}
                           className="w-full px-2 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs outline-none"
                         />
                       </div>
                     </div>
 
                     {/* Mobile Combo Subjects Editor */}
-                    {(editSubject === 'All-in-One Full Set (Combo)' || p.category === 'combo' || p.title.toLowerCase().includes('combo') || editComboSubjects.length > 0) && (
+                    {isProductOrEditACombo({ subject: editSubject, title: editTitle }) && (
                       <div className="p-3 bg-purple-50/80 border border-purple-200 rounded-xl space-y-2">
                         <div className="flex items-center justify-between">
                           <span className="text-[11px] font-black text-purple-950 uppercase">
@@ -1688,7 +1775,7 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                           <span className="text-xl">📦</span>
                           <div>
                             <h5 className="font-extrabold text-xs text-slate-900 flex items-center gap-1.5">
-                              <span>What's Inside This Complete Combo Pack</span>
+                              <span>What&apos;s Inside This Complete Combo Pack</span>
                               <span className="text-[10px] bg-amber-400 text-slate-900 px-2 py-0.5 rounded-full font-black">
                                 {selectedComboSubjects.length} IN 1
                               </span>

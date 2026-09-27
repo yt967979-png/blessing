@@ -389,7 +389,14 @@ export async function DELETE(request: NextRequest) {
   if (!id) return NextResponse.json({ error: 'Review id required.' }, { status: 400 });
 
   try {
-    await queryDb(`DELETE FROM reviews WHERE id = $1`, [id]);
+    await queryDb(`DELETE FROM review_votes WHERE review_id = $1`, [id]).catch(() => {});
+    const deleted = await queryDb(`DELETE FROM reviews WHERE id = $1 RETURNING book_id`, [id]);
+    if (deleted.rows.length) {
+      try {
+        const { invalidateProductsCache } = await import('@/app/api/products/route');
+        await invalidateProductsCache();
+      } catch (_) {}
+    }
     return NextResponse.json({ success: true });
   } catch (err: any) {
     return NextResponse.json({ error: err?.message || 'Delete failed.' }, { status: 500 });

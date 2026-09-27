@@ -11,6 +11,7 @@ import { imageNeedsUnoptimized } from '@/lib/productImage';
 import { useCartBadgeBump } from '@/hooks/useCartBadgeBump';
 import { authHeaders } from '@/lib/clientAuth';
 import { isAdminShopPreview } from '@/lib/adminShopPreview';
+import { isComboItem } from '@/lib/deliveryRules';
 
 export const Header = () => {
   const router = useRouter();
@@ -142,7 +143,7 @@ export const Header = () => {
   };
 
   const searchHit = (p: (typeof products)[number]) => {
-    const isCombo = p.title.toLowerCase().includes('combo') || p.category === 'combo';
+    const isCombo = isComboItem(p);
     return (
       <button
         type="button"

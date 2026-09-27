@@ -1,5 +1,6 @@
 import { queryDb } from '@/lib/db';
 import { isBookInStock, availableStock, calculateBookPrices } from '@/lib/stock';
+import { isComboItem } from '@/lib/deliveryRules';
 
 async function execQuery(client: any, sql: string, params?: any[]): Promise<any> {
   if (typeof client === 'function') {
@@ -49,10 +50,7 @@ export async function priceCartItems(
     const { price: unitPrice } = calculateBookPrices(book);
     const subtotal = unitPrice * itemQty;
     calculatedSubtotal += subtotal;
-    const isCombo =
-      book.category_id === 'cat-combos' ||
-      String(book.title || '').toLowerCase().includes('combo') ||
-      String(book.title || '').toLowerCase().includes('5 in 1');
+    const isCombo = isComboItem(book);
     verifiedItems.push({
       id: book.id,
       title: book.title,

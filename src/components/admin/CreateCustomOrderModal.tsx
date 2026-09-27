@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import { useStore, type Product } from '@/context/StoreContext';
 import { authHeaders } from '@/lib/clientAuth';
-import { MIN_BOOKS_PER_ORDER, FREE_DELIVERY_AT_QTY, deliveryFeeForQty, cartHasCombo, effectiveBookCount, isMoqSatisfied } from '@/lib/deliveryRules';
+import { MIN_BOOKS_PER_ORDER, FREE_DELIVERY_AT_QTY, deliveryFeeForQty, cartHasCombo, effectiveBookCount, isMoqSatisfied, booksUntilMinOrder } from '@/lib/deliveryRules';
 import { normalizeRequiredAlternateMobile } from '@/lib/authValidation';
 
 interface CreateCustomOrderModalProps {
@@ -130,7 +130,7 @@ export const CreateCustomOrderModal: React.FC<CreateCustomOrderModalProps> = ({
       return;
     }
     if (!isMoqSatisfied(selectedItems)) {
-      onShowToast(`Minimum ${MIN_BOOKS_PER_ORDER} books required (or 1 Combo Pack). Add ${MIN_BOOKS_PER_ORDER - bookQty} more.`);
+      onShowToast(`Minimum ${MIN_BOOKS_PER_ORDER} books required (or 1 Combo Pack). Add ${booksUntilMinOrder(selectedItems)} more.`);
       return;
     }
 

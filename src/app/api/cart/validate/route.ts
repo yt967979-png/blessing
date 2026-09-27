@@ -2,6 +2,15 @@ import { NextResponse } from 'next/server';
 import { queryDb } from '@/lib/db';
 import { getAuthenticatedUser, applyRateLimitAsync, clientIp } from '@/lib/serverSecurity';
 import { isBookInStock, availableStock, displayStock, calculateBookPrices } from '@/lib/stock';
+import {
+  isComboItem,
+  deliveryFeeForQty,
+  effectiveBookCount,
+  cartHasCombo,
+  isMoqSatisfied,
+  booksUntilMinOrder,
+  booksUntilFreeDelivery,
+} from '@/lib/deliveryRules';
 
 interface CartValidateItem {
   id?: string | number;
@@ -16,6 +25,8 @@ interface BookStockRow {
   status: string | null;
   price: number | string | null;
   discount_price: number | string | null;
+  category_id?: string | null;
+  combo_subjects?: any;
 }
 
 /**
@@ -57,7 +68,7 @@ export async function POST(request: Request) {
     }
 
     const res = await queryDb(
-      `SELECT id, title, price, discount_price, stock, status FROM books WHERE id = ANY($1)`,
+      `SELECT id, title, price, discount_price, stock, status, category_id, combo_subjects FROM books WHERE id = ANY($1)`,
       [ids]
     );
     const byId = new Map<string, BookStockRow>(
@@ -98,9 +109,13 @@ export async function POST(request: Request) {
 
       const { price: livePrice, mrp, discount: liveDiscount } = calculateBookPrices(book);
 
+      const isCombo = isComboItem(book);
+
       return {
         id,
         title: book.title,
+        category: isCombo ? 'combo' : 'guide',
+        category_id: book.category_id,
         requestedQty,
         availableStock: displayStock(avail),
         inStock,
@@ -112,8 +127,33 @@ export async function POST(request: Request) {
         discount: liveDiscount,
       };
     });
+ 
+    const mappedForRules = results.map((r) => ({
+      ...r,
+      qty: r.allowedQty,
+    }));
+    const hasCombo = cartHasCombo(mappedForRules);
+    const effQty = effectiveBookCount(mappedForRules);
+    const deliveryFee = deliveryFeeForQty(effQty, hasCombo);
+    const minOrderSatisfied = isMoqSatisfied(mappedForRules);
+    const remainingToMinOrder = booksUntilMinOrder(mappedForRules);
+    const remainingToFreeDelivery = booksUntilFreeDelivery(mappedForRules);
+    const subtotal = results.reduce((sum, r) => sum + r.price * r.allowedQty, 0);
+    const total = subtotal + deliveryFee;
 
-    return NextResponse.json({ items: results, checkedAt: Date.now() });
+    return NextResponse.json({
+      items: results,
+      subtotal,
+      deliveryFee,
+      total,
+      hasCombo,
+      effectiveQty: effQty,
+      isMinOrderSatisfied: minOrderSatisfied,
+      booksUntilMinOrder: remainingToMinOrder,
+      booksUntilFreeDelivery: remainingToFreeDelivery,
+      hasFreeDelivery: deliveryFee === 0,
+      checkedAt: Date.now(),
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Stock check failed';
     console.error('POST /api/cart/validate failed:', message);

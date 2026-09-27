@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { AdminTab } from './AdminSidebar';
 import { adminFulfillmentBucket } from '@/lib/orderStatus';
+import CheckoutControlCard from './CheckoutControlCard';
 
 export interface StockHoldItem {
   id: string;
@@ -171,6 +172,9 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
           </button>
         </div>
       </div>
+
+      {/* ─── Online Checkout Kill-Switch / Control Card ─────────────────────── */}
+      <CheckoutControlCard />
 
       {/* ─── Middle Section: Low Stock Warnings & Active Checkout Holds ──────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

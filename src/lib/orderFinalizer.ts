@@ -379,6 +379,28 @@ export async function finalizeOrderFromPayment(opts: FinalizeOrderOptions): Prom
       }
     }
 
+    // 10. CLEAN UP CUSTOMER CART IN DB SO PURCHASED ITEMS NEVER RESURRECT
+    if (userId) {
+      await client.query(`DELETE FROM cart_items WHERE cart_id = $1`, [`cart-${userId}`]).catch(() => {});
+    }
+
+    // 11. RECORD COUPON REDEMPTION IF A COUPON WAS APPLIED
+    if (couponId) {
+      try {
+        const { consumeCouponUsage, recordCouponRedemption } = await import('@/lib/coupons');
+        await consumeCouponUsage(client, couponId).catch(() => {});
+        if (userId) {
+          await recordCouponRedemption(client, {
+            couponId,
+            userId,
+            orderId,
+          }).catch(() => {});
+        }
+      } catch (e: any) {
+        console.warn('[orderFinalizer] coupon redemption logging error:', e?.message || e);
+      }
+    }
+
     await client.query('COMMIT');
 
     // 10. REAL-TIME BROADCAST (Non-blocking outside transaction)

@@ -241,7 +241,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     const userCheck = await queryDb(
-      `SELECT id, role FROM users WHERE id::text = $1::text LIMIT 1`,
+      `SELECT id, role, phone FROM users WHERE id::text = $1::text LIMIT 1`,
       [userId]
     );
     if (!userCheck.rows[0]) {
@@ -254,6 +254,23 @@ export async function DELETE(request: NextRequest) {
     if (String(userCheck.rows[0].id) === String(superAdmin.user?.userId)) {
       return NextResponse.json({ error: 'You cannot delete your own account here.' }, { status: 400 });
     }
+
+    const phone = userCheck.rows[0]?.phone;
+    const phoneDigits = phone ? String(phone).replace(/\D/g, '').slice(-10) : '';
+
+    // Cascade cleanups: remove abandoned cart leads, active cart items, addresses, and wishlist
+    if (phoneDigits) {
+      await queryDb(
+        `DELETE FROM abandoned_carts WHERE phone = $1 OR id = $2 OR (user_id IS NOT NULL AND user_id = $3)`,
+        [phoneDigits, `ac-${phoneDigits}`, userId]
+      ).catch(() => {});
+    } else {
+      await queryDb(`DELETE FROM abandoned_carts WHERE user_id = $1`, [userId]).catch(() => {});
+    }
+    await queryDb(`DELETE FROM cart_items WHERE cart_id = $1`, [`cart-${userId}`]).catch(() => {});
+    await queryDb(`DELETE FROM cart WHERE user_id = $1`, [userId]).catch(() => {});
+    await queryDb(`DELETE FROM wishlist WHERE user_id = $1`, [userId]).catch(() => {});
+    await queryDb(`DELETE FROM addresses WHERE user_id = $1`, [userId]).catch(() => {});
 
     await queryDb(`DELETE FROM users WHERE id::text = $1::text AND COALESCE(role, 'customer') != 'super_admin'`, [
       userId,

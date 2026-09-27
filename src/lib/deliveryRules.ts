@@ -6,10 +6,10 @@ export const COMBO_BOOK_EQUIVALENT = 5; // 1 combo pack represents 5 guide subje
 /** Checks if an item belongs to the Combo Pack category or contains 5-in-1 guides */
 export function isComboItem(item: any): boolean {
   if (!item) return false;
-  if (item.category === 'combo') return true;
-  if (item.category_id === 'cat-combos') return true;
   const title = String(item.title || item.name || '').toLowerCase();
-  return (
+
+  // 1. Explicit multi-book bundle or combo indicators in title
+  const hasComboTitle =
     title.includes('combo') ||
     title.includes('5 in 1') ||
     title.includes('5-in-1') ||
@@ -19,8 +19,32 @@ export function isComboItem(item: any): boolean {
     title.includes('7-in-1') ||
     title.includes('all in one') ||
     title.includes('all-in-one') ||
-    title.includes('full set')
-  );
+    title.includes('full set');
+
+  if (hasComboTitle) return true;
+
+  // 2. Multi-subject bundle payload check
+  const comboSubs = item.comboSubjects || item.combo_subjects;
+  if (Array.isArray(comboSubs) && comboSubs.length >= 2) {
+    return true;
+  }
+
+  // 3. Single individual subject guides can NEVER be combos under any circumstances
+  const isIndividualGuide =
+    title.includes('guide') ||
+    title.includes('book') ||
+    /\b(tamil|english|maths|mathematics|science|social|physics|chemistry|biology|computer)\b/i.test(title) ||
+    (item.subject && !/combo|all/i.test(String(item.subject)));
+
+  if (isIndividualGuide && !hasComboTitle) {
+    return false;
+  }
+
+  // 4. Strict category check only when not an individual single guide
+  if (item.category_id === 'cat-combos') return true;
+  if (item.category === 'combo') return true;
+
+  return false;
 }
 
 /** Returns true if any active item in the cart is a Combo Pack */
@@ -92,4 +116,14 @@ export function minOrderCheckoutMessage(itemsOrQty: any[] | number): string | nu
   const need = booksUntilMinOrder(itemsOrQty);
   if (need <= 0) return null;
   return `Minimum ${MIN_BOOKS_PER_ORDER} books per order. Add ${need} more to checkout (or add 1 Combo Pack for instant Free Delivery).`;
+}
+
+/** Returns remaining books needed to reach Free Delivery tier (5 books) */
+export function booksUntilFreeDelivery(itemsOrQty: any[] | number): number {
+  if (typeof itemsOrQty === 'number') {
+    return Math.max(0, FREE_DELIVERY_AT_QTY - Math.max(0, Number(itemsOrQty) || 0));
+  }
+  if (!Array.isArray(itemsOrQty) || itemsOrQty.length === 0) return FREE_DELIVERY_AT_QTY;
+  if (cartHasCombo(itemsOrQty)) return 0;
+  return Math.max(0, FREE_DELIVERY_AT_QTY - effectiveBookCount(itemsOrQty));
 }

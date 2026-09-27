@@ -145,7 +145,11 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Database unavailable' }, { status: 503 });
     }
 
-    await client.query(`DELETE FROM abandoned_carts WHERE id = $1`, [id]);
+    const cleanPhone = id.replace(/\D/g, '').slice(-10);
+    await client.query(
+      `DELETE FROM abandoned_carts WHERE id = $1 OR phone = $1 OR ($2 != '' AND (phone = $2 OR id = ('ac-' || $2)))`,
+      [id, cleanPhone]
+    );
     return NextResponse.json({ ok: true, deleted: id });
   } catch (err: any) {
     console.error('Failed to delete abandoned cart:', err);

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDbClient, releaseDbClient, ensureDefaultCategories } from '@/lib/db';
 import { verifyAdminRequest, forbiddenResponse } from '@/lib/serverSecurity';
 import { invalidateProductsCache } from '@/app/api/products/route';
+import { isComboItem } from '@/lib/deliveryRules';
 
 function slugFromTitle(title: string, id: string) {
   const base = title
@@ -73,7 +74,14 @@ export async function POST(request: NextRequest) {
         continue;
       }
       const cls = String(raw.cls || '10th').trim();
-      const category = String(raw.category || 'guide').toLowerCase().includes('combo') ? 'combo' : 'guide';
+      const category = isComboItem({
+        title,
+        category: raw.category,
+        category_id: raw.category_id,
+        subject: raw.subject,
+      })
+        ? 'combo'
+        : 'guide';
       const mrp = Number(raw.mrp || raw.price) || 0;
       const sale = Number(raw.price || raw.mrp) || mrp;
       if (mrp <= 0) {

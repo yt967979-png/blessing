@@ -6,6 +6,7 @@ import { applyRateLimitAsync, clientIp } from '@/lib/serverSecurity';
 import { verifyGoogleIdToken, getGoogleClientId } from '@/lib/googleAuth';
 import { userNeedsProfile } from '@/lib/userProfile';
 import { isBookInStock } from '@/lib/stock';
+import { isComboItem } from '@/lib/deliveryRules';
 
 function setSessionCookie(response: NextResponse, token: string, role: string | undefined, deviceId: string) {
   applySessionCookies(response, { token, deviceId, role });
@@ -38,7 +39,7 @@ async function loadUserSessionData(queryFn: any, userId: string) {
       const mrp = Number(row.mrp || row.price || 0);
       const price = Number(row.discount_price || row.price || mrp);
       const discount = mrp > price ? Math.round(((mrp - price) / mrp) * 100) : 0;
-      const isCombo = String(row.category_id || '').toLowerCase().includes('combo') || safeTitle.toLowerCase().includes('combo');
+      const isCombo = isComboItem(row);
 
       return {
         id: row.id,

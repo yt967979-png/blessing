@@ -199,6 +199,10 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'Coupon ID is required.' }, { status: 400 });
     }
 
+    // Cascade cleanups: purge past redemption locks and nullify foreign keys in orders to avoid FK violation
+    await queryDb(`DELETE FROM coupon_redemptions WHERE coupon_id = $1`, [id]).catch(() => {});
+    await queryDb(`UPDATE orders SET coupon_id = NULL WHERE coupon_id = $1`, [id]).catch(() => {});
+
     const result = await queryDb(`DELETE FROM coupons WHERE id = $1 RETURNING id`, [id]);
 
     if (!result || result.rowCount === 0) {

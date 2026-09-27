@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import {
   Menu,
@@ -12,6 +12,8 @@ import {
 } from 'lucide-react';
 import { AdminTab } from './AdminSidebar';
 import { enableAdminShopPreview } from '@/lib/adminShopPreview';
+import { useStore } from '@/context/StoreContext';
+import CheckoutControlModal from './CheckoutControlModal';
 
 interface AdminHeaderProps {
   activeTab: AdminTab;
@@ -79,6 +81,9 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
   onOpenMobileMenu,
   userEmail,
 }) => {
+  const { isCheckoutPaused } = useStore();
+  const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
+
   const meta = TAB_TITLES[activeTab] || {
     title: 'Blessing Power Guide Admin',
     subtitle: 'Store Operations Portal',
@@ -119,11 +124,41 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
           <span>View shop</span>
         </Link>
 
-        {/* Store Active Pill */}
-        <div className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="hidden sm:inline">Store Active</span>
-        </div>
+        {/* Store Checkout Live Control Pill */}
+        <button
+          type="button"
+          onClick={() => setIsCheckoutModalOpen(true)}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border transition-all cursor-pointer shadow-2xs ${
+            isCheckoutPaused
+              ? 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100'
+              : 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
+          }`}
+          title={
+            isCheckoutPaused
+              ? 'Online Checkout is PAUSED. Click to resume or edit notice.'
+              : 'Online Checkout is ACTIVE. Click to pause or edit notice.'
+          }
+        >
+          <span
+            className={`w-2 h-2 rounded-full ${
+              isCheckoutPaused
+                ? 'bg-amber-500 ring-2 ring-amber-200 animate-pulse'
+                : 'bg-emerald-500 ring-2 ring-emerald-200'
+            }`}
+          />
+          <span className="hidden sm:inline">
+            {isCheckoutPaused ? 'Checkout Paused' : 'Checkout Active'}
+          </span>
+          <span
+            className={`text-[9px] font-mono px-1 rounded uppercase font-extrabold ${
+              isCheckoutPaused
+                ? 'bg-amber-200 text-amber-950'
+                : 'bg-emerald-200 text-emerald-950'
+            }`}
+          >
+            {isCheckoutPaused ? 'OFF' : 'ON'}
+          </span>
+        </button>
 
         {/* Audio Chime Button */}
         <button
@@ -165,6 +200,11 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
           )}
         </div>
       </div>
+
+      <CheckoutControlModal
+        isOpen={isCheckoutModalOpen}
+        onClose={() => setIsCheckoutModalOpen(false)}
+      />
     </header>
   );
 };

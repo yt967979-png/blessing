@@ -39,7 +39,7 @@ export async function executeOrderCancel(opts: {
     const ord = await queryDb(
       `SELECT id, order_number, user_id, order_status, payment_method, payment_status,
               shipping_address, coupon_id, razorpay_payment_id, total_amount,
-              razorpay_refund_id
+              razorpay_refund_id, razorpay_order_id
        FROM orders WHERE order_number = $1 OR id = $1 LIMIT 1`,
       [orderId]
     );
@@ -184,6 +184,19 @@ export async function executeOrderCancel(opts: {
     }
     if (items.rows.length > 0) {
       void notifyStockChanged(items.rows.map((item: any) => item.book_id));
+    }
+
+    if (row.razorpay_order_id) {
+      try {
+        await queryDb(
+          `UPDATE stock_holds
+           SET status = 'released', release_reason = 'order_cancelled', released_at = NOW(), updated_at = NOW()
+           WHERE razorpay_order_id = $1 AND status IN ('held', 'confirmed')`,
+          [row.razorpay_order_id]
+        );
+      } catch (e: any) {
+        console.warn('[orderCancel] release stock_holds skipped:', e?.message || e);
+      }
     }
 
     const payStatus = paymentStatusAfterCancel(row.payment_method, { refunded });

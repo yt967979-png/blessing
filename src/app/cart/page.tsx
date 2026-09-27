@@ -29,7 +29,7 @@ import { MIN_BOOKS_PER_ORDER, booksUntilMinOrder, minOrderCheckoutMessage, cartH
 import { Header } from '@/components/layout/Header';
 import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
 import { Footer } from '@/components/layout/Footer';
-import { IS_CHECKOUT_PAUSED, CHECKOUT_PAUSE_MESSAGE } from '@/lib/checkoutControl';
+import { IS_CHECKOUT_PAUSED, CHECKOUT_PAUSE_MESSAGE } from '@/lib/checkoutConstants';
 
 export default function CartPage() {
   const router = useRouter();
@@ -52,6 +52,8 @@ export default function CartPage() {
     cartGrandTotal,
     validateCartStock,
     showToast,
+    isCheckoutPaused,
+    checkoutPauseMessage,
   } = useStore();
   const [pincode, setPincode] = useState('600012');
   const [pincodeMsg, setPincodeMsg] = useState('✓ Deliverable via ST Courier — usually 2–3 days in Tamil Nadu.');
@@ -485,17 +487,17 @@ export default function CartPage() {
                     </div>
                   )}
 
-                  {IS_CHECKOUT_PAUSED && (
+                  {isCheckoutPaused && (
                     <div className="bg-amber-50 border border-amber-300 rounded-xl p-3 text-xs text-amber-900 font-bold flex items-start gap-2">
                       <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
-                      <span>Online checkout is temporarily paused. Contact us on WhatsApp (+91-9486017820) to place orders directly.</span>
+                      <span>{checkoutPauseMessage || CHECKOUT_PAUSE_MESSAGE}</span>
                     </div>
                   )}
 
                   <button
                     onClick={async () => {
-                      if (IS_CHECKOUT_PAUSED) {
-                        showToast(CHECKOUT_PAUSE_MESSAGE);
+                      if (isCheckoutPaused) {
+                        showToast(checkoutPauseMessage || CHECKOUT_PAUSE_MESSAGE);
                         return;
                       }
                       if (!user) {
@@ -511,10 +513,10 @@ export default function CartPage() {
                       setIsCheckoutOpen(true);
                       router.push('/checkout');
                     }}
-                    disabled={IS_CHECKOUT_PAUSED || !pincodeOk || hasBlockingItem || booksNeeded > 0}
+                    disabled={isCheckoutPaused || !pincodeOk || hasBlockingItem || booksNeeded > 0}
                     className="w-full bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 disabled:opacity-50 text-[#001B3A] font-extrabold text-xs py-3.5 rounded-xl shadow-md uppercase tracking-wider transition-colors min-h-12"
                   >
-                    {IS_CHECKOUT_PAUSED
+                    {isCheckoutPaused
                       ? 'CHECKOUT TEMPORARILY PAUSED'
                       : booksNeeded > 0
                       ? `Add ${booksNeeded} more book${booksNeeded === 1 ? '' : 's'} (min ${MIN_BOOKS_PER_ORDER})`

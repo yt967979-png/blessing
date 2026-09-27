@@ -4,6 +4,7 @@ import { verifyAdminRequest, forbiddenResponse } from '@/lib/serverSecurity';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import { getCatalogCacheTtlMs, getCatalogCdnHeaders } from '@/lib/launchScale';
 import { isBookInStock, calculateBookPrices } from '@/lib/stock';
+import { isComboItem } from '@/lib/deliveryRules';
 import { redisGetJson, redisSetJson } from '@/lib/redis';
 
 // Shared catalog cache: same search/class/slug reused without hitting DB again
@@ -124,7 +125,12 @@ function mapCatalogRows(rows: any[]) {
   return (rows || []).map((d: any) => {
     const { price, mrp, discount } = mapBookPrices(d);
     const safeTitle = String(d.title || '');
-    const isCombo = d.category_id === 'cat-combos' || safeTitle.toLowerCase().includes('combo');
+    const isCombo = isComboItem({
+      title: d.title,
+      subject: d.subject,
+      category_id: d.category_id,
+      combo_subjects: d.combo_subjects,
+    });
 
     // Authoritative class extraction: check category_id first (e.g. cat-7th -> 7th), then fall back to title regex
     let extractedClass = '10th';
@@ -408,7 +414,17 @@ export async function POST(request: Request) {
     const sale = Number(price);
     const hasSale = Number.isFinite(sale) && sale > 0 && sale < finalMrp;
     const finalDiscountPrice = hasSale ? sale : null;
-    const categoryId = category === 'combo' ? 'cat-combos' : `cat-${cls || '10th'}`;
+    const finalSubject = String(subject || 'General').trim();
+    const finalLanguage = String(language || medium || 'Both').trim();
+
+    const isCombo = isComboItem({
+      title: String(title || ''),
+      subject: finalSubject,
+      category,
+      combo_subjects: Array.isArray(comboSubjects) ? comboSubjects : Array.isArray(combo_subjects) ? combo_subjects : undefined,
+    });
+    const categoryId = isCombo ? 'cat-combos' : `cat-${cls || '10th'}`;
+
     const finalImgRaw = String(image || '').trim();
     if (finalImgRaw.startsWith('data:')) {
       return NextResponse.json(
@@ -419,20 +435,20 @@ export async function POST(request: Request) {
     const finalImg = finalImgRaw || PLACEHOLDER_COVER;
     const finalDesc = description || `Complete ${cls || '10th'} Standard ${title} guide.`;
     const finalBadge = String(badge || '').trim().slice(0, 100);
-    const finalSubject = String(subject || 'General').trim();
-    const finalLanguage = String(language || medium || 'Both').trim();
 
     const finalPdf = String(samplePdfUrl || sample_pdf_url || '').trim() || null;
-    const finalComboSubjects = Array.isArray(comboSubjects)
-      ? JSON.stringify(comboSubjects)
-      : Array.isArray(combo_subjects)
-      ? JSON.stringify(combo_subjects)
+    const finalComboSubjects = isCombo
+      ? (Array.isArray(comboSubjects)
+          ? JSON.stringify(comboSubjects)
+          : Array.isArray(combo_subjects)
+          ? JSON.stringify(combo_subjects)
+          : '[]')
       : '[]';
 
     // queryDb is a function — wrap so helpers that expect client.query work
     const db = { query: (text: string, params?: any[]) => queryDb(text, params) };
     await ensureDefaultCategories(db);
-    await ensureCategory(categoryId, cls || '10th', category || 'guide');
+    await ensureCategory(categoryId, cls || '10th', isCombo ? 'combo' : 'guide');
     await ensureBooksColumns();
 
     const sql = `
@@ -492,12 +508,28 @@ export async function PATCH(request: Request) {
   if (!auth.isAdmin) return forbiddenResponse(auth.error);
 
   try {
-    const { id, title, cls, category, subject, price, mrp, inStock, stock, description, image, badge, hasDiscount, samplePdfUrl, sample_pdf_url, comboSubjects, combo_subjects, language, medium } = await request.json().catch(() => ({}));
+    const { id, title, cls, category, category_id, subject, price, mrp, inStock, stock, description, image, badge, hasDiscount, samplePdfUrl, sample_pdf_url, comboSubjects, combo_subjects, language, medium } = await request.json().catch(() => ({}));
     if (!id) return NextResponse.json({ error: 'Product id is required' }, { status: 400 });
 
     const fields: string[] = [];
     const values: any[] = [];
     let idx = 1;
+
+    let currentSubject = subject !== undefined ? String(subject) : undefined;
+    let currentTitle = title !== undefined ? String(title) : undefined;
+    if (currentSubject === undefined || currentTitle === undefined) {
+      const existing = await queryDb('SELECT title, subject, category_id FROM books WHERE id = $1 LIMIT 1', [id]);
+      if (existing.rows.length > 0) {
+        if (currentSubject === undefined) currentSubject = existing.rows[0].subject;
+        if (currentTitle === undefined) currentTitle = existing.rows[0].title;
+      }
+    }
+
+    const singleSubjects = [
+      'tamil', 'english', 'mathematics', 'maths', 'science', 'social science', 'social',
+      'physics', 'chemistry', 'biology', 'computer science', 'commerce', 'accountancy', 'economics'
+    ];
+    const isSingleSubject = currentSubject && singleSubjects.includes(currentSubject.trim().toLowerCase());
 
     if (title !== undefined) { fields.push(`title = $${idx++}`); values.push(title); }
     if (subject !== undefined) {
@@ -509,13 +541,22 @@ export async function PATCH(request: Request) {
       fields.push(`language = $${idx++}`);
       values.push(String(language || medium || 'Both').trim());
     }
-    if (cls !== undefined || category !== undefined) {
+    if (cls !== undefined || category !== undefined || category_id !== undefined || isSingleSubject) {
       const targetCls = cls ? String(cls).trim().toLowerCase() : undefined;
-      const targetCat = category === 'combo' ? 'cat-combos' : (targetCls ? `cat-${targetCls}` : undefined);
+      let targetCat = category_id
+        ? String(category_id).trim()
+        : category === 'combo'
+        ? 'cat-combos'
+        : (targetCls ? `cat-${targetCls}` : undefined);
+
+      if (isSingleSubject && targetCat === 'cat-combos') {
+        targetCat = targetCls ? `cat-${targetCls}` : 'cat-10th';
+      }
+
       if (targetCat) {
         const db = { query: (text: string, params?: any[]) => queryDb(text, params) };
         await ensureDefaultCategories(db);
-        await ensureCategory(targetCat, targetCls || '10th', category || 'guide');
+        await ensureCategory(targetCat, targetCls || '10th', targetCat === 'cat-combos' ? 'combo' : 'guide');
         fields.push(`category_id = $${idx++}`);
         values.push(targetCat);
       }
@@ -549,10 +590,10 @@ export async function PATCH(request: Request) {
       values.push(pdf);
     }
     if (badge !== undefined) { fields.push(`badge = $${idx++}`); values.push(String(badge || '').trim().slice(0, 100)); }
-    if (comboSubjects !== undefined || combo_subjects !== undefined) {
+    if (comboSubjects !== undefined || combo_subjects !== undefined || isSingleSubject) {
       await ensureBooksColumns();
       const raw = comboSubjects !== undefined ? comboSubjects : combo_subjects;
-      const arr = Array.isArray(raw) ? raw : [];
+      const arr = isSingleSubject ? [] : (Array.isArray(raw) ? raw : []);
       fields.push(`combo_subjects = $${idx++}::jsonb`);
       values.push(JSON.stringify(arr));
     }
@@ -623,6 +664,11 @@ export async function DELETE(request: Request) {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
     if (!id) return NextResponse.json({ error: 'Product id is required' }, { status: 400 });
+
+    // Cascade cleanups: purge active carts, wishlists, and unconfirmed reservations for this deleted book
+    await queryDb(`DELETE FROM cart_items WHERE book_id = $1`, [id]).catch(() => {});
+    await queryDb(`DELETE FROM wishlist WHERE book_id = $1`, [id]).catch(() => {});
+    await queryDb(`DELETE FROM stock_holds WHERE book_id = $1 AND status != 'confirmed'`, [id]).catch(() => {});
 
     await queryDb(`DELETE FROM books WHERE id = $1`, [id]);
     await invalidateProductsCache();

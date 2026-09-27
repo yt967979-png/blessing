@@ -237,11 +237,21 @@ export async function DELETE(request: Request) {
 
   try {
     const res = await queryDb(
-      `DELETE FROM addresses WHERE id = $1 AND user_id = $2 RETURNING id`,
+      `DELETE FROM addresses WHERE id = $1 AND user_id = $2 RETURNING id, is_default`,
       [id, userId]
     );
     if (res.rows.length === 0) {
       return NextResponse.json({ error: 'Address not found.' }, { status: 404 });
+    }
+    // If the deleted address was default, auto-promote the customer's next address to default
+    if (res.rows[0].is_default) {
+      await queryDb(
+        `UPDATE addresses SET is_default = TRUE
+         WHERE id = (
+           SELECT id FROM addresses WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1
+         )`,
+        [userId]
+      ).catch(() => {});
     }
     return NextResponse.json({ success: true, deletedId: id });
   } catch (err: any) {

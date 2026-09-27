@@ -18,7 +18,7 @@ import { refundRazorpayPayment } from '@/lib/razorpayRefund';
 import { confirmStockHolds, recordConfirmedSale, shrinkConfirmedHold, releaseStockHolds } from '@/lib/stockHold';
 import { isValidMobileNumber, normalizeRequiredAlternateMobile } from '@/lib/authValidation';
 import { recordSystemError } from '@/lib/errorMonitor';
-import { IS_CHECKOUT_PAUSED, CHECKOUT_PAUSE_MESSAGE } from '@/lib/checkoutControl';
+import { isCheckoutPausedAsync } from '@/lib/checkoutControl';
 
 /**
  * Money-safety net: payment is captured by Razorpay client-side BEFORE this
@@ -224,8 +224,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  if (IS_CHECKOUT_PAUSED) {
-    return NextResponse.json({ error: CHECKOUT_PAUSE_MESSAGE, blocked: true }, { status: 503 });
+  const checkoutStatus = await isCheckoutPausedAsync();
+  if (checkoutStatus.paused) {
+    return NextResponse.json({ error: checkoutStatus.message, blocked: true }, { status: 503 });
   }
 
   const session = await getAuthenticatedUser(request);

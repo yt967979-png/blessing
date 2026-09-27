@@ -10,12 +10,13 @@ import { priceCheckoutOrder } from '@/lib/checkoutPricing';
 import { verifyRazorpayPayment } from '@/lib/orderPricing';
 import { createStockHolds, attachRazorpayOrderId, releaseStockHolds, STOCK_HOLD_TTL_MINUTES } from '@/lib/stockHold';
 import { recordSystemError } from '@/lib/errorMonitor';
-import { IS_CHECKOUT_PAUSED, CHECKOUT_PAUSE_MESSAGE } from '@/lib/checkoutControl';
+import { isCheckoutPausedAsync } from '@/lib/checkoutControl';
 
 export async function POST(request: Request) {
-  if (IS_CHECKOUT_PAUSED) {
+  const checkoutStatus = await isCheckoutPausedAsync();
+  if (checkoutStatus.paused) {
     return NextResponse.json(
-      { error: CHECKOUT_PAUSE_MESSAGE, blocked: true },
+      { error: checkoutStatus.message, blocked: true },
       { status: 503 }
     );
   }

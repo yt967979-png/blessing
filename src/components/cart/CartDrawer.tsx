@@ -9,8 +9,13 @@ import { useStore } from '@/context/StoreContext';
 import { getSTCourierDeliveryEstimate } from '@/lib/deliveryEstimator';
 import { getCartItemStockState, anyCartItemBlocking } from '@/lib/cartStock';
 import { imageNeedsUnoptimized } from '@/lib/productImage';
-import { cartHasCombo, isMoqSatisfied as checkMoqSatisfied } from '@/lib/deliveryRules';
-import { IS_CHECKOUT_PAUSED, CHECKOUT_PAUSE_MESSAGE } from '@/lib/checkoutControl';
+import {
+  cartHasCombo,
+  isMoqSatisfied as checkMoqSatisfied,
+  MIN_BOOKS_PER_ORDER,
+  FREE_DELIVERY_AT_QTY,
+} from '@/lib/deliveryRules';
+import { IS_CHECKOUT_PAUSED, CHECKOUT_PAUSE_MESSAGE } from '@/lib/checkoutConstants';
 
 export const CartDrawer = () => {
   const {
@@ -24,14 +29,16 @@ export const CartDrawer = () => {
     setIsCheckoutOpen,
     user,
     setIsAuthOpen,
-    showToast,
     validateCartStock,
+    showToast,
+    isCheckoutPaused,
+    checkoutPauseMessage,
   } = useStore();
 
   const hasCombo = cartHasCombo(cart);
   const totalBooks = cart.reduce((a, b) => a + Number(b.qty || 0), 0);
-  const minOrderQty = 4;
-  const freeShippingQty = 5;
+  const minOrderQty = MIN_BOOKS_PER_ORDER;
+  const freeShippingQty = FREE_DELIVERY_AT_QTY;
   const isMoqSatisfied = hasCombo || totalBooks >= minOrderQty;
   const booksToMoq = hasCombo ? 0 : Math.max(0, minOrderQty - totalBooks);
   const booksToFreeShipping = hasCombo ? 0 : Math.max(0, freeShippingQty - totalBooks);
@@ -230,9 +237,9 @@ export const CartDrawer = () => {
                   <p className="text-[10px] font-bold text-red-600 text-center flex items-center justify-center gap-1">
                     <AlertTriangle className="w-3.5 h-3.5" /> Fix out-of-stock items before checkout
                   </p>
-                ) : IS_CHECKOUT_PAUSED ? (
+                ) : isCheckoutPaused ? (
                   <p className="text-[11px] font-extrabold text-amber-900 text-center bg-amber-50 border border-amber-300 p-2.5 rounded-xl">
-                    ⚠️ Online checkout is temporarily paused. Contact us on WhatsApp for orders.
+                    ⚠️ {checkoutPauseMessage || CHECKOUT_PAUSE_MESSAGE}
                   </p>
                 ) : !isMoqSatisfied ? (
                   <p className="text-[11px] font-extrabold text-amber-700 text-center bg-amber-50 border border-amber-200 p-2 rounded-lg">
@@ -243,10 +250,10 @@ export const CartDrawer = () => {
                 <motion.button
                   whileTap={{ scale: 0.97 }}
                   type="button"
-                  disabled={IS_CHECKOUT_PAUSED || hasBlockingItem || !isMoqSatisfied}
+                  disabled={isCheckoutPaused || hasBlockingItem || !isMoqSatisfied}
                   onClick={() => {
-                    if (IS_CHECKOUT_PAUSED) {
-                      showToast(CHECKOUT_PAUSE_MESSAGE);
+                    if (isCheckoutPaused) {
+                      showToast(checkoutPauseMessage || CHECKOUT_PAUSE_MESSAGE);
                       return;
                     }
                     setIsCartOpen(false);
@@ -259,7 +266,7 @@ export const CartDrawer = () => {
                   }}
                   className="w-full bg-gradient-to-r from-amber-400 via-amber-500 to-amber-400 text-[#001B3A] font-extrabold text-xs py-3.5 rounded-xl shadow-md hover:shadow-lg transition-all uppercase tracking-wider text-center min-h-12 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                 >
-                  {IS_CHECKOUT_PAUSED
+                  {isCheckoutPaused
                     ? 'CHECKOUT TEMPORARILY PAUSED'
                     : !isMoqSatisfied
                     ? `ADD ${booksToMoq} MORE BOOK${booksToMoq > 1 ? 'S' : ''} TO CHECKOUT`
