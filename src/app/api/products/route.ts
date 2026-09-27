@@ -210,16 +210,11 @@ export async function GET(request: Request) {
     const search = searchParams.get('search');
     const slug = searchParams.get('slug');
     const key = cacheKey(cls, search, slug);
-    const authHeader = request.headers.get('authorization');
-    const cookieHeader = request.headers.get('cookie') || '';
-    const isAdminHint = Boolean(
+    const forceFresh = Boolean(
+      searchParams.get('fresh') === '1' ||
       searchParams.get('admin') === '1' ||
-      authHeader ||
-      cookieHeader.includes('bpg_token') ||
-      cookieHeader.includes('bpg_session') ||
       request.headers.get('x-admin-request') === '1'
     );
-    const forceFresh = searchParams.get('fresh') === '1' || isAdminHint;
 
     const hdrs = forceFresh ? freshHeaders : catalogHeaders;
 

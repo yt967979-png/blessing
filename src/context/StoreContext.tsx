@@ -265,15 +265,18 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const CATALOG_CACHE_KEY = 'bpg_catalog_cache_v2';
   const CATALOG_TTL_MS = 30 * 1000; // 30-second client cache — ensures price changes show instantly
 
-  const readCatalogCache = (allowStale = false): Product[] | null => {
+  const readCatalogCache = (allowStale = true): Product[] | null => {
     if (typeof window === 'undefined') return null;
     try {
-      const raw = sessionStorage.getItem(CATALOG_CACHE_KEY);
+      let raw = sessionStorage.getItem(CATALOG_CACHE_KEY);
+      if (!raw) {
+        raw = localStorage.getItem(CATALOG_CACHE_KEY);
+      }
       if (!raw) return null;
       const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed?.products)) return null;
+      if (!Array.isArray(parsed?.products) || parsed.products.length === 0) return null;
       if (typeof parsed.at !== 'number') return null;
-      // Soft-fail path may reuse stale cache so the shop never blanks on Neon stalls.
+      // Soft-fail path may reuse stale cache so the shop never blanks on network stalls.
       if (!allowStale && Date.now() - parsed.at > CATALOG_TTL_MS) return null;
       return parsed.products as Product[];
     } catch {
@@ -282,12 +285,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const writeCatalogCache = (list: Product[]) => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined' || !Array.isArray(list) || list.length === 0) return;
     try {
-      sessionStorage.setItem(
-        CATALOG_CACHE_KEY,
-        JSON.stringify({ at: Date.now(), products: list })
-      );
+      const serialized = JSON.stringify({ at: Date.now(), products: list });
+      sessionStorage.setItem(CATALOG_CACHE_KEY, serialized);
+      localStorage.setItem(CATALOG_CACHE_KEY, serialized);
     } catch {
       /* ignore quota */
     }
@@ -295,12 +297,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const refreshProducts = (forceFresh = false) => {
     const now = Date.now();
-    // Non-fresh requests can be throttled/deduplicated; forceFresh requests must always proceed
-    if (!forceFresh) {
-      if (refreshInFlightRef.current) return;
-      if (now - lastRefreshTsRef.current < 2000) return;
-    }
+    // Non-fresh requests can be throttled/deduplicated; deduplicate fresh requests within 1.5s
+    if (refreshInFlightRef.current && (now - lastRefreshTsRef.current < 1500)) return;
+    if (!forceFresh && (now - lastRefreshTsRef.current < 2000)) return;
     refreshInFlightRef.current = true;
+    lastRefreshTsRef.current = now;
 
     // Soft SWR: keep previous catalog on screen — only skeleton when empty
     if (productsRef.current.length === 0) {
@@ -450,7 +451,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     try {
       sessionStorage.removeItem('bpg_catalog_cache_v1');
     } catch {}
-    const cached = readCatalogCache();
+    const cached = readCatalogCache(true);
     if (cached?.length) {
       // Sync ref immediately so refreshProducts() does not flash skeleton over cache
       productsRef.current = cached;
@@ -481,6 +482,17 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         if (u?.id) {
           const { token: _legacy, ...safeUser } = u;
           setUser(safeUser);
+        }
+      } catch (_) {}
+    }
+
+    // Hydrate local state immediately so user interactions and cart displays are 100% instant!
+    setHydrated(true);
+
+    if (savedUser) {
+      try {
+        const u = JSON.parse(savedUser);
+        if (u?.id) {
           fetch(`/api/auth?userId=${encodeURIComponent(u.id)}`, {
             credentials: 'include',
           })
@@ -515,13 +527,10 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 localStorage.removeItem('bpg_user_addresses');
               }
             })
-            .catch(() => {})
-            .finally(() => setHydrated(true));
-          return;
+            .catch(() => {});
         }
       } catch (_) {}
     }
-    setHydrated(true);
   }, []);
 
   // Lightweight background visitor heartbeat ping for live system monitoring (runs every 25s when tab is visible)
