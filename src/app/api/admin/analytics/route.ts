@@ -47,12 +47,17 @@ export async function GET(request: Request) {
   const session = await getAuthenticatedUser(request);
   if (!session) return unauthorizedResponse('Unauthorized: Missing session');
 
+  const role = String(session.role || '').toLowerCase();
+  if (role !== 'admin' && role !== 'super_admin') {
+    return forbiddenResponse('Forbidden: Admin privilege required');
+  }
+
   const { searchParams } = new URL(request.url);
   const range = searchParams.get('range') || searchParams.get('days') || '30';
   const days = Math.min(Math.max(Number(range) || 30, 1), 365);
   const bypassCache = searchParams.get('fresh') === 'true';
 
-  // Fast Path: Return RAM cached metrics instantly (<1ms) if fresh
+  // Fast Path: Return RAM cached metrics instantly (<1ms) if fresh (Admin verified above)
   if (!bypassCache && analyticsRamCache && analyticsRamCache.range === days && Date.now() - analyticsRamCache.timestamp < RAM_CACHE_TTL_MS) {
     return NextResponse.json(analyticsRamCache.payload);
   }

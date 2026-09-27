@@ -603,6 +603,11 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
       setNewPrice('280');
       setNewStock('50');
       setNewImage('');
+      setNewMedium('Both');
+      setNewBadge('Popular');
+      setSelectedComboSubjects(['Tamil', 'English', 'Mathematics', 'Science', 'Social Science']);
+      setCustomComboSubjectInput('');
+      setShowAdvanced(false);
     } catch (err: any) {
       onShowToast(`❌ ${err?.message || 'Failed to save publication'}`);
     } finally {

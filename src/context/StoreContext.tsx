@@ -324,11 +324,10 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         if (!Array.isArray(data)) return;
         if (data.length === 0 && productsRef.current.length > 0) return;
 
-        // Admin-aware merge: only protect in-flight edits if not a forced fresh load,
-        // and only for at most 2 seconds while network completes.
-        const hasRecentEdits = !forceFresh && recentAdminEditsRef.current.size > 0;
+        // Admin-aware merge: protect in-flight edits/additions while network & SSE complete
+        const hasRecentEdits = recentAdminEditsRef.current.size > 0;
         if (hasRecentEdits) {
-          const editCutoff = Date.now() - 2_000;
+          const editCutoff = Date.now() - 4_000;
           const protectedIds = new Set<string>();
           for (const [pid, ts] of recentAdminEditsRef.current) {
             if (ts > editCutoff) protectedIds.add(pid);
@@ -345,9 +344,16 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               }
               return serverProd;
             });
-            // Also include any local-only products (temp IDs from add that hasn't resolved yet)
+            // Prepend in-flight optimistic products at the top to prevent jumping/blinking
             for (const [pid, localProd] of localById) {
-              if (!serverById.has(pid)) merged.push(localProd);
+              if (protectedIds.has(pid) && !serverById.has(pid)) {
+                const serverHasIt = Array.from(serverById.values()).some(
+                  (sp) => sp.id === localProd.id || (sp.title === localProd.title && Number(sp.price) === Number(localProd.price))
+                );
+                if (!serverHasIt) {
+                  merged.unshift(localProd);
+                }
+              }
             }
             setProducts(merged);
             if (merged.length > 0) writeCatalogCache(merged);
@@ -1855,6 +1861,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const mrp = Number(newProdData.mrp || newProdData.price || 0);
     const price = Number(newProdData.price || mrp);
     const hasDiscount = price < mrp;
+    const finalLanguage = (newProdData as any).language || (newProdData as any).medium || 'Both';
     const tempProduct: Product = {
       id: tempId,
       slug: tempId,
@@ -1863,6 +1870,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       cls: newProdData.cls || '10th',
       category: (newProdData.category as any) || 'guide',
       subject: (newProdData as any).subject || 'General',
+      language: finalLanguage,
+      medium: finalLanguage,
       price: hasDiscount ? price : mrp,
       mrp,
       discount: hasDiscount && mrp > 0 ? Math.round(((mrp - price) / mrp) * 100) : 0,
@@ -1881,6 +1890,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       comboSubjects: newProdData.comboSubjects || [],
     };
 
+    recentAdminEditsRef.current.set(tempId, Date.now());
     setProducts((prev) => [tempProduct, ...prev]);
 
     try {
@@ -1899,6 +1909,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           badge: newProdData.badge || '',
           stock: Math.max(0, Math.floor(Number(newProdData.stock) || 0)),
           subject: (newProdData as any).subject,
+          language: finalLanguage,
+          medium: finalLanguage,
           status: (newProdData as any).status,
           samplePdfUrl: (newProdData as any).samplePdfUrl,
           comboSubjects: newProdData.comboSubjects || [],
@@ -1908,14 +1920,23 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (!res.ok) {
         throw new Error(data.error || `Create failed (${res.status})`);
       }
+      recentAdminEditsRef.current.delete(tempId);
       if (data?.id) {
-        setProducts((prev) => prev.map((p) => (p.id === tempId ? { ...p, id: data.id, slug: data.slug || data.id } : p)));
+        recentAdminEditsRef.current.set(String(data.id), Date.now());
+        setProducts((prev) => {
+          const alreadyHasServerId = prev.some((p) => String(p.id) === String(data.id));
+          if (alreadyHasServerId) {
+            return prev.filter((p) => p.id !== tempId);
+          }
+          return prev.map((p) => (p.id === tempId ? { ...p, ...data, id: data.id, slug: data.slug || data.id } : p));
+        });
       }
       // Server POST already triggers notifyCatalogChanged → SSE → auto-refresh.
       // Only do a delayed refresh as a fallback in case SSE is disconnected.
       setTimeout(() => { if (!sseConnectedRef.current) refreshProducts(true); }, 3000);
       return data;
     } catch (err: any) {
+      recentAdminEditsRef.current.delete(tempId);
       setProducts((prev) => prev.filter((p) => p.id !== tempId));
       const msg = err?.message || 'Unknown error';
       const formatted = msg.includes('Forbidden') || msg.includes('Unauthorized')
@@ -1927,6 +1948,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const deleteProductFromDb = async (id: string | number) => {
+    recentAdminEditsRef.current.delete(String(id));
     const previousProducts = products;
     setProducts((prev) => prev.filter((p) => p.id !== id));
     try {
