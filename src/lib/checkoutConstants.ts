@@ -9,8 +9,8 @@ export const DEFAULT_CHECKOUT_PAUSE_MESSAGE =
 
 // Backward-compatible synchronous fallback evaluated from public environment variable
 export const IS_CHECKOUT_PAUSED =
-  process.env.NEXT_PUBLIC_CHECKOUT_PAUSED !== 'false' &&
-  process.env.CHECKOUT_PAUSED !== 'false';
+  process.env.NEXT_PUBLIC_CHECKOUT_PAUSED === 'true' ||
+  process.env.CHECKOUT_PAUSED === 'true';
 
 export const CHECKOUT_PAUSE_MESSAGE = DEFAULT_CHECKOUT_PAUSE_MESSAGE;
 

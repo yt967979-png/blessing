@@ -189,8 +189,25 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [orderSuccessData, setOrderSuccessData] = useState<any | null>(null);
-  const [isCheckoutPaused, setIsCheckoutPaused] = useState<boolean>(IS_CHECKOUT_PAUSED);
-  const [checkoutPauseMessage, setCheckoutPauseMessage] = useState<string>(DEFAULT_CHECKOUT_PAUSE_MESSAGE);
+  const [isCheckoutPaused, setIsCheckoutPaused] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = sessionStorage.getItem('bpg_checkout_paused');
+        if (cached === 'true') return true;
+        if (cached === 'false') return false;
+      } catch {}
+    }
+    return IS_CHECKOUT_PAUSED;
+  });
+  const [checkoutPauseMessage, setCheckoutPauseMessage] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = sessionStorage.getItem('bpg_checkout_pause_msg');
+        if (cached) return cached;
+      } catch {}
+    }
+    return DEFAULT_CHECKOUT_PAUSE_MESSAGE;
+  });
   const [isCheckoutControlLoading, setIsCheckoutControlLoading] = useState<boolean>(false);
 
   const refreshCheckoutControl = useCallback(async () => {
@@ -200,9 +217,15 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         const data = await res.json();
         if (typeof data.paused === 'boolean') {
           setIsCheckoutPaused(data.paused);
+          try {
+            sessionStorage.setItem('bpg_checkout_paused', String(data.paused));
+          } catch {}
         }
         if (data.message) {
           setCheckoutPauseMessage(data.message);
+          try {
+            sessionStorage.setItem('bpg_checkout_pause_msg', data.message);
+          } catch {}
         }
       }
     } catch {
@@ -225,8 +248,14 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           throw new Error(data.error || 'Failed to update checkout status');
         }
         setIsCheckoutPaused(data.paused);
+        try {
+          sessionStorage.setItem('bpg_checkout_paused', String(data.paused));
+        } catch {}
         if (data.message) {
           setCheckoutPauseMessage(data.message);
+          try {
+            sessionStorage.setItem('bpg_checkout_pause_msg', data.message);
+          } catch {}
         }
         return { success: true };
       } catch (err: any) {
@@ -259,6 +288,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const cartRef = useRef<CartItem[]>([]);
   cartRef.current = cart;
+  const cartSyncAllowedRef = useRef(false);
+  const wishlistSyncAllowedRef = useRef(false);
 
   const [isValidatingCartStock, setIsValidatingCartStock] = useState(false);
 
@@ -463,8 +494,14 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     const localCart = readLocalCart();
     const localWish = readLocalWishlist();
-    if (localCart.length) setCart(localCart);
-    if (localWish.length) setWishlist(localWish);
+    if (localCart.length) {
+      setCart(localCart);
+      cartSyncAllowedRef.current = true;
+    }
+    if (localWish.length) {
+      setWishlist(localWish);
+      wishlistSyncAllowedRef.current = true;
+    }
     try {
       const raw = localStorage.getItem('bpg_saved_later');
       if (raw) {
@@ -484,6 +521,10 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           setUser(safeUser);
         }
       } catch (_) {}
+    } else {
+      // Guest user — safe to sync immediately if cart is mutated
+      cartSyncAllowedRef.current = true;
+      wishlistSyncAllowedRef.current = true;
     }
 
     // Hydrate local state immediately so user interactions and cart displays are 100% instant!
@@ -527,9 +568,20 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 localStorage.removeItem('bpg_user_addresses');
               }
             })
-            .catch(() => {});
+            .catch(() => {})
+            .finally(() => {
+              // DB cart/wishlist check finished — sync is now safe!
+              cartSyncAllowedRef.current = true;
+              wishlistSyncAllowedRef.current = true;
+            });
+        } else {
+          cartSyncAllowedRef.current = true;
+          wishlistSyncAllowedRef.current = true;
         }
-      } catch (_) {}
+      } catch (_) {
+        cartSyncAllowedRef.current = true;
+        wishlistSyncAllowedRef.current = true;
+      }
     }
   }, []);
 
@@ -864,9 +916,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     };
   }, [applyStockPush]);
 
-  // Debounced cart/wishlist sync — only after hydrate
+  // Debounced cart/wishlist sync — only after hydrate & once server cart is reconciled
   useEffect(() => {
-    if (!hydrated || !user?.id) return;
+    if (!hydrated || !user?.id || !cartSyncAllowedRef.current) return;
 
     if (syncTimer.current) clearTimeout(syncTimer.current);
     syncTimer.current = setTimeout(() => {
@@ -1052,6 +1104,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const addToCart = (product: Product, qty: number = 1, selectedMedium?: string) => {
+    cartSyncAllowedRef.current = true;
     // Prefer the freshest catalog snapshot (kept live by the 15s poll) over
     // whatever stale product object the caller passed in.
     const live = productsRef.current.find((p) => String(p.id) === String(product.id)) || product;
@@ -1149,6 +1202,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const updateQty = (id: string | number, delta: number) => {
+    cartSyncAllowedRef.current = true;
     let toastMsg = '';
     setCart((prev) => {
       const next = prev
@@ -1206,6 +1260,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const removeFromCart = (id: string | number) => {
+    cartSyncAllowedRef.current = true;
     setCart((prev) => {
       const next = prev.filter((item) => String(item.id) !== String(id));
       try {
@@ -1235,6 +1290,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const saveForLater = (id: string | number) => {
+    cartSyncAllowedRef.current = true;
     setCart((prev) => {
       const item = prev.find((i) => String(i.id) === String(id));
       if (!item) return prev;
@@ -1278,6 +1334,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const moveToCartFromSaved = (id: string | number) => {
+    cartSyncAllowedRef.current = true;
     const item = savedForLater.find((i) => String(i.id) === String(id));
     if (!item) return;
     setSavedForLater((later) => {
@@ -1293,6 +1350,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const clearCart = useCallback(() => {
+    cartSyncAllowedRef.current = true;
     setCart([]);
     try {
       localStorage.setItem('bpg_cart_next', '[]');
@@ -1320,6 +1378,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   /** Clear cart locally + on server immediately after a successful order. */
   const clearCartAfterOrder = useCallback(() => {
+    cartSyncAllowedRef.current = true;
     setCart([]);
     try {
       localStorage.setItem('bpg_cart_next', '[]');
@@ -1521,6 +1580,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, [hydrated, products]);
 
   const toggleWishlist = (id: string | number) => {
+    wishlistSyncAllowedRef.current = true;
     const sId = String(id);
     let isNowWishlisted = false;
     setWishlist((prev) => {
@@ -1556,6 +1616,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const removeFromWishlist = (id: string | number) => {
+    wishlistSyncAllowedRef.current = true;
     const sId = String(id);
     setWishlist((prev) => {
       const next = prev.filter((x) => String(x) !== sId);
@@ -1582,6 +1643,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const clearWishlist = () => {
+    wishlistSyncAllowedRef.current = true;
     setWishlist([]);
     try {
       localStorage.setItem('bpg_wishlist_next', '[]');
@@ -1652,6 +1714,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     restoredWishlist?: (string | number)[],
     restoredAddresses?: any[]
   ) => {
+    cartSyncAllowedRef.current = true;
+    wishlistSyncAllowedRef.current = true;
     const nextUser: UserData = {
       ...userData,
       needsProfile:
