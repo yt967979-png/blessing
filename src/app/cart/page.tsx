@@ -283,14 +283,20 @@ export default function CartPage() {
                       stockState.blocking ? 'border-red-300' : 'border-slate-200'
                     }`}
                   >
-                    <Image
-                      src={item.image || '/logo.png'}
-                      alt={item.title}
-                      width={80}
-                      height={80}
-                      className="w-20 h-20 object-contain bg-slate-50 border border-slate-200 rounded-xl p-2 flex-shrink-0"
-                      unoptimized={imageNeedsUnoptimized(item.image || '')}
-                    />
+                    <Link
+                      href={`/products/${item.slug || item.id}`}
+                      className="flex-shrink-0 group/img block rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      title={`View ${item.title}`}
+                    >
+                      <Image
+                        src={item.image || '/logo.png'}
+                        alt={item.title}
+                        width={80}
+                        height={80}
+                        className="w-20 h-20 object-contain bg-slate-50 border border-slate-200 rounded-xl p-2 flex-shrink-0 group-hover/img:scale-105 group-hover/img:border-blue-400 group-hover/img:shadow-sm transition-all duration-200 cursor-pointer"
+                        unoptimized={imageNeedsUnoptimized(item.image || '')}
+                      />
+                    </Link>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap mb-0.5">
                         <span className="text-[10px] font-bold text-blue-600 uppercase">{item.cls} Standard</span>
@@ -304,7 +310,15 @@ export default function CartPage() {
                           </span>
                         )}
                       </div>
-                      <h3 className="font-heading font-bold text-sm text-[#001B3A] truncate">{item.title}</h3>
+                      <h3 className="font-heading font-bold text-sm text-[#001B3A] truncate">
+                        <Link
+                          href={`/products/${item.slug || item.id}`}
+                          className="hover:text-blue-600 hover:underline transition-colors focus:outline-none focus:ring-1 focus:ring-blue-500 rounded"
+                          title={`View ${item.title}`}
+                        >
+                          {item.title}
+                        </Link>
+                      </h3>
 
                       <div className="flex items-baseline gap-2 mt-1">
                         <span className="font-black text-base text-slate-900">₹{item.price}</span>
@@ -377,42 +391,53 @@ export default function CartPage() {
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
-                    {sameClassSuggestions.map((book: any) => (
-                      <div
-                        key={book.id}
-                        className="flex items-center gap-2.5 p-2.5 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-white hover:border-blue-200 transition-all"
-                      >
-                        <div className="relative w-12 h-14 rounded-lg overflow-hidden bg-white border border-slate-200 flex-shrink-0">
-                          <Image
-                            src={book.image || book.cover_image || '/logo.png'}
-                            alt={book.title}
-                            fill
-                            className="object-cover"
-                            unoptimized={imageNeedsUnoptimized(book.image || book.cover_image || '')}
-                          />
-                        </div>
-
-                        <div className="flex-1 min-w-0">
-                          <p className="text-[11px] font-bold text-slate-800 truncate leading-tight">
-                            {book.title}
-                          </p>
-                          <p className="text-xs font-black text-[#001B3A] mt-0.5">
-                            ₹{book.price || book.discount_price}
-                          </p>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              addToCart(book);
-                              showToast(`Added ${book.title} to your cart!`);
-                            }}
-                            className="mt-1 inline-flex items-center gap-1 text-[10px] font-black text-white bg-[#0044AA] hover:bg-[#001B3A] px-2 py-0.5 rounded-md transition-colors cursor-pointer"
+                    {sameClassSuggestions.map((book: any) => {
+                      const bookHref = `/products/${book.slug || book.id}`;
+                      return (
+                        <div
+                          key={book.id}
+                          className="flex items-center gap-2.5 p-2.5 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-white hover:border-blue-200 transition-all"
+                        >
+                          <Link
+                            href={bookHref}
+                            className="relative w-12 h-14 rounded-lg overflow-hidden bg-white border border-slate-200 flex-shrink-0 group/rec block hover:border-blue-400 transition-colors"
+                            title={`View ${book.title}`}
                           >
-                            <Plus className="w-2.5 h-2.5" />
-                            <span>Add</span>
-                          </button>
+                            <Image
+                              src={book.image || book.cover_image || '/logo.png'}
+                              alt={book.title}
+                              fill
+                              className="object-cover group-hover/rec:scale-105 transition-transform duration-200"
+                              unoptimized={imageNeedsUnoptimized(book.image || book.cover_image || '')}
+                            />
+                          </Link>
+
+                          <div className="flex-1 min-w-0">
+                            <Link
+                              href={bookHref}
+                              className="text-[11px] font-bold text-slate-800 truncate leading-tight hover:text-blue-600 block transition-colors"
+                              title={`View ${book.title}`}
+                            >
+                              {book.title}
+                            </Link>
+                            <p className="text-xs font-black text-[#001B3A] mt-0.5">
+                              ₹{book.price || book.discount_price}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                addToCart(book);
+                                showToast(`Added ${book.title} to your cart!`);
+                              }}
+                              className="mt-1 inline-flex items-center gap-1 text-[10px] font-black text-white bg-[#0044AA] hover:bg-[#001B3A] px-2 py-0.5 rounded-md transition-colors cursor-pointer"
+                            >
+                              <Plus className="w-2.5 h-2.5" />
+                              <span>Add</span>
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -422,28 +447,44 @@ export default function CartPage() {
                   <h2 className="font-heading font-bold text-sm text-slate-700 uppercase tracking-wider">
                     Saved for later ({savedForLater.length})
                   </h2>
-                  {savedForLater.map((item) => (
-                    <div
-                      key={`${item.id}::${item.selectedMedium || 'default'}`}
-                      className="bg-white border border-dashed border-slate-200 rounded-2xl p-4 flex gap-4 items-center"
-                    >
-                      <Image
-                        src={item.image || '/logo.png'}
-                        alt=""
-                        width={64}
-                        height={64}
-                        className="w-16 h-16 object-contain bg-slate-50 rounded-lg"
-                        unoptimized={imageNeedsUnoptimized(item.image || '')}
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <p className="font-bold text-sm text-[#001B3A] truncate">{item.title}</p>
-                          {item.selectedMedium && (
-                            <span className="text-[9px] font-bold text-blue-600 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded">
-                              {item.selectedMedium}
-                            </span>
-                          )}
-                        </div>
+                  {savedForLater.map((item) => {
+                    const savedHref = `/products/${item.slug || item.id}`;
+                    return (
+                      <div
+                        key={`${item.id}::${item.selectedMedium || 'default'}`}
+                        className="bg-white border border-dashed border-slate-200 rounded-2xl p-4 flex gap-4 items-center"
+                      >
+                        <Link
+                          href={savedHref}
+                          className="flex-shrink-0 group/saved block rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          title={`View ${item.title}`}
+                        >
+                          <Image
+                            src={item.image || '/logo.png'}
+                            alt={item.title}
+                            width={64}
+                            height={64}
+                            className="w-16 h-16 object-contain bg-slate-50 rounded-lg border border-slate-200 group-hover/saved:scale-105 group-hover/saved:border-blue-400 transition-all duration-200 cursor-pointer"
+                            unoptimized={imageNeedsUnoptimized(item.image || '')}
+                          />
+                        </Link>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <h4 className="font-bold text-sm text-[#001B3A] truncate">
+                              <Link
+                                href={savedHref}
+                                className="hover:text-blue-600 hover:underline transition-colors"
+                                title={`View ${item.title}`}
+                              >
+                                {item.title}
+                              </Link>
+                            </h4>
+                            {item.selectedMedium && (
+                              <span className="text-[9px] font-bold text-blue-600 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded">
+                                {item.selectedMedium}
+                              </span>
+                            )}
+                          </div>
                         <p className="text-xs text-slate-500">₹{item.price}</p>
                       </div>
                       <button
@@ -453,8 +494,9 @@ export default function CartPage() {
                       >
                         Move to cart
                       </button>
-                    </div>
-                  ))}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>

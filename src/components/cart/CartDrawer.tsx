@@ -144,21 +144,36 @@ export const CartDrawer = () => {
                 cart.map((item) => {
                   const stockState = getCartItemStockState(item, products);
                   const itemKey = `${item.id}::${item.selectedMedium || 'default'}`;
+                  const itemHref = `/products/${item.slug || item.id}`;
                   return (
                     <div key={itemKey} className="flex gap-3 pb-3 border-b border-slate-100 items-center">
-                      <div className="relative w-14 h-14 bg-slate-50 border border-slate-200 rounded-xl overflow-hidden flex-shrink-0">
+                      <Link
+                        href={itemHref}
+                        onClick={() => setIsCartOpen(false)}
+                        className="relative w-14 h-14 bg-slate-50 border border-slate-200 rounded-xl overflow-hidden flex-shrink-0 group hover:border-blue-400 transition-colors block"
+                        title={`View ${item.title}`}
+                      >
                         <Image
                           src={item.image || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80'}
                           alt={item.title}
                           fill
-                          className="object-contain p-1"
+                          className="object-contain p-1 group-hover:scale-105 transition-transform duration-200"
                           sizes="56px"
                           unoptimized={imageNeedsUnoptimized(item.image || '')}
                         />
-                      </div>
+                      </Link>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <h4 className="font-heading font-bold text-xs text-[#001B3A] truncate">{item.title}</h4>
+                          <h4 className="font-heading font-bold text-xs text-[#001B3A] truncate">
+                            <Link
+                              href={itemHref}
+                              onClick={() => setIsCartOpen(false)}
+                              className="hover:text-blue-600 hover:underline transition-colors"
+                              title={`View ${item.title}`}
+                            >
+                              {item.title}
+                            </Link>
+                          </h4>
                           {item.selectedMedium && (
                             <span className={`inline-block text-[9px] font-black px-1.5 py-0.5 rounded shrink-0 ${
                               item.selectedMedium.toLowerCase().includes('tamil')
