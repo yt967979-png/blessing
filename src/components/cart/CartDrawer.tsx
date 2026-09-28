@@ -188,7 +188,11 @@ export const CartDrawer = () => {
                           ₹{item.price * item.qty}
                           <span className="text-[10px] text-slate-400 font-normal ml-1">(₹{item.price} each)</span>
                         </div>
-                        {!stockState.inStock ? (
+                        {stockState.mediumInvalid ? (
+                          <p className="text-[10px] font-bold text-red-600 mt-1 flex items-center gap-1">
+                            <AlertTriangle className="w-3 h-3" /> {item.selectedMedium || 'Selected medium'} not available — remove
+                          </p>
+                        ) : !stockState.inStock ? (
                           <p className="text-[10px] font-bold text-red-600 mt-1 flex items-center gap-1">
                             <AlertTriangle className="w-3 h-3" /> Out of stock — remove to continue
                           </p>

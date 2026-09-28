@@ -327,7 +327,11 @@ export default function CartPage() {
                         )}
                       </div>
 
-                      {!stockState.inStock ? (
+                      {stockState.mediumInvalid ? (
+                        <p className="text-[11px] font-bold text-red-600 mt-1.5 flex items-center gap-1">
+                          <AlertTriangle className="w-3.5 h-3.5" /> {item.selectedMedium || 'Selected medium'} is no longer available for this book — remove to continue
+                        </p>
+                      ) : !stockState.inStock ? (
                         <p className="text-[11px] font-bold text-red-600 mt-1.5 flex items-center gap-1">
                           <AlertTriangle className="w-3.5 h-3.5" /> Out of stock — remove this item to continue
                         </p>

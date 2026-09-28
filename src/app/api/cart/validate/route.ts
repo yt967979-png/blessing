@@ -16,6 +16,7 @@ interface CartValidateItem {
   id?: string | number;
   qty?: number;
   title?: string;
+  selectedMedium?: string;
 }
 
 interface BookStockRow {
@@ -27,6 +28,7 @@ interface BookStockRow {
   discount_price: number | string | null;
   category_id?: string | null;
   combo_subjects?: any;
+  language?: string | null;
 }
 
 /**
@@ -68,7 +70,7 @@ export async function POST(request: Request) {
     }
 
     const res = await queryDb(
-      `SELECT id, title, price, discount_price, stock, status, category_id, combo_subjects FROM books WHERE id = ANY($1)`,
+      `SELECT id, title, price, discount_price, stock, status, category_id, combo_subjects, language FROM books WHERE id = ANY($1)`,
       [ids]
     );
     const byId = new Map<string, BookStockRow>(
@@ -91,6 +93,42 @@ export async function POST(request: Request) {
           allowedQty: 0,
           removed: true,
           message: `"${fallbackTitle}" is no longer available`,
+          price: 0,
+          mrp: 0,
+          discount: 0,
+        };
+      }
+
+      const bookLang = String(book.language || 'Both').trim();
+      const lowerLang = bookLang.toLowerCase();
+      const requestedMedium = String(i?.selectedMedium || '').trim();
+      const lowerMedium = requestedMedium.toLowerCase();
+
+      let mediumInvalid = false;
+      if (
+        requestedMedium &&
+        lowerLang !== 'both' &&
+        !lowerLang.includes('both') &&
+        !(lowerLang.includes('tamil') && lowerLang.includes('english'))
+      ) {
+        if (lowerLang.includes('tamil') && lowerMedium.includes('english')) {
+          mediumInvalid = true;
+        } else if (lowerLang.includes('english') && lowerMedium.includes('tamil')) {
+          mediumInvalid = true;
+        }
+      }
+
+      if (mediumInvalid) {
+        return {
+          id,
+          title: book.title,
+          requestedQty,
+          availableStock: 0,
+          inStock: false,
+          allowedQty: 0,
+          removed: true,
+          mediumInvalid: true,
+          message: `"${book.title}" is no longer published in ${requestedMedium} — removed from cart`,
           price: 0,
           mrp: 0,
           discount: 0,

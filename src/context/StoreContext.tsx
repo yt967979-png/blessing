@@ -5,6 +5,7 @@ import { userNeedsProfile } from '@/lib/userProfile';
 import { deliveryFeeForQty, cartHasCombo, effectiveBookCount, isMoqSatisfied } from '@/lib/deliveryRules';
 import { IS_CHECKOUT_PAUSED, DEFAULT_CHECKOUT_PAUSE_MESSAGE } from '@/lib/checkoutConstants';
 import { authHeaders } from '@/lib/clientAuth';
+import { isMediumCompatible } from '@/lib/cartStock';
 
 export interface Product {
   id: string | number;
@@ -698,18 +699,35 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       queueMicrotask(() => refreshProducts(true));
     }
 
-    // Mirror into the live cart too — instant update of stock, inStock AND price / mrp / discount
+    // Mirror into the live cart too — instant update of stock, inStock, language AND price / mrp / discount
+    // and prune any item if its selected medium is no longer published for that guide
     setCart((prev) => {
       let changed = false;
-      const next = prev.map((item) => {
+      const next: CartItem[] = [];
+      const removedMediums: string[] = [];
+
+      for (const item of prev) {
         const upd = byId.get(String(item.id));
-        if (!upd) return item;
+        if (!upd) {
+          next.push(item);
+          continue;
+        }
+
+        // Medium availability check
+        const currentLang = upd.language !== undefined ? upd.language : item.language;
+        if (!isMediumCompatible(item.selectedMedium, currentLang)) {
+          changed = true;
+          removedMediums.push(`"${item.title} (${item.selectedMedium || 'Selected Medium'})"`);
+          continue; // Remove item from cart!
+        }
+
         const clampedQty = upd.inStock ? Math.min(item.qty, Math.max(1, upd.stock)) : item.qty;
         const newPrice = typeof upd.price === 'number' && Number.isFinite(upd.price) && upd.price > 0 ? upd.price : item.price;
         const newMrp = typeof upd.mrp === 'number' && Number.isFinite(upd.mrp) && upd.mrp > 0 ? upd.mrp : item.mrp;
         const newDiscount = typeof upd.discount === 'number' ? upd.discount : item.discount;
         const newTitle = upd.title !== undefined ? upd.title : item.title;
         const newImage = upd.coverImage !== undefined ? upd.coverImage : item.image;
+        const newLanguage = upd.language !== undefined ? upd.language : item.language;
 
         if (
           item.stock === upd.stock &&
@@ -719,10 +737,13 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           item.mrp === newMrp &&
           item.discount === newDiscount &&
           item.title === newTitle &&
-          item.image === newImage
+          item.image === newImage &&
+          item.language === newLanguage
         ) {
-          return item;
+          next.push(item);
+          continue;
         }
+
         changed = true;
         const isAdminPage = typeof window !== 'undefined' && window.location.pathname.startsWith('/admin');
         if (!isAdminPage) {
@@ -732,7 +753,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             showToast(`⚠️ "${item.title}" is now Out of Stock`);
           }
         }
-        return {
+
+        next.push({
           ...item,
           stock: upd.stock,
           inStock: upd.inStock,
@@ -742,8 +764,14 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           discount: newDiscount,
           title: newTitle,
           image: newImage,
-        };
-      });
+          language: newLanguage,
+        });
+      }
+
+      if (removedMediums.length > 0) {
+        showToast(`⚠️ Removed ${removedMediums.join(', ')} — this medium is no longer available`);
+      }
+
       if (changed) {
         try {
           localStorage.setItem('bpg_cart_next', JSON.stringify(next));
@@ -757,14 +785,26 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     // Also mirror into savedForLater
     setSavedForLater((prev) => {
       let changed = false;
-      const next = prev.map((item) => {
+      const next: CartItem[] = [];
+
+      for (const item of prev) {
         const upd = byId.get(String(item.id));
-        if (!upd) return item;
+        if (!upd) {
+          next.push(item);
+          continue;
+        }
+        const currentLang = upd.language !== undefined ? upd.language : item.language;
+        if (!isMediumCompatible(item.selectedMedium, currentLang)) {
+          changed = true;
+          continue; // Drop from saved for later if medium no longer published
+        }
         const newPrice = typeof upd.price === 'number' && Number.isFinite(upd.price) && upd.price > 0 ? upd.price : item.price;
         const newMrp = typeof upd.mrp === 'number' && Number.isFinite(upd.mrp) && upd.mrp > 0 ? upd.mrp : item.mrp;
         const newDiscount = typeof upd.discount === 'number' ? upd.discount : item.discount;
         const newTitle = upd.title !== undefined ? upd.title : item.title;
         const newImage = upd.coverImage !== undefined ? upd.coverImage : item.image;
+        const newLanguage = upd.language !== undefined ? upd.language : item.language;
+
         if (
           item.stock === upd.stock &&
           item.inStock === upd.inStock &&
@@ -772,12 +812,14 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           item.mrp === newMrp &&
           item.discount === newDiscount &&
           item.title === newTitle &&
-          item.image === newImage
+          item.image === newImage &&
+          item.language === newLanguage
         ) {
-          return item;
+          next.push(item);
+          continue;
         }
         changed = true;
-        return {
+        next.push({
           ...item,
           stock: upd.stock,
           inStock: upd.inStock,
@@ -786,8 +828,10 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           discount: newDiscount,
           title: newTitle,
           image: newImage,
-        };
-      });
+          language: newLanguage,
+        });
+      }
+
       if (changed) {
         try {
           localStorage.setItem('bpg_saved_later', JSON.stringify(next));
@@ -1506,7 +1550,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          items: current.map((c) => ({ id: c.id, qty: c.qty, title: c.title })),
+          items: current.map((c) => ({ id: c.id, qty: c.qty, title: c.title, selectedMedium: c.selectedMedium })),
         }),
         signal: AbortSignal.timeout(8_000),
       });
@@ -1526,7 +1570,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             next.push(item);
             continue;
           }
-          if (r.removed || !r.inStock || r.allowedQty <= 0) {
+          if (r.removed || r.mediumInvalid || !r.inStock || r.allowedQty <= 0) {
             clean = false;
             messages.push(r.message || `"${item.title}" is out of stock — removed from cart`);
             continue;
@@ -1907,35 +1951,52 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const previousProducts = products;
     setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, ...withDerived } : p)));
 
-    // Immediately mirror price/stock changes into active cart & savedForLater with zero latency
+    // Immediately mirror price/stock/language changes into active cart & savedForLater with zero latency
     setCart((prev) => {
       let changed = false;
-      const next = prev.map((item) => {
-        if (String(item.id) !== String(id)) return item;
+      const next: CartItem[] = [];
+      const droppedMediums: string[] = [];
+      for (const item of prev) {
+        if (String(item.id) !== String(id)) {
+          next.push(item);
+          continue;
+        }
+        if (withDerived.language !== undefined && !isMediumCompatible(item.selectedMedium, withDerived.language)) {
+          changed = true;
+          droppedMediums.push(`"${item.title} (${item.selectedMedium || 'Selected Medium'})"`);
+          continue; // Remove item with now-unavailable medium!
+        }
         const newPrice = withDerived.price !== undefined ? withDerived.price : item.price;
         const newMrp = withDerived.mrp !== undefined ? withDerived.mrp : item.mrp;
         const newDiscount = withDerived.discount !== undefined ? withDerived.discount : item.discount;
         const newStock = withDerived.stock !== undefined ? withDerived.stock : item.stock;
         const newInStock = withDerived.inStock !== undefined ? withDerived.inStock : item.inStock;
+        const newLanguage = withDerived.language !== undefined ? withDerived.language : item.language;
         if (
           item.price === newPrice &&
           item.mrp === newMrp &&
           item.discount === newDiscount &&
           item.stock === newStock &&
-          item.inStock === newInStock
+          item.inStock === newInStock &&
+          item.language === newLanguage
         ) {
-          return item;
+          next.push(item);
+          continue;
         }
         changed = true;
-        return {
+        next.push({
           ...item,
           price: newPrice,
           mrp: newMrp,
           discount: newDiscount,
           stock: newStock,
           inStock: newInStock,
-        };
-      });
+          language: newLanguage,
+        });
+      }
+      if (droppedMediums.length > 0) {
+        showToast(`⚠️ Removed ${droppedMediums.join(', ')} — this medium is no longer available`);
+      }
       if (changed) {
         try {
           localStorage.setItem('bpg_cart_next', JSON.stringify(next));

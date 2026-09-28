@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Star,
   ShoppingBag,
@@ -66,6 +66,8 @@ function applyReviewsPayload(
 
 export default function ProductDetailClient({ slug, initialProduct }: { slug: string; initialProduct?: any }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const queryMedium = searchParams?.get('medium');
   const { products, productsLoading, addToCart, toggleWishlist, wishlist, user, setIsAuthOpen, setIsCheckoutOpen, cartCount, showToast } = useStore();
   const [dbProduct, setDbProduct] = useState<any>(initialProduct || null);
   const [productFetchDone, setProductFetchDone] = useState(Boolean(initialProduct));
@@ -115,20 +117,21 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
   // storeProduct is kept live in realtime by the SSE stock/catalog stream in
   // StoreContext — merge with dbProduct so any admin edit (price, stock, language,
   // badge, title, samplePdf) updates this page instantly with 0 refresh.
+  // Authoritative dbProduct takes precedence over local client cache.
   const product = useMemo(() => {
     if (!dbProduct && !storeProduct) return null;
     if (!dbProduct) return storeProduct;
     if (!storeProduct) return dbProduct;
     return {
-      ...dbProduct,
       ...storeProduct,
+      ...dbProduct,
       description: dbProduct.description || storeProduct.description,
       features:
         Array.isArray(dbProduct.features) && dbProduct.features.length > 0
           ? dbProduct.features
           : storeProduct.features || ['Solved Papers', 'Chapter Notes'],
-      samplePdfUrl: storeProduct.samplePdfUrl !== undefined ? storeProduct.samplePdfUrl : dbProduct.samplePdfUrl,
-      image: storeProduct.image || dbProduct.image,
+      samplePdfUrl: dbProduct.samplePdfUrl !== undefined ? dbProduct.samplePdfUrl : storeProduct.samplePdfUrl,
+      image: dbProduct.image || storeProduct.image,
     };
   }, [dbProduct, storeProduct]);
   const [activeImg, setActiveImg] = useState('');
@@ -142,10 +145,29 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
     lowerLang.includes('both') ||
     (lowerLang.includes('tamil') && lowerLang.includes('english'));
 
-  const defaultSelectedMedium = lowerLang.includes('english') && !lowerLang.includes('tamil')
-    ? 'English Medium'
-    : 'Tamil Medium';
-  const [selectedMedium, setSelectedMedium] = useState<string>(defaultSelectedMedium);
+  const initialMedium = useMemo(() => {
+    if (queryMedium) {
+      const q = queryMedium.trim().toLowerCase();
+      if (q.includes('english')) return 'English Medium';
+      if (q.includes('tamil')) return 'Tamil Medium';
+    }
+    return lowerLang.includes('english') && !lowerLang.includes('tamil')
+      ? 'English Medium'
+      : 'Tamil Medium';
+  }, [queryMedium, lowerLang]);
+
+  const [selectedMedium, setSelectedMedium] = useState<string>(initialMedium);
+
+  useEffect(() => {
+    if (queryMedium) {
+      const q = queryMedium.trim().toLowerCase();
+      if (q.includes('english')) {
+        setSelectedMedium('English Medium');
+      } else if (q.includes('tamil')) {
+        setSelectedMedium('Tamil Medium');
+      }
+    }
+  }, [queryMedium]);
 
   useEffect(() => {
     if (product?.language) {
@@ -218,7 +240,8 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
       // Catalog snapshot at request start — enables parallel reviews when already warm
       const knownId = initialProduct?.id || products.find((p: any) => p.slug === slug || p.id === slug)?.id;
 
-      const productPromise = fetch(`/api/products?slug=${encodeURIComponent(slug)}&fresh=1`)
+      const fetchSlug = knownId ? String(knownId) : (normalizedSlug || slug);
+      const productPromise = fetch(`/api/products?slug=${encodeURIComponent(fetchSlug)}&fresh=1`)
         .then(async (res) => {
           if (!res.ok) return initialProduct || null;
           const list = await res.json();
@@ -260,19 +283,27 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
       cancelled = true;
     };
     // products omitted on purpose — snapshot only at slug/auth change
-  }, [slug, user?.token]);
+  }, [slug, normalizedSlug, user?.token]);
 
   // Listen for realtime catalog & stock change events pushed via SSE / StoreContext
   useEffect(() => {
     const handleLiveCatalogChange = (e: any) => {
-      const bookIds = e?.detail?.bookIds || (Array.isArray(e?.detail) ? e.detail.map((b: any) => String(b.id)) : []);
       const currentId = dbProduct?.id || storeProduct?.id;
+      // If the event provided detailed book data directly (e.g. from stock-changed), apply it immediately
+      if (Array.isArray(e?.detail) && currentId) {
+        const directMatch = e.detail.find((b: any) => String(b.id) === String(currentId));
+        if (directMatch) {
+          setDbProduct((prev: any) => ({ ...(prev || {}), ...directMatch }));
+        }
+      }
+      const bookIds = e?.detail?.bookIds || (Array.isArray(e?.detail) ? e.detail.map((b: any) => String(b.id)) : []);
       if (bookIds && bookIds.length > 0 && currentId) {
         if (!bookIds.map(String).includes(String(currentId))) {
           return;
         }
       }
-      fetch(`/api/products?slug=${encodeURIComponent(slug)}&fresh=1`)
+      const fetchSlug = currentId ? String(currentId) : (normalizedSlug || slug);
+      fetch(`/api/products?slug=${encodeURIComponent(fetchSlug)}&fresh=1`)
         .then((res) => (res.ok ? res.json() : null))
         .then((list) => {
           if (Array.isArray(list) && list.length > 0) {
@@ -288,7 +319,7 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
       window.removeEventListener('bpg:catalog-changed', handleLiveCatalogChange);
       window.removeEventListener('bpg:stock-changed', handleLiveCatalogChange);
     };
-  }, [slug, dbProduct?.id, storeProduct?.id]);
+  }, [slug, normalizedSlug, dbProduct?.id, storeProduct?.id]);
 
   useEffect(() => {
     if (product?.image) {

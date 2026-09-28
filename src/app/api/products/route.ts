@@ -51,7 +51,8 @@ export async function invalidateProductsCache() {
 }
 
 function cacheKey(cls: string | null, search: string | null, slug: string | null) {
-  return `c=${cls || ''}|s=${(search || '').trim().toLowerCase()}|g=${slug || ''}`;
+  const normSlug = slug ? String(slug).trim().toLowerCase().replace(/[^a-z0-9]+/g, '-') : '';
+  return `c=${cls || ''}|s=${(search || '').trim().toLowerCase()}|g=${normSlug}`;
 }
 
 function readCache(key: string, allowStale = false) {
@@ -266,9 +267,11 @@ export async function GET(request: Request) {
       const params: any[] = [];
       let count = 1;
       if (slug) {
-        where += ` AND (b.slug = $${count} OR b.id = $${count})`;
-        params.push(slug);
-        count++;
+        const rawSlug = String(slug).trim();
+        const normSlug = rawSlug.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+        where += ` AND (b.slug = $${count} OR b.id = $${count} OR lower(b.slug) = $${count + 1} OR lower(b.slug) = $${count + 2} OR lower(replace(b.title, ' ', '-')) = $${count + 2})`;
+        params.push(rawSlug, rawSlug.toLowerCase(), normSlug);
+        count += 3;
       }
       if (cls && cls !== 'all' && cls !== 'ALL') {
         const cleanCls = cls.toLowerCase().trim();

@@ -59,7 +59,9 @@ export const ProductCard = React.memo(function ProductCard({ product }: { produc
   const isWishlisted = Boolean(product?.id && wishlist.some((id) => String(id) === String(product.id)));
   const rupeesSaved = product.mrp - product.price;
   const imgSrc = product.image;
-  const productHref = `/products/${product.slug}`;
+  const productHref = isMultiMedium
+    ? `/products/${product.slug || product.id}?medium=${encodeURIComponent(selectedMedium)}`
+    : `/products/${product.slug || product.id}`;
   const isOutOfStock = product.inStock === false;
   const isCombo = isComboItem(product);
   const comboSubjects = isCombo ? getComboIncludedSubjects(product) : [];
