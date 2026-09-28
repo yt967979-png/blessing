@@ -111,17 +111,14 @@ export const ProductCard = React.memo(function ProductCard({ product }: { produc
       }`}
       onPointerEnter={prefetchProduct}
     >
-      <div className="absolute top-2 left-2 z-10 flex flex-col gap-1">
-        {isComingSoon ? (
+      <div className="absolute top-2 left-2 z-10 flex flex-col gap-1 items-start">
+        {isComingSoon && (
           <span className="text-[9.5px] font-black text-amber-950 px-2 py-0.5 rounded-md bg-gradient-to-r from-amber-400 to-amber-300 shadow-sm border border-amber-500/30 flex items-center gap-1">
             <Sparkles className="w-2.5 h-2.5 text-amber-900" />
             <span>COMING SOON</span>
           </span>
-        ) : isOutOfStock ? (
-          <span className="text-[9px] font-black text-white px-2 py-0.5 rounded-md bg-slate-700 shadow-sm">
-            OUT OF STOCK
-          </span>
-        ) : product.badge ? (
+        )}
+        {product.badge && !isOutOfStock && (
           <span
             className={`text-[9px] font-black text-white px-2 py-0.5 rounded-md uppercase shadow-sm ${
               product.badgeColor || 'bg-blue-600'
@@ -129,11 +126,17 @@ export const ProductCard = React.memo(function ProductCard({ product }: { produc
           >
             {product.badge}
           </span>
-        ) : (product.stock ?? 99) <= 5 && (product.stock ?? 0) > 0 ? (
+        )}
+        {isOutOfStock && !isComingSoon && (
+          <span className="text-[9px] font-black text-white px-2 py-0.5 rounded-md bg-slate-700 shadow-sm">
+            OUT OF STOCK
+          </span>
+        )}
+        {!isComingSoon && !isOutOfStock && !product.badge && (product.stock ?? 99) <= 5 && (product.stock ?? 0) > 0 && (
           <span className="text-[9px] font-black text-white px-2 py-0.5 rounded-md bg-amber-500 shadow-sm animate-pulse">
             ONLY {product.stock} LEFT
           </span>
-        ) : null}
+        )}
       </div>
 
       <button

@@ -742,15 +742,15 @@ export async function PATCH(request: Request) {
       }
     }
 
-    if (inStock !== undefined) {
+    if (inStock !== undefined && !comingSoonInput) {
       const available = Boolean(inStock);
       finalStatus = available ? 'published' : 'out_of_stock';
     }
 
-    if (status !== undefined) {
-      finalStatus = String(status);
-    } else if (comingSoonInput === true && finalStatus === undefined) {
+    if (comingSoonInput === true) {
       finalStatus = 'coming_soon';
+    } else if (status !== undefined) {
+      finalStatus = String(status);
     } else if (comingSoonInput === false && finalStatus === undefined && existingRow.status === 'coming_soon') {
       const curStock = finalStock !== undefined ? finalStock : Number(existingRow.stock || 0);
       finalStatus = curStock > 0 ? 'published' : 'out_of_stock';

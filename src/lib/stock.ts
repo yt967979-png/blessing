@@ -12,12 +12,15 @@ export interface StockRow {
   stock_english?: unknown;
   stockTamil?: unknown;
   stockEnglish?: unknown;
+  is_coming_soon?: unknown;
+  isComingSoon?: unknown;
 }
 
-const DISABLED_STATUSES = new Set(['out_of_stock', 'draft', 'archived', 'inactive']);
+const DISABLED_STATUSES = new Set(['out_of_stock', 'draft', 'archived', 'inactive', 'coming_soon']);
 
 /** Is this book purchasable right now? */
 export function isBookInStock(row: StockRow): boolean {
+  if (row.is_coming_soon || row.isComingSoon) return false;
   const status = String(row.status || '').toLowerCase().trim();
   if (DISABLED_STATUSES.has(status)) return false;
 

@@ -2041,12 +2041,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (rest.stock !== undefined) {
       const qty = Math.max(0, Math.floor(Number(rest.stock) || 0));
       withDerived.stock = qty;
-      withDerived.inStock = qty > 0;
-      if (qty <= 0) {
+      withDerived.inStock = withDerived.isComingSoon ? false : qty > 0;
+      if (qty <= 0 && !withDerived.isComingSoon) {
         (withDerived as any).status = 'out_of_stock';
       }
     }
-    if (withDerived.inStock === false) {
+    if (withDerived.inStock === false && !withDerived.isComingSoon) {
       (withDerived as any).status = 'out_of_stock';
     }
     if (rest.comboSubjects !== undefined) {
