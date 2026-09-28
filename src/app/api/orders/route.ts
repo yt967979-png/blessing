@@ -13,7 +13,7 @@ import {
 import { verifyRazorpayPayment } from '@/lib/orderPricing';
 import { priceCheckoutOrder } from '@/lib/checkoutPricing';
 import { consumeCouponUsage, recordCouponRedemption } from '@/lib/coupons';
-import { blocksShippingActions, isOrderCancelled, logOrderStateTransition } from '@/lib/orderStatus';
+import { blocksShippingActions, isOrderCancelled, isParcelDelivered, logOrderStateTransition, canTransitionOrderStatus } from '@/lib/orderStatus';
 import { refundRazorpayPayment } from '@/lib/razorpayRefund';
 import { confirmStockHolds, recordConfirmedSale, shrinkConfirmedHold, releaseStockHolds } from '@/lib/stockHold';
 import { isValidMobileNumber, normalizeRequiredAlternateMobile } from '@/lib/authValidation';
@@ -288,7 +288,16 @@ export async function POST(request: Request) {
     const userId = session.userId;
     const isRazorpay = String(paymentMethod || '').toLowerCase().includes('razorpay');
 
-    await client.query('BEGIN');
+    if (!isRazorpay) {
+      return NextResponse.json(
+        { error: 'Only Razorpay online payments are accepted. Cash on Delivery is disabled.' },
+        { status: 400 }
+      );
+    }
+
+    if (!razorpayPaymentId || !razorpayOrderId || !razorpaySignature) {
+      return NextResponse.json({ error: 'Payment details required for online checkout.' }, { status: 400 });
+    }
 
     const checkout = await priceCheckoutOrder(client, {
       items,
@@ -297,7 +306,6 @@ export async function POST(request: Request) {
     });
 
     if (!checkout.ok) {
-      await client.query('ROLLBACK');
       return NextResponse.json({ error: checkout.error }, { status: checkout.status });
     }
 
@@ -319,7 +327,6 @@ export async function POST(request: Request) {
         [idemKey]
       );
       if (byKey.rows.length) {
-        await client.query('ROLLBACK');
         const existing = byKey.rows[0];
         return NextResponse.json({
           orderId: existing.order_number,
@@ -330,25 +337,11 @@ export async function POST(request: Request) {
       }
     }
 
-    if (!isRazorpay) {
-      await client.query('ROLLBACK');
-      return NextResponse.json(
-        { error: 'Only Razorpay online payments are accepted. Cash on Delivery is disabled.' },
-        { status: 400 }
-      );
-    }
-
-    if (!razorpayPaymentId || !razorpayOrderId || !razorpaySignature) {
-      await client.query('ROLLBACK');
-      return NextResponse.json({ error: 'Payment details required for online checkout.' }, { status: 400 });
-    }
-
     const dupPay = await client.query(
       `SELECT order_number, id, total_amount FROM orders WHERE razorpay_payment_id = $1 OR razorpay_order_id = $2 LIMIT 1`,
       [razorpayPaymentId, razorpayOrderId]
     );
     if (dupPay.rows.length) {
-      await client.query('ROLLBACK');
       const existing = dupPay.rows[0];
       return NextResponse.json({
         orderId: existing.order_number,
@@ -358,6 +351,7 @@ export async function POST(request: Request) {
       });
     }
 
+    // Verify payment with Razorpay API (with bounded timeout) BEFORE opening database transaction
     const verified = await verifyRazorpayPayment({
       razorpayOrderId,
       razorpayPaymentId,
@@ -366,12 +360,48 @@ export async function POST(request: Request) {
       userId,
     });
     if (!verified.ok) {
-      await client.query('ROLLBACK');
       return NextResponse.json({ error: verified.error }, { status: 400 });
     }
+
     // From here on, Razorpay has confirmed the money is captured. Any failure
     // past this point MUST refund — never let a confirmed capture sit orphaned.
     paymentAlreadyVerified = true;
+
+    // NOW acquire exclusive transactional lock to persist the order atomically
+    await client.query('BEGIN');
+
+    // Concurrency defense: re-check idempotency key and duplicate payments inside transaction
+    if (idemKey) {
+      const txByKey = await client.query(
+        `SELECT order_number, total_amount FROM orders WHERE idempotency_key = $1 FOR UPDATE`,
+        [idemKey]
+      );
+      if (txByKey.rows.length) {
+        await client.query('ROLLBACK');
+        const existing = txByKey.rows[0];
+        return NextResponse.json({
+          orderId: existing.order_number,
+          duplicate: true,
+          totalAmount: Number(existing.total_amount || totalAmount),
+          message: 'Order already placed.',
+        });
+      }
+    }
+
+    const txDupPay = await client.query(
+      `SELECT order_number, id, total_amount FROM orders WHERE razorpay_payment_id = $1 OR razorpay_order_id = $2 FOR UPDATE`,
+      [razorpayPaymentId, razorpayOrderId]
+    );
+    if (txDupPay.rows.length) {
+      await client.query('ROLLBACK');
+      const existing = txDupPay.rows[0];
+      return NextResponse.json({
+        orderId: existing.order_number,
+        duplicate: true,
+        totalAmount: Number(existing.total_amount || totalAmount),
+        message: 'Payment already processed — returning your existing order.',
+      });
+    }
 
     if (appliedCoupon?.id) {
       const consumed = await consumeCouponUsage(client, appliedCoupon.id);
@@ -468,29 +498,71 @@ export async function POST(request: Request) {
         // Cart shrank between "Pay" (hold created) and confirm — give the
         // extra reserved units back to the shelf and shrink the ledger row.
         const excess = heldQty - item.qty;
-        await client.query(
-          `UPDATE books
-           SET stock = COALESCE(stock, 0) + $1,
-               status = CASE WHEN status = 'out_of_stock' AND COALESCE(stock, 0) + $1 > 0 THEN 'published' ELSE status END,
-               updated_at = NOW()
-           WHERE id = $2`,
-          [excess, item.id]
-        );
+        const lowerMed = String(med || '').toLowerCase();
+        let excessSql = `
+          UPDATE books
+          SET stock = COALESCE(stock, 0) + $1,
+              status = CASE WHEN status = 'out_of_stock' AND COALESCE(stock, 0) + $1 > 0 THEN 'published' ELSE status END,
+              updated_at = NOW()
+          WHERE id = $2
+        `;
+        if (lowerMed.includes('tamil')) {
+          excessSql = `
+            UPDATE books
+            SET stock = COALESCE(stock, 0) + $1,
+                stock_tamil = CASE WHEN stock_tamil IS NOT NULL THEN stock_tamil + $1 ELSE stock_tamil END,
+                status = CASE WHEN status = 'out_of_stock' AND COALESCE(stock, 0) + $1 > 0 THEN 'published' ELSE status END,
+                updated_at = NOW()
+            WHERE id = $2
+          `;
+        } else if (lowerMed.includes('english')) {
+          excessSql = `
+            UPDATE books
+            SET stock = COALESCE(stock, 0) + $1,
+                stock_english = CASE WHEN stock_english IS NOT NULL THEN stock_english + $1 ELSE stock_english END,
+                status = CASE WHEN status = 'out_of_stock' AND COALESCE(stock, 0) + $1 > 0 THEN 'published' ELSE status END,
+                updated_at = NOW()
+            WHERE id = $2
+          `;
+        }
+        await client.query(excessSql, [excess, item.id]);
         await shrinkConfirmedHold(client, { razorpayOrderId, bookId: item.id, newQty: item.qty });
       } else if (heldQty < item.qty) {
         // Fail-safe: no hold (legacy flow) or the hold covered fewer units
         // than this order needs — decrement the shortfall directly, same
         // race-safe guard as before.
         const shortfall = item.qty - heldQty;
-        const stockRes = await client.query(
-          `UPDATE books
-           SET stock = COALESCE(stock, 0) - $1,
-               status = CASE WHEN COALESCE(stock, 0) - $1 <= 0 THEN 'out_of_stock' ELSE status END,
-               updated_at = NOW()
-           WHERE id = $2 AND COALESCE(stock, 0) >= $1
-           RETURNING id, title, stock`,
-          [shortfall, item.id]
-        );
+        const lowerMed = String(med || '').toLowerCase();
+        let shortfallSql = `
+          UPDATE books
+          SET stock = COALESCE(stock, 0) - $1,
+              status = CASE WHEN COALESCE(stock, 0) - $1 <= 0 THEN 'out_of_stock' ELSE status END,
+              updated_at = NOW()
+          WHERE id = $2 AND COALESCE(stock, 0) >= $1
+          RETURNING id, title, stock
+        `;
+        if (lowerMed.includes('tamil')) {
+          shortfallSql = `
+            UPDATE books
+            SET stock = COALESCE(stock, 0) - $1,
+                stock_tamil = CASE WHEN stock_tamil IS NOT NULL THEN GREATEST(0, stock_tamil - $1) ELSE stock_tamil END,
+                status = CASE WHEN COALESCE(stock, 0) - $1 <= 0 THEN 'out_of_stock' ELSE status END,
+                updated_at = NOW()
+            WHERE id = $2 AND COALESCE(stock, 0) >= $1 AND (stock_tamil IS NULL OR stock_tamil >= $1)
+            RETURNING id, title, stock
+          `;
+        } else if (lowerMed.includes('english')) {
+          shortfallSql = `
+            UPDATE books
+            SET stock = COALESCE(stock, 0) - $1,
+                stock_english = CASE WHEN stock_english IS NOT NULL THEN GREATEST(0, stock_english - $1) ELSE stock_english END,
+                status = CASE WHEN COALESCE(stock, 0) - $1 <= 0 THEN 'out_of_stock' ELSE status END,
+                updated_at = NOW()
+            WHERE id = $2 AND COALESCE(stock, 0) >= $1 AND (stock_english IS NULL OR stock_english >= $1)
+            RETURNING id, title, stock
+          `;
+        }
+        const stockRes = await client.query(shortfallSql, [shortfall, item.id]);
         if (stockRes.rowCount === 0) {
           await client.query('ROLLBACK');
           // Someone else's order won this stock race after our payment was
@@ -682,6 +754,61 @@ export async function PATCH(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    if (String(newStatus).toLowerCase() === 'returned') {
+      releaseDbClient(client);
+      client = null;
+      const { executeOrderReturn } = await import('@/lib/orderCancel');
+      const retRes = await executeOrderReturn({
+        orderId: existing.rows[0].order_number || orderId,
+        reason: body.reason || 'Admin marked as Returned',
+        actor: 'admin',
+        refund: body.refund !== false,
+        restoreStock: body.restoreStock !== false,
+      });
+      if (!retRes.ok) {
+        return NextResponse.json({ error: retRes.error }, { status: retRes.status || 500 });
+      }
+      return NextResponse.json({
+        success: true,
+        orderId,
+        status: 'Returned',
+        refunded: retRes.refunded,
+        refundId: retRes.refundId,
+      });
+    }
+
+    const transitionCheck = canTransitionOrderStatus(currentStatus, newStatus);
+    if (!transitionCheck.allowed) {
+      return NextResponse.json(
+        { error: transitionCheck.reason },
+        { status: 409 }
+      );
+    }
+
+    if (awbNumber && String(awbNumber).trim()) {
+      const cleanAwb = String(awbNumber).replace(/\s+/g, '').toUpperCase();
+      if (!cleanAwb.startsWith('SHP-')) {
+        const dupCheck = await client.query(
+          `SELECT id, order_number FROM orders
+           WHERE UPPER(REPLACE(awb_number, ' ', '')) = $1
+             AND id <> $2
+             AND order_number <> $3
+             AND order_status NOT ILIKE '%cancel%'
+           LIMIT 1`,
+          [cleanAwb, existing.rows[0].id, existing.rows[0].order_number]
+        );
+        if (dupCheck.rows.length > 0) {
+          return NextResponse.json(
+            {
+              error: `AWB ${awbNumber} is already assigned to active Order #${dupCheck.rows[0].order_number}. Each shipment requires a unique ST Courier AWB.`,
+            },
+            { status: 409 }
+          );
+        }
+      }
+    }
+
     const isOfficial = awbNumber && (awbNumber.startsWith('STC') || !awbNumber.startsWith('SHP-'));
     const trackingUrl = isOfficial ? `https://stcourier.com/track/shipment?docket=${awbNumber}` : 'https://stcourier.com';
 

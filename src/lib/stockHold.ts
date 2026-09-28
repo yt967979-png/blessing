@@ -359,12 +359,73 @@ export async function releaseStockHolds(
 export async function sweepExpiredStockHolds(): Promise<number> {
   try {
     const expired = await queryDb(
-      `SELECT DISTINCT hold_group_id FROM stock_holds
+      `SELECT DISTINCT hold_group_id, razorpay_order_id FROM stock_holds
        WHERE status = 'held' AND expires_at < NOW() AND hold_group_id IS NOT NULL
        LIMIT 200`
     );
     let releasedGroups = 0;
+    const keyId = process.env.RAZORPAY_KEY_ID;
+    const keySecret = process.env.RAZORPAY_KEY_SECRET;
+    const authHeader =
+      keyId && keySecret ? `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString('base64')}` : null;
+
     for (const row of expired.rows) {
+      const rzpOrderId = String(row.razorpay_order_id || '').trim();
+
+      // If this hold is tied to a Razorpay order, verify with Razorpay before releasing inventory
+      if (rzpOrderId && authHeader) {
+        try {
+          const existingOrd = await queryDb(
+            `SELECT id FROM orders WHERE razorpay_order_id = $1 LIMIT 1`,
+            [rzpOrderId]
+          );
+          if (existingOrd.rows.length > 0) {
+            // Order was already finalized — confirm the holds, do not release
+            await confirmStockHolds(rzpOrderId);
+            continue;
+          }
+
+          const rzpRes = await fetch(`https://api.razorpay.com/v1/orders/${rzpOrderId}`, {
+            headers: { Authorization: authHeader },
+            signal: AbortSignal.timeout(4000),
+          });
+
+          if (rzpRes.ok) {
+            const rzpData = await rzpRes.json().catch(() => ({}));
+            const rzpStatus = String(rzpData?.status || '').toLowerCase();
+            const amountPaid = Number(rzpData?.amount_paid || 0);
+
+            if (rzpStatus === 'paid' || amountPaid > 0) {
+              // Customer paid! Auto-reconcile and confirm rather than releasing inventory
+              let payId = '';
+              try {
+                const payListRes = await fetch(`https://api.razorpay.com/v1/orders/${rzpOrderId}/payments`, {
+                  headers: { Authorization: authHeader },
+                  signal: AbortSignal.timeout(4000),
+                });
+                if (payListRes.ok) {
+                  const payList = await payListRes.json().catch(() => ({}));
+                  const items = Array.isArray(payList?.items) ? payList.items : [];
+                  const captured = items.find((p: any) => p.status === 'captured') || items[0];
+                  if (captured?.id) payId = String(captured.id);
+                }
+              } catch (_) {}
+
+              const { finalizeOrderFromPayment } = await import('@/lib/orderFinalizer');
+              await finalizeOrderFromPayment({
+                razorpayOrderId: rzpOrderId,
+                razorpayPaymentId: payId,
+                amountRupees: amountPaid > 0 ? amountPaid / 100 : undefined,
+                source: 'background_reconciliation',
+              });
+              continue;
+            }
+          }
+        } catch (checkErr: any) {
+          console.warn(`[stockHold] Sweeper check error for ${rzpOrderId}:`, checkErr?.message || checkErr);
+        }
+      }
+
       const result = await releaseStockHolds({ holdGroupId: row.hold_group_id }, 'ttl_expired');
       if (result.releasedCount > 0) releasedGroups++;
     }

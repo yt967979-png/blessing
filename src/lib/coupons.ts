@@ -289,3 +289,32 @@ export async function recordCouponRedemption(
     throw err;
   }
 }
+
+/** Roll back coupon usage and redemption when an order is cancelled or returned. */
+export async function releaseCouponUsage(
+  client: any,
+  opts: { couponId: string; orderId?: string | null; orderNumber?: string | null; userId?: string | null }
+): Promise<void> {
+  const couponId = String(opts.couponId || '').trim();
+  if (!couponId) return;
+
+  try {
+    await execQuery(
+      client,
+      `UPDATE coupons
+       SET used_count = GREATEST(COALESCE(used_count, 0) - 1, 0)
+       WHERE id = $1`,
+      [couponId]
+    );
+
+    if (opts.orderId || opts.orderNumber) {
+      await execQuery(
+        client,
+        `DELETE FROM coupon_redemptions WHERE order_id = $1 OR order_id = $2`,
+        [opts.orderId || opts.orderNumber, opts.orderNumber || opts.orderId]
+      );
+    }
+  } catch (err: any) {
+    console.warn('[coupons] releaseCouponUsage failed:', err?.message || err);
+  }
+}

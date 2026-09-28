@@ -63,6 +63,11 @@ export function getDeviceIdFromRequest(request: Request): string | null {
   if (fromCookie) return fromCookie;
   const headerDevice = request.headers.get('x-device-id');
   if (headerDevice) return headerDevice.trim();
+  try {
+    const url = new URL(request.url);
+    const paramDevice = url.searchParams.get('deviceId');
+    if (paramDevice) return paramDevice.trim();
+  } catch (_) {}
   return null;
 }
 
@@ -118,6 +123,48 @@ export function createSessionToken(userId: string, role: string, deviceId: strin
   return Buffer.from(JSON.stringify({ p: payloadStr, s: sig })).toString('base64url');
 }
 
+export const STREAM_TICKET_TTL_MS = 5 * 60 * 1000; // 5 minutes max life
+
+/**
+ * Creates a single-purpose, short-lived ticket specifically for SSE live streaming.
+ * Cannot be used as a general session token for state-changing API operations.
+ */
+export function createStreamTicket(userId: string, role: string, deviceId: string): string {
+  const payload = {
+    userId,
+    role,
+    did: deviceId,
+    purpose: 'sse_stream',
+    exp: Date.now() + STREAM_TICKET_TTL_MS,
+  };
+  const payloadStr = JSON.stringify(payload);
+  const sig = crypto.createHmac('sha256', getSessionSecret()).update(payloadStr).digest('hex');
+  return Buffer.from(JSON.stringify({ p: payloadStr, s: sig })).toString('base64url');
+}
+
+/**
+ * Validates a short-lived SSE stream ticket.
+ */
+export function verifyStreamTicket(
+  ticket: string,
+  deviceId?: string | null
+): { userId: string; role: string } | null {
+  try {
+    const decoded = JSON.parse(Buffer.from(ticket, 'base64url').toString('utf8'));
+    const payloadStr = decoded.p as string;
+    const sig = decoded.s as string;
+    const expected = crypto.createHmac('sha256', getSessionSecret()).update(payloadStr).digest('hex');
+    if (!timingSafeHexEqual(sig, expected)) return null;
+    const payload = JSON.parse(payloadStr);
+    if (payload.purpose !== 'sse_stream') return null;
+    if (!payload.exp || payload.exp < Date.now()) return null;
+    if (payload.did && deviceId && !timingSafeUtf8Equal(payload.did, deviceId)) return null;
+    return { userId: payload.userId, role: payload.role };
+  } catch {
+    return null;
+  }
+}
+
 function timingSafeUtf8Equal(a: string, b: string): boolean {
   try {
     const bufA = Buffer.from(String(a));
@@ -142,9 +189,18 @@ export function verifySessionToken(
     const payload = JSON.parse(payloadStr);
     if (!payload.exp || payload.exp < Date.now()) return null;
     if (payload.exp - Date.now() > SESSION_TTL_MS + 60_000) return null;
+    
+    // Strict Device Binding Enforcement:
+    // If the token was issued bound to a device ID (did), the request MUST present
+    // the matching device ID. If the request lacks a device ID, or presents a mismatched
+    // device ID, authentication is rejected.
     const bound = String(payload.did || '');
-    // If deviceId is provided, enforce strict match. If missing (e.g. SSE token streams), cryptographic signature validates authenticity.
-    if (bound && deviceId && !timingSafeUtf8Equal(bound, deviceId)) return null;
+    if (bound) {
+      if (!deviceId || !timingSafeUtf8Equal(bound, deviceId)) {
+        return null;
+      }
+    }
+
     return { userId: payload.userId, role: payload.role };
   } catch {
     return null;

@@ -930,7 +930,7 @@ async function runSchemaInit(client: any) {
           author VARCHAR(255) DEFAULT 'Blessing Editorial Board',
           publisher VARCHAR(255) DEFAULT 'Blessing Pathway Education',
           edition VARCHAR(50) DEFAULT '2026 Edition',
-          language VARCHAR(50) DEFAULT 'Tamil / English',
+          language VARCHAR(50) DEFAULT 'Both',
           semester VARCHAR(50),
           department VARCHAR(50),
           subject VARCHAR(100),

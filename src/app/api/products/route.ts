@@ -6,6 +6,7 @@ import { getCatalogCacheTtlMs, getCatalogCdnHeaders } from '@/lib/launchScale';
 import { isBookInStock, calculateBookPrices } from '@/lib/stock';
 import { isComboItem } from '@/lib/deliveryRules';
 import { redisGetJson, redisSetJson } from '@/lib/redis';
+import { normalizeProductMedium } from '@/lib/productMedium';
 
 // Shared catalog cache: same search/class/slug reused without hitting DB again
 const queryCache = new Map<string, { data: any[]; timestamp: number }>();
@@ -403,17 +404,45 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Title and price are required' }, { status: 400 });
     }
 
-    const finalLanguage = String(language || medium || 'Both').trim();
+    const finalLanguage = normalizeProductMedium(language || medium);
     let finalStockTamil: number | null = null;
     let finalStockEnglish: number | null = null;
+    let stockQty = 0;
+
     const rawSt = stockTamil !== undefined ? stockTamil : stock_tamil;
     const rawSe = stockEnglish !== undefined ? stockEnglish : stock_english;
-    if (rawSt !== undefined && rawSt !== null && rawSt !== '') finalStockTamil = Math.max(0, parseInt(String(rawSt), 10) || 0);
-    if (rawSe !== undefined && rawSe !== null && rawSe !== '') finalStockEnglish = Math.max(0, parseInt(String(rawSe), 10) || 0);
 
-    let stockQty = Math.max(0, Math.floor(Number(stock)));
-    if (finalStockTamil !== null || finalStockEnglish !== null) {
-      stockQty = (finalStockTamil || 0) + (finalStockEnglish || 0);
+    if (finalLanguage === 'English') {
+      finalStockTamil = null;
+      if (rawSe !== undefined && rawSe !== null && rawSe !== '') {
+        finalStockEnglish = Math.max(0, parseInt(String(rawSe), 10) || 0);
+      } else {
+        finalStockEnglish = Math.max(0, Math.floor(Number(stock) || 0));
+      }
+      stockQty = finalStockEnglish;
+    } else if (finalLanguage === 'Tamil') {
+      finalStockEnglish = null;
+      if (rawSt !== undefined && rawSt !== null && rawSt !== '') {
+        finalStockTamil = Math.max(0, parseInt(String(rawSt), 10) || 0);
+      } else {
+        finalStockTamil = Math.max(0, Math.floor(Number(stock) || 0));
+      }
+      stockQty = finalStockTamil;
+    } else {
+      // 'Both' (bilingual): both mediums must have explicit non-null integer stock
+      finalStockTamil = (rawSt !== undefined && rawSt !== null && rawSt !== '')
+        ? Math.max(0, parseInt(String(rawSt), 10) || 0)
+        : 0;
+      finalStockEnglish = (rawSe !== undefined && rawSe !== null && rawSe !== '')
+        ? Math.max(0, parseInt(String(rawSe), 10) || 0)
+        : 0;
+      stockQty = finalStockTamil + finalStockEnglish;
+      // If admin only provided generic stock without medium split, assign to Tamil as default
+      if (stockQty === 0 && stock !== undefined && Number(stock) > 0) {
+        stockQty = Math.max(0, Math.floor(Number(stock) || 0));
+        finalStockTamil = stockQty;
+        finalStockEnglish = 0;
+      }
     }
 
     if (!Number.isFinite(Number(stockQty)) || Number(stockQty) < 0) {
@@ -534,13 +563,10 @@ export async function PATCH(request: Request) {
 
     let currentSubject = subject !== undefined ? String(subject) : undefined;
     let currentTitle = title !== undefined ? String(title) : undefined;
-    if (currentSubject === undefined || currentTitle === undefined) {
-      const existing = await queryDb('SELECT title, subject, category_id FROM books WHERE id = $1 LIMIT 1', [id]);
-      if (existing.rows.length > 0) {
-        if (currentSubject === undefined) currentSubject = existing.rows[0].subject;
-        if (currentTitle === undefined) currentTitle = existing.rows[0].title;
-      }
-    }
+    const existing = await queryDb('SELECT title, subject, category_id, language, stock, stock_tamil, stock_english FROM books WHERE id = $1 LIMIT 1', [id]);
+    const existingRow = existing.rows[0] || {};
+    if (currentSubject === undefined) currentSubject = existingRow.subject;
+    if (currentTitle === undefined) currentTitle = existingRow.title;
 
     const singleSubjects = [
       'tamil', 'english', 'mathematics', 'maths', 'science', 'social science', 'social',
@@ -553,26 +579,84 @@ export async function PATCH(request: Request) {
       fields.push(`subject = $${idx++}`);
       values.push(String(subject || 'General').trim());
     }
-    if (language !== undefined || medium !== undefined) {
+
+    const updatedLanguage = (language !== undefined || medium !== undefined) ? normalizeProductMedium(language || medium) : undefined;
+    const activeLanguage = updatedLanguage || (existingRow.language ? normalizeProductMedium(existingRow.language) : 'Both');
+
+    if (updatedLanguage !== undefined) {
       await ensureBooksColumns();
       fields.push(`language = $${idx++}`);
-      values.push(String(language || medium || 'Both').trim());
+      values.push(updatedLanguage);
     }
 
     const rawStockTamil = stockTamil !== undefined ? stockTamil : stock_tamil;
-    if (rawStockTamil !== undefined) {
-      await ensureBooksColumns();
-      const val = rawStockTamil === null || rawStockTamil === '' ? null : Math.max(0, parseInt(String(rawStockTamil), 10) || 0);
-      fields.push(`stock_tamil = $${idx++}`);
-      values.push(val);
-    }
-
     const rawStockEnglish = stockEnglish !== undefined ? stockEnglish : stock_english;
-    if (rawStockEnglish !== undefined) {
-      await ensureBooksColumns();
-      const val = rawStockEnglish === null || rawStockEnglish === '' ? null : Math.max(0, parseInt(String(rawStockEnglish), 10) || 0);
-      fields.push(`stock_english = $${idx++}`);
-      values.push(val);
+
+    let finalStockTamil: number | null | undefined = undefined;
+    let finalStockEnglish: number | null | undefined = undefined;
+    let finalStock: number | undefined = undefined;
+    let finalStatus: string | undefined = undefined;
+
+    if (activeLanguage === 'English') {
+      // English-only: Tamil copies MUST NOT be added or preserved
+      finalStockTamil = null;
+      if (rawStockEnglish !== undefined && rawStockEnglish !== null && rawStockEnglish !== '') {
+        finalStockEnglish = Math.max(0, parseInt(String(rawStockEnglish), 10) || 0);
+      } else if (stock !== undefined) {
+        finalStockEnglish = Math.max(0, Math.floor(Number(stock) || 0));
+      } else if (updatedLanguage === 'English' && existingRow.stock_english !== null && existingRow.stock_english !== undefined) {
+        finalStockEnglish = Math.max(0, Number(existingRow.stock_english) || 0);
+      } else if (stock === undefined && rawStockEnglish === undefined && existingRow.stock !== undefined) {
+        finalStockEnglish = Math.max(0, Number(existingRow.stock_english ?? existingRow.stock) || 0);
+      }
+      if (finalStockEnglish !== undefined) {
+        finalStock = finalStockEnglish;
+      }
+    } else if (activeLanguage === 'Tamil') {
+      // Tamil-only: English copies MUST NOT be added or preserved
+      finalStockEnglish = null;
+      if (rawStockTamil !== undefined && rawStockTamil !== null && rawStockTamil !== '') {
+        finalStockTamil = Math.max(0, parseInt(String(rawStockTamil), 10) || 0);
+      } else if (stock !== undefined) {
+        finalStockTamil = Math.max(0, Math.floor(Number(stock) || 0));
+      } else if (updatedLanguage === 'Tamil' && existingRow.stock_tamil !== null && existingRow.stock_tamil !== undefined) {
+        finalStockTamil = Math.max(0, Number(existingRow.stock_tamil) || 0);
+      } else if (stock === undefined && rawStockTamil === undefined && existingRow.stock !== undefined) {
+        finalStockTamil = Math.max(0, Number(existingRow.stock_tamil ?? existingRow.stock) || 0);
+      }
+      if (finalStockTamil !== undefined) {
+        finalStock = finalStockTamil;
+      }
+    } else {
+      // Bilingual (Both)
+      const prevTamil = existingRow.stock_tamil != null
+        ? Math.max(0, Number(existingRow.stock_tamil) || 0)
+        : (existingRow.language === 'Tamil' ? Math.max(0, Number(existingRow.stock) || 0) : 0);
+      const prevEnglish = existingRow.stock_english != null
+        ? Math.max(0, Number(existingRow.stock_english) || 0)
+        : (existingRow.language === 'English' ? Math.max(0, Number(existingRow.stock) || 0) : 0);
+
+      if (rawStockTamil !== undefined && rawStockTamil !== null && rawStockTamil !== '') {
+        finalStockTamil = Math.max(0, parseInt(String(rawStockTamil), 10) || 0);
+      } else if (updatedLanguage === 'Both' || existingRow.stock_tamil === null) {
+        finalStockTamil = prevTamil;
+      }
+
+      if (rawStockEnglish !== undefined && rawStockEnglish !== null && rawStockEnglish !== '') {
+        finalStockEnglish = Math.max(0, parseInt(String(rawStockEnglish), 10) || 0);
+      } else if (updatedLanguage === 'Both' || existingRow.stock_english === null) {
+        finalStockEnglish = prevEnglish;
+      }
+
+      if (finalStockTamil !== undefined || finalStockEnglish !== undefined) {
+        const t = finalStockTamil !== undefined ? finalStockTamil : prevTamil;
+        const e = finalStockEnglish !== undefined ? finalStockEnglish : prevEnglish;
+        finalStockTamil = t;
+        finalStockEnglish = e;
+        finalStock = t + e;
+      } else if (stock !== undefined) {
+        finalStock = Math.max(0, Math.floor(Number(stock) || 0));
+      }
     }
 
     if (cls !== undefined || category !== undefined || category_id !== undefined || isSingleSubject) {
@@ -631,25 +715,20 @@ export async function PATCH(request: Request) {
       fields.push(`combo_subjects = $${idx++}::jsonb`);
       values.push(JSON.stringify(arr));
     }
-    let finalStatus: string | undefined = undefined;
-    let finalStock: number | undefined = undefined;
 
-    if (inStock !== undefined && stock === undefined && rawStockTamil === undefined && rawStockEnglish === undefined) {
-      const available = Boolean(inStock);
-      // Status-only toggle — do NOT invent or wipe stock counts (keeps qty consistent).
-      finalStatus = available ? 'published' : 'out_of_stock';
+    if (finalStock !== undefined) {
+      if (activeLanguage === 'Both') {
+        const t = finalStockTamil !== undefined && finalStockTamil !== null ? finalStockTamil : (existingRow.stock_tamil != null ? Number(existingRow.stock_tamil) : 0);
+        const e = finalStockEnglish !== undefined && finalStockEnglish !== null ? finalStockEnglish : (existingRow.stock_english != null ? Number(existingRow.stock_english) : 0);
+        finalStatus = (t > 0 || e > 0) && finalStock > 0 ? 'published' : 'out_of_stock';
+      } else {
+        finalStatus = finalStock > 0 ? 'published' : 'out_of_stock';
+      }
     }
 
-    if (stock !== undefined) {
-      const qty = Math.max(0, Math.floor(Number(stock) || 0));
-      finalStock = qty;
-      finalStatus = qty > 0 ? 'published' : 'out_of_stock';
-    } else if (rawStockTamil !== undefined || rawStockEnglish !== undefined) {
-      // Recompute total stock if medium quantities were updated
-      const t = rawStockTamil !== undefined && rawStockTamil !== null ? Number(rawStockTamil) || 0 : 0;
-      const e = rawStockEnglish !== undefined && rawStockEnglish !== null ? Number(rawStockEnglish) || 0 : 0;
-      finalStock = t + e;
-      finalStatus = finalStock > 0 ? 'published' : 'out_of_stock';
+    if (inStock !== undefined) {
+      const available = Boolean(inStock);
+      finalStatus = available ? 'published' : 'out_of_stock';
     }
 
     // Assign each column once (avoids "multiple assignments to same column")
@@ -658,8 +737,10 @@ export async function PATCH(request: Request) {
       const col = fields[i].split('=')[0].trim();
       setCols.set(col, values[i]);
     }
-    if (finalStatus !== undefined) setCols.set('status', finalStatus);
+    if (finalStockTamil !== undefined) setCols.set('stock_tamil', finalStockTamil);
+    if (finalStockEnglish !== undefined) setCols.set('stock_english', finalStockEnglish);
     if (finalStock !== undefined) setCols.set('stock', finalStock);
+    if (finalStatus !== undefined) setCols.set('status', finalStatus);
 
     if (setCols.size > 0) {
       const cols = [...setCols.keys()];

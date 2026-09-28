@@ -7,6 +7,11 @@
 export interface StockRow {
   status?: unknown;
   stock?: unknown;
+  language?: unknown;
+  stock_tamil?: unknown;
+  stock_english?: unknown;
+  stockTamil?: unknown;
+  stockEnglish?: unknown;
 }
 
 const DISABLED_STATUSES = new Set(['out_of_stock', 'draft', 'archived', 'inactive']);
@@ -15,6 +20,21 @@ const DISABLED_STATUSES = new Set(['out_of_stock', 'draft', 'archived', 'inactiv
 export function isBookInStock(row: StockRow): boolean {
   const status = String(row.status || '').toLowerCase().trim();
   if (DISABLED_STATUSES.has(status)) return false;
+
+  const lang = String(row.language || '').toLowerCase().trim();
+  const isMulti = lang.includes('both') || (lang.includes('tamil') && lang.includes('english'));
+  if (isMulti) {
+    const rawT = row.stock_tamil ?? row.stockTamil;
+    const rawE = row.stock_english ?? row.stockEnglish;
+    const hasT = rawT !== undefined && rawT !== null && rawT !== '';
+    const hasE = rawE !== undefined && rawE !== null && rawE !== '';
+    if (hasT || hasE) {
+      const tQty = hasT ? Math.max(0, Number(rawT) || 0) : 0;
+      const eQty = hasE ? Math.max(0, Number(rawE) || 0) : 0;
+      if (tQty <= 0 && eQty <= 0) return false;
+    }
+  }
+
   if (row.stock !== undefined && row.stock !== null && row.stock !== '') {
     return Number(row.stock) > 0;
   }

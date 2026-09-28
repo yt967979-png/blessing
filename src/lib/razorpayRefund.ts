@@ -79,6 +79,7 @@ export async function refundRazorpayPayment(opts: {
     // Check payment first — already fully refunded is success (idempotent).
     const payRes = await fetch(`https://api.razorpay.com/v1/payments/${paymentId}`, {
       headers: { Authorization: auth },
+      signal: AbortSignal.timeout(8000),
     });
     const payment = await payRes.json().catch(() => ({}));
     if (!payRes.ok) {
@@ -100,7 +101,7 @@ export async function refundRazorpayPayment(opts: {
       try {
         const listRes = await fetch(
           `https://api.razorpay.com/v1/payments/${paymentId}/refunds?count=1`,
-          { headers: { Authorization: auth } }
+          { headers: { Authorization: auth }, signal: AbortSignal.timeout(8000) }
         );
         const list = await listRes.json().catch(() => ({}));
         const first = Array.isArray(list?.items) ? list.items[0] : null;
@@ -124,6 +125,7 @@ export async function refundRazorpayPayment(opts: {
         'Content-Type': 'application/json',
         Authorization: auth,
       },
+      signal: AbortSignal.timeout(8000),
       body: JSON.stringify({
         amount, // full refund
         notes: {
@@ -143,6 +145,7 @@ export async function refundRazorpayPayment(opts: {
       ) {
         const again = await fetch(`https://api.razorpay.com/v1/payments/${paymentId}`, {
           headers: { Authorization: auth },
+          signal: AbortSignal.timeout(8000),
         });
         const againPay = await again.json().catch(() => ({}));
         if (

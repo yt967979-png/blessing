@@ -92,22 +92,28 @@ export async function POST(request: Request) {
 
     try {
       const uploadSubDir = isReviewUpload ? 'reviews' : kind === 'pdf' ? 'samples' : 'catalog';
-      const uploadDir = path.join(process.cwd(), 'public', 'uploads', uploadSubDir);
-      await fs.promises.mkdir(uploadDir, { recursive: true });
-
       const ext = kind === 'jpeg' ? 'jpg' : kind;
       const prefix = kind === 'pdf' ? 'sample-' : 'img-';
       const filename = `${prefix}${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-      const filepath = path.join(uploadDir, filename);
-      await fs.promises.writeFile(filepath, buffer);
+      const mimeType = kind === 'pdf' ? 'application/pdf' : `image/${kind}`;
+
+      const { getStorageProvider } = await import('@/lib/storage');
+      const storage = getStorageProvider();
+      const saved = await storage.saveFile({
+        buffer,
+        filename,
+        mimeType,
+        subDir: uploadSubDir,
+      });
 
       return NextResponse.json({
-        url: `/uploads/${uploadSubDir}/${filename}`,
-        provider: 'vps-disk',
+        url: saved.url,
+        provider: saved.provider,
+        key: saved.key,
       });
-    } catch (diskErr: any) {
-      console.error('[upload] VPS disk write failed:', diskErr);
-      return NextResponse.json({ error: 'Failed to save file to VPS storage' }, { status: 500 });
+    } catch (saveErr: any) {
+      console.error('[upload] Storage save failed:', saveErr);
+      return NextResponse.json({ error: 'Failed to save uploaded file' }, { status: 500 });
     }
   } catch (err: any) {
     console.error('[upload] error:', err);

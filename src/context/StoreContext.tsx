@@ -6,6 +6,7 @@ import { deliveryFeeForQty, cartHasCombo, effectiveBookCount, isMoqSatisfied } f
 import { IS_CHECKOUT_PAUSED, DEFAULT_CHECKOUT_PAUSE_MESSAGE } from '@/lib/checkoutConstants';
 import { authHeaders } from '@/lib/clientAuth';
 import { isMediumCompatible } from '@/lib/cartStock';
+import { resolveCartItemMedium } from '@/lib/productMedium';
 
 export interface Product {
   id: string | number;
@@ -39,6 +40,7 @@ export interface Product {
   isTrending?: boolean;
   language?: string;
   medium?: string;
+  status?: string;
 }
 
 export interface CartItem extends Product {
@@ -670,12 +672,14 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         const newImage = upd.coverImage !== undefined ? upd.coverImage : p.image;
         const newStockTamil = upd.stockTamil !== undefined ? upd.stockTamil : upd.stock_tamil !== undefined ? upd.stock_tamil : p.stockTamil;
         const newStockEnglish = upd.stockEnglish !== undefined ? upd.stockEnglish : upd.stock_english !== undefined ? upd.stock_english : p.stockEnglish;
+        const newStatus = upd.status !== undefined ? upd.status : p.status;
 
         if (
           p.stock === upd.stock &&
           p.stockTamil === newStockTamil &&
           p.stockEnglish === newStockEnglish &&
           p.inStock === upd.inStock &&
+          p.status === newStatus &&
           p.price === newPrice &&
           p.mrp === newMrp &&
           p.discount === newDiscount &&
@@ -696,6 +700,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           stock_tamil: newStockTamil,
           stock_english: newStockEnglish,
           inStock: upd.inStock,
+          status: newStatus,
           price: newPrice,
           mrp: newMrp,
           discount: newDiscount,
@@ -1172,7 +1177,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       showToast(`❌ "${live.title}" is out of stock`);
       return;
     }
-    const finalMedium = selectedMedium || (live.language && live.language !== 'Both' ? live.language : undefined);
+    const finalMedium = resolveCartItemMedium(live.language, selectedMedium);
 
     const isTamil = finalMedium && finalMedium.toLowerCase().includes('tamil');
     const isEnglish = finalMedium && finalMedium.toLowerCase().includes('english');
@@ -1975,10 +1980,29 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (rest.inStock !== undefined) {
       withDerived.inStock = Boolean(rest.inStock);
     }
+    if ((rest as any).status !== undefined) {
+      (withDerived as any).status = String((rest as any).status);
+    }
+    if ((rest as any).stockTamil !== undefined || (rest as any).stock_tamil !== undefined) {
+      const v = (rest as any).stockTamil !== undefined ? (rest as any).stockTamil : (rest as any).stock_tamil;
+      withDerived.stockTamil = v === null ? null : Math.max(0, Number(v) || 0);
+      (withDerived as any).stock_tamil = withDerived.stockTamil;
+    }
+    if ((rest as any).stockEnglish !== undefined || (rest as any).stock_english !== undefined) {
+      const v = (rest as any).stockEnglish !== undefined ? (rest as any).stockEnglish : (rest as any).stock_english;
+      withDerived.stockEnglish = v === null ? null : Math.max(0, Number(v) || 0);
+      (withDerived as any).stock_english = withDerived.stockEnglish;
+    }
     if (rest.stock !== undefined) {
       const qty = Math.max(0, Math.floor(Number(rest.stock) || 0));
       withDerived.stock = qty;
       withDerived.inStock = qty > 0;
+      if (qty <= 0) {
+        (withDerived as any).status = 'out_of_stock';
+      }
+    }
+    if (withDerived.inStock === false) {
+      (withDerived as any).status = 'out_of_stock';
     }
     if (rest.comboSubjects !== undefined) {
       withDerived.comboSubjects = rest.comboSubjects;
@@ -2132,6 +2156,10 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       features: ['Solved Papers', 'Chapter Notes'],
       inStock: Math.max(0, Math.floor(Number(newProdData.stock) || 0)) > 0,
       stock: Math.max(0, Math.floor(Number(newProdData.stock) || 0)),
+      stockTamil: (newProdData as any).stockTamil ?? (newProdData as any).stock_tamil ?? null,
+      stockEnglish: (newProdData as any).stockEnglish ?? (newProdData as any).stock_english ?? null,
+      stock_tamil: (newProdData as any).stockTamil ?? (newProdData as any).stock_tamil ?? null,
+      stock_english: (newProdData as any).stockEnglish ?? (newProdData as any).stock_english ?? null,
       isBestSeller: String(newProdData.badge || '').toUpperCase().includes('BEST'),
       samplePdfUrl: (newProdData as any).samplePdfUrl || null,
       comboSubjects: newProdData.comboSubjects || [],
@@ -2155,6 +2183,10 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           description: newProdData.description,
           badge: newProdData.badge || '',
           stock: Math.max(0, Math.floor(Number(newProdData.stock) || 0)),
+          stockTamil: (newProdData as any).stockTamil ?? (newProdData as any).stock_tamil,
+          stockEnglish: (newProdData as any).stockEnglish ?? (newProdData as any).stock_english,
+          stock_tamil: (newProdData as any).stockTamil ?? (newProdData as any).stock_tamil,
+          stock_english: (newProdData as any).stockEnglish ?? (newProdData as any).stock_english,
           subject: (newProdData as any).subject,
           language: finalLanguage,
           medium: finalLanguage,

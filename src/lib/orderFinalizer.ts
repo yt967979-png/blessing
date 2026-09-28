@@ -314,8 +314,71 @@ export async function finalizeOrderFromPayment(opts: FinalizeOrderOptions): Prom
     }
 
     // 5. CONVERT INVENTORY RESERVATION -> SOLD (Confirmed)
-    if (rzpOrderId) {
-      await confirmStockHolds(rzpOrderId, client);
+    const confirmedHolds = rzpOrderId ? await confirmStockHolds(rzpOrderId, client) : [];
+    const heldQtyByBook = new Map<string, number>();
+    for (const h of confirmedHolds) {
+      heldQtyByBook.set(h.bookId, (heldQtyByBook.get(h.bookId) || 0) + h.qty);
+    }
+
+    // Verify inventory coverage: if hold was already released (timeout/delay race),
+    // atomically re-decrement books.stock. If stock is exhausted, auto-refund!
+    for (const it of itemsToInsert) {
+      const heldQty = heldQtyByBook.get(it.bookId) || 0;
+      if (heldQty < it.qty) {
+        const shortfall = it.qty - heldQty;
+        const lowerMed = String(it.medium || '').toLowerCase();
+        let shortfallSql = `
+          UPDATE books
+          SET stock = COALESCE(stock, 0) - $1,
+              status = CASE WHEN COALESCE(stock, 0) - $1 <= 0 THEN 'out_of_stock' ELSE status END,
+              updated_at = NOW()
+          WHERE id = $2 AND COALESCE(stock, 0) >= $1
+          RETURNING id, title, stock
+        `;
+        if (lowerMed.includes('tamil')) {
+          shortfallSql = `
+            UPDATE books
+            SET stock = COALESCE(stock, 0) - $1,
+                stock_tamil = CASE WHEN stock_tamil IS NOT NULL THEN GREATEST(0, stock_tamil - $1) ELSE stock_tamil END,
+                status = CASE WHEN COALESCE(stock, 0) - $1 <= 0 THEN 'out_of_stock' ELSE status END,
+                updated_at = NOW()
+            WHERE id = $2 AND COALESCE(stock, 0) >= $1 AND (stock_tamil IS NULL OR stock_tamil >= $1)
+            RETURNING id, title, stock
+          `;
+        } else if (lowerMed.includes('english')) {
+          shortfallSql = `
+            UPDATE books
+            SET stock = COALESCE(stock, 0) - $1,
+                stock_english = CASE WHEN stock_english IS NOT NULL THEN GREATEST(0, stock_english - $1) ELSE stock_english END,
+                status = CASE WHEN COALESCE(stock, 0) - $1 <= 0 THEN 'out_of_stock' ELSE status END,
+                updated_at = NOW()
+            WHERE id = $2 AND COALESCE(stock, 0) >= $1 AND (stock_english IS NULL OR stock_english >= $1)
+            RETURNING id, title, stock
+          `;
+        }
+        const stockRes = await client.query(shortfallSql, [shortfall, it.bookId]);
+        if (stockRes.rowCount === 0) {
+          // Stock was claimed by another customer while hold was released / webhook was delayed!
+          await client.query('ROLLBACK');
+          if (rzpPayId) {
+            const { refundRazorpayPayment } = await import('@/lib/razorpayRefund');
+            await refundRazorpayPayment({ paymentId: rzpPayId, orderNumber });
+          }
+          return {
+            ok: false,
+            error: `Item "${it.title}" went out of stock before payment was finalized. Payment has been refunded automatically.`,
+            status: 409,
+          };
+        }
+        // Record confirmed sale ledger row
+        const { recordConfirmedSale } = await import('@/lib/stockHold');
+        await recordConfirmedSale(client, {
+          razorpayOrderId: rzpOrderId || `direct-${Date.now()}`,
+          bookId: it.bookId,
+          userId: String(userId || ''),
+          qty: shortfall,
+        });
+      }
     }
 
     // 6. RECORD PAYMENT ROW

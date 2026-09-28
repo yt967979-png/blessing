@@ -3,6 +3,7 @@
  * Interval adapts to Free / Hobby / CPU load via runtimeProfile.
  */
 import { shouldRunBackgroundTask, resolveTunedNumber } from '@/lib/runtimeProfile';
+import { isBackgroundLeader } from '@/lib/backgroundLeader';
 
 let started = false;
 let running = false;
@@ -18,7 +19,7 @@ export function startCourierSyncCron() {
   const startDelay = resolveTunedNumber('COURIER_CRON_START_DELAY_MS', 'courierCronStartDelayMs');
 
   const run = async () => {
-    if (!shouldRunBackgroundTask('courier')) return;
+    if (!shouldRunBackgroundTask('courier') || !isBackgroundLeader()) return;
     if (running) {
       console.warn('[courier-cron] skipped — previous sync still running');
       return;

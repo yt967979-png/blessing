@@ -3,6 +3,7 @@ import ProductDetailClient from './ProductDetailClient';
 import { queryDb } from '@/lib/db';
 import { isBookInStock } from '@/lib/stock';
 import { redisGetJson, redisSetJson } from '@/lib/redis';
+import { serializeJsonLd } from '@/lib/jsonLd';
 
 // Next.js ISR: cache rendered HTML on server for 60 seconds (drastically lowers CPU usage)
 export const revalidate = 60;
@@ -336,13 +337,13 @@ export default async function ProductPage({ params }: Props) {
       {productSchema && (
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(productSchema) }}
+          dangerouslySetInnerHTML={{ __html: serializeJsonLd(productSchema) }}
         />
       )}
       {breadcrumbSchema && (
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }}
+          dangerouslySetInnerHTML={{ __html: serializeJsonLd(breadcrumbSchema) }}
         />
       )}
       <ProductDetailClient slug={slug} initialProduct={mapBookToClientProduct(book)} />

@@ -233,3 +233,57 @@ export function logOrderStateTransition(opts: {
   };
   console.log(JSON.stringify(payload));
 }
+
+/**
+ * Authoritative Order State Machine Validator
+ * Rejects illegal regressions, specifically ensuring a Delivered order cannot
+ * regress to In Transit, Out for Delivery, Packed, Confirmed, or Order Placed.
+ */
+export function canTransitionOrderStatus(
+  currentStatus: string | null | undefined,
+  nextStatus: string | null | undefined
+): { allowed: boolean; reason?: string } {
+  const current = String(currentStatus || '').trim().toLowerCase();
+  const next = String(nextStatus || '').trim().toLowerCase();
+
+  if (!next) {
+    return { allowed: false, reason: 'Next status cannot be empty.' };
+  }
+
+  // Idempotent: same status transition is always allowed
+  if (current === next) {
+    return { allowed: true };
+  }
+
+  // Once Delivered, only Returned or RTO transitions are permitted
+  if (isParcelDelivered(current)) {
+    if (next === 'returned' || next.includes('return')) {
+      return { allowed: true };
+    }
+    if (isRtoStatus(next)) {
+      return { allowed: true };
+    }
+    return {
+      allowed: false,
+      reason: `Cannot revert a Delivered order back to "${nextStatus}". Delivered orders can only transition to "Returned" or "RTO".`,
+    };
+  }
+
+  // Terminal Cancelled state cannot be resurrected
+  if (isOrderCancelled(current)) {
+    return {
+      allowed: false,
+      reason: `Cannot transition a Cancelled order to "${nextStatus}". Cancelled orders are terminal.`,
+    };
+  }
+
+  // Terminal Returned state cannot transition
+  if (current.includes('returned')) {
+    return {
+      allowed: false,
+      reason: `Cannot transition a Returned order to "${nextStatus}". Returned orders are terminal.`,
+    };
+  }
+
+  return { allowed: true };
+}

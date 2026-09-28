@@ -27,6 +27,9 @@ export interface Product {
   samplePdfUrl?: string | null;
   language?: string;
   medium?: string;
+  status?: string;
+  comboSubjects?: string[];
+  combo_subjects?: string[];
   isNew?: boolean;
   isBestSeller?: boolean;
   isTrending?: boolean;

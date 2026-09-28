@@ -189,6 +189,7 @@ export async function fetchStCourierTrack(docketInput: string): Promise<TrackRes
           Referer: 'https://stcourier.com/',
         },
         cache: 'no-store',
+        signal: AbortSignal.timeout(10_000),
       }
     );
 
@@ -197,11 +198,22 @@ export async function fetchStCourierTrack(docketInput: string): Promise<TrackRes
         ok: false,
         docket,
         trackingUrl,
-        error: `ST Courier live system: docket '${docket}' not found / not booked yet.`,
+        error: `ST Courier live system: docket '${docket}' not found / not booked yet (HTTP ${erpRes.status}).`,
       };
     }
 
-    const erpData = await erpRes.json();
+    const text = await erpRes.text();
+    let erpData: any = null;
+    try {
+      erpData = JSON.parse(text);
+    } catch {
+      return {
+        ok: false,
+        docket,
+        trackingUrl,
+        error: `ST Courier live system returned non-JSON response (possibly maintenance page or invalid HTML).`,
+      };
+    }
     const looksValid =
       erpData &&
       (erpData.status === 'success' ||
@@ -239,9 +251,22 @@ function shouldAdvance(current: string, next: OrderStageLabel): boolean {
   if (current === 'Delivered') return false;
   if (current === next) return false;
   if (next === 'Delivered' || next === 'RTO') return true;
-  // Last-mile loop: missed delivery → ST retries OFD / back to hub
-  const lastMile = new Set(['Out for Delivery', 'Delivery Attempted', 'In Transit']);
-  if (lastMile.has(current) && lastMile.has(next)) return true;
+
+  // Last-mile loop: missed delivery → ST retries OFD
+  // Out for Delivery <-> Delivery Attempted can cycle
+  if (
+    (current === 'Out for Delivery' && next === 'Delivery Attempted') ||
+    (current === 'Delivery Attempted' && next === 'Out for Delivery')
+  ) {
+    return true;
+  }
+
+  // Delivery Attempted can return to hub In Transit
+  if (current === 'Delivery Attempted' && next === 'In Transit') {
+    return true;
+  }
+
+  // Standard forward progression: next must be strictly higher rank
   const curRank = STAGE_RANK[current] ?? -1;
   const nextRank = STAGE_RANK[next] ?? 0;
   return nextRank > curRank;
@@ -311,8 +336,7 @@ export async function syncOrderByAwb(docketInput: string): Promise<{
        FROM orders
        WHERE UPPER(REPLACE(awb_number, ' ', '')) = $1
           OR id = $1 OR order_number = $1
-       ORDER BY ordered_at DESC
-       LIMIT 1`,
+       ORDER BY ordered_at DESC`,
       [tracked.docket]
     );
 
@@ -328,90 +352,76 @@ export async function syncOrderByAwb(docketInput: string): Promise<{
       };
     }
 
-    const order = orderRes.rows[0];
-    const previous = order.order_status || 'Order Placed';
-    let updated = false;
-    let nextStatus = previous;
+    let anyUpdated = false;
+    const primaryOrder = orderRes.rows[0];
+    const primaryPrevious = primaryOrder.order_status || 'Order Placed';
+    let primaryNext = primaryPrevious;
 
-    // Never revive or overwrite a cancelled / awaiting-confirmation order via courier sync
-    if (String(previous).toLowerCase().includes('cancel')) {
-      return {
-        verified: true,
-        updated: false,
-        status: previous,
-        previousStatus: previous,
-        orderId: order.order_number || order.id,
-        trackingUrl: tracked.trackingUrl,
-        events: tracked.events,
-        error: 'Order is cancelled — status not updated.',
-        rawStatus: tracked.rawStatus,
-      };
-    }
-    if (String(previous).toLowerCase().includes('awaiting confirmation')) {
-      return {
-        verified: true,
-        updated: false,
-        status: previous,
-        previousStatus: previous,
-        orderId: order.order_number || order.id,
-        trackingUrl: tracked.trackingUrl,
-        events: tracked.events,
-        error: 'Order not confirmed yet — status not updated.',
-        rawStatus: tracked.rawStatus,
-      };
-    }
+    for (const order of orderRes.rows) {
+      const previous = order.order_status || 'Order Placed';
+      if (
+        String(previous).toLowerCase().includes('cancel') ||
+        String(previous).toLowerCase().includes('awaiting confirmation')
+      ) {
+        continue;
+      }
 
-    await client.query(
-      `UPDATE orders SET tracking_url = $1, courier_name = 'ST Courier Express', updated_at = NOW()
-       WHERE id = $2`,
-      [tracked.trackingUrl, order.id]
-    );
+      await client.query(
+        `UPDATE orders SET tracking_url = $1, courier_name = 'ST Courier Express', updated_at = NOW()
+         WHERE id = $2`,
+        [tracked.trackingUrl, order.id]
+      );
 
-    await persistCourierEvents(client, order.id, tracked.docket, tracked.events);
+      await persistCourierEvents(client, order.id, tracked.docket, tracked.events);
 
-    if (shouldAdvance(previous, tracked.status)) {
-      nextStatus = tracked.status;
-      await client.query(`UPDATE orders SET order_status = $1, updated_at = NOW() WHERE id = $2`, [
-        nextStatus,
-        order.id,
-      ]);
-
-      try {
+      if (shouldAdvance(previous, tracked.status)) {
+        const nextStatus = tracked.status;
+        const deliveredClause = nextStatus === 'Delivered' ? ', delivered_at = NOW()' : '';
         await client.query(
-          `INSERT INTO order_timeline (id, order_id, status, remarks)
-           VALUES ($1, $2, $3, $4)`,
-          [
-            `tl-auto-${Date.now()}`,
-            order.id,
-            nextStatus,
-            `Auto-synced from ST Courier: ${tracked.rawStatus}`,
-          ]
+          `UPDATE orders SET order_status = $1, updated_at = NOW()${deliveredClause} WHERE id = $2`,
+          [nextStatus, order.id]
         );
-      } catch (_) {}
 
-      updated = true;
+        try {
+          await client.query(
+            `INSERT INTO order_timeline (id, order_id, status, remarks)
+             VALUES ($1, $2, $3, $4)`,
+            [
+              `tl-auto-${Date.now()}-${String(order.id).slice(-4)}`,
+              order.id,
+              nextStatus,
+              `Auto-synced from ST Courier: ${tracked.rawStatus}`,
+            ]
+          );
+        } catch (_) {}
 
-      const event = {
-        type: 'ORDER_UPDATED',
-        orderId: order.order_number || order.id,
-        status: nextStatus,
-        awbNumber: tracked.docket,
-        userId: order.user_id ? String(order.user_id) : null,
-        timestamp: Date.now(),
-        source: 'st_courier_auto',
-      };
-      try {
-        broadcastOrderChange(event);
-        await notifyOrderChanged(event);
-      } catch (_) {}
+        anyUpdated = true;
+        if (order.id === primaryOrder.id) {
+          primaryNext = nextStatus;
+        }
+
+        const event = {
+          type: 'ORDER_UPDATED',
+          orderId: order.order_number || order.id,
+          status: nextStatus,
+          awbNumber: tracked.docket,
+          userId: order.user_id ? String(order.user_id) : null,
+          timestamp: Date.now(),
+          source: 'st_courier_auto',
+        };
+        try {
+          broadcastOrderChange(event);
+          await notifyOrderChanged(event);
+        } catch (_) {}
+      }
     }
 
     return {
       verified: true,
-      updated,
-      status: nextStatus,
-      previousStatus: previous,
-      orderId: order.order_number || order.id,
+      updated: anyUpdated,
+      status: primaryNext,
+      previousStatus: primaryPrevious,
+      orderId: primaryOrder.order_number || primaryOrder.id,
       trackingUrl: tracked.trackingUrl,
       events: tracked.events,
       rawStatus: tracked.rawStatus,

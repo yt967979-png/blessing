@@ -16,6 +16,7 @@ import { Footer } from '@/components/layout/Footer';
 import { ContactSection } from '@/components/home/ContactSection';
 import { PromoSection } from '@/components/home/PromoSection';
 import { HomeCouponsSection } from '@/components/home/HomeCouponsSection';
+import { serializeJsonLd } from '@/lib/jsonLd';
 
 export default function Home() {
   const router = useRouter();
@@ -84,11 +85,11 @@ export default function Home() {
     <main className="min-h-screen bg-slate-50 flex flex-col page-mobile-nav">
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationSchema) }}
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(organizationSchema) }}
       />
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteSchema) }}
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(websiteSchema) }}
       />
       <AnnouncementBar />
       <Header />

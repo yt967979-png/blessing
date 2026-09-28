@@ -28,6 +28,7 @@ import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
 import { Footer } from '@/components/layout/Footer';
 import { openSamplePdfModal } from '@/components/books/SampleChapterReaderModal';
 import { samplePdfWhatsAppUrl } from '@/lib/shopContact';
+import { serializeJsonLd } from '@/lib/jsonLd';
 import { ProductCard } from '@/components/ui/ProductCard';
 import { FrequentlyBoughtTogether } from '@/components/products/FrequentlyBoughtTogether';
 import { getSTCourierDeliveryEstimate } from '@/lib/deliveryEstimator';
@@ -36,6 +37,12 @@ import { authHeaders, authFormHeaders } from '@/lib/clientAuth';
 import { imageNeedsUnoptimized } from '@/lib/productImage';
 import { MIN_BOOKS_PER_ORDER, booksUntilMinOrder, minOrderCheckoutMessage, isComboItem } from '@/lib/deliveryRules';
 import { getComboIncludedSubjects, getComboSavingsSummary } from '@/lib/comboMetadata';
+import {
+  normalizeProductMedium,
+  isProductMultiMedium,
+  getProductMediumBadge,
+  resolveCartItemMedium,
+} from '@/lib/productMedium';
 
 function applyReviewsPayload(
   data: any,
@@ -138,12 +145,9 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
   const [isMobileAdded, setIsMobileAdded] = useState(false);
   const minOrderMsg = minOrderCheckoutMessage(cartCount);
 
-  const rawLang = (product?.language || 'Both').trim();
-  const lowerLang = rawLang.toLowerCase();
-  const isMultiMedium =
-    lowerLang === 'both' ||
-    lowerLang.includes('both') ||
-    (lowerLang.includes('tamil') && lowerLang.includes('english'));
+  const isMultiMedium = isProductMultiMedium(product?.language);
+  const mediumType = normalizeProductMedium(product?.language);
+  const mediumBadge = getProductMediumBadge(product?.language);
 
   const tamilStock = product?.stock_tamil !== undefined && product?.stock_tamil !== null
     ? Number(product.stock_tamil)
@@ -157,6 +161,9 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
   const isEnglishSoldOut = englishStock !== null && englishStock <= 0;
 
   const initialMedium = useMemo(() => {
+    if (!isMultiMedium) {
+      return mediumType === 'English' ? 'English Medium' : 'Tamil Medium';
+    }
     if (queryMedium) {
       const q = queryMedium.trim().toLowerCase();
       if (q.includes('english') && !isEnglishSoldOut) return 'English Medium';
@@ -164,40 +171,29 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
     }
     if (isTamilSoldOut && !isEnglishSoldOut) return 'English Medium';
     if (isEnglishSoldOut && !isTamilSoldOut) return 'Tamil Medium';
-    return lowerLang.includes('english') && !lowerLang.includes('tamil')
-      ? 'English Medium'
-      : 'Tamil Medium';
-  }, [queryMedium, lowerLang, isTamilSoldOut, isEnglishSoldOut]);
+    return 'Tamil Medium';
+  }, [isMultiMedium, mediumType, queryMedium, isTamilSoldOut, isEnglishSoldOut]);
 
   const [selectedMedium, setSelectedMedium] = useState<string>(initialMedium);
 
+  // Auto-correct medium only when product language or stock data changes.
+  // IMPORTANT: selectedMedium is intentionally NOT in deps — including it
+  // would revert every user click, making the toggle non-functional.
   useEffect(() => {
-    if (queryMedium) {
-      const q = queryMedium.trim().toLowerCase();
-      if (q.includes('english') && !isEnglishSoldOut) {
-        setSelectedMedium('English Medium');
-      } else if (q.includes('tamil') && !isTamilSoldOut) {
-        setSelectedMedium('Tamil Medium');
-      }
+    if (!isMultiMedium) {
+      setSelectedMedium(mediumType === 'English' ? 'English Medium' : 'Tamil Medium');
+      return;
     }
-  }, [queryMedium, isTamilSoldOut, isEnglishSoldOut]);
-
-  useEffect(() => {
-    if (product?.language) {
-      const l = product.language.trim().toLowerCase();
-      if (l.includes('english') && !l.includes('tamil')) {
-        setSelectedMedium('English Medium');
-      } else if (l.includes('tamil') && !l.includes('english')) {
-        setSelectedMedium('Tamil Medium');
-      } else if (isMultiMedium) {
-        if (isTamilSoldOut && !isEnglishSoldOut && selectedMedium === 'Tamil Medium') {
-          setSelectedMedium('English Medium');
-        } else if (isEnglishSoldOut && !isTamilSoldOut && selectedMedium === 'English Medium') {
-          setSelectedMedium('Tamil Medium');
-        }
-      }
-    }
-  }, [product?.language, isMultiMedium, isTamilSoldOut, isEnglishSoldOut, selectedMedium]);
+    // Only auto-correct if the currently selected medium became sold out
+    setSelectedMedium((prev) => {
+      const onTamil = prev === 'Tamil Medium';
+      const onEnglish = prev === 'English Medium';
+      if (onTamil && isTamilSoldOut && !isEnglishSoldOut) return 'English Medium';
+      if (onEnglish && isEnglishSoldOut && !isTamilSoldOut) return 'Tamil Medium';
+      return prev;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [product?.language, mediumType, isMultiMedium, isTamilSoldOut, isEnglishSoldOut]);
 
   const bothMediumsSoldOut = isMultiMedium && isTamilSoldOut && isEnglishSoldOut;
   const isCurrentMediumSoldOut = isMultiMedium && ((selectedMedium === 'Tamil Medium' && isTamilSoldOut) || (selectedMedium === 'English Medium' && isEnglishSoldOut));
@@ -209,13 +205,7 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
     ? englishStock
     : (typeof product?.stock === 'number' ? product.stock : null);
 
-  const finalMedium = isMultiMedium
-    ? selectedMedium
-    : lowerLang.includes('tamil')
-    ? 'Tamil Medium'
-    : lowerLang.includes('english')
-    ? 'English Medium'
-    : rawLang;
+  const finalMedium = resolveCartItemMedium(product?.language, selectedMedium);
 
   const handleMobileAddToCart = () => {
     if (!product || isProductOutOfStock || isCurrentMediumSoldOut) return;
@@ -602,7 +592,7 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
-          __html: JSON.stringify({
+          __html: serializeJsonLd({
             '@context': 'https://schema.org',
             '@type': 'Product',
             name: product.title,
@@ -646,7 +636,7 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
         <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 md:p-8 shadow-xs grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-8 mb-12">
           {/* Gallery */}
           <div className="lg:col-span-5 flex flex-col items-center">
-            <div className="w-full h-80 bg-slate-50 border border-slate-200 rounded-xl p-4 flex items-center justify-center relative overflow-hidden mb-4">
+            <div className={`w-full h-80 border rounded-xl p-4 flex items-center justify-center relative overflow-hidden mb-4 transition-all ${isProductOutOfStock ? 'bg-slate-100 border-slate-300' : 'bg-slate-50 border-slate-200'}`}>
               <Image
                 src={
                   activeImg ||
@@ -657,11 +647,15 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
                 width={480}
                 height={480}
                 priority
-                className="max-h-full max-w-full object-contain transition-transform duration-300 hover:scale-105"
+                className={`max-h-full max-w-full object-contain transition-transform duration-300 hover:scale-105 ${isProductOutOfStock ? 'grayscale opacity-60' : ''}`}
                 sizes="(max-width: 1024px) 90vw, 480px"
                 unoptimized={imageNeedsUnoptimized(activeImg || product.image || '')}
               />
-              {product.badge ? (
+              {isProductOutOfStock ? (
+                <span className="absolute top-3 left-3 text-[10px] font-black text-white px-2.5 py-1 rounded shadow-xs uppercase tracking-wider bg-slate-700">
+                  OUT OF STOCK
+                </span>
+              ) : product.badge ? (
                 <span className={`absolute top-3 left-3 text-[10px] font-extrabold text-white px-2.5 py-1 rounded shadow-xs uppercase tracking-wider ${product.badgeColor || 'bg-blue-600'}`}>
                   {product.badge}
                 </span>
@@ -1036,16 +1030,10 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
                 </div>
               ) : (
                 <div className="flex items-center gap-2 p-2.5 bg-white rounded-xl border border-slate-200">
-                  <span className={`text-xs font-black px-2.5 py-1 rounded-lg ${
-                    rawLang.toLowerCase().includes('tamil')
-                      ? 'bg-amber-100 text-amber-900 border border-amber-200'
-                      : rawLang.toLowerCase().includes('english')
-                      ? 'bg-emerald-100 text-emerald-900 border border-emerald-200'
-                      : 'bg-indigo-100 text-indigo-900 border border-indigo-200'
-                  }`}>
-                    {rawLang.toLowerCase().includes('tamil')
+                  <span className={`text-xs font-black px-2.5 py-1 rounded-lg ${mediumBadge.pillClasses}`}>
+                    {mediumBadge.type === 'Tamil'
                       ? '📘 தமிழ் வழி (Tamil Medium Only)'
-                      : rawLang.toLowerCase().includes('english')
+                      : mediumBadge.type === 'English'
                       ? '📗 English Medium Only'
                       : '🌐 Tamil & English Edition'}
                   </span>

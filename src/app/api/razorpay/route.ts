@@ -74,7 +74,12 @@ export async function POST(request: Request) {
     // shoppers' checkout) so nobody else can buy the same units while this
     // customer is on the payment sheet. Released automatically if they don't pay.
     const hold = await createStockHolds({
-      items: checkout.verifiedItems.map((i: any) => ({ id: i.id, qty: i.qty, title: i.title })),
+      items: checkout.verifiedItems.map((i: any) => ({
+        id: i.id,
+        qty: i.qty,
+        title: i.title,
+        selectedMedium: i.selectedMedium || i.medium || undefined,
+      })),
       userId: session.userId,
     });
     if (!hold.ok) {

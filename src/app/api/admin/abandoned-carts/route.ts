@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDbClient, releaseDbClient } from '@/lib/db';
 import { verifyAdminRequest, forbiddenResponse, unauthorizedResponse } from '@/lib/serverSecurity';
 import { deliveryFeeForCart, cartHasCombo } from '@/lib/deliveryRules';
+import { calculateBookPrices } from '@/lib/stock';
 
 export async function GET(request: NextRequest) {
   const auth = await verifyAdminRequest(request);
@@ -46,23 +47,60 @@ export async function GET(request: NextRequest) {
       LIMIT 100
     `);
 
-    const carts = res.rows.map((row: any) => {
-      let items: any[] = [];
-      try {
-        items = JSON.parse(row.cart_json || '[]');
-      } catch {
-        items = [];
+    // Collect all unique book IDs from all abandoned carts so we can
+    // batch-fetch their CURRENT prices from the catalog in one query.
+    const allItemsParsed = res.rows.map((row: any) => {
+      try { return JSON.parse(row.cart_json || '[]'); } catch { return []; }
+    });
+    const allBookIds = new Set<string>();
+    for (const items of allItemsParsed) {
+      for (const item of items) {
+        if (item.id) allBookIds.add(String(item.id));
       }
-      const subtotal = items.reduce(
+    }
+
+    // Batch query live prices — single round-trip for ALL book IDs
+    const livePriceMap = new Map<string, number>();
+    if (allBookIds.size > 0) {
+      try {
+        const idsArray = Array.from(allBookIds);
+        const placeholders = idsArray.map((_, i) => `$${i + 1}`).join(', ');
+        const priceRes = await client.query(
+          `SELECT id, price, discount_price FROM books WHERE id IN (${placeholders})`,
+          idsArray
+        );
+        for (const row of priceRes.rows) {
+          const { price } = calculateBookPrices(row);
+          livePriceMap.set(String(row.id), price);
+        }
+      } catch (e: any) {
+        // If live price fetch fails, fall back to stale snapshot prices
+        console.warn('[abandoned-carts] Could not fetch live prices:', e?.message || e);
+      }
+    }
+
+    const carts = res.rows.map((row: any, idx: number) => {
+      const items: any[] = allItemsParsed[idx] || [];
+      // Enrich each item with the current live price from the catalog
+      const enrichedItems = items.map((item: any) => {
+        const livePrice = livePriceMap.get(String(item.id));
+        return {
+          ...item,
+          price: livePrice !== undefined ? livePrice : Number(item.price || 0),
+          snapshotPrice: Number(item.price || 0),
+        };
+      });
+
+      const subtotal = enrichedItems.reduce(
         (sum: number, item: any) => sum + (Number(item.price || 0) * Number(item.qty || 1)),
         0
       );
-      const totalQty = items.reduce(
+      const totalQty = enrichedItems.reduce(
         (sum: number, item: any) => sum + Number(item.qty || 1),
         0
       );
-      const hasCombo = cartHasCombo(items);
-      const shippingFee = deliveryFeeForCart(items);
+      const hasCombo = cartHasCombo(enrichedItems);
+      const shippingFee = deliveryFeeForCart(enrichedItems);
       const totalAmount = subtotal + shippingFee;
 
       return {
@@ -70,7 +108,7 @@ export async function GET(request: NextRequest) {
         userId: row.user_id,
         phone: row.phone,
         name: row.name || 'Student',
-        items,
+        items: enrichedItems,
         totalQty,
         subtotal,
         shippingFee,
@@ -90,6 +128,7 @@ export async function GET(request: NextRequest) {
     releaseDbClient(client);
   }
 }
+
 
 export async function PATCH(request: NextRequest) {
   const auth = await verifyAdminRequest(request);

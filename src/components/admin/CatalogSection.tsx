@@ -36,6 +36,11 @@ import {
   getComboIncludedSubjects,
 } from '@/lib/comboMetadata';
 import { isComboItem } from '@/lib/deliveryRules';
+import {
+  normalizeProductMedium,
+  isProductMultiMedium,
+  getProductMediumBadge,
+} from '@/lib/productMedium';
 
 export interface StockHoldItem {
   id: string;
@@ -316,21 +321,36 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
     setEditImage(p.image || '');
     setEditPrice(p.price);
     setEditMrp(p.mrp || p.price);
-    setEditStock(p.stock ?? 0);
+    const normMed = normalizeProductMedium(p.language);
+    setEditMedium(normMed);
+
     const rawTamil = p.stockTamil ?? p.stock_tamil;
     const rawEnglish = p.stockEnglish ?? p.stock_english;
-    const stTamil = rawTamil !== undefined && rawTamil !== null
-      ? Number(rawTamil)
-      : (p.stock !== undefined && p.stock !== null ? Math.floor(Number(p.stock) / 2) : 0);
-    const stEnglish = rawEnglish !== undefined && rawEnglish !== null
-      ? Number(rawEnglish)
-      : (p.stock !== undefined && p.stock !== null ? Math.ceil(Number(p.stock) / 2) : 0);
+
+    let stTamil = 0;
+    let stEnglish = 0;
+    let stTotal = 0;
+
+    if (normMed === 'English') {
+      stEnglish = rawEnglish !== undefined && rawEnglish !== null ? Number(rawEnglish) : (p.stock ?? 0);
+      stTamil = 0;
+      stTotal = stEnglish;
+    } else if (normMed === 'Tamil') {
+      stTamil = rawTamil !== undefined && rawTamil !== null ? Number(rawTamil) : (p.stock ?? 0);
+      stEnglish = 0;
+      stTotal = stTamil;
+    } else {
+      stTamil = rawTamil !== undefined && rawTamil !== null ? Number(rawTamil) : (p.stock !== undefined && p.stock !== null ? Math.floor(Number(p.stock) / 2) : 0);
+      stEnglish = rawEnglish !== undefined && rawEnglish !== null ? Number(rawEnglish) : (p.stock !== undefined && p.stock !== null ? Math.ceil(Number(p.stock) / 2) : 0);
+      stTotal = stTamil + stEnglish;
+    }
+
+    setEditStock(stTotal);
     setEditStockTamil(stTamil);
     setEditStockEnglish(stEnglish);
     setEditSamplePdf(p.samplePdfUrl || '');
     setEditCls(p.cls || '10th');
     setEditSubject(p.subject || 'Mathematics');
-    setEditMedium(p.language || 'Both');
     const isCombo = isProductOrEditACombo(p);
     const initialSubs = isCombo
       ? (p.comboSubjects && p.comboSubjects.length > 0
@@ -339,6 +359,25 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
       : [];
     setEditComboSubjects(initialSubs);
     setEditCustomComboSubjectInput('');
+  };
+
+  const handleEditMediumChange = (newMed: string) => {
+    const nextMed = normalizeProductMedium(newMed);
+    setEditMedium(nextMed);
+    if (nextMed === 'English') {
+      // ONLY take English stock — do NOT add Tamil stock!
+      const eng = editStockEnglish > 0 ? editStockEnglish : (editMedium === 'Both' ? 0 : editStock);
+      setEditStock(eng);
+    } else if (nextMed === 'Tamil') {
+      // ONLY take Tamil stock — do NOT add English stock!
+      const tam = editStockTamil > 0 ? editStockTamil : (editMedium === 'Both' ? 0 : editStock);
+      setEditStock(tam);
+    } else {
+      // Both
+      const t = editStockTamil || 0;
+      const e = editStockEnglish || 0;
+      setEditStock(t + e);
+    }
   };
 
   const handleEditDeviceImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -380,11 +419,28 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
     const numPrice = Number(editPrice);
     const numMrp = Number(editMrp);
     const isBothMedium = editMedium === 'Both';
-    const numStockTamil = isBothMedium ? Math.max(0, parseInt(String(editStockTamil), 10) || 0) : null;
-    const numStockEnglish = isBothMedium ? Math.max(0, parseInt(String(editStockEnglish), 10) || 0) : null;
+    const isTamilMedium = editMedium === 'Tamil';
+    const isEnglishMedium = editMedium === 'English';
+
+    const numStockTamil = isBothMedium
+      ? Math.max(0, parseInt(String(editStockTamil), 10) || 0)
+      : isTamilMedium
+      ? Math.max(0, parseInt(String(editStock), 10) || 0)
+      : null;
+
+    const numStockEnglish = isBothMedium
+      ? Math.max(0, parseInt(String(editStockEnglish), 10) || 0)
+      : isEnglishMedium
+      ? Math.max(0, parseInt(String(editStock), 10) || 0)
+      : null;
+
     const numStock = isBothMedium
       ? (numStockTamil || 0) + (numStockEnglish || 0)
       : Math.max(0, parseInt(String(editStock), 10) || 0);
+
+    const isAvailable = isBothMedium
+      ? ((numStockTamil || 0) > 0 || (numStockEnglish || 0) > 0)
+      : numStock > 0;
 
     const isCombo = isProductOrEditACombo({
       subject: editSubject,
@@ -410,7 +466,8 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
         stockEnglish: numStockEnglish,
         stock_tamil: numStockTamil,
         stock_english: numStockEnglish,
-        inStock: numStock > 0,
+        inStock: isAvailable,
+        status: isAvailable ? 'published' : 'out_of_stock',
         samplePdfUrl: editSamplePdf.trim() || null,
       });
       onShowToast('✅ Publication details updated');
@@ -421,22 +478,53 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
   };
 
   const handleToggleStockStatus = async (p: Product) => {
-    const nextInStock = !p.inStock;
-    const currentStock = p.stock ?? 0;
+    const isMulti = isProductMultiMedium(p.language);
+    const tStock = p.stockTamil ?? p.stock_tamil;
+    const eStock = p.stockEnglish ?? p.stock_english;
+    const isMultiBothOos = isMulti && (tStock !== null && tStock !== undefined && tStock <= 0) && (eStock !== null && eStock !== undefined && eStock <= 0);
+    const currentlyOOS = !p.inStock || (p.stock ?? 0) <= 0 || isMultiBothOos;
+    const nextInStock = currentlyOOS;
+
     try {
-      if (nextInStock && currentStock <= 0) {
-        // Turning ON from 0: ensure at least 1 unit so customer can buy
-        await onUpdateProduct(p.id, {
-          inStock: true,
-          stock: 1,
-        });
+      if (nextInStock) {
+        const curStock = p.stock ?? 0;
+        if (curStock <= 0 || isMultiBothOos) {
+          if (isMulti) {
+            await onUpdateProduct(p.id, {
+              inStock: true,
+              status: 'published',
+              stock: 10,
+              stockTamil: 5,
+              stockEnglish: 5,
+              stock_tamil: 5,
+              stock_english: 5,
+            });
+          } else {
+            const med = normalizeProductMedium(p.language);
+            await onUpdateProduct(p.id, {
+              inStock: true,
+              status: 'published',
+              stock: 10,
+              stockTamil: med === 'Tamil' ? 10 : null,
+              stock_tamil: med === 'Tamil' ? 10 : null,
+              stockEnglish: med === 'English' ? 10 : null,
+              stock_english: med === 'English' ? 10 : null,
+            });
+          }
+        } else {
+          await onUpdateProduct(p.id, {
+            inStock: true,
+            status: 'published',
+          });
+        }
+        onShowToast(`📦 ${p.title} marked IN STOCK`);
       } else {
-        // Toggling status without destroying existing rack inventory count!
         await onUpdateProduct(p.id, {
-          inStock: nextInStock,
+          inStock: false,
+          status: 'out_of_stock',
         });
+        onShowToast(`⚠️ ${p.title} marked OUT OF STOCK`);
       }
-      onShowToast(nextInStock ? `📦 ${p.title} marked IN STOCK` : `⚠️ ${p.title} marked OUT OF STOCK`);
     } catch {
       onShowToast('❌ Toggle failed');
     }
@@ -570,8 +658,10 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
     setIsSubmitting(true);
     try {
       const isBoth = newMedium === 'Both';
-      const numStockTamil = isBoth ? Math.max(0, parseInt(String(newStockTamil), 10) || 0) : null;
-      const numStockEnglish = isBoth ? Math.max(0, parseInt(String(newStockEnglish), 10) || 0) : null;
+      const isTamil = newMedium === 'Tamil';
+      const isEnglish = newMedium === 'English';
+      const numStockTamil = isBoth ? Math.max(0, parseInt(String(newStockTamil), 10) || 0) : isTamil ? Math.max(0, parseInt(String(newStock), 10) || 0) : null;
+      const numStockEnglish = isBoth ? Math.max(0, parseInt(String(newStockEnglish), 10) || 0) : isEnglish ? Math.max(0, parseInt(String(newStock), 10) || 0) : null;
       const finalStock = isBoth
         ? (numStockTamil || 0) + (numStockEnglish || 0)
         : Math.max(0, Number(newStock) || 0);
@@ -794,12 +884,16 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                         ? 100
                         : Math.min(99, Math.round(((p.mrp - p.price) / p.mrp) * 100))
                       : 0;
-                  const isOOS = !p.inStock || (p.stock ?? 0) <= 0;
+                  const isMulti = isProductMultiMedium(p.language);
+                  const tStock = p.stockTamil ?? p.stock_tamil;
+                  const eStock = p.stockEnglish ?? p.stock_english;
+                  const isMultiBothOos = isMulti && ((tStock !== null && tStock !== undefined && tStock <= 0) || tStock === 0) && ((eStock !== null && eStock !== undefined && eStock <= 0) || eStock === 0);
+                  const isOOS = !p.inStock || (p.stock ?? 0) <= 0 || isMultiBothOos;
                   const isLow = (p.stock ?? 99) <= 5 && !isOOS;
                   const heldCount = holdsByBookId.get(String(p.id)) || 0;
 
                   return (
-                    <tr key={p.id} className="hover:bg-slate-50/80 transition-colors">
+                    <tr key={p.id} className={`transition-colors ${isOOS ? 'bg-slate-100/90 text-slate-500 hover:bg-slate-200/60' : 'hover:bg-slate-50/80'}`}>
                       {/* Book Cover & Title */}
                       <td className="p-4">
                         <div className="flex items-start gap-3">
@@ -807,7 +901,7 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                             <img
                               src={isEditing && editImage ? editImage : p.image}
                               alt={p.title}
-                              className="w-12 h-12 object-contain bg-slate-50 border border-slate-200 rounded-lg p-0.5"
+                              className={`w-12 h-12 object-contain bg-slate-50 border border-slate-200 rounded-lg p-0.5 transition-all ${isOOS ? 'grayscale opacity-60' : ''}`}
                             />
                             {isEditing && (
                               <button
@@ -845,7 +939,7 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                                   </select>
                                   <select
                                     value={editMedium}
-                                    onChange={(e) => setEditMedium(e.target.value)}
+                                    onChange={(e) => handleEditMediumChange(e.target.value)}
                                     className="px-2 py-0.5 bg-emerald-50 text-emerald-900 border border-emerald-300 rounded text-[10px] font-bold outline-none cursor-pointer"
                                     title="Medium / Language"
                                   >
@@ -873,7 +967,7 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                               </div>
                             ) : (
                               <>
-                                <span className="font-bold text-xs text-slate-900 block truncate">
+                                <span className={`font-bold text-xs block truncate ${isOOS ? 'text-slate-500 line-through decoration-slate-400' : 'text-slate-900'}`}>
                                   {p.title}
                                 </span>
                                 <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
@@ -882,15 +976,14 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                                       {p.badge}
                                     </span>
                                   )}
-                                  <span className={`inline-block text-[9px] font-bold px-2 py-0.5 rounded-md ${
-                                    (p.language || 'Both') === 'Tamil'
-                                      ? 'bg-amber-100 text-amber-900 border border-amber-200'
-                                      : (p.language || 'Both') === 'English'
-                                      ? 'bg-emerald-100 text-emerald-900 border border-emerald-200'
-                                      : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
-                                  }`}>
-                                    {(p.language || 'Both') === 'Both' ? '🌐 Tamil & Eng' : (p.language || 'Both') === 'Tamil' ? '📘 தமிழ் வழி' : '📗 English Med'}
-                                  </span>
+                                  {(() => {
+                                    const mb = getProductMediumBadge(p.language);
+                                    return (
+                                      <span className={`inline-block text-[9px] font-bold px-2 py-0.5 rounded-md ${mb.pillClasses}`}>
+                                        {mb.shortBadge}
+                                      </span>
+                                    );
+                                  })()}
                                   {p.samplePdfUrl && (
                                     <a
                                       href={p.samplePdfUrl}
@@ -1215,7 +1308,7 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                               {isOOS ? 'OUT OF STOCK' : `${p.stock ?? '—'} IN RACK`}
                             </button>
 
-                            {(p.language === 'Both' || (p.stockTamil !== undefined && p.stockTamil !== null) || (p.stock_tamil !== undefined && p.stock_tamil !== null)) && (
+                            {isProductMultiMedium(p.language) && (
                               <div className="flex items-center gap-1 mt-0.5">
                                 {(() => {
                                   const tQty = p.stockTamil ?? p.stock_tamil;
@@ -1325,7 +1418,11 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                   ? 100
                   : Math.min(99, Math.round(((p.mrp - p.price) / p.mrp) * 100))
                 : 0;
-            const isOOS = !p.inStock || (p.stock ?? 0) <= 0;
+            const isMulti = isProductMultiMedium(p.language);
+            const tStock = p.stockTamil ?? p.stock_tamil;
+            const eStock = p.stockEnglish ?? p.stock_english;
+            const isMultiBothOos = isMulti && ((tStock !== null && tStock !== undefined && tStock <= 0) || tStock === 0) && ((eStock !== null && eStock !== undefined && eStock <= 0) || eStock === 0);
+            const isOOS = !p.inStock || (p.stock ?? 0) <= 0 || isMultiBothOos;
             const isLow = (p.stock ?? 99) <= 5 && !isOOS;
             const heldCount = holdsByBookId.get(String(p.id)) || 0;
 
@@ -1381,6 +1478,20 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                           className="w-full px-2 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs outline-none"
                         />
                       </div>
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-700 block mb-1">Medium / பயிற்று மொழி</label>
+                      <select
+                        value={editMedium}
+                        onChange={(e) => handleEditMediumChange(e.target.value)}
+                        className="w-full px-2 py-2 bg-emerald-50 text-emerald-900 border border-emerald-300 rounded-xl text-xs font-bold outline-none cursor-pointer"
+                        title="Medium / Language"
+                      >
+                        <option value="Both">🌐 Tamil & English</option>
+                        <option value="Tamil">📘 Tamil Only (தமிழ் வழி)</option>
+                        <option value="English">📗 English Medium Only</option>
+                      </select>
                     </div>
 
                     {/* Mobile Combo Subjects Editor */}
@@ -1543,12 +1654,12 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
             }
 
             return (
-              <div key={p.id} className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs space-y-3">
+              <div key={p.id} className={`rounded-2xl border p-4 shadow-xs space-y-3 transition-colors ${isOOS ? 'bg-slate-100/90 border-slate-300 text-slate-500' : 'bg-white border-slate-200'}`}>
                 <div className="flex items-start gap-3">
                   <img
                     src={p.image}
                     alt={p.title}
-                    className="w-14 h-14 object-contain bg-slate-50 border border-slate-200 rounded-xl p-0.5 shrink-0"
+                    className={`w-14 h-14 object-contain bg-slate-50 border border-slate-200 rounded-xl p-0.5 shrink-0 transition-all ${isOOS ? 'grayscale opacity-60' : ''}`}
                   />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5 flex-wrap">
@@ -1565,8 +1676,16 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                           {p.badge}
                         </span>
                       )}
+                      {(() => {
+                        const mb = getProductMediumBadge(p.language);
+                        return (
+                          <span className={`inline-block text-[9px] font-bold px-2 py-0.5 rounded-md ${mb.pillClasses}`}>
+                            {mb.shortBadge}
+                          </span>
+                        );
+                      })()}
                     </div>
-                    <span className="font-bold text-xs text-slate-900 block mt-1 leading-snug">
+                    <span className={`font-bold text-xs block mt-1 leading-snug ${isOOS ? 'text-slate-500 line-through decoration-slate-400' : 'text-slate-900'}`}>
                       {p.title}
                     </span>
                   </div>
@@ -1602,7 +1721,7 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                     >
                       {isOOS ? 'OUT OF STOCK' : `${p.stock ?? '—'} IN RACK`}
                     </button>
-                    {(p.language === 'Both' || (p.stockTamil !== undefined && p.stockTamil !== null) || (p.stock_tamil !== undefined && p.stock_tamil !== null)) && (
+                    {isProductMultiMedium(p.language) && (
                       <div className="flex items-center gap-1 mt-1 justify-center flex-wrap">
                         {(() => {
                           const tQty = p.stockTamil ?? p.stock_tamil;
@@ -1776,14 +1895,14 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                     onChange={(e) => setNewMedium(e.target.value)}
                     className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl outline-none focus:border-[#2874f0] text-slate-900 cursor-pointer font-semibold shadow-2xs"
                   >
-                    <option value="Both">Both Tamil & English (Student can choose)</option>
-                    <option value="Tamil Medium">Tamil Medium Only (தமிழ் வழி)</option>
-                    <option value="English Medium">English Medium Only (ஆங்கில வழி)</option>
+                    <option value="Both">Both Tamil &amp; English (Student can choose)</option>
+                    <option value="Tamil">Tamil Medium Only (தமிழ் வழி)</option>
+                    <option value="English">English Medium Only (ஆங்கில வழி)</option>
                   </select>
                   <p className="text-[10.5px] text-slate-500 mt-1">
                     {newMedium === 'Both'
                       ? '💡 When adding to cart, student can choose Tamil Medium or English Medium.'
-                      : newMedium === 'Tamil Medium'
+                      : newMedium === 'Tamil'
                       ? '📘 Displayed as Tamil Medium only. Added directly to cart.'
                       : '📗 Displayed as English Medium only. Added directly to cart.'}
                   </p>
@@ -2098,7 +2217,7 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                   ) : (
                     <div>
                       <label className="block font-bold text-slate-700 mb-1">
-                        Initial Copies in Rack *
+                        Initial Copies in Rack ({newMedium === 'English' ? 'English Medium' : 'Tamil Medium'}) *
                       </label>
                       <input
                         type="number"

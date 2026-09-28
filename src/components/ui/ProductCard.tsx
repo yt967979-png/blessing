@@ -12,6 +12,13 @@ import { MIN_BOOKS_PER_ORDER, booksUntilMinOrder, isComboItem } from '@/lib/deli
 import { getComboIncludedSubjects } from '@/lib/comboMetadata';
 import { openSamplePdfModal } from '@/components/books/SampleChapterReaderModal';
 
+import {
+  normalizeProductMedium,
+  isProductMultiMedium,
+  getProductMediumBadge,
+  resolveCartItemMedium,
+} from '@/lib/productMedium';
+
 export const ProductCard = React.memo(function ProductCard({ product }: { product: Product }) {
   const router = useRouter();
   const {
@@ -27,12 +34,9 @@ export const ProductCard = React.memo(function ProductCard({ product }: { produc
   } = useStore();
 
   const [isAdded, setIsAdded] = useState(false);
-  const rawLang = (product.language || 'Both').trim();
-  const lowerLang = rawLang.toLowerCase();
-  const isMultiMedium =
-    lowerLang === 'both' ||
-    lowerLang.includes('both') ||
-    (lowerLang.includes('tamil') && lowerLang.includes('english'));
+  const isMultiMedium = isProductMultiMedium(product.language);
+  const mediumType = normalizeProductMedium(product.language);
+  const mediumBadge = getProductMediumBadge(product.language);
 
   const tamilStock = product.stock_tamil !== undefined && product.stock_tamil !== null
     ? Number(product.stock_tamil)
@@ -45,33 +49,31 @@ export const ProductCard = React.memo(function ProductCard({ product }: { produc
   const isTamilSoldOut = tamilStock !== null && tamilStock <= 0;
   const isEnglishSoldOut = englishStock !== null && englishStock <= 0;
 
-  const defaultSelectedMedium = (lowerLang.includes('english') && !lowerLang.includes('tamil')) || isTamilSoldOut
+  const defaultSelectedMedium = mediumType === 'English'
+    ? 'English Medium'
+    : mediumType === 'Tamil'
+    ? 'Tamil Medium'
+    : isTamilSoldOut && !isEnglishSoldOut
     ? 'English Medium'
     : 'Tamil Medium';
   const [selectedMedium, setSelectedMedium] = useState<string>(defaultSelectedMedium);
 
   React.useEffect(() => {
-    const l = (product.language || 'Both').trim().toLowerCase();
-    if (l.includes('english') && !l.includes('tamil')) {
+    if (mediumType === 'English') {
       setSelectedMedium('English Medium');
-    } else if (l.includes('tamil') && !l.includes('english')) {
+    } else if (mediumType === 'Tamil') {
       setSelectedMedium('Tamil Medium');
     } else if (isMultiMedium) {
-      if (isTamilSoldOut && !isEnglishSoldOut && selectedMedium === 'Tamil Medium') {
-        setSelectedMedium('English Medium');
-      } else if (isEnglishSoldOut && !isTamilSoldOut && selectedMedium === 'English Medium') {
-        setSelectedMedium('Tamil Medium');
-      }
+      setSelectedMedium((prev) => {
+        if (isTamilSoldOut && !isEnglishSoldOut && prev === 'Tamil Medium') return 'English Medium';
+        if (isEnglishSoldOut && !isTamilSoldOut && prev === 'English Medium') return 'Tamil Medium';
+        return prev;
+      });
     }
-  }, [product.language, isMultiMedium, isTamilSoldOut, isEnglishSoldOut]);
+  }, [product.language, mediumType, isMultiMedium, isTamilSoldOut, isEnglishSoldOut]);
 
-  const finalMedium = isMultiMedium
-    ? selectedMedium
-    : lowerLang.includes('tamil')
-    ? 'Tamil Medium'
-    : lowerLang.includes('english')
-    ? 'English Medium'
-    : rawLang;
+
+  const finalMedium = resolveCartItemMedium(product.language, selectedMedium);
 
   const isWishlisted = Boolean(product?.id && wishlist.some((id) => String(id) === String(product.id)));
   const rupeesSaved = product.mrp - product.price;
@@ -188,7 +190,7 @@ export const ProductCard = React.memo(function ProductCard({ product }: { produc
       <Link
         href={productHref}
         className={`font-heading font-black text-xs sm:text-sm leading-snug mb-1.5 line-clamp-2 min-h-[2.25rem] transition-colors ${
-          isOutOfStock ? 'text-slate-500' : 'text-[#001226] group-hover:text-blue-700'
+          isOutOfStock ? 'text-slate-500 line-through decoration-slate-400' : 'text-[#001226] group-hover:text-blue-700'
         }`}
       >
         {product.title}
@@ -293,7 +295,7 @@ export const ProductCard = React.memo(function ProductCard({ product }: { produc
             }`}
             title={isTamilSoldOut ? 'Tamil Medium is sold out' : 'Tamil Medium'}
           >
-            {isTamilSoldOut ? 'தமிழ் (OOS)' : 'தமிழ் வழி'}
+            தமிழ் வழி
           </button>
           <button
             type="button"
@@ -312,25 +314,19 @@ export const ProductCard = React.memo(function ProductCard({ product }: { produc
             }`}
             title={isEnglishSoldOut ? 'English Medium is sold out' : 'English Medium'}
           >
-            {isEnglishSoldOut ? 'English (OOS)' : 'English'}
+            English
           </button>
         </div>
       ) : (
         <div className="mb-2 flex items-center">
           <span
-            className={`text-[9.5px] font-black px-2 py-0.5 rounded-md ${
-              rawLang.toLowerCase().includes('tamil')
-                ? 'bg-amber-50 text-amber-900 border border-amber-200'
-                : rawLang.toLowerCase().includes('english')
-                ? 'bg-emerald-50 text-emerald-900 border border-emerald-200'
-                : 'bg-indigo-50 text-indigo-900 border border-indigo-200'
-            }`}
+            className={`text-[9.5px] font-black px-2 py-0.5 rounded-md ${mediumBadge.storeBadgeClasses}`}
           >
-            {rawLang.toLowerCase().includes('tamil')
-              ? '📘 தமிழ் வழி (Tamil)'
-              : rawLang.toLowerCase().includes('english')
+            {mediumBadge.type === 'English'
               ? '📗 English Medium'
-              : '🌐 Tamil & English'}
+              : mediumBadge.type === 'Tamil'
+              ? '📘 தமிழ் வழி (Tamil)'
+              : mediumBadge.shortBadge}
           </span>
         </div>
       )}
