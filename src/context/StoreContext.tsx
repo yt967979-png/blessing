@@ -412,20 +412,32 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             let cartChanged = false;
             const catalogById = new Map(data.map((b: Product) => [String(b.id), b]));
             const updatedCart = prevCart.map((item) => {
-              const fresh = catalogById.get(String(item.id));
+              let fresh = catalogById.get(String(item.id));
+              if (!fresh && item.title) {
+                const itemTitle = String(item.title).trim().toLowerCase();
+                fresh = data.find((b: Product) => String(b.title).trim().toLowerCase() === itemTitle)
+                  || data.find((b: Product) => {
+                    const bt = String(b.title).toLowerCase();
+                    const it = itemTitle;
+                    return (it.includes('tamil') && bt.includes('tamil')) || (it.includes('combo') && bt.includes('combo'));
+                  });
+              }
               if (!fresh) return item;
               if (
                 item.price === fresh.price &&
                 item.mrp === fresh.mrp &&
                 item.discount === fresh.discount &&
                 item.inStock === fresh.inStock &&
-                item.stock === fresh.stock
+                item.stock === fresh.stock &&
+                String(item.id) === String(fresh.id)
               ) {
                 return item;
               }
               cartChanged = true;
               return {
                 ...item,
+                id: fresh.id,
+                title: fresh.title || item.title,
                 price: fresh.price,
                 mrp: fresh.mrp,
                 discount: fresh.discount,
@@ -437,6 +449,22 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               try {
                 localStorage.setItem('bpg_cart_next', JSON.stringify(updatedCart));
               } catch {}
+              // Automatically notify /api/cart/abandon with fresh prices if phone or user is present
+              const p = user?.phone || (typeof window !== 'undefined' ? localStorage.getItem('bpg_checkout_phone') : null);
+              if (p) {
+                fetch('/api/cart/abandon', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    ...(user?.token ? { Authorization: `Bearer ${user.token}` } : {}),
+                  },
+                  body: JSON.stringify({
+                    phone: p,
+                    name: user?.name || 'Student',
+                    cart: updatedCart,
+                  }),
+                }).catch(() => {});
+              }
               return updatedCart;
             }
             return prevCart;

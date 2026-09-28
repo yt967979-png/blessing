@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDbClient, releaseDbClient } from '@/lib/db';
 import { verifyAdminRequest, forbiddenResponse, unauthorizedResponse } from '@/lib/serverSecurity';
-import { deliveryFeeForCart, cartHasCombo } from '@/lib/deliveryRules';
-import { calculateBookPrices } from '@/lib/stock';
+import { syncCartItemsWithBooks, syncAllAbandonedCartsInDb, CatalogBookRow } from '@/lib/abandonedCartSync';
 
 export async function GET(request: NextRequest) {
   const auth = await verifyAdminRequest(request);
@@ -18,101 +17,71 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Database unavailable' }, { status: 503 });
     }
 
-    // Fetch top 100 recent abandoned carts
-    // ONLY marked as converted / recovered IF reminded = TRUE (we contacted them) and order was placed
-    const res = await client.query(`
-      SELECT 
-        ac.id,
-        ac.user_id,
-        ac.phone,
-        ac.name,
-        ac.cart_json,
-        ac.reminded,
-        ac.created_at,
-        ac.updated_at,
-        (
-          ac.reminded = TRUE AND EXISTS (
-            SELECT 1 FROM orders o 
-            LEFT JOIN users u ON o.user_id = u.id
-            WHERE (
-              (ac.user_id IS NOT NULL AND ac.user_id <> '' AND o.user_id = ac.user_id)
-              OR (u.phone IS NOT NULL AND u.phone = ac.phone)
-              OR (o.shipping_address ILIKE '%' || ac.phone || '%')
+    // Parallel fetch: top 100 recent abandoned carts + entire active catalog books
+    const [res, booksRes] = await Promise.all([
+      client.query(`
+        SELECT 
+          ac.id,
+          ac.user_id,
+          ac.phone,
+          ac.name,
+          ac.cart_json,
+          ac.reminded,
+          ac.created_at,
+          ac.updated_at,
+          (
+            ac.reminded = TRUE AND EXISTS (
+              SELECT 1 FROM orders o 
+              LEFT JOIN users u ON o.user_id = u.id
+              WHERE (
+                (ac.user_id IS NOT NULL AND ac.user_id <> '' AND o.user_id = ac.user_id)
+                OR (u.phone IS NOT NULL AND u.phone = ac.phone)
+                OR (o.shipping_address ILIKE '%' || ac.phone || '%')
+              )
+              AND o.created_at >= ac.created_at
             )
-            AND o.created_at >= ac.created_at
-          )
-        ) as converted
-      FROM abandoned_carts ac
-      ORDER BY ac.updated_at DESC
-      LIMIT 100
-    `);
+          ) as converted
+        FROM abandoned_carts ac
+        ORDER BY ac.updated_at DESC
+        LIMIT 100
+      `),
+      client.query(`SELECT id, title, subject, price, discount_price, stock, status, language FROM books`),
+    ]);
 
-    // Collect all unique book IDs from all abandoned carts so we can
-    // batch-fetch their CURRENT prices from the catalog in one query.
-    const allItemsParsed = res.rows.map((row: any) => {
-      try { return JSON.parse(row.cart_json || '[]'); } catch { return []; }
-    });
-    const allBookIds = new Set<string>();
-    for (const items of allItemsParsed) {
-      for (const item of items) {
-        if (item.id) allBookIds.add(String(item.id));
-      }
-    }
+    const catalogBooks: CatalogBookRow[] = booksRes.rows || [];
+    const updatesToPersist: Promise<any>[] = [];
 
-    // Batch query live prices — single round-trip for ALL book IDs
-    const livePriceMap = new Map<string, number>();
-    if (allBookIds.size > 0) {
+    const carts = res.rows.map((row: any) => {
+      let rawItems: any[] = [];
       try {
-        const idsArray = Array.from(allBookIds);
-        const placeholders = idsArray.map((_, i) => `$${i + 1}`).join(', ');
-        const priceRes = await client.query(
-          `SELECT id, price, discount_price FROM books WHERE id IN (${placeholders})`,
-          idsArray
-        );
-        for (const row of priceRes.rows) {
-          const { price } = calculateBookPrices(row);
-          livePriceMap.set(String(row.id), price);
-        }
-      } catch (e: any) {
-        // If live price fetch fails, fall back to stale snapshot prices
-        console.warn('[abandoned-carts] Could not fetch live prices:', e?.message || e);
+        rawItems = JSON.parse(row.cart_json || '[]');
+      } catch {
+        rawItems = [];
       }
-    }
 
-    const carts = res.rows.map((row: any, idx: number) => {
-      const items: any[] = allItemsParsed[idx] || [];
-      // Enrich each item with the current live price from the catalog
-      const enrichedItems = items.map((item: any) => {
-        const livePrice = livePriceMap.get(String(item.id));
-        return {
-          ...item,
-          price: livePrice !== undefined ? livePrice : Number(item.price || 0),
-          snapshotPrice: Number(item.price || 0),
-        };
-      });
+      // Synchronize and reconcile all items with the live catalog
+      const syncResult = syncCartItemsWithBooks(rawItems, catalogBooks);
 
-      const subtotal = enrichedItems.reduce(
-        (sum: number, item: any) => sum + (Number(item.price || 0) * Number(item.qty || 1)),
-        0
-      );
-      const totalQty = enrichedItems.reduce(
-        (sum: number, item: any) => sum + Number(item.qty || 1),
-        0
-      );
-      const hasCombo = cartHasCombo(enrichedItems);
-      const shippingFee = deliveryFeeForCart(enrichedItems);
-      const totalAmount = subtotal + shippingFee;
+      // If price, title, or book ID changed compared to stored JSON, auto-update the DB row
+      if (syncResult.changed) {
+        updatesToPersist.push(
+          client.query(
+            `UPDATE abandoned_carts SET cart_json = $1, updated_at = NOW() WHERE id = $2`,
+            [JSON.stringify(syncResult.items), row.id]
+          ).catch((e: any) => console.warn('[abandoned-carts] Failed auto-sync persist:', e?.message || e))
+        );
+      }
 
       return {
         id: row.id,
         userId: row.user_id,
         phone: row.phone,
         name: row.name || 'Student',
-        items: enrichedItems,
-        totalQty,
-        subtotal,
-        shippingFee,
-        totalAmount,
+        items: syncResult.items,
+        totalQty: syncResult.totalQty,
+        subtotal: syncResult.subtotal,
+        shippingFee: syncResult.shippingFee,
+        totalAmount: syncResult.totalAmount,
         reminded: Boolean(row.reminded),
         converted: Boolean(row.converted),
         createdAt: row.created_at,
@@ -120,12 +89,32 @@ export async function GET(request: NextRequest) {
       };
     });
 
+    if (updatesToPersist.length > 0) {
+      await Promise.all(updatesToPersist);
+    }
+
     return NextResponse.json({ ok: true, carts });
   } catch (err: any) {
     console.error('Failed to fetch abandoned carts:', err);
     return NextResponse.json({ error: err.message || 'Internal error' }, { status: 500 });
   } finally {
     releaseDbClient(client);
+  }
+}
+
+export async function POST(request: NextRequest) {
+  const auth = await verifyAdminRequest(request);
+  if (!auth.isAdmin) {
+    if (!auth.user) return unauthorizedResponse('Admin login required');
+    return forbiddenResponse('Admin privileges required');
+  }
+
+  try {
+    const result = await syncAllAbandonedCartsInDb();
+    return NextResponse.json({ ok: true, ...result });
+  } catch (err: any) {
+    console.error('Failed to manually sync abandoned carts:', err);
+    return NextResponse.json({ error: err?.message || 'Sync failed' }, { status: 500 });
   }
 }
 

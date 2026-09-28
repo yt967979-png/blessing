@@ -4,6 +4,7 @@ import { verifyAdminRequest, forbiddenResponse } from '@/lib/serverSecurity';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import { getCatalogCacheTtlMs, getCatalogCdnHeaders } from '@/lib/launchScale';
 import { isBookInStock, calculateBookPrices } from '@/lib/stock';
+import { syncAllAbandonedCartsInDb } from '@/lib/abandonedCartSync';
 import { isComboItem } from '@/lib/deliveryRules';
 import { redisGetJson, redisSetJson } from '@/lib/redis';
 import { normalizeProductMedium } from '@/lib/productMedium';
@@ -534,6 +535,9 @@ export async function POST(request: Request) {
       const { notifyCatalogChanged } = await import('@/app/api/stock/stream/route');
       void notifyCatalogChanged([id]);
     } catch (_) {}
+    void syncAllAbandonedCartsInDb().catch((e) =>
+      console.warn('[POST /api/products] syncAllAbandonedCartsInDb failed:', e?.message || e)
+    );
     return NextResponse.json(res.rows[0], { status: 201 });
   } catch (err: any) {
     console.error('POST /api/products failed:', err?.message || err);
@@ -757,6 +761,9 @@ export async function PATCH(request: Request) {
         void notifyStockChanged([id]);
         void notifyCatalogChanged([id]);
       } catch (_) {}
+      void syncAllAbandonedCartsInDb().catch((e) =>
+        console.warn('[PATCH /api/products] syncAllAbandonedCartsInDb failed:', e?.message || e)
+      );
 
       void recordAdminAudit(
         {
@@ -810,6 +817,9 @@ export async function DELETE(request: Request) {
       const { notifyCatalogChanged } = await import('@/app/api/stock/stream/route');
       void notifyCatalogChanged([id]);
     } catch (_) {}
+    void syncAllAbandonedCartsInDb().catch((e) =>
+      console.warn('[DELETE /api/products] syncAllAbandonedCartsInDb failed:', e?.message || e)
+    );
     return NextResponse.json({ success: true, deletedId: id });
   } catch (err: any) {
     console.error('DELETE /api/products failed:', err?.message || err);

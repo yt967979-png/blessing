@@ -20,6 +20,9 @@ interface AbandonedCartItem {
   title: string;
   price: number;
   qty: number;
+  snapshotPrice?: number;
+  mrp?: number;
+  inStock?: boolean;
 }
 
 interface AbandonedCart {
@@ -144,6 +147,30 @@ export const AbandonedCartsSection: React.FC<AbandonedCartsSectionProps> = ({
     }
   };
 
+  const syncCatalogPrices = async () => {
+    setRefreshing(true);
+    try {
+      const res = await fetch('/api/admin/abandoned-carts', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders,
+        },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.ok) {
+        onShowToast(`✅ Synced with live catalog (${data.updatedCount || 0} cart(s) re-priced)`);
+        await fetchCarts(true);
+      } else {
+        onShowToast(`⚠️ ${data.error || 'Failed to sync prices'}`);
+      }
+    } catch {
+      onShowToast('❌ Network error syncing prices');
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const sendWhatsAppRecovery = (cart: AbandonedCart) => {
     const cleanPhone = cart.phone.replace(/\D/g, '');
     const phoneWithCountry = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
@@ -218,15 +245,28 @@ export const AbandonedCartsSection: React.FC<AbandonedCartsSectionProps> = ({
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => void fetchCarts(true)}
-          disabled={refreshing}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer shrink-0"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin text-blue-600' : ''}`} />
-          <span>Refresh Carts</span>
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => void syncCatalogPrices()}
+            disabled={refreshing}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer active:scale-95"
+            title="Recalculate all abandoned carts using the latest catalog book prices"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+            <span>Sync Catalog Prices</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => void fetchCarts(true)}
+            disabled={refreshing}
+            className="inline-flex items-center gap-2 px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin text-blue-600' : ''}`} />
+            <span>Refresh</span>
+          </button>
+        </div>
       </div>
 
       {/* KPI Stats Cards */}
@@ -387,6 +427,14 @@ export const AbandonedCartsSection: React.FC<AbandonedCartsSectionProps> = ({
                       <span className="font-bold text-[#001B3A]">{it.title}</span>
                       <span className="text-slate-400">×{it.qty || 1}</span>
                       <span className="font-extrabold text-slate-900">₹{(Number(it.price || 0) * Number(it.qty || 1))}</span>
+                      {it.snapshotPrice !== undefined && Math.abs(it.snapshotPrice - it.price) > 0.001 && (
+                        <span
+                          className="text-[10px] text-amber-700 bg-amber-100/90 font-bold px-1.5 py-0.5 rounded ml-0.5"
+                          title={`Price updated from ₹${it.snapshotPrice * (it.qty || 1)} to current catalog price`}
+                        >
+                          Sync: ₹{it.price}
+                        </span>
+                      )}
                     </span>
                   ))}
                 </div>
