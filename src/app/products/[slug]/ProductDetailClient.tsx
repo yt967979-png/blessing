@@ -951,7 +951,7 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
                       ? '📘 தமிழ் வழி (Tamil Medium Only)'
                       : rawLang.toLowerCase().includes('english')
                       ? '📗 English Medium Only'
-                      : '📙 Bilingual Edition (தமிழ் & English Combined)'}
+                      : '🌐 Tamil & English Edition'}
                   </span>
                   <span className="text-[11px] text-slate-500 font-semibold truncate">
                     Ready to order

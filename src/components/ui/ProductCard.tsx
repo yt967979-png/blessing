@@ -300,7 +300,7 @@ export const ProductCard = React.memo(function ProductCard({ product }: { produc
               ? '📘 தமிழ் வழி (Tamil)'
               : rawLang.toLowerCase().includes('english')
               ? '📗 English Medium'
-              : '📙 Bilingual Edition'}
+              : '🌐 Tamil & English'}
           </span>
         </div>
       )}

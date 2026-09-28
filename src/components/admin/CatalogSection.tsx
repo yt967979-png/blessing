@@ -815,7 +815,6 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                                     <option value="Both">🌐 Tamil & English</option>
                                     <option value="Tamil">📘 Tamil Only (தமிழ் வழி)</option>
                                     <option value="English">📗 English Medium Only</option>
-                                    <option value="Bilingual">📙 Bilingual (இருமொழி)</option>
                                   </select>
                                   <input
                                     ref={editImageInputRef}
@@ -853,7 +852,7 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                                       ? 'bg-emerald-100 text-emerald-900 border border-emerald-200'
                                       : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
                                   }`}>
-                                    {(p.language || 'Both') === 'Both' ? '🌐 Tamil & Eng' : (p.language || 'Both') === 'Tamil' ? '📘 தமிழ் வழி' : (p.language || 'Both') === 'English' ? '📗 English Med' : '📙 Bilingual'}
+                                    {(p.language || 'Both') === 'Both' ? '🌐 Tamil & Eng' : (p.language || 'Both') === 'Tamil' ? '📘 தமிழ் வழி' : '📗 English Med'}
                                   </span>
                                   {p.samplePdfUrl && (
                                     <a
@@ -1611,16 +1610,13 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                     <option value="Both">Both Tamil & English (Student can choose)</option>
                     <option value="Tamil Medium">Tamil Medium Only (தமிழ் வழி)</option>
                     <option value="English Medium">English Medium Only (ஆங்கில வழி)</option>
-                    <option value="Bilingual">Bilingual (Combined Tamil & English)</option>
                   </select>
                   <p className="text-[10.5px] text-slate-500 mt-1">
                     {newMedium === 'Both'
                       ? '💡 When adding to cart, student can choose Tamil Medium or English Medium.'
                       : newMedium === 'Tamil Medium'
                       ? '📘 Displayed as Tamil Medium only. Added directly to cart.'
-                      : newMedium === 'English Medium'
-                      ? '📗 Displayed as English Medium only. Added directly to cart.'
-                      : '📚 Single guide book with both languages inside.'}
+                      : '📗 Displayed as English Medium only. Added directly to cart.'}
                   </p>
                 </div>
 
