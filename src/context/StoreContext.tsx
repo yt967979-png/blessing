@@ -98,15 +98,15 @@ interface StoreContextType {
   isProfileOpen: boolean;
   setIsProfileOpen: (open: boolean) => void;
   addToCart: (product: Product, qty?: number, selectedMedium?: string) => void;
-  updateQty: (id: string | number, delta: number) => void;
-  removeFromCart: (id: string | number) => void;
+  updateQty: (id: string | number, delta: number, selectedMedium?: string | null) => void;
+  removeFromCart: (id: string | number, selectedMedium?: string | null) => void;
   clearCart: () => void;
   clearCartAfterOrder: () => void;
   /** Live server stock check for everything in the cart — clamps qty, drops OOS items, toasts changes. Returns false if anything is still blocking after the check. */
   validateCartStock: () => Promise<boolean>;
   isValidatingCartStock: boolean;
-  saveForLater: (id: string | number) => void;
-  moveToCartFromSaved: (id: string | number) => void;
+  saveForLater: (id: string | number, selectedMedium?: string | null) => void;
+  moveToCartFromSaved: (id: string | number, selectedMedium?: string | null) => void;
   savedForLater: CartItem[];
   wishlistCount: number;
   toggleWishlist: (id: string | number) => void;
@@ -1201,13 +1201,18 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setIsCheckoutOpen(open);
   };
 
-  const updateQty = (id: string | number, delta: number) => {
+  const updateQty = (id: string | number, delta: number, selectedMedium?: string | null) => {
     cartSyncAllowedRef.current = true;
     let toastMsg = '';
     setCart((prev) => {
       const next = prev
         .map((item) => {
           if (String(item.id) !== String(id)) return item;
+          if (selectedMedium !== undefined && selectedMedium !== null) {
+            const itemMed = (item.selectedMedium || '').trim().toLowerCase();
+            const targetMed = selectedMedium.trim().toLowerCase();
+            if (itemMed !== targetMed) return item;
+          }
           const live = productsRef.current.find((p) => String(p.id) === String(id));
           const stockSource = typeof live?.stock === 'number' ? live.stock : item.stock;
           const stockLimit = typeof stockSource === 'number' ? Math.max(0, stockSource) : Infinity;
@@ -1248,7 +1253,13 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           body: JSON.stringify({
             phone: p,
             name: user?.name || 'Student',
-            cart: next.map((c) => ({ id: c.id, title: c.title, qty: c.qty, price: c.price })),
+            cart: next.map((c) => ({
+              id: c.id,
+              title: c.selectedMedium ? `${c.title} (${c.selectedMedium})` : c.title,
+              qty: c.qty,
+              price: c.price,
+              selectedMedium: c.selectedMedium || null,
+            })),
             cleared: next.length === 0,
           }),
         }).catch(() => {});
@@ -1259,10 +1270,18 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (toastMsg) showToast(toastMsg);
   };
 
-  const removeFromCart = (id: string | number) => {
+  const removeFromCart = (id: string | number, selectedMedium?: string | null) => {
     cartSyncAllowedRef.current = true;
     setCart((prev) => {
-      const next = prev.filter((item) => String(item.id) !== String(id));
+      const next = prev.filter((item) => {
+        if (String(item.id) !== String(id)) return true;
+        if (selectedMedium !== undefined && selectedMedium !== null) {
+          const itemMed = (item.selectedMedium || '').trim().toLowerCase();
+          const targetMed = selectedMedium.trim().toLowerCase();
+          return itemMed !== targetMed;
+        }
+        return false;
+      });
       try {
         localStorage.setItem('bpg_cart_next', JSON.stringify(next));
       } catch {}
@@ -1279,7 +1298,13 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           body: JSON.stringify({
             phone: p,
             name: user?.name || 'Student',
-            cart: next.map((c) => ({ id: c.id, title: c.title, qty: c.qty, price: c.price })),
+            cart: next.map((c) => ({
+              id: c.id,
+              title: c.selectedMedium ? `${c.title} (${c.selectedMedium})` : c.title,
+              qty: c.qty,
+              price: c.price,
+              selectedMedium: c.selectedMedium || null,
+            })),
             cleared: next.length === 0,
           }),
         }).catch(() => {});
@@ -1289,14 +1314,36 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     });
   };
 
-  const saveForLater = (id: string | number) => {
+  const saveForLater = (id: string | number, selectedMedium?: string | null) => {
     cartSyncAllowedRef.current = true;
     setCart((prev) => {
-      const item = prev.find((i) => String(i.id) === String(id));
+      const item = prev.find((i) => {
+        if (String(i.id) !== String(id)) return false;
+        if (selectedMedium !== undefined && selectedMedium !== null) {
+          const itemMed = (i.selectedMedium || '').trim().toLowerCase();
+          const targetMed = selectedMedium.trim().toLowerCase();
+          return itemMed === targetMed;
+        }
+        return true;
+      });
       if (!item) return prev;
       setSavedForLater((later) => {
-        const next = later.some((l) => String(l.id) === String(id))
-          ? later.map((l) => (String(l.id) === String(id) ? { ...l, qty: l.qty + item.qty } : l))
+        const next = later.some((l) => {
+          if (String(l.id) !== String(id)) return false;
+          if (selectedMedium !== undefined && selectedMedium !== null) {
+            const lMed = (l.selectedMedium || '').trim().toLowerCase();
+            const targetMed = selectedMedium.trim().toLowerCase();
+            return lMed === targetMed;
+          }
+          return true;
+        })
+          ? later.map((l) => {
+              const idMatch = String(l.id) === String(id);
+              const medMatch = selectedMedium !== undefined && selectedMedium !== null
+                ? (l.selectedMedium || '').trim().toLowerCase() === selectedMedium.trim().toLowerCase()
+                : true;
+              return idMatch && medMatch ? { ...l, qty: l.qty + item.qty } : l;
+            })
           : [...later, item];
         try {
           localStorage.setItem('bpg_saved_later', JSON.stringify(next));
@@ -1306,7 +1353,15 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         return next;
       });
       showToast('Saved for later');
-      const updatedCart = prev.filter((i) => String(i.id) !== String(id));
+      const updatedCart = prev.filter((i) => {
+        if (String(i.id) !== String(id)) return true;
+        if (selectedMedium !== undefined && selectedMedium !== null) {
+          const itemMed = (i.selectedMedium || '').trim().toLowerCase();
+          const targetMed = selectedMedium.trim().toLowerCase();
+          return itemMed !== targetMed;
+        }
+        return false;
+      });
       try {
         localStorage.setItem('bpg_cart_next', JSON.stringify(updatedCart));
       } catch {}
@@ -1323,7 +1378,13 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           body: JSON.stringify({
             phone: p,
             name: user?.name || 'Student',
-            cart: updatedCart.map((c) => ({ id: c.id, title: c.title, qty: c.qty, price: c.price })),
+            cart: updatedCart.map((c) => ({
+              id: c.id,
+              title: c.selectedMedium ? `${c.title} (${c.selectedMedium})` : c.title,
+              qty: c.qty,
+              price: c.price,
+              selectedMedium: c.selectedMedium || null,
+            })),
             cleared: updatedCart.length === 0,
           }),
         }).catch(() => {});
@@ -1333,12 +1394,28 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     });
   };
 
-  const moveToCartFromSaved = (id: string | number) => {
+  const moveToCartFromSaved = (id: string | number, selectedMedium?: string | null) => {
     cartSyncAllowedRef.current = true;
-    const item = savedForLater.find((i) => String(i.id) === String(id));
+    const item = savedForLater.find((i) => {
+      if (String(i.id) !== String(id)) return false;
+      if (selectedMedium !== undefined && selectedMedium !== null) {
+        const itemMed = (i.selectedMedium || '').trim().toLowerCase();
+        const targetMed = selectedMedium.trim().toLowerCase();
+        return itemMed === targetMed;
+      }
+      return true;
+    });
     if (!item) return;
     setSavedForLater((later) => {
-      const next = later.filter((i) => String(i.id) !== String(id));
+      const next = later.filter((i) => {
+        if (String(i.id) !== String(id)) return true;
+        if (selectedMedium !== undefined && selectedMedium !== null) {
+          const itemMed = (i.selectedMedium || '').trim().toLowerCase();
+          const targetMed = selectedMedium.trim().toLowerCase();
+          return itemMed !== targetMed;
+        }
+        return false;
+      });
       try {
         localStorage.setItem('bpg_saved_later', JSON.stringify(next));
       } catch {

@@ -4,7 +4,7 @@ import React, { useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ShoppingBag, X, Truck, Plus, Minus, ArrowRight, AlertTriangle } from 'lucide-react';
+import { ShoppingBag, X, Truck, Plus, Minus, ArrowRight, AlertTriangle, Trash2 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { getSTCourierDeliveryEstimate } from '@/lib/deliveryEstimator';
 import { getCartItemStockState, anyCartItemBlocking } from '@/lib/cartStock';
@@ -24,6 +24,7 @@ export const CartDrawer = () => {
     isCartOpen,
     setIsCartOpen,
     updateQty,
+    removeFromCart,
     cartTotal,
     cartGrandTotal,
     setIsCheckoutOpen,
@@ -142,8 +143,9 @@ export const CartDrawer = () => {
               ) : (
                 cart.map((item) => {
                   const stockState = getCartItemStockState(item, products);
+                  const itemKey = `${item.id}::${item.selectedMedium || 'default'}`;
                   return (
-                    <div key={item.id} className="flex gap-3 pb-3 border-b border-slate-100 items-center">
+                    <div key={itemKey} className="flex gap-3 pb-3 border-b border-slate-100 items-center">
                       <div className="relative w-14 h-14 bg-slate-50 border border-slate-200 rounded-xl overflow-hidden flex-shrink-0">
                         <Image
                           src={item.image || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80'}
@@ -158,7 +160,7 @@ export const CartDrawer = () => {
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <h4 className="font-heading font-bold text-xs text-[#001B3A] truncate">{item.title}</h4>
                           {item.selectedMedium && (
-                            <span className={`inline-block text-[9px] font-black px-1.5 py-0.2 rounded shrink-0 ${
+                            <span className={`inline-block text-[9px] font-black px-1.5 py-0.5 rounded shrink-0 ${
                               item.selectedMedium.toLowerCase().includes('tamil')
                                 ? 'bg-amber-100 text-amber-900 border border-amber-200'
                                 : 'bg-emerald-100 text-emerald-900 border border-emerald-200'
@@ -183,7 +185,7 @@ export const CartDrawer = () => {
                         <div className="flex items-center gap-2 mt-2">
                           <button
                             type="button"
-                            onClick={() => updateQty(item.id, -1)}
+                            onClick={() => updateQty(item.id, -1, item.selectedMedium)}
                             className="w-11 h-11 rounded-lg bg-slate-100 border border-slate-200 text-slate-700 font-bold flex items-center justify-center hover:bg-slate-200 active:scale-95 transition-transform"
                             aria-label="Decrease quantity"
                           >
@@ -192,12 +194,21 @@ export const CartDrawer = () => {
                           <span className="text-xs font-bold text-slate-800 w-4 text-center">{item.qty}</span>
                           <button
                             type="button"
-                            onClick={() => updateQty(item.id, 1)}
+                            onClick={() => updateQty(item.id, 1, item.selectedMedium)}
                             disabled={!stockState.inStock || stockState.atLimit}
                             className="w-11 h-11 rounded-lg bg-slate-100 border border-slate-200 text-slate-700 font-bold flex items-center justify-center hover:bg-slate-200 active:scale-95 transition-transform disabled:opacity-40 disabled:cursor-not-allowed"
                             aria-label="Increase quantity"
                           >
                             <Plus className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => removeFromCart(item.id, item.selectedMedium)}
+                            className="w-11 h-11 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 flex items-center justify-center transition-colors ml-auto cursor-pointer touch-manipulation"
+                            aria-label={`Remove ${item.title} from cart`}
+                            title="Remove from cart"
+                          >
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
                       </div>

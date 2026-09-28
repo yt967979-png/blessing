@@ -275,9 +275,10 @@ export default function CartPage() {
 
               {cart.map((item) => {
                 const stockState = getCartItemStockState(item, products);
+                const itemCompositeKey = `${item.id}::${item.selectedMedium || 'default'}`;
                 return (
                   <div
-                    key={item.id}
+                    key={itemCompositeKey}
                     className={`bg-white border rounded-2xl p-4 sm:p-6 flex gap-4 sm:gap-6 items-center shadow-xs ${
                       stockState.blocking ? 'border-red-300' : 'border-slate-200'
                     }`}
@@ -294,7 +295,7 @@ export default function CartPage() {
                       <div className="flex items-center gap-2 flex-wrap mb-0.5">
                         <span className="text-[10px] font-bold text-blue-600 uppercase">{item.cls} Standard</span>
                         {item.selectedMedium && (
-                          <span className={`text-[9.5px] font-black px-1.5 py-0.2 rounded ${
+                          <span className={`text-[9.5px] font-black px-1.5 py-0.5 rounded ${
                             item.selectedMedium.toLowerCase().includes('tamil')
                               ? 'bg-amber-100 text-amber-900 border border-amber-200'
                               : 'bg-emerald-100 text-emerald-900 border border-emerald-200'
@@ -325,7 +326,7 @@ export default function CartPage() {
                       <div className="flex items-center gap-3 mt-3 flex-wrap">
                         <div className="flex items-center gap-2">
                           <button
-                            onClick={() => updateQty(item.id, -1)}
+                            onClick={() => updateQty(item.id, -1, item.selectedMedium)}
                             className="w-11 h-11 rounded-lg bg-slate-100 border border-slate-200 font-bold flex items-center justify-center hover:bg-slate-200"
                             aria-label="Decrease quantity"
                           >
@@ -333,7 +334,7 @@ export default function CartPage() {
                           </button>
                           <span className="text-xs font-bold w-6 text-center">{item.qty}</span>
                           <button
-                            onClick={() => updateQty(item.id, 1)}
+                            onClick={() => updateQty(item.id, 1, item.selectedMedium)}
                             disabled={!stockState.inStock || stockState.atLimit}
                             className="w-11 h-11 rounded-lg bg-slate-100 border border-slate-200 font-bold flex items-center justify-center hover:bg-slate-200 disabled:opacity-40 disabled:cursor-not-allowed"
                             aria-label="Increase quantity"
@@ -343,14 +344,14 @@ export default function CartPage() {
                         </div>
 
                         <button
-                          onClick={() => saveForLater(item.id)}
+                          onClick={() => saveForLater(item.id, item.selectedMedium)}
                           className="text-blue-600 hover:text-blue-800 text-xs font-semibold flex items-center gap-1 min-h-11 px-2"
                         >
                           <Bookmark className="w-4 h-4" />
                           Save for later
                         </button>
                         <button
-                          onClick={() => removeFromCart(item.id)}
+                          onClick={() => removeFromCart(item.id, item.selectedMedium)}
                           className="text-red-500 hover:text-red-700 text-xs font-semibold flex items-center gap-1 ml-auto min-h-11 px-2"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -423,7 +424,7 @@ export default function CartPage() {
                   </h2>
                   {savedForLater.map((item) => (
                     <div
-                      key={item.id}
+                      key={`${item.id}::${item.selectedMedium || 'default'}`}
                       className="bg-white border border-dashed border-slate-200 rounded-2xl p-4 flex gap-4 items-center"
                     >
                       <Image
@@ -435,13 +436,20 @@ export default function CartPage() {
                         unoptimized={imageNeedsUnoptimized(item.image || '')}
                       />
                       <div className="flex-1 min-w-0">
-                        <p className="font-bold text-sm text-[#001B3A] truncate">{item.title}</p>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className="font-bold text-sm text-[#001B3A] truncate">{item.title}</p>
+                          {item.selectedMedium && (
+                            <span className="text-[9px] font-bold text-blue-600 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded">
+                              {item.selectedMedium}
+                            </span>
+                          )}
+                        </div>
                         <p className="text-xs text-slate-500">₹{item.price}</p>
                       </div>
                       <button
                         type="button"
-                        onClick={() => moveToCartFromSaved(item.id)}
-                        className="text-xs font-extrabold text-white bg-[#0044AA] px-3 py-2 rounded-lg"
+                        onClick={() => moveToCartFromSaved(item.id, item.selectedMedium)}
+                        className="text-xs font-extrabold text-white bg-[#0044AA] px-3 py-2 rounded-lg cursor-pointer"
                       >
                         Move to cart
                       </button>

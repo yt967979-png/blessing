@@ -1177,9 +1177,10 @@ export default function CheckoutPage() {
               <div className="space-y-2">
                 {cart.map((item) => {
                   const stockState = getCartItemStockState(item, products);
+                  const itemKey = `${item.id}::${item.selectedMedium || 'default'}`;
                   return (
                     <div
-                      key={item.id}
+                      key={itemKey}
                       className={`flex gap-3 items-center border rounded-xl p-3 ${
                         stockState.blocking ? 'border-red-300 bg-red-50/40' : 'border-slate-100'
                       }`}
@@ -1196,7 +1197,7 @@ export default function CheckoutPage() {
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <p className="font-bold text-slate-900 truncate">{item.title}</p>
                           {item.selectedMedium && (
-                            <span className={`inline-block text-[9px] font-black px-1.5 py-0.2 rounded shrink-0 ${
+                            <span className={`inline-block text-[9px] font-black px-1.5 py-0.5 rounded shrink-0 ${
                               item.selectedMedium.toLowerCase().includes('tamil')
                                 ? 'bg-amber-100 text-amber-900 border border-amber-200'
                                 : 'bg-emerald-100 text-emerald-900 border border-emerald-200'
