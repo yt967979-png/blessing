@@ -21,6 +21,7 @@ import {
   RotateCcw,
   Clock,
   Plus,
+  MessageCircle,
 } from 'lucide-react';
 import OrderStatusStamp from './OrderStatusStamp';
 import { openShippingLabelPrint } from '@/lib/shippingLabel';
@@ -73,6 +74,69 @@ interface OrdersSectionProps {
 }
 
 const fmt = (n: number) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
+
+/**
+ * Builds prefilled WhatsApp order summary link (same format as custom WhatsApp order flow)
+ */
+export function getWhatsAppShareUrl(order: Order): string {
+  const cleanPhone = String(order.customerPhone || '').replace(/\D/g, '').slice(-10);
+  const cleanName = order.customerName || 'Customer';
+  const orderNumber = order.orderId || order.id;
+  const trackingUrl = `https://blessingpowerguide.in/track?orderId=${encodeURIComponent(orderNumber)}`;
+
+  const items = Array.isArray(order.items) ? order.items : [];
+  const itemsSummary = items.length > 0
+    ? items.map((i) => `• ${i.qty}x ${i.title}${i.medium ? ` (${i.medium})` : ''}${i.subtotal ? ` - ₹${i.subtotal}` : i.price ? ` - ₹${i.price * i.qty}` : ''}`).join('\n')
+    : '• Study Guide Books';
+
+  const totalBooks = items.reduce((acc, cur) => acc + (cur.qty || 1), 0);
+  const addressParts = [order.address, order.city, order.pincode ? `- ${order.pincode}` : '', order.state].filter(Boolean);
+  const deliveryLine = addressParts.join(', ');
+
+  const hasAwb = Boolean(order.trackingNumber && !order.trackingNumber.startsWith('SHP-') && !order.trackingNumber.includes('Pending'));
+  const currentFulfillment = fulfillmentStatus(order) || order.courierStatus || 'Processing';
+
+  const lines = [
+    `Dear ${cleanName},`,
+    '',
+    'Thank you for your order with Blessing Power Guide.',
+    '',
+    `Order ID: #${orderNumber}`,
+    `Books: ${totalBooks}`,
+    `Amount payable: ₹${order.totalAmount}`,
+    `Payment: ${order.paymentMethod || 'Online'} (${order.paymentStatus || 'Paid'})`,
+    `Status: ${currentFulfillment}`,
+  ];
+
+  if (hasAwb) {
+    lines.push(`ST Courier AWB: ${order.trackingNumber}`);
+    lines.push(`Courier Tracking: ${order.trackingUrl || `https://stcourier.com/track/view?docket=${order.trackingNumber}`}`);
+  }
+
+  lines.push('');
+  lines.push('Items:');
+  lines.push(itemsSummary);
+
+  if (deliveryLine) {
+    lines.push('');
+    lines.push('Delivery address:');
+    lines.push(deliveryLine);
+  }
+
+  lines.push('');
+  lines.push('Track your order:');
+  lines.push(trackingUrl);
+  lines.push('');
+  lines.push('Your order will be dispatched via ST Courier Express.');
+  lines.push('');
+  lines.push('Blessing Power Guide');
+  lines.push('Tamil Nadu State Board guides (Classes 6–12)');
+
+  const message = lines.join('\n');
+  return cleanPhone
+    ? `https://wa.me/91${cleanPhone}?text=${encodeURIComponent(message)}`
+    : `https://wa.me/?text=${encodeURIComponent(message)}`;
+}
 
 export const OrdersSection: React.FC<OrdersSectionProps> = ({
   orders,
@@ -532,14 +596,26 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
 
                         {/* Actions */}
                         <td className="p-3.5 text-right">
-                          <button
-                            type="button"
-                            onClick={() => setActiveDrawerOrder(order)}
-                            className="p-1.5 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors inline-block cursor-pointer"
-                            title="View Order Details"
-                          >
-                            <ChevronRight className="w-4 h-4" />
-                          </button>
+                          <div className="flex items-center justify-end gap-1.5">
+                            <a
+                              href={getWhatsAppShareUrl(order)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-[#25D366]/10 hover:bg-[#25D366]/20 text-[#128C7E] border border-[#25D366]/30 rounded-lg text-[11px] font-bold transition-all shadow-2xs hover:shadow-xs cursor-pointer"
+                              title={`Share Order #${order.orderId} via WhatsApp`}
+                            >
+                              <MessageCircle className="w-3.5 h-3.5 text-[#25D366] fill-[#25D366]/20" />
+                              <span>Share</span>
+                            </a>
+                            <button
+                              type="button"
+                              onClick={() => setActiveDrawerOrder(order)}
+                              className="p-1.5 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors inline-block cursor-pointer"
+                              title="View Order Details"
+                            >
+                              <ChevronRight className="w-4 h-4" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -595,13 +671,25 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
 
                   <div className="border-t border-slate-100 pt-2 flex items-center justify-between text-xs">
                     <span className="font-mono font-bold text-slate-900">{fmt(order.totalAmount)}</span>
-                    <button
-                      type="button"
-                      onClick={() => setActiveDrawerOrder(order)}
-                      className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-colors cursor-pointer"
-                    >
-                      View Details →
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <a
+                        href={getWhatsAppShareUrl(order)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-2.5 py-1.5 bg-[#25D366]/10 hover:bg-[#25D366]/20 text-[#128C7E] border border-[#25D366]/30 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                        title="Share on WhatsApp"
+                      >
+                        <MessageCircle className="w-3.5 h-3.5 text-[#25D366] fill-[#25D366]/20" />
+                        <span>Share</span>
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => setActiveDrawerOrder(order)}
+                        className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                      >
+                        View Details →
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
@@ -664,10 +752,22 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
                   <p className="text-slate-600">
                     {activeDrawerOrder.city} — <strong className="text-slate-900">{activeDrawerOrder.pincode}</strong>
                   </p>
-                  <p className="text-blue-700 font-bold pt-1">
-                    ☎ +91 {activeDrawerOrder.customerPhone}
-                    {activeDrawerOrder.customerAltPhone ? ` • Alt: +91 ${activeDrawerOrder.customerAltPhone}` : ''}
-                  </p>
+                  <div className="flex items-center justify-between pt-1">
+                    <p className="text-blue-700 font-bold">
+                      ☎ +91 {activeDrawerOrder.customerPhone}
+                      {activeDrawerOrder.customerAltPhone ? ` • Alt: +91 ${activeDrawerOrder.customerAltPhone}` : ''}
+                    </p>
+                    <a
+                      href={getWhatsAppShareUrl(activeDrawerOrder)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 px-2 py-1 bg-[#25D366]/10 hover:bg-[#25D366]/20 text-[#128C7E] border border-[#25D366]/30 rounded text-[11px] font-bold transition-colors cursor-pointer"
+                      title="Send message to customer on WhatsApp"
+                    >
+                      <MessageCircle className="w-3 h-3 text-[#25D366] fill-[#25D366]/20" />
+                      <span>WhatsApp</span>
+                    </a>
+                  </div>
                 </div>
               </div>
 
@@ -831,25 +931,36 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
             </div>
 
             {/* Drawer Footer Actions */}
-            <div className="p-4 bg-white border-t border-slate-200 flex items-center justify-between gap-3">
-              <button
-                type="button"
-                onClick={() => openShippingLabelPrint(activeDrawerOrder, 'thermal4x6')}
-                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+            <div className="p-4 bg-white border-t border-slate-200 flex flex-col gap-2.5">
+              <a
+                href={getWhatsAppShareUrl(activeDrawerOrder)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full py-2.5 px-4 bg-[#25D366] hover:bg-[#20ba5a] text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs hover:shadow-md"
               >
-                <Printer className="w-4 h-4 text-[#2874f0]" />
-                <span>4×6&quot; Thermal Label</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  window.open(`/api/orders/${activeDrawerOrder.id}/invoice`, '_blank');
-                }}
-                className="flex-1 py-2.5 bg-[#2874f0] hover:bg-blue-700 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs"
-              >
-                <FileText className="w-4 h-4" />
-                <span>Bill of Supply</span>
-              </button>
+                <MessageCircle className="w-4 h-4 fill-white" />
+                <span>Share Order Details via WhatsApp</span>
+              </a>
+              <div className="flex items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={() => openShippingLabelPrint(activeDrawerOrder, 'thermal4x6')}
+                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Printer className="w-4 h-4 text-[#2874f0]" />
+                  <span>4×6&quot; Thermal Label</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    window.open(`/api/orders/${activeDrawerOrder.id}/invoice`, '_blank');
+                  }}
+                  className="flex-1 py-2.5 bg-[#2874f0] hover:bg-blue-700 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                >
+                  <FileText className="w-4 h-4" />
+                  <span>Bill of Supply</span>
+                </button>
+              </div>
             </div>
           </div>
         </>
