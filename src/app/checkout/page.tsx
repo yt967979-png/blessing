@@ -690,6 +690,7 @@ export default function CheckoutPage() {
             title: i.title,
             qty: i.qty,
             price: i.price,
+            selectedMedium: i.selectedMedium || (i as any).medium || null,
           })),
         });
 
