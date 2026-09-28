@@ -562,25 +562,62 @@ function AdminPageInner() {
   };
 
   // Cancel order handler
-  const handleCancelOrder = async (orderId: string) => {
-    if (!user) return;
-    const reason = prompt('Please enter cancellation reason for student records:');
-    if (!reason) return;
+  const handleCancelOrder = async (orderId: string, reason?: string) => {
+    if (!user) return false;
+    const cancelReason = reason || prompt('Please enter cancellation reason for student records:');
+    if (!cancelReason) return false;
     try {
       const res = await fetch('/api/orders/cancel', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders(user) },
-        body: JSON.stringify({ orderId, reason }),
+        body: JSON.stringify({ orderId, reason: cancelReason }),
       });
       const data = await res.json();
       if (res.ok) {
         showToast(`🛑 Order #${orderId} cancelled & stock released`);
         loadLiveOrders();
+        return true;
       } else {
         showToast(`❌ ${data.error || 'Failed to cancel order'}`);
+        return false;
       }
     } catch {
       showToast('❌ Network error cancelling order');
+      return false;
+    }
+  };
+
+  // Return order handler (Delivered or In-Transit order returns & RTO)
+  const handleReturnOrder = async (
+    orderId: string,
+    reason?: string,
+    refund: boolean = true,
+    restoreStock: boolean = true
+  ) => {
+    if (!user) return false;
+    try {
+      const res = await fetch('/api/orders/return', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders(user) },
+        body: JSON.stringify({
+          orderId,
+          reason: reason || 'Admin processed return / RTO',
+          refund,
+          restoreStock,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showToast(`↩️ Order #${orderId} marked as Returned (${data.refunded ? 'Refunded via Razorpay' : 'No refund'})`);
+        loadLiveOrders();
+        return true;
+      } else {
+        showToast(`❌ ${data.error || 'Failed to process return'}`);
+        return false;
+      }
+    } catch {
+      showToast('❌ Network error processing return');
+      return false;
     }
   };
 

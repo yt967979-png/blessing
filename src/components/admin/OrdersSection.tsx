@@ -26,7 +26,7 @@ import OrderStatusStamp from './OrderStatusStamp';
 import { openShippingLabelPrint } from '@/lib/shippingLabel';
 import { CreateCustomOrderModal } from './CreateCustomOrderModal';
 import type { Product } from '@/context/StoreContext';
-import { adminFulfillmentBucket, fulfillmentStatus, isRecordCancelled } from '@/lib/orderStatus';
+import { adminFulfillmentBucket, fulfillmentStatus, isRecordCancelled, isParcelDelivered } from '@/lib/orderStatus';
 
 interface OrderItem {
   title: string;
@@ -67,7 +67,7 @@ interface OrdersSectionProps {
   products?: Product[];
   onUpdateStatus: (orderId: string, newStatus: string) => Promise<void>;
   onAssignAwb: (orderId: string, awb: string) => Promise<void>;
-  onCancelOrder?: (orderId: string) => Promise<void>;
+  onCancelOrder?: (orderId: string, reason?: string) => Promise<boolean | void>;
   onRefreshOrders?: () => void;
   onShowToast: (msg: string) => void;
 }
@@ -92,6 +92,47 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
   const [awbInputs, setAwbInputs] = useState<Record<string, string>>({});
   const [awbSaving, setAwbSaving] = useState<Record<string, boolean>>({});
   const [showCustomOrderModal, setShowCustomOrderModal] = useState(false);
+
+  // ── Modal state for Pre-AWB Cancel & Refund ──────────────────────────────────
+  const [orderToCancel, setOrderToCancel] = useState<Order | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelLoading, setCancelLoading] = useState(false);
+
+  const handleConfirmCancel = async () => {
+    if (!orderToCancel) return;
+    const targetOrder = orderToCancel;
+    setCancelLoading(true);
+    try {
+      if (onCancelOrder) {
+        await onCancelOrder(targetOrder.orderId, cancelReason || 'Cancelled prior to ST Courier dispatch');
+      } else {
+        const res = await fetch('/api/orders/cancel', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            orderId: targetOrder.orderId,
+            reason: cancelReason || 'Cancelled prior to ST Courier dispatch',
+          }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          onShowToast(`🛑 Order #${targetOrder.orderId} cancelled & 100% refund issued`);
+          onRefreshOrders?.();
+        } else {
+          onShowToast(`❌ ${data.error || 'Failed to cancel order'}`);
+        }
+      }
+      setOrderToCancel(null);
+      setCancelReason('');
+      if (activeDrawerOrder?.id === targetOrder.id) {
+        setActiveDrawerOrder(null);
+      }
+    } catch {
+      onShowToast('❌ Network error cancelling order');
+    } finally {
+      setCancelLoading(false);
+    }
+  };
 
   // ── Status counts for filter pills ──────────────────────────────────────────
   const counts = useMemo(() => {
@@ -716,6 +757,77 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
                   </div>
                 )}
               </div>
+
+              {/* Order Cancellation & Refund Policy: Strict Pre-AWB Only */}
+              <div className="bg-white p-4 rounded-2xl border border-slate-200 space-y-3 shadow-xs">
+                <h4 className="font-bold text-xs text-slate-900 uppercase tracking-wider border-b border-slate-100 pb-1.5 flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <AlertTriangle className="w-3.5 h-3.5 text-slate-600" />
+                    <span>Order Actions & Cancellation Policy</span>
+                  </div>
+                </h4>
+
+                {(() => {
+                  const hasAwb = Boolean(
+                    activeDrawerOrder.trackingNumber &&
+                    !activeDrawerOrder.trackingNumber.startsWith('SHP-') &&
+                    !activeDrawerOrder.trackingNumber.toLowerCase().includes('pending')
+                  );
+                  const drawerFmtStatus = (fulfillmentStatus(activeDrawerOrder) || activeDrawerOrder.orderStatus || '').toLowerCase();
+                  const isDispatched =
+                    drawerFmtStatus.includes('transit') ||
+                    drawerFmtStatus.includes('handed') ||
+                    drawerFmtStatus.includes('delivery') ||
+                    drawerFmtStatus.includes('delivered') ||
+                    drawerFmtStatus.includes('rto');
+
+                  if (isRecordCancelled(activeDrawerOrder)) {
+                    return (
+                      <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-800 text-xs flex items-center gap-2">
+                        <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+                        <div>
+                          <p className="font-bold">Order Cancelled & Refunded</p>
+                          <p className="text-[11px] text-red-700">Stock released back to inventory. 100% Razorpay refund issued.</p>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  if (hasAwb || isDispatched) {
+                    return (
+                      <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 text-xs space-y-1.5">
+                        <div className="flex items-center gap-2 text-slate-900 font-bold">
+                          <Truck className="w-4 h-4 text-[#2874f0] shrink-0" />
+                          <span>Handed to ST Courier — Non-Refundable</span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 leading-relaxed">
+                          ST Courier AWB <strong className="font-mono text-slate-800">{activeDrawerOrder.trackingNumber || 'Assigned'}</strong> is active.
+                          Because this parcel has been handed over to ST Courier, no cancellation, return, or refund is permitted.
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-2">
+                      <div className="p-2.5 bg-blue-50/70 border border-blue-100 rounded-xl text-[11px] text-blue-900 leading-relaxed">
+                        ℹ️ <strong>Pre-Dispatch Window:</strong> ST Courier AWB has not been assigned yet. Order can still be cancelled with a 100% Razorpay refund to the student.
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOrderToCancel(activeDrawerOrder);
+                          setCancelReason('');
+                        }}
+                        className="w-full py-2.5 px-3 bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                      >
+                        <AlertTriangle className="w-3.5 h-3.5 text-red-600" />
+                        <span>Cancel Order & Refund Student (Pre-AWB Only)</span>
+                      </button>
+                    </div>
+                  );
+                })()}
+              </div>
             </div>
 
             {/* Drawer Footer Actions */}
@@ -741,6 +853,67 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
             </div>
           </div>
         </>
+      )}
+
+      {/* ─── Cancel Order Modal (Pre-AWB Only) ────────────────────────── */}
+      {orderToCancel && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white rounded-3xl border border-slate-200 max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2 text-red-600 font-bold text-base">
+                <AlertTriangle className="w-5 h-5" />
+                <span>Cancel Order #{orderToCancel.orderId}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOrderToCancel(null)}
+                className="p-1 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3 bg-red-50 border border-red-200 rounded-2xl text-xs text-red-800 space-y-1">
+              <p className="font-bold">⚠️ Pre-AWB Cancellation & Full Refund</p>
+              <p className="text-[11px] leading-relaxed">
+                Because this parcel has <strong>not yet been given an ST Courier AWB</strong>, you may cancel it. Cancelling will release all reserved inventory for{' '}
+                <strong>{orderToCancel.customerName}</strong> and trigger an automatic 100% Razorpay refund of{' '}
+                <strong>{fmt(orderToCancel.totalAmount)}</strong>.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-slate-700">
+                Cancellation Reason (Required for audit log):
+              </label>
+              <input
+                type="text"
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                placeholder="e.g. Student requested cancellation prior to ST Courier dispatch"
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-red-500 focus:bg-white"
+              />
+            </div>
+
+            <div className="flex gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setOrderToCancel(null)}
+                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl cursor-pointer transition-colors"
+              >
+                Keep Order
+              </button>
+              <button
+                type="button"
+                disabled={cancelLoading}
+                onClick={handleConfirmCancel}
+                className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-xl cursor-pointer shadow-md transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
+              >
+                {cancelLoading ? 'Cancelling...' : 'Confirm Pre-AWB Cancel'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <CreateCustomOrderModal

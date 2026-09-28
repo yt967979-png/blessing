@@ -52,6 +52,9 @@ export const OrderStatusStamp: React.FC<OrderStatusStampProps> = ({
   } else if (normalized.includes('confirm') || normalized.includes('placed') || normalized.includes('paid')) {
     colorClass = 'text-[#0284c7] border-[#0284c7]/80 bg-[#0284c7]/5 ring-1 ring-[#0284c7]/30';
     label = 'CONFIRMED';
+  } else if (normalized.includes('return')) {
+    colorClass = 'text-[#7C3AED] border-[#7C3AED]/80 bg-[#7C3AED]/5 ring-1 ring-[#7C3AED]/30';
+    label = 'RETURNED';
   } else if (normalized.includes('cancel') || normalized.includes('refund') || normalized.includes('fail')) {
     colorClass = 'text-[#C43B3B] border-[#C43B3B]/80 bg-[#C43B3B]/5 ring-1 ring-[#C43B3B]/30';
     label = normalized.includes('refund') ? 'REFUNDED' : 'CANCELLED';

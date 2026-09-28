@@ -51,7 +51,7 @@ export async function executeOrderCancel(opts: CancelOrderOpts): Promise<CancelR
     const ord = await queryDb(
       `SELECT id, order_number, user_id, order_status, payment_method, payment_status,
               shipping_address, coupon_id, razorpay_payment_id, total_amount,
-              razorpay_refund_id, razorpay_order_id
+              razorpay_refund_id, razorpay_order_id, awb_number
        FROM orders WHERE order_number = $1 OR id = $1 LIMIT 1`,
       [orderId]
     );
@@ -62,32 +62,42 @@ export async function executeOrderCancel(opts: CancelOrderOpts): Promise<CancelR
     const row = ord.rows[0];
     const status = String(row.order_status || '').toLowerCase();
 
-    if (isReturn && status === 'returned') {
-      const alreadyRefunded = String(row.payment_status || '').toLowerCase().includes('refund');
-      return {
-        ok: true,
-        orderNumber: row.order_number,
-        duplicate: true,
-        refunded: alreadyRefunded,
-        refundId: row.razorpay_refund_id || undefined,
-      };
-    }
-
-    if (!isReturn && isOrderCancelled(status)) {
-      const alreadyRefunded = String(row.payment_status || '').toLowerCase().includes('refund');
-      return {
-        ok: true,
-        orderNumber: row.order_number,
-        duplicate: true,
-        refunded: alreadyRefunded,
-        refundId: row.razorpay_refund_id || undefined,
-      };
-    }
-
-    if (opts.actor === 'admin' && isParcelDelivered(status) && !isReturn) {
+    // Strict Policy: NO RETURNS accepted for books once ordered/dispatched.
+    if (isReturn) {
       return {
         ok: false,
-        error: 'Delivered orders cannot be cancelled. Use return flow instead.',
+        error: 'Books are strictly non-returnable. No returns or return-refunds are accepted once dispatched or delivered.',
+        status: 400,
+      };
+    }
+
+    if (isOrderCancelled(status)) {
+      const alreadyRefunded = String(row.payment_status || '').toLowerCase().includes('refund');
+      return {
+        ok: true,
+        orderNumber: row.order_number,
+        duplicate: true,
+        refunded: alreadyRefunded,
+        refundId: row.razorpay_refund_id || undefined,
+      };
+    }
+
+    // Strict Policy: REFUND ONLY BEFORE AWB ASSIGNMENT.
+    // Assigning an AWB indicates parcel is handed over to ST Courier.
+    // Once AWB is assigned or order is in transit/delivered, NO CANCELLATION AND NO REFUND.
+    const awb = String(row.awb_number || '').trim();
+    const hasAwb = Boolean(awb && !awb.startsWith('SHP-') && !awb.toLowerCase().includes('pending'));
+    const isDispatched =
+      status.includes('transit') ||
+      status.includes('handed') ||
+      status.includes('delivery') ||
+      status.includes('delivered') ||
+      status.includes('rto');
+
+    if (opts.actor !== 'system' && (hasAwb || isDispatched)) {
+      return {
+        ok: false,
+        error: `Cannot cancel or refund order #${row.order_number}: ST Courier AWB has already been assigned (${awb || 'Handed to ST Courier'}). Once handed to ST Courier, orders cannot be cancelled or refunded.`,
         status: 409,
       };
     }
