@@ -31,20 +31,25 @@ function trimDescription(text: string | null | undefined, maxChars = 155): strin
 }
 
 async function getBookMeta(slug: string) {
-  const cleanSlug = String(slug || '').trim().toLowerCase();
+  const rawSlug = String(slug || '').trim();
+  const cleanSlug = rawSlug.toLowerCase();
+  const decodedSlug = decodeURIComponent(cleanSlug).trim();
+  const hyphenSlug = decodedSlug.replace(/[^a-z0-9]+/g, '-');
+  const spaceSlug = decodedSlug.replace(/[-_]+/g, ' ');
   const now = Date.now();
 
   // 1. Check local process memory cache
-  const mem = metaMemoryCache.get(cleanSlug);
+  const mem = metaMemoryCache.get(cleanSlug) || metaMemoryCache.get(hyphenSlug);
   if (mem && now - mem.timestamp < META_TTL_MS) {
     return mem.data;
   }
 
   // 2. Check Redis cache
   try {
-    const redisVal = await redisGetJson<any>(`book_meta:${cleanSlug}`);
+    const redisVal = (await redisGetJson<any>(`book_meta:${cleanSlug}`)) || (await redisGetJson<any>(`book_meta:${hyphenSlug}`));
     if (redisVal) {
       metaMemoryCache.set(cleanSlug, { data: redisVal, timestamp: now });
+      metaMemoryCache.set(hyphenSlug, { data: redisVal, timestamp: now });
       return redisVal;
     }
   } catch {}
@@ -70,9 +75,16 @@ async function getBookMeta(slug: string) {
               COALESCE(AVG(r.rating), 0)::numeric(3,1) as avg_rating
        FROM books b
        LEFT JOIN reviews r ON b.id = r.book_id
-       WHERE b.slug = $1 OR b.id = $1 OR b.slug ILIKE $1
+       WHERE b.slug = $1 
+          OR b.id = $1 
+          OR lower(b.slug) = $2 
+          OR lower(b.slug) = $3 
+          OR lower(b.slug) = $4 
+          OR lower(replace(b.title, ' ', '-')) = $3
+          OR b.slug ILIKE $1 
+          OR b.slug ILIKE $3
        GROUP BY b.id LIMIT 1`,
-      [slug]
+      [rawSlug, cleanSlug, hyphenSlug, spaceSlug]
     );
     if (!res.rows || res.rows.length === 0) return null;
     const row = res.rows[0];
