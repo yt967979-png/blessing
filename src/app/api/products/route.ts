@@ -455,7 +455,7 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    const bookStatus = status === 'draft' ? 'draft' : (stockQty > 0 ? 'published' : 'out_of_stock');
+    const bookStatus = status === 'draft' ? 'draft' : (finalIsComingSoon ? 'coming_soon' : (stockQty > 0 ? 'published' : 'out_of_stock'));
 
     const id = `bpg-${Date.now()}`;
     const slug = slugFromTitle(String(title), id);

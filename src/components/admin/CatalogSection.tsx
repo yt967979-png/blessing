@@ -215,11 +215,13 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
   const editImageInputRef = useRef<HTMLInputElement>(null);
   const [editComboSubjects, setEditComboSubjects] = useState<string[]>([]);
   const [editCustomComboSubjectInput, setEditCustomComboSubjectInput] = useState('');
+  const [editComingSoon, setEditComingSoon] = useState<boolean>(false);
 
   // New publication modal states
   const [newTitle, setNewTitle] = useState('');
   const [newCls, setNewCls] = useState('10th');
   const [newMedium, setNewMedium] = useState<string>('Both');
+  const [newComingSoon, setNewComingSoon] = useState<boolean>(false);
   const [selectedSubjectOption, setSelectedSubjectOption] = useState('Mathematics');
   const [customSubjectText, setCustomSubjectText] = useState('');
   const [selectedComboSubjects, setSelectedComboSubjects] = useState<string[]>([
@@ -359,6 +361,7 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
       : [];
     setEditComboSubjects(initialSubs);
     setEditCustomComboSubjectInput('');
+    setEditComingSoon(Boolean(p.isComingSoon || p.is_coming_soon || p.status === 'coming_soon'));
   };
 
   const handleEditMediumChange = (newMed: string) => {
@@ -466,8 +469,10 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
         stockEnglish: numStockEnglish,
         stock_tamil: numStockTamil,
         stock_english: numStockEnglish,
-        inStock: isAvailable,
-        status: isAvailable ? 'published' : 'out_of_stock',
+        isComingSoon: editComingSoon,
+        is_coming_soon: editComingSoon,
+        inStock: editComingSoon ? false : isAvailable,
+        status: editComingSoon ? 'coming_soon' : (isAvailable ? 'published' : 'out_of_stock'),
         samplePdfUrl: editSamplePdf.trim() || null,
       });
       onShowToast('✅ Publication details updated');
@@ -680,7 +685,9 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
         stockEnglish: numStockEnglish,
         stock_tamil: numStockTamil,
         stock_english: numStockEnglish,
-        status: targetStatus,
+        isComingSoon: newComingSoon,
+        is_coming_soon: newComingSoon,
+        status: newComingSoon ? 'coming_soon' : targetStatus,
         badge: newBadge.trim() || (isCombo ? 'Combo Set' : ''),
         description: isCombo
           ? `Complete ${newCls} Standard All-in-One Combo Guide Pack (${selectedComboSubjects.join(', ')}). Covers full Tamil Nadu State Board syllabus with solved question papers.`
@@ -713,7 +720,9 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
       }
 
       onShowToast(
-        targetStatus === 'published'
+        newComingSoon
+          ? `🚀 "${newTitle}" added as Coming Soon!`
+          : targetStatus === 'published'
           ? `🎉 "${newTitle}" published live to bookstore!`
           : `📝 "${newTitle}" saved as Draft`
       );
@@ -734,6 +743,7 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
       setNewBadge('Popular');
       setSelectedComboSubjects(['Tamil', 'English', 'Mathematics', 'Science', 'Social Science']);
       setCustomComboSubjectInput('');
+      setNewComingSoon(false);
       setShowAdvanced(false);
     } catch (err: any) {
       onShowToast(`❌ ${err?.message || 'Failed to save publication'}`);
@@ -1248,65 +1258,82 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                       {/* Stock Inventory */}
                       <td className="p-4">
                         {isEditing ? (
-                          editMedium === 'Both' ? (
-                            <div className="space-y-1.5 min-w-[140px]">
-                              <span className="text-[10px] font-black uppercase text-blue-900 block">
-                                Copies by Medium:
-                              </span>
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-[10px] font-bold text-amber-900 bg-amber-100 px-1 py-0.5 rounded w-10 text-center shrink-0">தமிழ்</span>
+                          <div className="space-y-1.5">
+                            {editMedium === 'Both' ? (
+                              <div className="space-y-1.5 min-w-[140px]">
+                                <span className="text-[10px] font-black uppercase text-blue-900 block">
+                                  Copies by Medium:
+                                </span>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-[10px] font-bold text-amber-900 bg-amber-100 px-1 py-0.5 rounded w-10 text-center shrink-0">தமிழ்</span>
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    value={editStockTamil}
+                                    onChange={(e) => setEditStockTamil(Math.max(0, Number(e.target.value) || 0))}
+                                    className="w-16 px-2 py-1 bg-white border border-amber-300 rounded-lg text-xs font-bold outline-none"
+                                    placeholder="Tamil"
+                                  />
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-[10px] font-bold text-emerald-900 bg-emerald-100 px-1 py-0.5 rounded w-10 text-center shrink-0">Eng</span>
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    value={editStockEnglish}
+                                    onChange={(e) => setEditStockEnglish(Math.max(0, Number(e.target.value) || 0))}
+                                    className="w-16 px-2 py-1 bg-white border border-emerald-300 rounded-lg text-xs font-bold outline-none"
+                                    placeholder="English"
+                                  />
+                                </div>
+                                <div className="text-[9.5px] font-black text-slate-500 pt-0.5">
+                                  Total: {Number(editStockTamil || 0) + Number(editStockEnglish || 0)} in Rack
+                                </div>
+                              </div>
+                            ) : (
+                              <div>
+                                <span className="text-[10px] text-slate-400 block">Copies in Rack</span>
                                 <input
                                   type="number"
                                   min={0}
-                                  value={editStockTamil}
-                                  onChange={(e) => setEditStockTamil(Math.max(0, Number(e.target.value) || 0))}
-                                  className="w-16 px-2 py-1 bg-white border border-amber-300 rounded-lg text-xs font-bold outline-none"
-                                  placeholder="Tamil"
+                                  value={editStock}
+                                  onChange={(e) => setEditStock(Math.max(0, Number(e.target.value) || 0))}
+                                  className="w-20 px-2 py-1 bg-slate-50 border border-blue-400 rounded-lg text-xs font-bold outline-none"
                                 />
                               </div>
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-[10px] font-bold text-emerald-900 bg-emerald-100 px-1 py-0.5 rounded w-10 text-center shrink-0">Eng</span>
-                                <input
-                                  type="number"
-                                  min={0}
-                                  value={editStockEnglish}
-                                  onChange={(e) => setEditStockEnglish(Math.max(0, Number(e.target.value) || 0))}
-                                  className="w-16 px-2 py-1 bg-white border border-emerald-300 rounded-lg text-xs font-bold outline-none"
-                                  placeholder="English"
-                                />
-                              </div>
-                              <div className="text-[9.5px] font-black text-slate-500 pt-0.5">
-                                Total: {Number(editStockTamil || 0) + Number(editStockEnglish || 0)} in Rack
-                              </div>
-                            </div>
-                          ) : (
-                            <div>
-                              <span className="text-[10px] text-slate-400 block">Copies in Rack</span>
+                            )}
+                            <label className="flex items-center gap-1.5 cursor-pointer pt-1">
                               <input
-                                type="number"
-                                min={0}
-                                value={editStock}
-                                onChange={(e) => setEditStock(Math.max(0, Number(e.target.value) || 0))}
-                                className="w-20 px-2 py-1 bg-slate-50 border border-blue-400 rounded-lg text-xs font-bold outline-none"
+                                type="checkbox"
+                                checked={editComingSoon}
+                                onChange={(e) => setEditComingSoon(e.target.checked)}
+                                className="w-3.5 h-3.5 text-purple-600 rounded border-slate-300 cursor-pointer"
                               />
-                            </div>
-                          )
+                              <span className="text-[10px] font-bold text-purple-800">Coming Soon</span>
+                            </label>
+                          </div>
                         ) : (
                           <div className="flex flex-col gap-1 items-start">
-                            <button
-                              type="button"
-                              onClick={() => handleToggleStockStatus(p)}
-                              className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border transition-colors cursor-pointer ${
-                                isOOS
-                                  ? 'bg-red-50 text-red-600 border-red-200'
-                                  : isLow
-                                  ? 'bg-amber-50 text-amber-700 border-amber-200 animate-pulse'
-                                  : 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                              }`}
-                              title="Click to toggle in-stock / out-of-stock"
-                            >
-                              {isOOS ? 'OUT OF STOCK' : `${p.stock ?? '—'} IN RACK`}
-                            </button>
+                            {(p.isComingSoon || p.is_coming_soon || p.status === 'coming_soon') ? (
+                              <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg border bg-purple-50 text-purple-700 border-purple-200">
+                                COMING SOON
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleToggleStockStatus(p)}
+                                className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border transition-colors cursor-pointer ${
+                                  isOOS
+                                    ? 'bg-red-50 text-red-600 border-red-200'
+                                    : isLow
+                                    ? 'bg-amber-50 text-amber-700 border-amber-200 animate-pulse'
+                                    : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                }`}
+                                title="Click to toggle in-stock / out-of-stock"
+                              >
+                                {isOOS ? 'OUT OF STOCK' : `${p.stock ?? '—'} IN RACK`}
+                              </button>
+                            )}
 
                             {isProductMultiMedium(p.language) && (
                               <div className="flex items-center gap-1 mt-0.5">
@@ -1632,6 +1659,18 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                         />
                       </div>
                     )}
+                    <label className="flex items-center gap-2 p-2.5 bg-purple-50/80 border border-purple-200 rounded-xl cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={editComingSoon}
+                        onChange={(e) => setEditComingSoon(e.target.checked)}
+                        className="w-4 h-4 text-purple-600 rounded border-purple-300"
+                      />
+                      <div>
+                        <span className="text-xs font-bold text-purple-900 block leading-tight">Mark as Coming Soon</span>
+                        <span className="text-[10px] text-purple-600">Disables purchasing, shows pre-launch banner</span>
+                      </div>
+                    </label>
                   </div>
                   <div className="flex items-center gap-2 pt-1">
                     <button
@@ -1708,19 +1747,25 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                   </div>
                   <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 flex flex-col justify-between">
                     <span className="text-[10px] text-slate-500 block font-medium">Rack Stock</span>
-                    <button
-                      type="button"
-                      onClick={() => handleToggleStockStatus(p)}
-                      className={`text-[10px] font-bold px-2 py-1 rounded-lg border transition-colors cursor-pointer text-center mt-1 ${
-                        isOOS
-                          ? 'bg-red-50 text-red-600 border-red-200'
-                          : isLow
-                          ? 'bg-amber-50 text-amber-700 border-amber-200 animate-pulse'
-                          : 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                      }`}
-                    >
-                      {isOOS ? 'OUT OF STOCK' : `${p.stock ?? '—'} IN RACK`}
-                    </button>
+                    {(p.isComingSoon || p.is_coming_soon || p.status === 'coming_soon') ? (
+                      <span className="text-[10px] font-bold px-2 py-1 rounded-lg border bg-purple-50 text-purple-700 border-purple-200 text-center mt-1">
+                        COMING SOON
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleToggleStockStatus(p)}
+                        className={`text-[10px] font-bold px-2 py-1 rounded-lg border transition-colors cursor-pointer text-center mt-1 ${
+                          isOOS
+                            ? 'bg-red-50 text-red-600 border-red-200'
+                            : isLow
+                            ? 'bg-amber-50 text-amber-700 border-amber-200 animate-pulse'
+                            : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        }`}
+                      >
+                        {isOOS ? 'OUT OF STOCK' : `${p.stock ?? '—'} IN RACK`}
+                      </button>
+                    )}
                     {isProductMultiMedium(p.language) && (
                       <div className="flex items-center gap-1 mt-1 justify-center flex-wrap">
                         {(() => {
@@ -2256,6 +2301,20 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                     )}
                   </div>
                 )}
+
+                {/* Mark as Coming Soon Toggle */}
+                <label className="flex items-center gap-2.5 p-3 bg-purple-50/80 border border-purple-200 rounded-xl cursor-pointer hover:bg-purple-100/70 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={newComingSoon}
+                    onChange={(e) => setNewComingSoon(e.target.checked)}
+                    className="w-4 h-4 text-purple-600 rounded border-purple-300 accent-purple-600 cursor-pointer"
+                  />
+                  <div>
+                    <span className="text-xs font-bold text-purple-950 block leading-tight">Mark as Coming Soon (Pre-launch)</span>
+                    <span className="text-[11px] text-purple-700">Display with a &ldquo;Coming Soon&rdquo; badge on storefront. Purchasing disabled until stock arrives.</span>
+                  </div>
+                </label>
               </div>
 
               {/* SECTION 3: BOOK COVER IMAGE UPLOAD */}
@@ -2429,11 +2488,17 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                     )}
                   </div>
                   <div className="flex-1 min-w-0 space-y-1">
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="bg-blue-100 text-[#2874f0] text-[9px] font-bold px-2 py-0.5 rounded">
                         {newCls} Standard
                       </span>
-                      <span className="text-slate-400 text-[10px]">★ 5.0 (New)</span>
+                      {newComingSoon ? (
+                        <span className="bg-purple-100 text-purple-700 text-[9px] font-bold px-2 py-0.5 rounded border border-purple-200">
+                          COMING SOON
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 text-[10px]">★ 5.0 (New)</span>
+                      )}
                     </div>
                     <p className="font-bold text-xs text-slate-900 truncate">
                       {newTitle || 'Guide Book Title'}
