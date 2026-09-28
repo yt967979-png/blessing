@@ -198,6 +198,8 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
   const [editPrice, setEditPrice] = useState<number>(0);
   const [editMrp, setEditMrp] = useState<number>(0);
   const [editStock, setEditStock] = useState<number>(0);
+  const [editStockTamil, setEditStockTamil] = useState<number>(0);
+  const [editStockEnglish, setEditStockEnglish] = useState<number>(0);
   const [editCls, setEditCls] = useState<string>('10th');
   const [editSubject, setEditSubject] = useState<string>('Mathematics');
   const [editTitle, setEditTitle] = useState<string>('');
@@ -226,6 +228,8 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
   const [newMrp, setNewMrp] = useState<string>('350');
   const [newPrice, setNewPrice] = useState<string>('280');
   const [newStock, setNewStock] = useState<string>('50');
+  const [newStockTamil, setNewStockTamil] = useState<string>('25');
+  const [newStockEnglish, setNewStockEnglish] = useState<string>('25');
   const [lowStockThreshold, setLowStockThreshold] = useState<number>(5);
   const [newBadge, setNewBadge] = useState('Popular');
   const [newImage, setNewImage] = useState('');
@@ -313,6 +317,16 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
     setEditPrice(p.price);
     setEditMrp(p.mrp || p.price);
     setEditStock(p.stock ?? 0);
+    const rawTamil = p.stockTamil ?? p.stock_tamil;
+    const rawEnglish = p.stockEnglish ?? p.stock_english;
+    const stTamil = rawTamil !== undefined && rawTamil !== null
+      ? Number(rawTamil)
+      : (p.stock !== undefined && p.stock !== null ? Math.floor(Number(p.stock) / 2) : 0);
+    const stEnglish = rawEnglish !== undefined && rawEnglish !== null
+      ? Number(rawEnglish)
+      : (p.stock !== undefined && p.stock !== null ? Math.ceil(Number(p.stock) / 2) : 0);
+    setEditStockTamil(stTamil);
+    setEditStockEnglish(stEnglish);
     setEditSamplePdf(p.samplePdfUrl || '');
     setEditCls(p.cls || '10th');
     setEditSubject(p.subject || 'Mathematics');
@@ -365,7 +379,13 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
   const handleSaveEdit = async (id: string | number) => {
     const numPrice = Number(editPrice);
     const numMrp = Number(editMrp);
-    const numStock = Math.max(0, parseInt(String(editStock), 10) || 0);
+    const isBothMedium = editMedium === 'Both';
+    const numStockTamil = isBothMedium ? Math.max(0, parseInt(String(editStockTamil), 10) || 0) : null;
+    const numStockEnglish = isBothMedium ? Math.max(0, parseInt(String(editStockEnglish), 10) || 0) : null;
+    const numStock = isBothMedium
+      ? (numStockTamil || 0) + (numStockEnglish || 0)
+      : Math.max(0, parseInt(String(editStock), 10) || 0);
+
     const isCombo = isProductOrEditACombo({
       subject: editSubject,
       title: editTitle,
@@ -386,6 +406,10 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
         price: numPrice,
         mrp: numMrp,
         stock: numStock,
+        stockTamil: numStockTamil,
+        stockEnglish: numStockEnglish,
+        stock_tamil: numStockTamil,
+        stock_english: numStockEnglish,
         inStock: numStock > 0,
         samplePdfUrl: editSamplePdf.trim() || null,
       });
@@ -545,6 +569,13 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
 
     setIsSubmitting(true);
     try {
+      const isBoth = newMedium === 'Both';
+      const numStockTamil = isBoth ? Math.max(0, parseInt(String(newStockTamil), 10) || 0) : null;
+      const numStockEnglish = isBoth ? Math.max(0, parseInt(String(newStockEnglish), 10) || 0) : null;
+      const finalStock = isBoth
+        ? (numStockTamil || 0) + (numStockEnglish || 0)
+        : Math.max(0, Number(newStock) || 0);
+
       const payload = {
         title: newTitle.trim(),
         cls: newCls,
@@ -554,7 +585,11 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
         comboSubjects: isCombo ? selectedComboSubjects : undefined,
         price: numPrice,
         mrp: numMrp,
-        stock: Math.max(0, Number(newStock) || 0),
+        stock: finalStock,
+        stockTamil: numStockTamil,
+        stockEnglish: numStockEnglish,
+        stock_tamil: numStockTamil,
+        stock_english: numStockEnglish,
         status: targetStatus,
         badge: newBadge.trim() || (isCombo ? 'Combo Set' : ''),
         description: isCombo
@@ -602,6 +637,8 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
       setNewMrp('350');
       setNewPrice('280');
       setNewStock('50');
+      setNewStockTamil('25');
+      setNewStockEnglish('25');
       setNewImage('');
       setNewMedium('Both');
       setNewBadge('Popular');
@@ -1118,16 +1155,49 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                       {/* Stock Inventory */}
                       <td className="p-4">
                         {isEditing ? (
-                          <div>
-                            <span className="text-[10px] text-slate-400 block">Copies in Rack</span>
-                            <input
-                              type="number"
-                              min={0}
-                              value={editStock}
-                              onChange={(e) => setEditStock(Math.max(0, Number(e.target.value) || 0))}
-                              className="w-20 px-2 py-1 bg-slate-50 border border-blue-400 rounded-lg text-xs font-bold outline-none"
-                            />
-                          </div>
+                          editMedium === 'Both' ? (
+                            <div className="space-y-1.5 min-w-[140px]">
+                              <span className="text-[10px] font-black uppercase text-blue-900 block">
+                                Copies by Medium:
+                              </span>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] font-bold text-amber-900 bg-amber-100 px-1 py-0.5 rounded w-10 text-center shrink-0">தமிழ்</span>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  value={editStockTamil}
+                                  onChange={(e) => setEditStockTamil(Math.max(0, Number(e.target.value) || 0))}
+                                  className="w-16 px-2 py-1 bg-white border border-amber-300 rounded-lg text-xs font-bold outline-none"
+                                  placeholder="Tamil"
+                                />
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] font-bold text-emerald-900 bg-emerald-100 px-1 py-0.5 rounded w-10 text-center shrink-0">Eng</span>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  value={editStockEnglish}
+                                  onChange={(e) => setEditStockEnglish(Math.max(0, Number(e.target.value) || 0))}
+                                  className="w-16 px-2 py-1 bg-white border border-emerald-300 rounded-lg text-xs font-bold outline-none"
+                                  placeholder="English"
+                                />
+                              </div>
+                              <div className="text-[9.5px] font-black text-slate-500 pt-0.5">
+                                Total: {Number(editStockTamil || 0) + Number(editStockEnglish || 0)} in Rack
+                              </div>
+                            </div>
+                          ) : (
+                            <div>
+                              <span className="text-[10px] text-slate-400 block">Copies in Rack</span>
+                              <input
+                                type="number"
+                                min={0}
+                                value={editStock}
+                                onChange={(e) => setEditStock(Math.max(0, Number(e.target.value) || 0))}
+                                className="w-20 px-2 py-1 bg-slate-50 border border-blue-400 rounded-lg text-xs font-bold outline-none"
+                              />
+                            </div>
+                          )
                         ) : (
                           <div className="flex flex-col gap-1 items-start">
                             <button
@@ -1144,6 +1214,40 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                             >
                               {isOOS ? 'OUT OF STOCK' : `${p.stock ?? '—'} IN RACK`}
                             </button>
+
+                            {(p.language === 'Both' || (p.stockTamil !== undefined && p.stockTamil !== null) || (p.stock_tamil !== undefined && p.stock_tamil !== null)) && (
+                              <div className="flex items-center gap-1 mt-0.5">
+                                {(() => {
+                                  const tQty = p.stockTamil ?? p.stock_tamil;
+                                  const eQty = p.stockEnglish ?? p.stock_english;
+                                  return (
+                                    <>
+                                      <span
+                                        className={`text-[9.5px] font-bold px-1.5 py-0.5 rounded border ${
+                                          tQty === 0
+                                            ? 'bg-slate-100 text-slate-400 border-slate-200 line-through'
+                                            : 'bg-amber-50 text-amber-900 border-amber-200'
+                                        }`}
+                                        title="Tamil Medium Copies"
+                                      >
+                                        தமிழ்: {tQty ?? '—'}
+                                      </span>
+                                      <span
+                                        className={`text-[9.5px] font-bold px-1.5 py-0.5 rounded border ${
+                                          eQty === 0
+                                            ? 'bg-slate-100 text-slate-400 border-slate-200 line-through'
+                                            : 'bg-emerald-50 text-emerald-900 border-emerald-200'
+                                        }`}
+                                        title="English Medium Copies"
+                                      >
+                                        Eng: {eQty ?? '—'}
+                                      </span>
+                                    </>
+                                  );
+                                })()}
+                              </div>
+                            )}
+
                             {heldCount > 0 && (
                               <span className="text-[10px] text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md font-bold flex items-center gap-1">
                                 <Clock className="w-2.5 h-2.5 text-blue-600 animate-spin" />
@@ -1373,17 +1477,50 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                         />
                       </div>
                     </div>
-                    <div className="bg-amber-50/60 p-3 rounded-xl border border-amber-100">
-                      <label className="text-[11px] font-bold text-amber-900 block mb-0.5">Copies in Rack</label>
-                      <span className="text-[9px] text-amber-700 block mb-1">Available warehouse inventory count</span>
-                      <input
-                        type="number"
-                        min="0"
-                        value={editStock}
-                        onChange={(e) => setEditStock(Math.max(0, Number(e.target.value) || 0))}
-                        className="w-full px-2 py-2 bg-white border border-amber-300 rounded-lg text-xs font-extrabold outline-none text-slate-900"
-                      />
-                    </div>
+                    {editMedium === 'Both' ? (
+                      <div className="bg-amber-50/60 p-3 rounded-xl border border-amber-100 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[11px] font-bold text-amber-900 block">Copies by Medium</label>
+                          <span className="text-[10px] font-black text-slate-600 bg-white px-2 py-0.5 rounded border border-amber-200">
+                            Total: {Number(editStockTamil || 0) + Number(editStockEnglish || 0)}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <span className="text-[10px] font-bold text-amber-900 block mb-1">📘 தமிழ் (Tamil)</span>
+                            <input
+                              type="number"
+                              min="0"
+                              value={editStockTamil}
+                              onChange={(e) => setEditStockTamil(Math.max(0, Number(e.target.value) || 0))}
+                              className="w-full px-2 py-2 bg-white border border-amber-300 rounded-lg text-xs font-extrabold outline-none text-slate-900"
+                            />
+                          </div>
+                          <div>
+                            <span className="text-[10px] font-bold text-emerald-900 block mb-1">📗 Eng Med</span>
+                            <input
+                              type="number"
+                              min="0"
+                              value={editStockEnglish}
+                              onChange={(e) => setEditStockEnglish(Math.max(0, Number(e.target.value) || 0))}
+                              className="w-full px-2 py-2 bg-white border border-emerald-300 rounded-lg text-xs font-extrabold outline-none text-slate-900"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="bg-amber-50/60 p-3 rounded-xl border border-amber-100">
+                        <label className="text-[11px] font-bold text-amber-900 block mb-0.5">Copies in Rack</label>
+                        <span className="text-[9px] text-amber-700 block mb-1">Available warehouse inventory count</span>
+                        <input
+                          type="number"
+                          min="0"
+                          value={editStock}
+                          onChange={(e) => setEditStock(Math.max(0, Number(e.target.value) || 0))}
+                          className="w-full px-2 py-2 bg-white border border-amber-300 rounded-lg text-xs font-extrabold outline-none text-slate-900"
+                        />
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-2 pt-1">
                     <button
@@ -1465,6 +1602,38 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                     >
                       {isOOS ? 'OUT OF STOCK' : `${p.stock ?? '—'} IN RACK`}
                     </button>
+                    {(p.language === 'Both' || (p.stockTamil !== undefined && p.stockTamil !== null) || (p.stock_tamil !== undefined && p.stock_tamil !== null)) && (
+                      <div className="flex items-center gap-1 mt-1 justify-center flex-wrap">
+                        {(() => {
+                          const tQty = p.stockTamil ?? p.stock_tamil;
+                          const eQty = p.stockEnglish ?? p.stock_english;
+                          return (
+                            <>
+                              <span
+                                className={`text-[8.5px] font-bold px-1.5 py-0.5 rounded border ${
+                                  tQty === 0
+                                    ? 'bg-slate-100 text-slate-400 border-slate-200 line-through'
+                                    : 'bg-amber-50 text-amber-900 border-amber-200'
+                                }`}
+                                title="Tamil Medium Copies"
+                              >
+                                தமிழ்: {tQty ?? '—'}
+                              </span>
+                              <span
+                                className={`text-[8.5px] font-bold px-1.5 py-0.5 rounded border ${
+                                  eQty === 0
+                                    ? 'bg-slate-100 text-slate-400 border-slate-200 line-through'
+                                    : 'bg-emerald-50 text-emerald-900 border-emerald-200'
+                                }`}
+                                title="English Medium Copies"
+                              >
+                                Eng: {eQty ?? '—'}
+                              </span>
+                            </>
+                          );
+                        })()}
+                      </div>
+                    )}
                     {heldCount > 0 && (
                       <span className="text-[9px] text-blue-700 font-bold mt-1 block">
                         {heldCount} on hold
@@ -1889,19 +2058,58 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                   </div>
 
                   {/* Initial Copies */}
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">
-                      Initial Copies in Rack *
-                    </label>
-                    <input
-                      type="number"
-                      required
-                      min={0}
-                      value={newStock}
-                      onChange={(e) => setNewStock(e.target.value)}
-                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl outline-none focus:border-[#2874f0] text-slate-900 font-bold shadow-2xs"
-                    />
-                  </div>
+                  {newMedium === 'Both' ? (
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block font-bold text-slate-700">
+                          Copies by Medium *
+                        </label>
+                        <span className="text-[10px] font-black text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
+                          Total: {Number(newStockTamil || 0) + Number(newStockEnglish || 0)}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <div>
+                          <span className="text-[9.5px] font-bold text-amber-900 block mb-0.5">தமிழ் வழி</span>
+                          <input
+                            type="number"
+                            required
+                            min={0}
+                            placeholder="Tamil"
+                            value={newStockTamil}
+                            onChange={(e) => setNewStockTamil(e.target.value)}
+                            className="w-full px-2.5 py-2 bg-white border border-amber-300 rounded-xl outline-none focus:border-[#2874f0] text-slate-900 font-bold text-xs shadow-2xs"
+                          />
+                        </div>
+                        <div>
+                          <span className="text-[9.5px] font-bold text-emerald-900 block mb-0.5">English</span>
+                          <input
+                            type="number"
+                            required
+                            min={0}
+                            placeholder="Eng"
+                            value={newStockEnglish}
+                            onChange={(e) => setNewStockEnglish(e.target.value)}
+                            className="w-full px-2.5 py-2 bg-white border border-emerald-300 rounded-xl outline-none focus:border-[#2874f0] text-slate-900 font-bold text-xs shadow-2xs"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">
+                        Initial Copies in Rack *
+                      </label>
+                      <input
+                        type="number"
+                        required
+                        min={0}
+                        value={newStock}
+                        onChange={(e) => setNewStock(e.target.value)}
+                        className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl outline-none focus:border-[#2874f0] text-slate-900 font-bold shadow-2xs"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {/* Inline Price Validation & Live Discount Banner */}

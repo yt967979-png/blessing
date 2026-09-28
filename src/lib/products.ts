@@ -20,6 +20,10 @@ export interface Product {
   features: string[];
   inStock: boolean;
   stock?: number;
+  stockTamil?: number | null;
+  stockEnglish?: number | null;
+  stock_tamil?: number | null;
+  stock_english?: number | null;
   samplePdfUrl?: string | null;
   language?: string;
   medium?: string;

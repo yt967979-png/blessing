@@ -19,6 +19,10 @@ import { isBookInStock, calculateBookPrices } from '@/lib/stock';
 export interface StockChangeEntry {
   id: string;
   stock: number;
+  stock_tamil?: number | null;
+  stock_english?: number | null;
+  stockTamil?: number | null;
+  stockEnglish?: number | null;
   status: string;
   inStock: boolean;
   price?: number;
@@ -65,14 +69,20 @@ export async function notifyStockChanged(bookIds: Array<string | number | null |
   if (ids.length === 0) return;
   try {
     const res = await queryDb(
-      `SELECT id, price, discount_price, stock, status, language, title, badge, sample_pdf_url, cover_image FROM books WHERE id = ANY($1::text[])`,
+      `SELECT id, price, discount_price, stock, stock_tamil, stock_english, status, language, title, badge, sample_pdf_url, cover_image FROM books WHERE id = ANY($1::text[])`,
       [ids]
     );
     const books: StockChangeEntry[] = (res.rows || []).map((r: any) => {
       const { price, mrp, discount } = calculateBookPrices(r);
+      const st = r.stock_tamil !== null && r.stock_tamil !== undefined ? Number(r.stock_tamil) : null;
+      const se = r.stock_english !== null && r.stock_english !== undefined ? Number(r.stock_english) : null;
       return {
         id: String(r.id),
         stock: Number(r.stock ?? 0),
+        stock_tamil: st,
+        stock_english: se,
+        stockTamil: st,
+        stockEnglish: se,
         status: String(r.status || ''),
         inStock: isBookInStock(r),
         price,

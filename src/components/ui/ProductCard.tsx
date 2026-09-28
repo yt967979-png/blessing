@@ -34,7 +34,18 @@ export const ProductCard = React.memo(function ProductCard({ product }: { produc
     lowerLang.includes('both') ||
     (lowerLang.includes('tamil') && lowerLang.includes('english'));
 
-  const defaultSelectedMedium = lowerLang.includes('english') && !lowerLang.includes('tamil')
+  const tamilStock = product.stock_tamil !== undefined && product.stock_tamil !== null
+    ? Number(product.stock_tamil)
+    : (product.stockTamil !== undefined && product.stockTamil !== null ? Number(product.stockTamil) : null);
+
+  const englishStock = product.stock_english !== undefined && product.stock_english !== null
+    ? Number(product.stock_english)
+    : (product.stockEnglish !== undefined && product.stockEnglish !== null ? Number(product.stockEnglish) : null);
+
+  const isTamilSoldOut = tamilStock !== null && tamilStock <= 0;
+  const isEnglishSoldOut = englishStock !== null && englishStock <= 0;
+
+  const defaultSelectedMedium = (lowerLang.includes('english') && !lowerLang.includes('tamil')) || isTamilSoldOut
     ? 'English Medium'
     : 'Tamil Medium';
   const [selectedMedium, setSelectedMedium] = useState<string>(defaultSelectedMedium);
@@ -45,8 +56,14 @@ export const ProductCard = React.memo(function ProductCard({ product }: { produc
       setSelectedMedium('English Medium');
     } else if (l.includes('tamil') && !l.includes('english')) {
       setSelectedMedium('Tamil Medium');
+    } else if (isMultiMedium) {
+      if (isTamilSoldOut && !isEnglishSoldOut && selectedMedium === 'Tamil Medium') {
+        setSelectedMedium('English Medium');
+      } else if (isEnglishSoldOut && !isTamilSoldOut && selectedMedium === 'English Medium') {
+        setSelectedMedium('Tamil Medium');
+      }
     }
-  }, [product.language]);
+  }, [product.language, isMultiMedium, isTamilSoldOut, isEnglishSoldOut]);
 
   const finalMedium = isMultiMedium
     ? selectedMedium
@@ -62,7 +79,10 @@ export const ProductCard = React.memo(function ProductCard({ product }: { produc
   const productHref = isMultiMedium
     ? `/products/${product.slug || product.id}?medium=${encodeURIComponent(selectedMedium)}`
     : `/products/${product.slug || product.id}`;
-  const isOutOfStock = product.inStock === false;
+
+  const bothMediumsSoldOut = isMultiMedium && isTamilSoldOut && isEnglishSoldOut;
+  const isOutOfStock = product.inStock === false || (product.stock !== undefined && product.stock <= 0) || bothMediumsSoldOut;
+  const isCurrentMediumSoldOut = isMultiMedium && ((selectedMedium === 'Tamil Medium' && isTamilSoldOut) || (selectedMedium === 'English Medium' && isEnglishSoldOut));
   const isCombo = isComboItem(product);
   const comboSubjects = isCombo ? getComboIncludedSubjects(product) : [];
 
@@ -258,33 +278,41 @@ export const ProductCard = React.memo(function ProductCard({ product }: { produc
         <div className="mb-2 p-0.5 bg-slate-100/90 rounded-xl flex items-center border border-slate-200">
           <button
             type="button"
+            disabled={isTamilSoldOut}
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              setSelectedMedium('Tamil Medium');
+              if (!isTamilSoldOut) setSelectedMedium('Tamil Medium');
             }}
-            className={`flex-1 py-1 px-1 rounded-lg text-[10px] font-black transition-all text-center cursor-pointer ${
-              selectedMedium === 'Tamil Medium'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'text-slate-600 hover:text-slate-900'
+            className={`flex-1 py-1 px-1 rounded-lg text-[10px] font-black transition-all text-center ${
+              isTamilSoldOut
+                ? 'bg-slate-200/80 text-slate-400 cursor-not-allowed line-through opacity-70'
+                : selectedMedium === 'Tamil Medium'
+                ? 'bg-blue-600 text-white shadow-xs cursor-pointer'
+                : 'text-slate-600 hover:text-slate-900 cursor-pointer'
             }`}
+            title={isTamilSoldOut ? 'Tamil Medium is sold out' : 'Tamil Medium'}
           >
-            தமிழ் வழி
+            {isTamilSoldOut ? 'தமிழ் (OOS)' : 'தமிழ் வழி'}
           </button>
           <button
             type="button"
+            disabled={isEnglishSoldOut}
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              setSelectedMedium('English Medium');
+              if (!isEnglishSoldOut) setSelectedMedium('English Medium');
             }}
-            className={`flex-1 py-1 px-1 rounded-lg text-[10px] font-black transition-all text-center cursor-pointer ${
-              selectedMedium === 'English Medium'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'text-slate-600 hover:text-slate-900'
+            className={`flex-1 py-1 px-1 rounded-lg text-[10px] font-black transition-all text-center ${
+              isEnglishSoldOut
+                ? 'bg-slate-200/80 text-slate-400 cursor-not-allowed line-through opacity-70'
+                : selectedMedium === 'English Medium'
+                ? 'bg-blue-600 text-white shadow-xs cursor-pointer'
+                : 'text-slate-600 hover:text-slate-900 cursor-pointer'
             }`}
+            title={isEnglishSoldOut ? 'English Medium is sold out' : 'English Medium'}
           >
-            English
+            {isEnglishSoldOut ? 'English (OOS)' : 'English'}
           </button>
         </div>
       ) : (
@@ -310,15 +338,19 @@ export const ProductCard = React.memo(function ProductCard({ product }: { produc
       <div className="grid grid-cols-2 gap-1.5 sm:gap-2 mt-auto">
         <button
           type="button"
-          disabled={isOutOfStock}
+          disabled={isOutOfStock || isCurrentMediumSoldOut}
           onClick={handleAddToCart}
-          className={`font-extrabold text-[11px] sm:text-xs py-2.5 rounded-xl flex items-center justify-center gap-1 uppercase touch-manipulation disabled:cursor-not-allowed min-h-11 transition-all duration-300 cursor-pointer ${
+          className={`font-extrabold text-[11px] sm:text-xs py-2.5 rounded-xl flex items-center justify-center gap-1 uppercase touch-manipulation disabled:cursor-not-allowed min-h-11 transition-all duration-300 ${
+            isOutOfStock || isCurrentMediumSoldOut ? 'cursor-not-allowed' : 'cursor-pointer'
+          } ${
             isAdded
               ? 'bg-emerald-600 text-white animate-success-pop shadow-md shadow-emerald-600/30'
               : 'bg-[#0044AA] hover:bg-[#003388] active:bg-[#001B3A] disabled:bg-slate-300 disabled:text-slate-500 text-white'
           }`}
         >
-          {isAdded ? (
+          {isOutOfStock || isCurrentMediumSoldOut ? (
+            <span>SOLD OUT</span>
+          ) : isAdded ? (
             <>
               <Check className="w-4 h-4 text-white animate-bounce" />
               <span>ADDED</span>
@@ -332,9 +364,9 @@ export const ProductCard = React.memo(function ProductCard({ product }: { produc
         </button>
         <button
           type="button"
-          disabled={isOutOfStock}
+          disabled={isOutOfStock || isCurrentMediumSoldOut}
           onClick={() => {
-            if (isOutOfStock) return;
+            if (isOutOfStock || isCurrentMediumSoldOut) return;
             addToCart(product, 1, finalMedium);
             if (!user) {
               setIsAuthOpen(true);

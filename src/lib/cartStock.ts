@@ -6,6 +6,10 @@ export interface StockAwareItem {
   qty: number;
   inStock?: boolean;
   stock?: number;
+  stockTamil?: number | null;
+  stockEnglish?: number | null;
+  stock_tamil?: number | null;
+  stock_english?: number | null;
   selectedMedium?: string;
   language?: string;
 }
@@ -14,6 +18,10 @@ export interface CatalogStockLookup {
   id: string | number;
   inStock?: boolean;
   stock?: number;
+  stockTamil?: number | null;
+  stockEnglish?: number | null;
+  stock_tamil?: number | null;
+  stock_english?: number | null;
   language?: string;
 }
 
@@ -58,8 +66,24 @@ export function getCartItemStockState(
 ): CartItemStockState {
   const live = catalog.find((p) => String(p.id) === String(item.id));
   const source = live || item;
-  const stock = typeof source.stock === 'number' ? source.stock : null;
-  const inStock = source.inStock !== false;
+
+  const isTamil = item.selectedMedium && item.selectedMedium.toLowerCase().includes('tamil');
+  const isEnglish = item.selectedMedium && item.selectedMedium.toLowerCase().includes('english');
+  const medStockTamil = source.stock_tamil !== undefined && source.stock_tamil !== null
+    ? Number(source.stock_tamil)
+    : (source.stockTamil !== undefined && source.stockTamil !== null ? Number(source.stockTamil) : null);
+  const medStockEnglish = source.stock_english !== undefined && source.stock_english !== null
+    ? Number(source.stock_english)
+    : (source.stockEnglish !== undefined && source.stockEnglish !== null ? Number(source.stockEnglish) : null);
+
+  const effectiveStock = isTamil && medStockTamil !== null
+    ? medStockTamil
+    : isEnglish && medStockEnglish !== null
+    ? medStockEnglish
+    : (typeof source.stock === 'number' ? source.stock : null);
+
+  const stock = effectiveStock;
+  const inStock = source.inStock !== false && (effectiveStock === null || effectiveStock > 0);
   const overLimit = inStock && stock !== null && item.qty > stock;
   const atLimit = inStock && stock !== null && item.qty >= stock;
   const activeLang = live?.language !== undefined ? live.language : item.language;

@@ -186,6 +186,10 @@ function mapCatalogRows(rows: any[]) {
       features: ['Solved Papers', 'Chapter Notes'],
       inStock: mapBookInStock(d),
       stock: Number(d.stock ?? 0),
+      stockTamil: d.stock_tamil !== null && d.stock_tamil !== undefined ? Number(d.stock_tamil) : null,
+      stockEnglish: d.stock_english !== null && d.stock_english !== undefined ? Number(d.stock_english) : null,
+      stock_tamil: d.stock_tamil !== null && d.stock_tamil !== undefined ? Number(d.stock_tamil) : null,
+      stock_english: d.stock_english !== null && d.stock_english !== undefined ? Number(d.stock_english) : null,
       isBestSeller: String(d.badge || '').toUpperCase().includes('BEST'),
       language: d.language || 'Both',
     };
@@ -199,6 +203,9 @@ async function ensureBooksColumns() {
   try {
     await queryDb(`ALTER TABLE books ADD COLUMN IF NOT EXISTS combo_subjects JSONB DEFAULT '[]'::jsonb;`);
     await queryDb(`ALTER TABLE books ADD COLUMN IF NOT EXISTS language VARCHAR(50) DEFAULT 'Both';`);
+    await queryDb(`ALTER TABLE books ADD COLUMN IF NOT EXISTS stock_tamil INT DEFAULT NULL;`);
+    await queryDb(`ALTER TABLE books ADD COLUMN IF NOT EXISTS stock_english INT DEFAULT NULL;`);
+    await queryDb(`ALTER TABLE stock_holds ADD COLUMN IF NOT EXISTS medium VARCHAR(50);`);
     await queryDb(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS medium VARCHAR(50);`);
   } catch {}
 }
@@ -291,7 +298,7 @@ export async function GET(request: Request) {
       await ensureBooksColumns();
       const { where, params } = buildFilters();
       const sql = `
-        SELECT b.id, b.slug, b.title, b.subject, b.price, b.discount_price, b.stock, b.status,
+        SELECT b.id, b.slug, b.title, b.subject, b.price, b.discount_price, b.stock, b.stock_tamil, b.stock_english, b.status,
                b.badge, b.description, b.category_id, b.created_at, b.sample_pdf_url,
                b.combo_subjects, b.language,
                CASE
@@ -315,7 +322,7 @@ export async function GET(request: Request) {
     const loadFallback = async () => {
       const { where, params } = buildFilters();
       const sql = `
-        SELECT b.id, b.slug, b.title, b.subject, b.price, b.discount_price, b.stock, b.status,
+        SELECT b.id, b.slug, b.title, b.subject, b.price, b.discount_price, b.stock, NULL::int AS stock_tamil, NULL::int AS stock_english, b.status,
                b.badge, b.description, b.category_id, b.created_at, b.sample_pdf_url,
                '[]'::jsonb AS combo_subjects, COALESCE(b.language, 'Both') AS language,
                NULL::text AS cover_image,
@@ -389,16 +396,27 @@ export async function POST(request: Request) {
   if (!auth.isAdmin) return forbiddenResponse(auth.error);
 
   try {
-    const body = await request.json().catch(() => ({}));
-    const { title, cls, category, price, mrp, badge, image, description, stock, subject, status, samplePdfUrl, sample_pdf_url, comboSubjects, combo_subjects, language, medium } = body;
+    const body = await request.json();
+    const { title, cls, category, price, mrp, badge, image, description, stock, stockTamil, stock_tamil, stockEnglish, stock_english, subject, status, samplePdfUrl, sample_pdf_url, comboSubjects, combo_subjects, language, medium } = body;
 
     if (!title || price === undefined || price === null || price === '') {
       return NextResponse.json({ error: 'Title and price are required' }, { status: 400 });
     }
 
-    // Never invent inventory — missing/invalid stock → 0 (not for sale until admin sets qty)
-    const stockQty = Math.max(0, Math.floor(Number(stock)));
-    if (!Number.isFinite(Number(stock)) || Number(stock) < 0) {
+    const finalLanguage = String(language || medium || 'Both').trim();
+    let finalStockTamil: number | null = null;
+    let finalStockEnglish: number | null = null;
+    const rawSt = stockTamil !== undefined ? stockTamil : stock_tamil;
+    const rawSe = stockEnglish !== undefined ? stockEnglish : stock_english;
+    if (rawSt !== undefined && rawSt !== null && rawSt !== '') finalStockTamil = Math.max(0, parseInt(String(rawSt), 10) || 0);
+    if (rawSe !== undefined && rawSe !== null && rawSe !== '') finalStockEnglish = Math.max(0, parseInt(String(rawSe), 10) || 0);
+
+    let stockQty = Math.max(0, Math.floor(Number(stock)));
+    if (finalStockTamil !== null || finalStockEnglish !== null) {
+      stockQty = (finalStockTamil || 0) + (finalStockEnglish || 0);
+    }
+
+    if (!Number.isFinite(Number(stockQty)) || Number(stockQty) < 0) {
       return NextResponse.json(
         { error: 'Initial stock is required (use 0 if not yet available)' },
         { status: 400 }
@@ -413,7 +431,6 @@ export async function POST(request: Request) {
     const hasSale = Number.isFinite(sale) && sale > 0 && sale < finalMrp;
     const finalDiscountPrice = hasSale ? sale : null;
     const finalSubject = String(subject || 'General').trim();
-    const finalLanguage = String(language || medium || 'Both').trim();
 
     const isCombo = isComboItem({
       title: String(title || ''),
@@ -450,8 +467,8 @@ export async function POST(request: Request) {
     await ensureBooksColumns();
 
     const sql = `
-      INSERT INTO books (id, title, slug, category_id, subject, price, discount_price, cover_image, description, status, featured, badge, stock, sample_pdf_url, combo_subjects, language)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, TRUE, $11, $12, $13, $14::jsonb, $15)
+      INSERT INTO books (id, title, slug, category_id, subject, price, discount_price, cover_image, description, status, featured, badge, stock, sample_pdf_url, combo_subjects, language, stock_tamil, stock_english)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, TRUE, $11, $12, $13, $14::jsonb, $15, $16, $17)
       RETURNING *
     `;
     const res = await queryDb(sql, [
@@ -470,6 +487,8 @@ export async function POST(request: Request) {
       finalPdf,
       finalComboSubjects,
       finalLanguage,
+      finalStockTamil,
+      finalStockEnglish,
     ]);
     await invalidateProductsCache();
     void recordAdminAudit(
@@ -506,7 +525,7 @@ export async function PATCH(request: Request) {
   if (!auth.isAdmin) return forbiddenResponse(auth.error);
 
   try {
-    const { id, title, cls, category, category_id, subject, price, mrp, inStock, stock, description, image, badge, hasDiscount, samplePdfUrl, sample_pdf_url, comboSubjects, combo_subjects, language, medium } = await request.json().catch(() => ({}));
+    const { id, title, cls, category, category_id, subject, price, mrp, inStock, stock, stockTamil, stock_tamil, stockEnglish, stock_english, description, image, badge, hasDiscount, samplePdfUrl, sample_pdf_url, comboSubjects, combo_subjects, language, medium } = await request.json().catch(() => ({}));
     if (!id) return NextResponse.json({ error: 'Product id is required' }, { status: 400 });
 
     const fields: string[] = [];
@@ -539,6 +558,23 @@ export async function PATCH(request: Request) {
       fields.push(`language = $${idx++}`);
       values.push(String(language || medium || 'Both').trim());
     }
+
+    const rawStockTamil = stockTamil !== undefined ? stockTamil : stock_tamil;
+    if (rawStockTamil !== undefined) {
+      await ensureBooksColumns();
+      const val = rawStockTamil === null || rawStockTamil === '' ? null : Math.max(0, parseInt(String(rawStockTamil), 10) || 0);
+      fields.push(`stock_tamil = $${idx++}`);
+      values.push(val);
+    }
+
+    const rawStockEnglish = stockEnglish !== undefined ? stockEnglish : stock_english;
+    if (rawStockEnglish !== undefined) {
+      await ensureBooksColumns();
+      const val = rawStockEnglish === null || rawStockEnglish === '' ? null : Math.max(0, parseInt(String(rawStockEnglish), 10) || 0);
+      fields.push(`stock_english = $${idx++}`);
+      values.push(val);
+    }
+
     if (cls !== undefined || category !== undefined || category_id !== undefined || isSingleSubject) {
       const targetCls = cls ? String(cls).trim().toLowerCase() : undefined;
       let targetCat = category_id
@@ -598,7 +634,7 @@ export async function PATCH(request: Request) {
     let finalStatus: string | undefined = undefined;
     let finalStock: number | undefined = undefined;
 
-    if (inStock !== undefined && stock === undefined) {
+    if (inStock !== undefined && stock === undefined && rawStockTamil === undefined && rawStockEnglish === undefined) {
       const available = Boolean(inStock);
       // Status-only toggle — do NOT invent or wipe stock counts (keeps qty consistent).
       finalStatus = available ? 'published' : 'out_of_stock';
@@ -608,6 +644,12 @@ export async function PATCH(request: Request) {
       const qty = Math.max(0, Math.floor(Number(stock) || 0));
       finalStock = qty;
       finalStatus = qty > 0 ? 'published' : 'out_of_stock';
+    } else if (rawStockTamil !== undefined || rawStockEnglish !== undefined) {
+      // Recompute total stock if medium quantities were updated
+      const t = rawStockTamil !== undefined && rawStockTamil !== null ? Number(rawStockTamil) || 0 : 0;
+      const e = rawStockEnglish !== undefined && rawStockEnglish !== null ? Number(rawStockEnglish) || 0 : 0;
+      finalStock = t + e;
+      finalStatus = finalStock > 0 ? 'published' : 'out_of_stock';
     }
 
     // Assign each column once (avoids "multiple assignments to same column")

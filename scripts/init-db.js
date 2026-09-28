@@ -471,6 +471,11 @@ async function migrateDatabase(connStr, dbName) {
       ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMP;
       ALTER TABLE reviews ADD COLUMN IF NOT EXISTS user_name VARCHAR(255);
       ALTER TABLE books ADD COLUMN IF NOT EXISTS badge VARCHAR(100) DEFAULT '';
+      ALTER TABLE books ADD COLUMN IF NOT EXISTS language VARCHAR(50) DEFAULT 'Both';
+      ALTER TABLE books ADD COLUMN IF NOT EXISTS stock_tamil INT DEFAULT NULL;
+      ALTER TABLE books ADD COLUMN IF NOT EXISTS stock_english INT DEFAULT NULL;
+      ALTER TABLE stock_holds ADD COLUMN IF NOT EXISTS medium VARCHAR(50);
+      ALTER TABLE order_items ADD COLUMN IF NOT EXISTS medium VARCHAR(50);
       ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_completed BOOLEAN DEFAULT TRUE;
       ALTER TABLE users DROP COLUMN IF EXISTS email_verified;
 

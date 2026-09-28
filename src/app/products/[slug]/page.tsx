@@ -68,7 +68,7 @@ async function getBookMeta(slug: string) {
                 WHEN length(b.cover_image) > 2048 THEN NULL
                 ELSE b.cover_image
               END AS cover_image,
-              b.discount_price, b.price, b.status, b.stock,
+              b.discount_price, b.price, b.status, b.stock, b.stock_tamil, b.stock_english,
               b.sample_pdf_url,
               b.updated_at,
               COALESCE(COUNT(r.id), 0)::int as review_count,
@@ -235,6 +235,10 @@ function mapBookToClientProduct(book: any) {
     comboSubjects: comboSubjects || undefined,
     inStock: isBookInStock(book),
     stock: Math.max(0, Math.floor(Number(book.stock) || 0)),
+    stockTamil: book.stock_tamil !== null && book.stock_tamil !== undefined ? Number(book.stock_tamil) : null,
+    stockEnglish: book.stock_english !== null && book.stock_english !== undefined ? Number(book.stock_english) : null,
+    stock_tamil: book.stock_tamil !== null && book.stock_tamil !== undefined ? Number(book.stock_tamil) : null,
+    stock_english: book.stock_english !== null && book.stock_english !== undefined ? Number(book.stock_english) : null,
     features: ['Solved Papers', 'Chapter Notes'],
   };
 }

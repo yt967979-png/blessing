@@ -51,6 +51,7 @@ export interface HoldItemInput {
   id: string | number;
   qty: number;
   title?: string;
+  selectedMedium?: string;
 }
 
 export type CreateHoldsResult =
@@ -79,26 +80,52 @@ export async function createStockHolds(opts: {
     await client.query('BEGIN');
     for (const item of items) {
       const qty = Math.max(1, Math.floor(Number(item.qty) || 0));
-      const bookRes = await client.query(
-        `UPDATE books
-         SET stock = COALESCE(stock, 0) - $1,
-             status = CASE WHEN COALESCE(stock, 0) - $1 <= 0 THEN 'out_of_stock' ELSE status END,
-             updated_at = NOW()
-         WHERE id = $2 AND COALESCE(stock, 0) >= $1
-         RETURNING id, title`,
-        [qty, item.id]
-      );
+      const med = String(item.selectedMedium || '').toLowerCase();
+      const isTamil = med.includes('tamil');
+      const isEnglish = med.includes('english');
+
+      let updateSql = `
+        UPDATE books
+        SET stock = COALESCE(stock, 0) - $1,
+            status = CASE WHEN COALESCE(stock, 0) - $1 <= 0 THEN 'out_of_stock' ELSE status END,
+            updated_at = NOW()
+        WHERE id = $2 AND COALESCE(stock, 0) >= $1
+        RETURNING id, title
+      `;
+      if (isTamil) {
+        updateSql = `
+          UPDATE books
+          SET stock = COALESCE(stock, 0) - $1,
+              stock_tamil = CASE WHEN stock_tamil IS NOT NULL THEN GREATEST(0, stock_tamil - $1) ELSE stock_tamil END,
+              status = CASE WHEN COALESCE(stock, 0) - $1 <= 0 THEN 'out_of_stock' ELSE status END,
+              updated_at = NOW()
+          WHERE id = $2 AND COALESCE(stock, 0) >= $1 AND (stock_tamil IS NULL OR stock_tamil >= $1)
+          RETURNING id, title
+        `;
+      } else if (isEnglish) {
+        updateSql = `
+          UPDATE books
+          SET stock = COALESCE(stock, 0) - $1,
+              stock_english = CASE WHEN stock_english IS NOT NULL THEN GREATEST(0, stock_english - $1) ELSE stock_english END,
+              status = CASE WHEN COALESCE(stock, 0) - $1 <= 0 THEN 'out_of_stock' ELSE status END,
+              updated_at = NOW()
+          WHERE id = $2 AND COALESCE(stock, 0) >= $1 AND (stock_english IS NULL OR stock_english >= $1)
+          RETURNING id, title
+        `;
+      }
+
+      const bookRes = await client.query(updateSql, [qty, item.id]);
       if (bookRes.rowCount === 0) {
         await client.query('ROLLBACK');
         return {
           ok: false,
-          error: `"${item.title || item.id}" went out of stock. Please refresh your cart.`,
+          error: `"${item.title || item.id}"${item.selectedMedium ? ` (${item.selectedMedium})` : ''} went out of stock. Please refresh your cart.`,
           status: 409,
         };
       }
       await client.query(
-        `INSERT INTO stock_holds (id, hold_group_id, book_id, user_id, qty, status, expires_at)
-         VALUES ($1, $2, $3, $4, $5, 'held', NOW() + ($6 || ' minutes')::interval)`,
+        `INSERT INTO stock_holds (id, hold_group_id, book_id, user_id, qty, status, expires_at, medium)
+         VALUES ($1, $2, $3, $4, $5, 'held', NOW() + ($6 || ' minutes')::interval, $7)`,
         [
           `sh-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           holdGroupId,
@@ -106,6 +133,7 @@ export async function createStockHolds(opts: {
           opts.userId || null,
           qty,
           String(STOCK_HOLD_TTL_MINUTES),
+          item.selectedMedium || null,
         ]
       );
     }
@@ -276,27 +304,44 @@ export async function releaseStockHolds(
     `UPDATE stock_holds
      SET status = 'released', released_at = NOW(), release_reason = $${reasonIdx}, updated_at = NOW()
      WHERE (${whereParts.join(' OR ')}) AND ${statusFilter}${userClause}
-     RETURNING book_id, qty`,
+     RETURNING book_id, qty, medium`,
     params
   );
 
   const byBook: Record<string, number> = {};
   for (const row of res.rows || []) {
     const id = String(row.book_id);
-    byBook[id] = (byBook[id] || 0) + (Number(row.qty) || 0);
-  }
-
-  for (const [bookId, qty] of Object.entries(byBook)) {
+    const qty = Number(row.qty) || 0;
     if (qty <= 0) continue;
-    await execQuery(
-      client,
-      `UPDATE books
-       SET stock = COALESCE(stock, 0) + $1,
-           status = CASE WHEN status = 'out_of_stock' AND COALESCE(stock, 0) + $1 > 0 THEN 'published' ELSE status END,
-           updated_at = NOW()
-       WHERE id = $2`,
-      [qty, bookId]
-    );
+    byBook[id] = (byBook[id] || 0) + qty;
+    const med = String(row.medium || '').toLowerCase();
+    let restoreSql = `
+      UPDATE books
+      SET stock = COALESCE(stock, 0) + $1,
+          status = CASE WHEN status = 'out_of_stock' AND COALESCE(stock, 0) + $1 > 0 THEN 'published' ELSE status END,
+          updated_at = NOW()
+      WHERE id = $2
+    `;
+    if (med.includes('tamil')) {
+      restoreSql = `
+        UPDATE books
+        SET stock = COALESCE(stock, 0) + $1,
+            stock_tamil = CASE WHEN stock_tamil IS NOT NULL THEN stock_tamil + $1 ELSE stock_tamil END,
+            status = CASE WHEN status = 'out_of_stock' AND COALESCE(stock, 0) + $1 > 0 THEN 'published' ELSE status END,
+            updated_at = NOW()
+        WHERE id = $2
+      `;
+    } else if (med.includes('english')) {
+      restoreSql = `
+        UPDATE books
+        SET stock = COALESCE(stock, 0) + $1,
+            stock_english = CASE WHEN stock_english IS NOT NULL THEN stock_english + $1 ELSE stock_english END,
+            status = CASE WHEN status = 'out_of_stock' AND COALESCE(stock, 0) + $1 > 0 THEN 'published' ELSE status END,
+            updated_at = NOW()
+        WHERE id = $2
+      `;
+    }
+    await execQuery(client, restoreSql, [qty, id]);
   }
 
   const changedIds = Object.keys(byBook).filter((id) => byBook[id] > 0);

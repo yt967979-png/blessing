@@ -28,6 +28,10 @@ export interface Product {
   features: string[];
   inStock: boolean;
   stock?: number;
+  stockTamil?: number | null;
+  stockEnglish?: number | null;
+  stock_tamil?: number | null;
+  stock_english?: number | null;
   samplePdfUrl?: string | null;
   comboSubjects?: string[];
   isNew?: boolean;
@@ -46,6 +50,10 @@ export interface CartItem extends Product {
 interface StockPushEntry {
   id: string;
   stock: number;
+  stockTamil?: number | null;
+  stockEnglish?: number | null;
+  stock_tamil?: number | null;
+  stock_english?: number | null;
   status: string;
   inStock: boolean;
   price?: number;
@@ -660,9 +668,13 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         const newBadge = upd.badge !== undefined ? upd.badge : p.badge;
         const newSamplePdf = upd.samplePdfUrl !== undefined ? upd.samplePdfUrl : p.samplePdfUrl;
         const newImage = upd.coverImage !== undefined ? upd.coverImage : p.image;
+        const newStockTamil = upd.stockTamil !== undefined ? upd.stockTamil : upd.stock_tamil !== undefined ? upd.stock_tamil : p.stockTamil;
+        const newStockEnglish = upd.stockEnglish !== undefined ? upd.stockEnglish : upd.stock_english !== undefined ? upd.stock_english : p.stockEnglish;
 
         if (
           p.stock === upd.stock &&
+          p.stockTamil === newStockTamil &&
+          p.stockEnglish === newStockEnglish &&
           p.inStock === upd.inStock &&
           p.price === newPrice &&
           p.mrp === newMrp &&
@@ -679,6 +691,10 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         return {
           ...p,
           stock: upd.stock,
+          stockTamil: newStockTamil,
+          stockEnglish: newStockEnglish,
+          stock_tamil: newStockTamil,
+          stock_english: newStockEnglish,
           inStock: upd.inStock,
           price: newPrice,
           mrp: newMrp,
@@ -1156,8 +1172,28 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       showToast(`❌ "${live.title}" is out of stock`);
       return;
     }
-    const stockLimit = typeof live.stock === 'number' ? Math.max(0, live.stock) : Infinity;
     const finalMedium = selectedMedium || (live.language && live.language !== 'Both' ? live.language : undefined);
+
+    const isTamil = finalMedium && finalMedium.toLowerCase().includes('tamil');
+    const isEnglish = finalMedium && finalMedium.toLowerCase().includes('english');
+    const medStockTamil = live.stock_tamil !== undefined && live.stock_tamil !== null
+      ? Number(live.stock_tamil)
+      : (live.stockTamil !== undefined && live.stockTamil !== null ? Number(live.stockTamil) : null);
+    const medStockEnglish = live.stock_english !== undefined && live.stock_english !== null
+      ? Number(live.stock_english)
+      : (live.stockEnglish !== undefined && live.stockEnglish !== null ? Number(live.stockEnglish) : null);
+
+    const specificStock = isTamil && medStockTamil !== null
+      ? medStockTamil
+      : isEnglish && medStockEnglish !== null
+      ? medStockEnglish
+      : (typeof live.stock === 'number' ? Math.max(0, live.stock) : Infinity);
+
+    if (specificStock <= 0) {
+      showToast(`❌ "${live.title}" (${finalMedium || 'Selected medium'}) is sold out`);
+      return;
+    }
+    const stockLimit = specificStock;
 
     let toastMsg = '';
     setCart((prev) => {

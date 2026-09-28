@@ -145,29 +145,42 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
     lowerLang.includes('both') ||
     (lowerLang.includes('tamil') && lowerLang.includes('english'));
 
+  const tamilStock = product?.stock_tamil !== undefined && product?.stock_tamil !== null
+    ? Number(product.stock_tamil)
+    : (product?.stockTamil !== undefined && product?.stockTamil !== null ? Number(product.stockTamil) : null);
+
+  const englishStock = product?.stock_english !== undefined && product?.stock_english !== null
+    ? Number(product.stock_english)
+    : (product?.stockEnglish !== undefined && product?.stockEnglish !== null ? Number(product.stockEnglish) : null);
+
+  const isTamilSoldOut = tamilStock !== null && tamilStock <= 0;
+  const isEnglishSoldOut = englishStock !== null && englishStock <= 0;
+
   const initialMedium = useMemo(() => {
     if (queryMedium) {
       const q = queryMedium.trim().toLowerCase();
-      if (q.includes('english')) return 'English Medium';
-      if (q.includes('tamil')) return 'Tamil Medium';
+      if (q.includes('english') && !isEnglishSoldOut) return 'English Medium';
+      if (q.includes('tamil') && !isTamilSoldOut) return 'Tamil Medium';
     }
+    if (isTamilSoldOut && !isEnglishSoldOut) return 'English Medium';
+    if (isEnglishSoldOut && !isTamilSoldOut) return 'Tamil Medium';
     return lowerLang.includes('english') && !lowerLang.includes('tamil')
       ? 'English Medium'
       : 'Tamil Medium';
-  }, [queryMedium, lowerLang]);
+  }, [queryMedium, lowerLang, isTamilSoldOut, isEnglishSoldOut]);
 
   const [selectedMedium, setSelectedMedium] = useState<string>(initialMedium);
 
   useEffect(() => {
     if (queryMedium) {
       const q = queryMedium.trim().toLowerCase();
-      if (q.includes('english')) {
+      if (q.includes('english') && !isEnglishSoldOut) {
         setSelectedMedium('English Medium');
-      } else if (q.includes('tamil')) {
+      } else if (q.includes('tamil') && !isTamilSoldOut) {
         setSelectedMedium('Tamil Medium');
       }
     }
-  }, [queryMedium]);
+  }, [queryMedium, isTamilSoldOut, isEnglishSoldOut]);
 
   useEffect(() => {
     if (product?.language) {
@@ -176,9 +189,25 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
         setSelectedMedium('English Medium');
       } else if (l.includes('tamil') && !l.includes('english')) {
         setSelectedMedium('Tamil Medium');
+      } else if (isMultiMedium) {
+        if (isTamilSoldOut && !isEnglishSoldOut && selectedMedium === 'Tamil Medium') {
+          setSelectedMedium('English Medium');
+        } else if (isEnglishSoldOut && !isTamilSoldOut && selectedMedium === 'English Medium') {
+          setSelectedMedium('Tamil Medium');
+        }
       }
     }
-  }, [product?.language]);
+  }, [product?.language, isMultiMedium, isTamilSoldOut, isEnglishSoldOut, selectedMedium]);
+
+  const bothMediumsSoldOut = isMultiMedium && isTamilSoldOut && isEnglishSoldOut;
+  const isCurrentMediumSoldOut = isMultiMedium && ((selectedMedium === 'Tamil Medium' && isTamilSoldOut) || (selectedMedium === 'English Medium' && isEnglishSoldOut));
+  const isProductOutOfStock = product?.inStock === false || (product?.stock !== undefined && product?.stock <= 0) || bothMediumsSoldOut;
+
+  const currentMediumRemainingStock = selectedMedium === 'Tamil Medium' && tamilStock !== null
+    ? tamilStock
+    : selectedMedium === 'English Medium' && englishStock !== null
+    ? englishStock
+    : (typeof product?.stock === 'number' ? product.stock : null);
 
   const finalMedium = isMultiMedium
     ? selectedMedium
@@ -189,7 +218,7 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
     : rawLang;
 
   const handleMobileAddToCart = () => {
-    if (!product || product.inStock === false) return;
+    if (!product || isProductOutOfStock || isCurrentMediumSoldOut) return;
     addToCart(product, 1, finalMedium);
     setIsMobileAdded(true);
     setTimeout(() => setIsMobileAdded(false), 1800);
@@ -739,15 +768,21 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
               )}
             </div>
 
-            {/* Live Stock Urgency Pill */}
-            {product.inStock !== false && typeof product.stock === 'number' && product.stock > 0 && product.stock <= 8 && (
-              <div className="flex items-center gap-2 text-xs font-extrabold text-amber-800 bg-amber-50 border border-amber-200/80 px-3.5 py-2 rounded-xl mb-4 shadow-2xs">
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
-                </span>
-                <span>🔥 High Demand: Only {product.stock} {product.stock === 1 ? 'copy' : 'copies'} remaining!</span>
+            {/* Live Stock Urgency or Medium Sold Out Alert */}
+            {isCurrentMediumSoldOut ? (
+              <div className="flex items-center gap-2 text-xs font-black text-rose-800 bg-rose-50 border border-rose-200 px-3.5 py-2.5 rounded-xl mb-4 shadow-2xs">
+                <span>⚠️ {selectedMedium} is Sold Out! {(!isTamilSoldOut || !isEnglishSoldOut) ? 'Please switch to the available medium below.' : ''}</span>
               </div>
+            ) : (
+              currentMediumRemainingStock !== null && currentMediumRemainingStock > 0 && currentMediumRemainingStock <= 8 && (
+                <div className="flex items-center gap-2 text-xs font-extrabold text-amber-800 bg-amber-50 border border-amber-200/80 px-3.5 py-2 rounded-xl mb-4 shadow-2xs">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                  </span>
+                  <span>🔥 High Demand: Only {currentMediumRemainingStock} {currentMediumRemainingStock === 1 ? 'copy' : 'copies'} remaining{isMultiMedium ? ` (${selectedMedium})` : ''}!</span>
+                </div>
+              )
             )}
 
             {/* Quick Visual "What's Inside This Combo" Showcase Pills */}
@@ -935,37 +970,67 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
-                    onClick={() => setSelectedMedium('Tamil Medium')}
-                    className={`p-2.5 rounded-xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between ${
-                      selectedMedium === 'Tamil Medium'
-                        ? 'border-blue-600 bg-blue-600 text-white shadow-md shadow-blue-600/20'
-                        : 'border-slate-200 bg-white text-slate-700 hover:border-blue-300'
+                    disabled={isTamilSoldOut}
+                    onClick={() => !isTamilSoldOut && setSelectedMedium('Tamil Medium')}
+                    className={`p-2.5 rounded-xl border-2 text-left transition-all flex flex-col justify-between ${
+                      isTamilSoldOut
+                        ? 'border-slate-200 bg-slate-100/90 text-slate-400 cursor-not-allowed opacity-75'
+                        : selectedMedium === 'Tamil Medium'
+                        ? 'border-blue-600 bg-blue-600 text-white shadow-md shadow-blue-600/20 cursor-pointer'
+                        : 'border-slate-200 bg-white text-slate-700 hover:border-blue-300 cursor-pointer'
                     }`}
                   >
                     <div className="flex items-center justify-between">
-                      <span className="text-sm font-black font-tamil">தமிழ் வழி</span>
-                      {selectedMedium === 'Tamil Medium' && <CheckCircle className="w-4 h-4 text-white" />}
+                      <span className={`text-sm font-black font-tamil ${isTamilSoldOut ? 'line-through text-slate-400' : ''}`}>தமிழ் வழி</span>
+                      {isTamilSoldOut ? (
+                        <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-200 text-slate-500">
+                          Sold Out
+                        </span>
+                      ) : (
+                        selectedMedium === 'Tamil Medium' && <CheckCircle className="w-4 h-4 text-white" />
+                      )}
                     </div>
-                    <span className={`text-[10px] font-bold mt-0.5 ${selectedMedium === 'Tamil Medium' ? 'text-blue-100' : 'text-slate-500'}`}>
-                      Tamil Medium
+                    <span className={`text-[10px] font-bold mt-0.5 ${
+                      isTamilSoldOut
+                        ? 'text-slate-400'
+                        : selectedMedium === 'Tamil Medium'
+                        ? 'text-blue-100'
+                        : 'text-slate-500'
+                    }`}>
+                      {isTamilSoldOut ? 'Out of stock' : 'Tamil Medium'}
                     </span>
                   </button>
 
                   <button
                     type="button"
-                    onClick={() => setSelectedMedium('English Medium')}
-                    className={`p-2.5 rounded-xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between ${
-                      selectedMedium === 'English Medium'
-                        ? 'border-blue-600 bg-blue-600 text-white shadow-md shadow-blue-600/20'
-                        : 'border-slate-200 bg-white text-slate-700 hover:border-blue-300'
+                    disabled={isEnglishSoldOut}
+                    onClick={() => !isEnglishSoldOut && setSelectedMedium('English Medium')}
+                    className={`p-2.5 rounded-xl border-2 text-left transition-all flex flex-col justify-between ${
+                      isEnglishSoldOut
+                        ? 'border-slate-200 bg-slate-100/90 text-slate-400 cursor-not-allowed opacity-75'
+                        : selectedMedium === 'English Medium'
+                        ? 'border-blue-600 bg-blue-600 text-white shadow-md shadow-blue-600/20 cursor-pointer'
+                        : 'border-slate-200 bg-white text-slate-700 hover:border-blue-300 cursor-pointer'
                     }`}
                   >
                     <div className="flex items-center justify-between">
-                      <span className="text-sm font-black">English Med</span>
-                      {selectedMedium === 'English Medium' && <CheckCircle className="w-4 h-4 text-white" />}
+                      <span className={`text-sm font-black ${isEnglishSoldOut ? 'line-through text-slate-400' : ''}`}>English Med</span>
+                      {isEnglishSoldOut ? (
+                        <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-200 text-slate-500">
+                          Sold Out
+                        </span>
+                      ) : (
+                        selectedMedium === 'English Medium' && <CheckCircle className="w-4 h-4 text-white" />
+                      )}
                     </div>
-                    <span className={`text-[10px] font-bold mt-0.5 ${selectedMedium === 'English Medium' ? 'text-blue-100' : 'text-slate-500'}`}>
-                      English Medium
+                    <span className={`text-[10px] font-bold mt-0.5 ${
+                      isEnglishSoldOut
+                        ? 'text-slate-400'
+                        : selectedMedium === 'English Medium'
+                        ? 'text-blue-100'
+                        : 'text-slate-500'
+                    }`}>
+                      {isEnglishSoldOut ? 'Out of stock' : 'English Medium'}
                     </span>
                   </button>
                 </div>
@@ -993,12 +1058,12 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
 
             {/* Actions — desktop/tablet; mobile uses sticky bar below */}
             <div className="hidden sm:flex gap-3 mt-auto">
-              {product.inStock === false ? (
+              {isProductOutOfStock || isCurrentMediumSoldOut ? (
                 <button
                   disabled
                   className="w-full bg-slate-200 text-slate-500 font-extrabold text-sm py-3.5 px-6 rounded-xl uppercase tracking-wider cursor-not-allowed"
                 >
-                  OUT OF STOCK
+                  {isCurrentMediumSoldOut ? `${selectedMedium.replace(' Medium', '')} SOLD OUT` : 'OUT OF STOCK'}
                 </button>
               ) : (
                 <>
@@ -1631,23 +1696,35 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
                 <span className="text-slate-500">ST Courier</span>
               )}
             </div>
-            {isMultiMedium && product.inStock !== false && (
+            {isMultiMedium && !isProductOutOfStock && (
               <div className="flex items-center rounded-lg bg-slate-200/80 p-0.5 mt-1 border border-slate-300/70">
                 <button
                   type="button"
-                  onClick={() => setSelectedMedium('Tamil Medium')}
+                  disabled={isTamilSoldOut}
+                  onClick={() => !isTamilSoldOut && setSelectedMedium('Tamil Medium')}
                   className={`px-1.5 py-0.5 rounded text-[8.5px] font-black transition-all ${
-                    selectedMedium === 'Tamil Medium' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600'
+                    isTamilSoldOut
+                      ? 'bg-slate-200 text-slate-400 line-through cursor-not-allowed opacity-60'
+                      : selectedMedium === 'Tamil Medium'
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'text-slate-600'
                   }`}
+                  title={isTamilSoldOut ? 'Tamil Medium Sold Out' : 'Tamil Medium'}
                 >
                   தமிழ்
                 </button>
                 <button
                   type="button"
-                  onClick={() => setSelectedMedium('English Medium')}
+                  disabled={isEnglishSoldOut}
+                  onClick={() => !isEnglishSoldOut && setSelectedMedium('English Medium')}
                   className={`px-1.5 py-0.5 rounded text-[8.5px] font-black transition-all ${
-                    selectedMedium === 'English Medium' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600'
+                    isEnglishSoldOut
+                      ? 'bg-slate-200 text-slate-400 line-through cursor-not-allowed opacity-60'
+                      : selectedMedium === 'English Medium'
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'text-slate-600'
                   }`}
+                  title={isEnglishSoldOut ? 'English Medium Sold Out' : 'English Medium'}
                 >
                   Eng
                 </button>
@@ -1656,13 +1733,13 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
           </div>
 
           {/* Action Buttons */}
-          {product.inStock === false ? (
+          {isProductOutOfStock || isCurrentMediumSoldOut ? (
             <button
               type="button"
               disabled
               className="flex-1 bg-slate-200 text-slate-500 font-extrabold text-xs py-3.5 rounded-xl uppercase tracking-wider cursor-not-allowed min-h-11"
             >
-              OUT OF STOCK
+              {isCurrentMediumSoldOut ? `${selectedMedium.replace(' Medium', '')} Sold Out` : 'OUT OF STOCK'}
             </button>
           ) : (
             <div className="flex items-center gap-1.5 flex-1 min-w-0">

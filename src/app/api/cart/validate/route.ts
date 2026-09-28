@@ -23,6 +23,8 @@ interface BookStockRow {
   id: string | number;
   title: string;
   stock: number | null;
+  stock_tamil?: number | null;
+  stock_english?: number | null;
   status: string | null;
   price: number | string | null;
   discount_price: number | string | null;
@@ -70,7 +72,7 @@ export async function POST(request: Request) {
     }
 
     const res = await queryDb(
-      `SELECT id, title, price, discount_price, stock, status, category_id, combo_subjects, language FROM books WHERE id = ANY($1)`,
+      `SELECT id, title, price, discount_price, stock, stock_tamil, stock_english, status, category_id, combo_subjects, language FROM books WHERE id = ANY($1)`,
       [ids]
     );
     const byId = new Map<string, BookStockRow>(
@@ -135,8 +137,37 @@ export async function POST(request: Request) {
         };
       }
 
-      const inStock = isBookInStock(book);
-      const avail = availableStock(book);
+      let avail = availableStock(book);
+      let isSoldOutMedium = false;
+
+      if (lowerMedium.includes('tamil') && book.stock_tamil !== null && book.stock_tamil !== undefined) {
+        const tStock = Math.max(0, Number(book.stock_tamil));
+        avail = Math.min(avail, tStock);
+        if (tStock <= 0) isSoldOutMedium = true;
+      } else if (lowerMedium.includes('english') && book.stock_english !== null && book.stock_english !== undefined) {
+        const eStock = Math.max(0, Number(book.stock_english));
+        avail = Math.min(avail, eStock);
+        if (eStock <= 0) isSoldOutMedium = true;
+      }
+
+      if (isSoldOutMedium) {
+        return {
+          id,
+          title: book.title,
+          requestedQty,
+          availableStock: 0,
+          inStock: false,
+          allowedQty: 0,
+          removed: true,
+          mediumInvalid: true,
+          message: `"${book.title}" (${requestedMedium}) is currently sold out — removed from cart`,
+          price: 0,
+          mrp: 0,
+          discount: 0,
+        };
+      }
+
+      const inStock = isBookInStock(book) && avail > 0;
       const allowedQty = Math.min(requestedQty, avail);
       let message: string | null = null;
       if (!inStock) {
