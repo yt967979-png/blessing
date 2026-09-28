@@ -31,6 +31,7 @@ interface BookStockRow {
   category_id?: string | null;
   combo_subjects?: any;
   language?: string | null;
+  is_coming_soon?: boolean | null;
 }
 
 /**
@@ -72,7 +73,7 @@ export async function POST(request: Request) {
     }
 
     const res = await queryDb(
-      `SELECT id, title, price, discount_price, stock, stock_tamil, stock_english, status, category_id, combo_subjects, language FROM books WHERE id = ANY($1)`,
+      `SELECT id, title, price, discount_price, stock, stock_tamil, stock_english, status, category_id, combo_subjects, language, is_coming_soon FROM books WHERE id = ANY($1)`,
       [ids]
     );
     const byId = new Map<string, BookStockRow>(
@@ -95,6 +96,23 @@ export async function POST(request: Request) {
           allowedQty: 0,
           removed: true,
           message: `"${fallbackTitle}" is no longer available`,
+          price: 0,
+          mrp: 0,
+          discount: 0,
+        };
+      }
+
+      if (book.is_coming_soon || book.status === 'coming_soon') {
+        return {
+          id,
+          title: book.title,
+          requestedQty,
+          availableStock: 0,
+          inStock: false,
+          isComingSoon: true,
+          allowedQty: 0,
+          removed: true,
+          message: `"${book.title}" is coming soon and cannot be ordered yet`,
           price: 0,
           mrp: 0,
           discount: 0,

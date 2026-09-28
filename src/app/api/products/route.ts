@@ -193,6 +193,7 @@ function mapCatalogRows(rows: any[]) {
       stock_tamil: d.stock_tamil !== null && d.stock_tamil !== undefined ? Number(d.stock_tamil) : null,
       stock_english: d.stock_english !== null && d.stock_english !== undefined ? Number(d.stock_english) : null,
       isBestSeller: String(d.badge || '').toUpperCase().includes('BEST'),
+      isComingSoon: Boolean(d.is_coming_soon || d.status === 'coming_soon'),
       language: d.language || 'Both',
     };
   });
@@ -207,6 +208,7 @@ async function ensureBooksColumns() {
     await queryDb(`ALTER TABLE books ADD COLUMN IF NOT EXISTS language VARCHAR(50) DEFAULT 'Both';`);
     await queryDb(`ALTER TABLE books ADD COLUMN IF NOT EXISTS stock_tamil INT DEFAULT NULL;`);
     await queryDb(`ALTER TABLE books ADD COLUMN IF NOT EXISTS stock_english INT DEFAULT NULL;`);
+    await queryDb(`ALTER TABLE books ADD COLUMN IF NOT EXISTS is_coming_soon BOOLEAN DEFAULT false;`);
     await queryDb(`ALTER TABLE stock_holds ADD COLUMN IF NOT EXISTS medium VARCHAR(50);`);
     await queryDb(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS medium VARCHAR(50);`);
   } catch {}
@@ -300,7 +302,7 @@ export async function GET(request: Request) {
       await ensureBooksColumns();
       const { where, params } = buildFilters();
       const sql = `
-        SELECT b.id, b.slug, b.title, b.subject, b.price, b.discount_price, b.stock, b.stock_tamil, b.stock_english, b.status,
+        SELECT b.id, b.slug, b.title, b.subject, b.price, b.discount_price, b.stock, b.stock_tamil, b.stock_english, b.status, b.is_coming_soon,
                b.badge, b.description, b.category_id, b.created_at, b.sample_pdf_url,
                b.combo_subjects, b.language,
                CASE
@@ -324,7 +326,7 @@ export async function GET(request: Request) {
     const loadFallback = async () => {
       const { where, params } = buildFilters();
       const sql = `
-        SELECT b.id, b.slug, b.title, b.subject, b.price, b.discount_price, b.stock, NULL::int AS stock_tamil, NULL::int AS stock_english, b.status,
+        SELECT b.id, b.slug, b.title, b.subject, b.price, b.discount_price, b.stock, NULL::int AS stock_tamil, NULL::int AS stock_english, b.status, COALESCE(b.is_coming_soon, false) AS is_coming_soon,
                b.badge, b.description, b.category_id, b.created_at, b.sample_pdf_url,
                '[]'::jsonb AS combo_subjects, COALESCE(b.language, 'Both') AS language,
                NULL::text AS cover_image,
@@ -399,12 +401,13 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { title, cls, category, price, mrp, badge, image, description, stock, stockTamil, stock_tamil, stockEnglish, stock_english, subject, status, samplePdfUrl, sample_pdf_url, comboSubjects, combo_subjects, language, medium } = body;
+    const { title, cls, category, price, mrp, badge, image, description, stock, stockTamil, stock_tamil, stockEnglish, stock_english, subject, status, samplePdfUrl, sample_pdf_url, comboSubjects, combo_subjects, language, medium, isComingSoon, is_coming_soon } = body;
 
     if (!title || price === undefined || price === null || price === '') {
       return NextResponse.json({ error: 'Title and price are required' }, { status: 400 });
     }
 
+    const finalIsComingSoon = Boolean(isComingSoon !== undefined ? isComingSoon : (is_coming_soon !== undefined ? is_coming_soon : status === 'coming_soon'));
     const finalLanguage = normalizeProductMedium(language || medium);
     let finalStockTamil: number | null = null;
     let finalStockEnglish: number | null = null;
@@ -497,8 +500,8 @@ export async function POST(request: Request) {
     await ensureBooksColumns();
 
     const sql = `
-      INSERT INTO books (id, title, slug, category_id, subject, price, discount_price, cover_image, description, status, featured, badge, stock, sample_pdf_url, combo_subjects, language, stock_tamil, stock_english)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, TRUE, $11, $12, $13, $14::jsonb, $15, $16, $17)
+      INSERT INTO books (id, title, slug, category_id, subject, price, discount_price, cover_image, description, status, featured, badge, stock, sample_pdf_url, combo_subjects, language, stock_tamil, stock_english, is_coming_soon)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, TRUE, $11, $12, $13, $14::jsonb, $15, $16, $17, $18)
       RETURNING *
     `;
     const res = await queryDb(sql, [
@@ -519,6 +522,7 @@ export async function POST(request: Request) {
       finalLanguage,
       finalStockTamil,
       finalStockEnglish,
+      finalIsComingSoon,
     ]);
     await invalidateProductsCache();
     void recordAdminAudit(
@@ -558,12 +562,20 @@ export async function PATCH(request: Request) {
   if (!auth.isAdmin) return forbiddenResponse(auth.error);
 
   try {
-    const { id, title, cls, category, category_id, subject, price, mrp, inStock, stock, stockTamil, stock_tamil, stockEnglish, stock_english, description, image, badge, hasDiscount, samplePdfUrl, sample_pdf_url, comboSubjects, combo_subjects, language, medium } = await request.json().catch(() => ({}));
+    const { id, title, cls, category, category_id, subject, price, mrp, inStock, stock, stockTamil, stock_tamil, stockEnglish, stock_english, description, image, badge, hasDiscount, samplePdfUrl, sample_pdf_url, comboSubjects, combo_subjects, language, medium, isComingSoon, is_coming_soon, status } = await request.json().catch(() => ({}));
     if (!id) return NextResponse.json({ error: 'Product id is required' }, { status: 400 });
 
     const fields: string[] = [];
     const values: any[] = [];
     let idx = 1;
+
+    const comingSoonInput = isComingSoon !== undefined ? isComingSoon : (is_coming_soon !== undefined ? is_coming_soon : (status === 'coming_soon' ? true : undefined));
+    if (comingSoonInput !== undefined) {
+      await ensureBooksColumns();
+      const val = Boolean(comingSoonInput);
+      fields.push(`is_coming_soon = $${idx++}`);
+      values.push(val);
+    }
 
     let currentSubject = subject !== undefined ? String(subject) : undefined;
     let currentTitle = title !== undefined ? String(title) : undefined;
@@ -733,6 +745,15 @@ export async function PATCH(request: Request) {
     if (inStock !== undefined) {
       const available = Boolean(inStock);
       finalStatus = available ? 'published' : 'out_of_stock';
+    }
+
+    if (status !== undefined) {
+      finalStatus = String(status);
+    } else if (comingSoonInput === true && finalStatus === undefined) {
+      finalStatus = 'coming_soon';
+    } else if (comingSoonInput === false && finalStatus === undefined && existingRow.status === 'coming_soon') {
+      const curStock = finalStock !== undefined ? finalStock : Number(existingRow.stock || 0);
+      finalStatus = curStock > 0 ? 'published' : 'out_of_stock';
     }
 
     // Assign each column once (avoids "multiple assignments to same column")

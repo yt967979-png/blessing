@@ -5,6 +5,8 @@ export interface StockAwareItem {
   title: string;
   qty: number;
   inStock?: boolean;
+  isComingSoon?: boolean;
+  status?: string;
   stock?: number;
   stockTamil?: number | null;
   stockEnglish?: number | null;
@@ -17,6 +19,8 @@ export interface StockAwareItem {
 export interface CatalogStockLookup {
   id: string | number;
   inStock?: boolean;
+  isComingSoon?: boolean;
+  status?: string;
   stock?: number;
   stockTamil?: number | null;
   stockEnglish?: number | null;
@@ -29,6 +33,8 @@ export interface CartItemStockState {
   /** null = stock not tracked for this book (treated as unlimited) */
   stock: number | null;
   inStock: boolean;
+  /** whether the item is coming soon and cannot be purchased */
+  isComingSoon?: boolean;
   /** qty in cart exceeds what's available right now */
   overLimit: boolean;
   /** qty in cart is already at the max available */
@@ -83,7 +89,8 @@ export function getCartItemStockState(
     : (typeof source.stock === 'number' ? source.stock : null);
 
   const stock = effectiveStock;
-  const inStock = source.inStock !== false && (effectiveStock === null || effectiveStock > 0);
+  const isComingSoon = Boolean(source.isComingSoon || source.status === 'coming_soon');
+  const inStock = !isComingSoon && source.inStock !== false && (effectiveStock === null || effectiveStock > 0);
   const overLimit = inStock && stock !== null && item.qty > stock;
   const atLimit = inStock && stock !== null && item.qty >= stock;
   const activeLang = live?.language !== undefined ? live.language : item.language;
@@ -92,10 +99,11 @@ export function getCartItemStockState(
   return {
     stock,
     inStock: inStock && !mediumInvalid,
+    isComingSoon,
     overLimit,
     atLimit,
     mediumInvalid,
-    blocking: !inStock || overLimit || mediumInvalid,
+    blocking: isComingSoon || !inStock || overLimit || mediumInvalid,
   };
 }
 

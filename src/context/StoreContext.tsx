@@ -38,6 +38,8 @@ export interface Product {
   isNew?: boolean;
   isBestSeller?: boolean;
   isTrending?: boolean;
+  isComingSoon?: boolean;
+  is_coming_soon?: boolean;
   language?: string;
   medium?: string;
   status?: string;
@@ -58,6 +60,7 @@ interface StockPushEntry {
   stock_english?: number | null;
   status: string;
   inStock: boolean;
+  isComingSoon?: boolean;
   price?: number;
   mrp?: number;
   discount?: number;
@@ -715,7 +718,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           p.title === newTitle &&
           p.badge === newBadge &&
           p.samplePdfUrl === newSamplePdf &&
-          p.image === newImage
+          p.image === newImage &&
+          (upd.isComingSoon === undefined || p.isComingSoon === upd.isComingSoon)
         ) {
           return p;
         }
@@ -729,6 +733,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           stock_english: newStockEnglish,
           inStock: upd.inStock,
           status: newStatus,
+          isComingSoon: upd.isComingSoon !== undefined ? upd.isComingSoon : p.isComingSoon,
           price: newPrice,
           mrp: newMrp,
           discount: newDiscount,
@@ -1201,6 +1206,10 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     // Prefer the freshest catalog snapshot (kept live by the 15s poll) over
     // whatever stale product object the caller passed in.
     const live = productsRef.current.find((p) => String(p.id) === String(product.id)) || product;
+    if (live.isComingSoon || live.status === 'coming_soon') {
+      showToast(`⏳ "${live.title}" is coming soon and cannot be ordered yet.`);
+      return;
+    }
     if (live.inStock === false) {
       showToast(`❌ "${live.title}" is out of stock`);
       return;
@@ -2005,6 +2014,14 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         withDerived.discount = Math.round(((mrp - sell) / mrp) * 100);
       }
     }
+    if (rest.isComingSoon !== undefined || (rest as any).is_coming_soon !== undefined) {
+      const cs = Boolean(rest.isComingSoon !== undefined ? rest.isComingSoon : (rest as any).is_coming_soon);
+      withDerived.isComingSoon = cs;
+      withDerived.is_coming_soon = cs;
+      if (cs) {
+        (withDerived as any).status = 'coming_soon';
+      }
+    }
     if (rest.inStock !== undefined) {
       withDerived.inStock = Boolean(rest.inStock);
     }
@@ -2048,6 +2065,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         if (String(item.id) !== String(id)) {
           next.push(item);
           continue;
+        }
+        if (withDerived.isComingSoon) {
+          changed = true;
+          droppedMediums.push(`"${item.title}" (Now Coming Soon)`);
+          continue; // Remove item that is now marked coming soon
         }
         if (withDerived.language !== undefined && !isMediumCompatible(item.selectedMedium, withDerived.language)) {
           changed = true;
@@ -2189,6 +2211,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       stock_tamil: (newProdData as any).stockTamil ?? (newProdData as any).stock_tamil ?? null,
       stock_english: (newProdData as any).stockEnglish ?? (newProdData as any).stock_english ?? null,
       isBestSeller: String(newProdData.badge || '').toUpperCase().includes('BEST'),
+      isComingSoon: Boolean(newProdData.isComingSoon || (newProdData as any).is_coming_soon || (newProdData as any).status === 'coming_soon'),
       samplePdfUrl: (newProdData as any).samplePdfUrl || null,
       comboSubjects: newProdData.comboSubjects || [],
     };
@@ -2219,6 +2242,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           language: finalLanguage,
           medium: finalLanguage,
           status: (newProdData as any).status,
+          isComingSoon: Boolean(newProdData.isComingSoon || (newProdData as any).is_coming_soon || (newProdData as any).status === 'coming_soon'),
           samplePdfUrl: (newProdData as any).samplePdfUrl,
           comboSubjects: newProdData.comboSubjects || [],
         }),

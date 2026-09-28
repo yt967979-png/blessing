@@ -25,6 +25,7 @@ export interface StockChangeEntry {
   stockEnglish?: number | null;
   status: string;
   inStock: boolean;
+  isComingSoon?: boolean;
   price?: number;
   mrp?: number;
   discount?: number;
@@ -69,7 +70,7 @@ export async function notifyStockChanged(bookIds: Array<string | number | null |
   if (ids.length === 0) return;
   try {
     const res = await queryDb(
-      `SELECT id, price, discount_price, stock, stock_tamil, stock_english, status, language, title, badge, sample_pdf_url, cover_image FROM books WHERE id = ANY($1::text[])`,
+      `SELECT id, price, discount_price, stock, stock_tamil, stock_english, status, language, title, badge, sample_pdf_url, cover_image, is_coming_soon FROM books WHERE id = ANY($1::text[])`,
       [ids]
     );
     const books: StockChangeEntry[] = (res.rows || []).map((r: any) => {
@@ -85,6 +86,7 @@ export async function notifyStockChanged(bookIds: Array<string | number | null |
         stockEnglish: se,
         status: String(r.status || ''),
         inStock: isBookInStock(r),
+        isComingSoon: Boolean(r.is_coming_soon || r.status === 'coming_soon'),
         price,
         mrp,
         discount,

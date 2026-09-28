@@ -21,6 +21,7 @@ import {
   BookOpen,
   Check,
   Zap,
+  Sparkles,
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { Header } from '@/components/layout/Header';
@@ -195,9 +196,10 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [product?.language, mediumType, isMultiMedium, isTamilSoldOut, isEnglishSoldOut]);
 
+  const isComingSoon = Boolean(product?.isComingSoon || product?.is_coming_soon || product?.status === 'coming_soon');
   const bothMediumsSoldOut = isMultiMedium && isTamilSoldOut && isEnglishSoldOut;
-  const isCurrentMediumSoldOut = isMultiMedium && ((selectedMedium === 'Tamil Medium' && isTamilSoldOut) || (selectedMedium === 'English Medium' && isEnglishSoldOut));
-  const isProductOutOfStock = product?.inStock === false || (product?.stock !== undefined && product?.stock <= 0) || bothMediumsSoldOut;
+  const isCurrentMediumSoldOut = !isComingSoon && isMultiMedium && ((selectedMedium === 'Tamil Medium' && isTamilSoldOut) || (selectedMedium === 'English Medium' && isEnglishSoldOut));
+  const isProductOutOfStock = !isComingSoon && (product?.inStock === false || (product?.stock !== undefined && product?.stock <= 0) || bothMediumsSoldOut);
 
   const currentMediumRemainingStock = selectedMedium === 'Tamil Medium' && tamilStock !== null
     ? tamilStock
@@ -208,14 +210,14 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
   const finalMedium = resolveCartItemMedium(product?.language, selectedMedium);
 
   const handleMobileAddToCart = () => {
-    if (!product || isProductOutOfStock || isCurrentMediumSoldOut) return;
+    if (!product || isProductOutOfStock || isCurrentMediumSoldOut || isComingSoon) return;
     addToCart(product, 1, finalMedium);
     setIsMobileAdded(true);
     setTimeout(() => setIsMobileAdded(false), 1800);
   };
 
   const tryBuyNow = () => {
-    if (!product) return;
+    if (!product || isComingSoon) return;
     addToCart(product, 1, finalMedium);
     if (!user) {
       setIsAuthOpen(true);
@@ -762,8 +764,13 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
               )}
             </div>
 
-            {/* Live Stock Urgency or Medium Sold Out Alert */}
-            {isCurrentMediumSoldOut ? (
+            {/* Coming Soon Alert OR Live Stock Urgency or Medium Sold Out Alert */}
+            {isComingSoon ? (
+              <div className="flex items-center gap-2.5 text-xs font-black text-amber-950 bg-gradient-to-r from-amber-100 via-amber-50 to-amber-100 border border-amber-300 px-4 py-3 rounded-xl mb-4 shadow-2xs">
+                <Sparkles className="w-4 h-4 text-amber-600 shrink-0 animate-pulse" />
+                <span>🚀 This book is Coming Soon! Printing in progress — availability will open shortly.</span>
+              </div>
+            ) : isCurrentMediumSoldOut ? (
               <div className="flex items-center gap-2 text-xs font-black text-rose-800 bg-rose-50 border border-rose-200 px-3.5 py-2.5 rounded-xl mb-4 shadow-2xs">
                 <span>⚠️ {selectedMedium} is Sold Out! {(!isTamilSoldOut || !isEnglishSoldOut) ? 'Please switch to the available medium below.' : ''}</span>
               </div>
@@ -1045,8 +1052,13 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
             </div>
 
             {/* Actions — desktop/tablet; mobile uses sticky bar below */}
-            <div className="hidden sm:flex gap-3 mt-auto">
-              {isProductOutOfStock || isCurrentMediumSoldOut ? (
+            <div className="hidden sm:flex flex-col gap-3 mt-auto">
+              {isComingSoon ? (
+                <div className="w-full py-4 px-6 bg-gradient-to-r from-amber-500/15 via-amber-400/25 to-amber-500/15 border-2 border-amber-400/70 text-amber-950 font-black text-sm rounded-2xl flex items-center justify-center gap-2.5 shadow-xs">
+                  <Sparkles className="w-5 h-5 text-amber-600 animate-pulse" />
+                  <span>🚀 COMING SOON — PRE-ORDERS OPENING SHORTLY</span>
+                </div>
+              ) : isProductOutOfStock || isCurrentMediumSoldOut ? (
                 <button
                   disabled
                   className="w-full bg-slate-200 text-slate-500 font-extrabold text-sm py-3.5 px-6 rounded-xl uppercase tracking-wider cursor-not-allowed"
@@ -1054,13 +1066,13 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
                   {isCurrentMediumSoldOut ? `${selectedMedium.replace(' Medium', '')} SOLD OUT` : 'OUT OF STOCK'}
                 </button>
               ) : (
-                <>
+                <div className="flex gap-3">
                   <button
                     type="button"
                     onClick={() => {
                       addToCart(product, 1, finalMedium);
                     }}
-                    className="flex-1 bg-[#0044AA] text-white font-extrabold text-sm py-3.5 px-4 rounded-xl shadow-md flex items-center justify-center gap-2 uppercase tracking-wider min-h-12"
+                    className="flex-1 bg-[#0044AA] hover:bg-[#003388] text-white font-extrabold text-sm py-3.5 px-4 rounded-xl shadow-md flex items-center justify-center gap-2 uppercase tracking-wider min-h-12 cursor-pointer transition-all"
                   >
                     <ShoppingBag className="w-4 h-4 text-amber-400" />
                     <span>ADD TO CART</span>
@@ -1068,11 +1080,11 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
                   <button
                     type="button"
                     onClick={tryBuyNow}
-                    className="flex-1 bg-gradient-to-r from-amber-400 to-amber-500 text-[#001B3A] font-extrabold text-sm py-3.5 px-4 rounded-xl shadow-md uppercase tracking-wider min-h-12"
+                    className="flex-1 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-[#001B3A] font-extrabold text-sm py-3.5 px-4 rounded-xl shadow-md uppercase tracking-wider min-h-12 cursor-pointer transition-all"
                   >
                     BUY NOW
                   </button>
-                </>
+                </div>
               )}
             </div>
             {/* 1-Click WhatsApp Share for Students & Classmates */}
@@ -1086,7 +1098,7 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
               </svg>
               <span>Share Book with Classmates on WhatsApp</span>
             </button>
-            {minOrderMsg && product.inStock !== false && (
+            {minOrderMsg && !isComingSoon && product.inStock !== false && (
               <p className="mt-3 text-[11px] text-amber-800 font-medium bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
                 {minOrderMsg} Same title can be added multiple times.
               </p>
@@ -1674,7 +1686,9 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
               )}
             </div>
             <div className="text-[9px] font-black mt-0.5 truncate">
-              {product.inStock === false ? (
+              {isComingSoon ? (
+                <span className="text-amber-600">🚀 Coming Soon</span>
+              ) : product.inStock === false ? (
                 <span className="text-red-600">Out of Stock</span>
               ) : isCombo ? (
                 <span className="text-emerald-700 bg-emerald-50 px-1 rounded">🎁 FREE Courier</span>
@@ -1721,7 +1735,12 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
           </div>
 
           {/* Action Buttons */}
-          {isProductOutOfStock || isCurrentMediumSoldOut ? (
+          {isComingSoon ? (
+            <div className="flex-1 py-3 px-3 bg-gradient-to-r from-amber-500/20 via-amber-400/30 to-amber-500/20 border border-amber-400 text-amber-950 font-black text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-2xs">
+              <Sparkles className="w-4 h-4 text-amber-600 animate-pulse" />
+              <span>🚀 COMING SOON</span>
+            </div>
+          ) : isProductOutOfStock || isCurrentMediumSoldOut ? (
             <button
               type="button"
               disabled

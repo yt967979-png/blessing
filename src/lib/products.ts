@@ -33,6 +33,8 @@ export interface Product {
   isNew?: boolean;
   isBestSeller?: boolean;
   isTrending?: boolean;
+  isComingSoon?: boolean;
+  is_coming_soon?: boolean;
 }
 
 // Initial products array - starts empty until products are fetched dynamically from DB or added via Admin Portal

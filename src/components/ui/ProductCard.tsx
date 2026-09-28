@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { Heart, Star, ShoppingBag, Truck, Check, FileText } from 'lucide-react';
+import { Heart, Star, ShoppingBag, Truck, Check, FileText, Sparkles } from 'lucide-react';
 import { Product } from '@/lib/products';
 import { useStore } from '@/context/StoreContext';
 import { imageNeedsUnoptimized } from '@/lib/productImage';
@@ -82,9 +82,10 @@ export const ProductCard = React.memo(function ProductCard({ product }: { produc
     ? `/products/${product.slug || product.id}?medium=${encodeURIComponent(selectedMedium)}`
     : `/products/${product.slug || product.id}`;
 
+  const isComingSoon = Boolean(product.isComingSoon || (product as any).is_coming_soon || product.status === 'coming_soon');
   const bothMediumsSoldOut = isMultiMedium && isTamilSoldOut && isEnglishSoldOut;
-  const isOutOfStock = product.inStock === false || (product.stock !== undefined && product.stock <= 0) || bothMediumsSoldOut;
-  const isCurrentMediumSoldOut = isMultiMedium && ((selectedMedium === 'Tamil Medium' && isTamilSoldOut) || (selectedMedium === 'English Medium' && isEnglishSoldOut));
+  const isOutOfStock = !isComingSoon && (product.inStock === false || (product.stock !== undefined && product.stock <= 0) || bothMediumsSoldOut);
+  const isCurrentMediumSoldOut = !isComingSoon && isMultiMedium && ((selectedMedium === 'Tamil Medium' && isTamilSoldOut) || (selectedMedium === 'English Medium' && isEnglishSoldOut));
   const isCombo = isComboItem(product);
   const comboSubjects = isCombo ? getComboIncludedSubjects(product) : [];
 
@@ -93,7 +94,7 @@ export const ProductCard = React.memo(function ProductCard({ product }: { produc
   };
 
   const handleAddToCart = () => {
-    if (isOutOfStock) return;
+    if (isOutOfStock || isComingSoon) return;
     addToCart(product, 1, finalMedium);
     setIsAdded(true);
     setTimeout(() => setIsAdded(false), 1800);
@@ -102,14 +103,21 @@ export const ProductCard = React.memo(function ProductCard({ product }: { produc
   return (
     <article
       className={`product-card-shell group border rounded-2xl p-3 sm:p-4 flex flex-col relative h-full shadow-sm transition-all duration-300 ${
-        isOutOfStock
+        isComingSoon
+          ? 'bg-amber-50/15 border-amber-200/90 hover:shadow-xl hover:border-amber-300 hover:-translate-y-1'
+          : isOutOfStock
           ? 'bg-slate-100/95 border-slate-300 grayscale'
           : 'bg-white border-slate-200/90 hover:shadow-xl hover:border-blue-300/80 hover:-translate-y-1'
       }`}
       onPointerEnter={prefetchProduct}
     >
       <div className="absolute top-2 left-2 z-10 flex flex-col gap-1">
-        {isOutOfStock ? (
+        {isComingSoon ? (
+          <span className="text-[9.5px] font-black text-amber-950 px-2 py-0.5 rounded-md bg-gradient-to-r from-amber-400 to-amber-300 shadow-sm border border-amber-500/30 flex items-center gap-1">
+            <Sparkles className="w-2.5 h-2.5 text-amber-900" />
+            <span>COMING SOON</span>
+          </span>
+        ) : isOutOfStock ? (
           <span className="text-[9px] font-black text-white px-2 py-0.5 rounded-md bg-slate-700 shadow-sm">
             OUT OF STOCK
           </span>
@@ -331,64 +339,73 @@ export const ProductCard = React.memo(function ProductCard({ product }: { produc
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-1.5 sm:gap-2 mt-auto">
-        <button
-          type="button"
-          disabled={isOutOfStock || isCurrentMediumSoldOut}
-          onClick={handleAddToCart}
-          className={`font-extrabold text-[11px] sm:text-xs py-2.5 rounded-xl flex items-center justify-center gap-1 uppercase touch-manipulation disabled:cursor-not-allowed min-h-11 transition-all duration-300 ${
-            isOutOfStock || isCurrentMediumSoldOut ? 'cursor-not-allowed' : 'cursor-pointer'
-          } ${
-            isAdded
-              ? 'bg-emerald-600 text-white animate-success-pop shadow-md shadow-emerald-600/30'
-              : 'bg-[#0044AA] hover:bg-[#003388] active:bg-[#001B3A] disabled:bg-slate-300 disabled:text-slate-500 text-white'
-          }`}
-        >
-          {isOutOfStock || isCurrentMediumSoldOut ? (
-            <span>SOLD OUT</span>
-          ) : isAdded ? (
-            <>
-              <Check className="w-4 h-4 text-white animate-bounce" />
-              <span>ADDED</span>
-            </>
-          ) : (
-            <>
-              <ShoppingBag className="w-3.5 h-3.5" />
-              <span>ADD</span>
-            </>
-          )}
-        </button>
-        <button
-          type="button"
-          disabled={isOutOfStock || isCurrentMediumSoldOut}
-          onClick={() => {
-            if (isOutOfStock || isCurrentMediumSoldOut) return;
-            addToCart(product, 1, finalMedium);
-            if (!user) {
-              setIsAuthOpen(true);
-              showToast('Book added to cart! Please sign in with Google to proceed.');
-              return;
-            }
-            if (isComboItem(product)) {
-              showToast(`Added ${product.title}! 🎁 FREE Express Delivery Unlocked!`);
+      {isComingSoon ? (
+        <div className="mt-auto pt-1">
+          <div className="w-full py-2.5 px-3 bg-gradient-to-r from-amber-500/15 via-amber-400/25 to-amber-500/15 border border-amber-400/60 text-amber-900 font-extrabold text-[11px] sm:text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-2xs">
+            <Sparkles className="w-3.5 h-3.5 text-amber-600 animate-pulse" />
+            <span>🚀 COMING SOON</span>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-1.5 sm:gap-2 mt-auto">
+          <button
+            type="button"
+            disabled={isOutOfStock || isCurrentMediumSoldOut}
+            onClick={handleAddToCart}
+            className={`font-extrabold text-[11px] sm:text-xs py-2.5 rounded-xl flex items-center justify-center gap-1 uppercase touch-manipulation disabled:cursor-not-allowed min-h-11 transition-all duration-300 ${
+              isOutOfStock || isCurrentMediumSoldOut ? 'cursor-not-allowed' : 'cursor-pointer'
+            } ${
+              isAdded
+                ? 'bg-emerald-600 text-white animate-success-pop shadow-md shadow-emerald-600/30'
+                : 'bg-[#0044AA] hover:bg-[#003388] active:bg-[#001B3A] disabled:bg-slate-300 disabled:text-slate-500 text-white'
+            }`}
+          >
+            {isOutOfStock || isCurrentMediumSoldOut ? (
+              <span>SOLD OUT</span>
+            ) : isAdded ? (
+              <>
+                <Check className="w-4 h-4 text-white animate-bounce" />
+                <span>ADDED</span>
+              </>
+            ) : (
+              <>
+                <ShoppingBag className="w-3.5 h-3.5" />
+                <span>ADD</span>
+              </>
+            )}
+          </button>
+          <button
+            type="button"
+            disabled={isOutOfStock || isCurrentMediumSoldOut}
+            onClick={() => {
+              if (isOutOfStock || isCurrentMediumSoldOut) return;
+              addToCart(product, 1, finalMedium);
+              if (!user) {
+                setIsAuthOpen(true);
+                showToast('Book added to cart! Please sign in with Google to proceed.');
+                return;
+              }
+              if (isComboItem(product)) {
+                showToast(`Added ${product.title}! 🎁 FREE Express Delivery Unlocked!`);
+                setIsCheckoutOpen(true);
+                router.push('/checkout');
+                return;
+              }
+              const need = booksUntilMinOrder(cartCount + 1);
+              if (need > 0) {
+                showToast(`Added to cart. Minimum ${MIN_BOOKS_PER_ORDER} books required — add ${need} more to checkout.`);
+                setIsCartOpen(true);
+                return;
+              }
               setIsCheckoutOpen(true);
               router.push('/checkout');
-              return;
-            }
-            const need = booksUntilMinOrder(cartCount + 1);
-            if (need > 0) {
-              showToast(`Added to cart. Minimum ${MIN_BOOKS_PER_ORDER} books required — add ${need} more to checkout.`);
-              setIsCartOpen(true);
-              return;
-            }
-            setIsCheckoutOpen(true);
-            router.push('/checkout');
-          }}
-          className="bg-amber-400 hover:bg-amber-500 active:bg-amber-600 disabled:bg-slate-200 disabled:text-slate-500 text-[#001B3A] font-extrabold text-[11px] sm:text-xs py-2.5 rounded-xl uppercase touch-manipulation disabled:cursor-not-allowed min-h-11 shadow-sm hover:shadow-md transition-all flex items-center justify-center cursor-pointer"
-        >
-          {isOutOfStock ? 'N/A' : 'BUY'}
-        </button>
-      </div>
+            }}
+            className="bg-amber-400 hover:bg-amber-500 active:bg-amber-600 disabled:bg-slate-200 disabled:text-slate-500 text-[#001B3A] font-extrabold text-[11px] sm:text-xs py-2.5 rounded-xl uppercase touch-manipulation disabled:cursor-not-allowed min-h-11 shadow-sm hover:shadow-md transition-all flex items-center justify-center cursor-pointer"
+          >
+            {isOutOfStock ? 'N/A' : 'BUY'}
+          </button>
+        </div>
+      )}
     </article>
   );
 });
