@@ -2,6 +2,13 @@ import { NextResponse } from 'next/server';
 import { applyRateLimitAsync, clientIp, getAuthenticatedUser } from '@/lib/serverSecurity';
 import { listAvailableCouponsForUser } from '@/lib/coupons';
 
+let publicMemoryCache: { coupons: any[]; timestamp: number } | null = null;
+const CACHE_TTL_MS = 15000;
+
+export function invalidateCouponsCache() {
+  publicMemoryCache = null;
+}
+
 /** Public catalog of active coupons. Signed-in users also get alreadyUsed. */
 export async function GET(request: Request) {
   const session = await getAuthenticatedUser(request);
@@ -12,8 +19,24 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Please wait a moment and try again.' }, { status: 429 });
   }
 
+  // Fast-path in-memory cache for anonymous public visitors
+  if (!session && publicMemoryCache && Date.now() - publicMemoryCache.timestamp < CACHE_TTL_MS) {
+    return NextResponse.json(
+      { coupons: publicMemoryCache.coupons, cached: true },
+      {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate',
+          'X-Cache': 'HIT_MEMORY',
+        },
+      }
+    );
+  }
+
   try {
     const coupons = await listAvailableCouponsForUser(session?.userId || '');
+    if (!session) {
+      publicMemoryCache = { coupons, timestamp: Date.now() };
+    }
     return NextResponse.json(
       { coupons },
       {

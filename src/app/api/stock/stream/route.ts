@@ -158,6 +158,15 @@ export async function notifyCatalogChanged(
 /** Shop home / hero / profile refetch coupon cards after admin create/edit/delete. */
 export async function notifyCouponsChanged(): Promise<void> {
   try {
+    try {
+      const { invalidateCouponsCache } = await import('@/app/api/coupons/available/route');
+      invalidateCouponsCache();
+    } catch (_) {}
+    try {
+      const { invalidateHeroCouponCache } = await import('@/app/api/coupons/hero/route');
+      invalidateHeroCouponCache();
+    } catch (_) {}
+
     const payload = { type: 'COUPONS_CHANGED', timestamp: Date.now() };
     broadcastStockChange(payload);
     const client = await getDbClient();

@@ -186,7 +186,12 @@ export async function syncAllAbandonedCartsInDb(existingClient?: any): Promise<{
 
     const [booksRes, cartsRes] = await Promise.all([
       client.query(`SELECT id, title, subject, price, discount_price, stock, status, language FROM books`),
-      client.query(`SELECT id, cart_json FROM abandoned_carts`),
+      client.query(
+        `SELECT id, cart_json FROM abandoned_carts 
+         WHERE updated_at > NOW() - INTERVAL '7 days' 
+         ORDER BY updated_at DESC 
+         LIMIT 200`
+      ),
     ]);
 
     const catalogBooks: CatalogBookRow[] = booksRes.rows || [];

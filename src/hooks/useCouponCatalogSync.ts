@@ -28,8 +28,11 @@ export function useCouponCatalogSync(reload: () => void) {
       }
     } catch (_) {}
 
-    // Rapid 4-second poll guarantee so no refresh is ever needed
-    const poll = window.setInterval(run, 4000);
+    // Fallback 30-second poll guarantee for background synchronization (instant updates handled by SSE & BroadcastChannel)
+    const poll = window.setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      run();
+    }, 30000);
 
     return () => {
       window.removeEventListener('bpg:coupons-changed', run);

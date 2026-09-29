@@ -187,19 +187,18 @@ export async function retryFailedWebhookEvents(): Promise<{ replayed: number; re
             await confirmStockHolds(rzpOrdId);
           }
 
-          if (payId) {
-            const ord = await queryDb(
-              `SELECT id FROM orders WHERE razorpay_payment_id = $1 OR razorpay_order_id = $2 LIMIT 1`,
-              [payId, rzpOrdId || null]
-            );
-            if (ord.rows.length) {
-              await queryDb(
-                `UPDATE orders SET payment_status = 'Payment Confirmed', updated_at = NOW() WHERE id = $1`,
-                [ord.rows[0].id]
-              );
+          if (payId || rzpOrdId) {
+            const finalRes = await finalizeOrderFromPayment({
+              razorpayOrderId: rzpOrdId,
+              razorpayPaymentId: payId,
+              source: 'background_reconciliation',
+            });
+            if (finalRes.ok) {
+              success = true;
+            } else {
+              console.warn(`[dead-letter-replay] could not finalize order for ${payId || rzpOrdId}: ${finalRes.error}`);
             }
           }
-          success = true;
         } else if (eventType.includes('refund')) {
           const refundEntity = event?.payload?.refund?.entity || event?.payload?.payment?.entity;
           const refundPayId = String(refundEntity?.payment_id || '').trim();

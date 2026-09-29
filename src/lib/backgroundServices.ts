@@ -59,8 +59,8 @@ export async function startLeaderBackgroundServices() {
         await recordJobHeartbeat({ jobName: 'reconcileUnfinalizedRefunds', durationMs: Date.now() - t0, status: 'error', error: e?.message || String(e) });
       }
     };
-    setTimeout(() => void sweep(), 5 * 60 * 1000);
-    orphanRefundTimer = setInterval(() => void sweep(), 10 * 60 * 1000);
+    setTimeout(() => void sweep(), 30 * 1000);
+    orphanRefundTimer = setInterval(() => void sweep(), 2 * 60 * 1000);
   }
 
   // Abandoned Razorpay checkout sweeper — releases reserved stock for

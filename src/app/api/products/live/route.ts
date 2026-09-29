@@ -50,7 +50,7 @@ export async function GET(request: Request) {
   // 3. Lean database query: only dynamic columns (0 joins, minimal bandwidth)
   try {
     const res = await queryDb(
-      `SELECT id, stock, stock_tamil, stock_english, price, discount_price, status, language, title, badge, sample_pdf_url, cover_image FROM books ORDER BY id`
+      `SELECT id, stock, stock_tamil, stock_english, price, discount_price, status, language, title, badge, sample_pdf_url, cover_image, is_coming_soon FROM books ORDER BY id`
     );
 
     const map: Record<string, any> = {};
@@ -58,6 +58,7 @@ export async function GET(request: Request) {
       const { price, mrp, discount } = calculateBookPrices(row);
       const inStock = isBookInStock(row);
       const stock = Math.max(0, Math.floor(Number(row.stock) || 0));
+      const isComingSoon = Boolean(row.is_coming_soon || row.status === 'coming_soon');
 
       map[row.id] = {
         id: row.id,
@@ -71,6 +72,8 @@ export async function GET(request: Request) {
         mrp,
         discount,
         status: row.status,
+        isComingSoon,
+        is_coming_soon: isComingSoon,
         language: row.language || 'Both',
         title: row.title != null ? String(row.title) : undefined,
         badge: row.badge != null ? String(row.badge) : undefined,

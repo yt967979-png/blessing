@@ -165,21 +165,37 @@ export default function CheckoutPage() {
     } catch {}
   }, []);
 
-  // Check if a previous mobile UPI payment completed while the tab was asleep/reloading
+  // Check if a previous mobile UPI payment completed while the tab was asleep/reloading/crashed
   useEffect(() => {
     if (typeof window === 'undefined') return;
     try {
-      const pendingRzpId = sessionStorage.getItem('bpg_pending_rzp_order');
+      let pendingRzpId = sessionStorage.getItem('bpg_pending_rzp_order');
+      if (!pendingRzpId) {
+        try {
+          const rawLocal = localStorage.getItem('bpg_pending_rzp_order');
+          if (rawLocal) {
+            const parsed = JSON.parse(rawLocal);
+            if (parsed?.orderId && parsed?.time && Date.now() - parsed.time < 2 * 60 * 60 * 1000) {
+              pendingRzpId = parsed.orderId;
+            } else {
+              localStorage.removeItem('bpg_pending_rzp_order');
+            }
+          }
+        } catch {}
+      }
+
       if (pendingRzpId) {
         fetch(`/api/checkout/status?orderId=${encodeURIComponent(pendingRzpId)}`)
           .then((r) => r.json())
           .then((d) => {
             if (d.status === 'ORDER_CONFIRMED' && d.orderId) {
               sessionStorage.removeItem('bpg_pending_rzp_order');
+              try { localStorage.removeItem('bpg_pending_rzp_order'); } catch {}
               clearCartAfterOrder();
               router.push(`/orders?orderId=${encodeURIComponent(d.orderId)}`);
-            } else if (d.status === 'FAILED' || d.status === 'CANCELLED') {
+            } else if (d.status === 'PAYMENT_FAILED' || d.status === 'CANCELLED') {
               sessionStorage.removeItem('bpg_pending_rzp_order');
+              try { localStorage.removeItem('bpg_pending_rzp_order'); } catch {}
             }
           })
           .catch(() => {});
@@ -668,6 +684,7 @@ export default function CheckoutPage() {
         pendingRazorpayOrderIdRef.current = null;
         try {
           sessionStorage.removeItem('bpg_pending_rzp_order');
+          localStorage.removeItem('bpg_pending_rzp_order');
         } catch {}
         clearCartAfterOrder();
         try {
@@ -730,6 +747,10 @@ export default function CheckoutPage() {
 
       try {
         sessionStorage.setItem('bpg_pending_rzp_order', rzpData.orderId);
+        localStorage.setItem(
+          'bpg_pending_rzp_order',
+          JSON.stringify({ orderId: rzpData.orderId, time: Date.now() })
+        );
       } catch {}
 
       if (typeof rzpData.discountAmount === 'number' && appliedCoupon) {
@@ -796,6 +817,7 @@ export default function CheckoutPage() {
           ondismiss: function () {
             try {
               sessionStorage.removeItem('bpg_pending_rzp_order');
+              localStorage.removeItem('bpg_pending_rzp_order');
             } catch {}
             showToast('Payment window closed. Your items are safe in your cart.');
             releasePendingHold('modal_dismissed');
@@ -808,6 +830,7 @@ export default function CheckoutPage() {
       rzp.on('payment.failed', function (resp: any) {
         try {
           sessionStorage.removeItem('bpg_pending_rzp_order');
+          localStorage.removeItem('bpg_pending_rzp_order');
         } catch {}
         showToast(`❌ Payment Failed: ${resp.error?.description || 'Declined'}`);
         releasePendingHold('payment_failed');
@@ -817,6 +840,7 @@ export default function CheckoutPage() {
     } catch (e: any) {
       try {
         sessionStorage.removeItem('bpg_pending_rzp_order');
+        localStorage.removeItem('bpg_pending_rzp_order');
       } catch {}
       showToast(`❌ ${e?.message || 'Order failed'}`);
       releasePendingHold('client_error');

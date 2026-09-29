@@ -618,6 +618,10 @@ async function migrateDatabase(connStr, dbName) {
       CREATE INDEX IF NOT EXISTS idx_books_status_cat ON books (status, category_id);
       CREATE INDEX IF NOT EXISTS idx_addresses_user_id ON addresses (user_id);
       CREATE INDEX IF NOT EXISTS idx_orders_order_number ON orders (order_number);
+      CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications (user_id, is_read, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_abandoned_carts_user ON abandoned_carts (user_id);
+      CREATE INDEX IF NOT EXISTS idx_abandoned_carts_updated ON abandoned_carts (updated_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_checkout_sessions_sweep ON checkout_sessions (status, created_at);
 
       ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS ip_address VARCHAR(100);
       ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS user_agent TEXT;

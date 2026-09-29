@@ -2,8 +2,28 @@ import { NextResponse } from 'next/server';
 import { queryDb } from '@/lib/db';
 import { mapHeroCoupon } from '@/lib/coupons';
 
+let heroMemoryCache: { offer: any; timestamp: number } | null = null;
+const HERO_CACHE_TTL_MS = 15000;
+
+export function invalidateHeroCouponCache() {
+  heroMemoryCache = null;
+}
+
 /** Public: the single festive offer admin pinned to the home hero. */
 export async function GET() {
+  const now = Date.now();
+  if (heroMemoryCache && now - heroMemoryCache.timestamp < HERO_CACHE_TTL_MS) {
+    return NextResponse.json(
+      { offer: heroMemoryCache.offer, cached: true },
+      {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate',
+          'X-Cache': 'HIT_MEMORY',
+        },
+      }
+    );
+  }
+
   try {
     const res = await queryDb(
       `SELECT title, max_uses, used_count
@@ -17,6 +37,7 @@ export async function GET() {
     );
     const mapped = mapHeroCoupon(res.rows?.[0]);
     const offer = mapped ? { title: mapped.title } : null;
+    heroMemoryCache = { offer, timestamp: now };
     return NextResponse.json(
       { offer },
       {

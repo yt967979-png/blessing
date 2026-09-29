@@ -459,6 +459,28 @@ function AdminPageInner() {
     };
     connectOrdersStream();
 
+    // Cross-tab and multi-window order live sync bus
+    let bcOrders: BroadcastChannel | null = null;
+    try {
+      if (typeof window !== 'undefined' && typeof BroadcastChannel !== 'undefined') {
+        bcOrders = new BroadcastChannel('bpg_orders_bus');
+        bcOrders.onmessage = () => {
+          loadLiveOrders({ fromStream: true, silent: true });
+          loadLowStock();
+          loadAnalytics();
+        };
+      }
+    } catch (_) {}
+
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'bpg_orders_sync_signal') {
+        loadLiveOrders({ fromStream: true, silent: true });
+        loadLowStock();
+        loadAnalytics();
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+
     // Guaranteed safety-net dual sync:
     // Silent 8-second poll ensures admin never misses an order even if SSE stream was suspended or closed
     const pollInterval = setInterval(() => {
@@ -470,19 +492,36 @@ function AdminPageInner() {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         loadLiveOrders({ fromStream: true, silent: true });
+        loadLowStock();
         loadWaitingSupport();
       }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleVisibilityChange);
 
     return () => {
       active = false;
       clearInterval(pollInterval);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleVisibilityChange);
+      window.removeEventListener('storage', handleStorage);
+      try { bcOrders?.close(); } catch (_) {}
       if (esStock) esStock.close();
       if (esOrders) esOrders.close();
     };
   }, [user, isAdmin, loadLowStock, loadLiveOrders, loadAnalytics, loadWaitingSupport]);
+
+  const broadcastOrderSignal = (detail?: any) => {
+    if (typeof window === 'undefined') return;
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        const bc = new BroadcastChannel('bpg_orders_bus');
+        bc.postMessage({ type: 'ORDER_MUTATED', detail, timestamp: Date.now() });
+        bc.close();
+      }
+      localStorage.setItem('bpg_orders_sync_signal', Date.now().toString());
+    } catch (_) {}
+  };
 
   // Manual stock hold release handler (Restores reserved stock immediately)
   const handleReleaseHold = async (holdGroupId: string, bookTitle: string) => {
@@ -520,6 +559,7 @@ function AdminPageInner() {
       const data = await res.json();
       if (res.ok) {
         showToast(`✅ Order #${order.orderId} marked as ${displayLabel || newStatus}`);
+        broadcastOrderSignal({ orderId: order.orderId || order.id, status: newStatus });
         loadLiveOrders();
       } else {
         showToast(`❌ ${data.error || 'Update failed'}`);
@@ -552,6 +592,7 @@ function AdminPageInner() {
       const data = await res.json();
       if (res.ok) {
         showToast(`🚚 ST Courier AWB ${cleanAwb} assigned`);
+        broadcastOrderSignal({ orderId, awb: cleanAwb, status: 'DISPATCHED' });
         loadLiveOrders();
       } else {
         showToast(`❌ ${data.error || 'Failed to assign AWB'}`);
@@ -575,6 +616,7 @@ function AdminPageInner() {
       const data = await res.json();
       if (res.ok) {
         showToast(`🛑 Order #${orderId} cancelled & stock released`);
+        broadcastOrderSignal({ orderId, status: 'CANCELLED' });
         loadLiveOrders();
         return true;
       } else {

@@ -340,11 +340,25 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   };
 
+  const broadcastCatalogSignal = (detail?: any) => {
+    if (typeof window === 'undefined') return;
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        const bc = new BroadcastChannel('bpg_catalog_bus');
+        bc.postMessage({ type: 'CATALOG_MUTATED', detail, timestamp: Date.now() });
+        bc.close();
+      }
+      localStorage.setItem('bpg_catalog_sync_signal', Date.now().toString());
+    } catch {}
+  };
+
   const refreshProducts = (forceFresh = false) => {
     const now = Date.now();
-    // Non-fresh requests can be throttled/deduplicated; deduplicate fresh requests within 1.5s
-    if (refreshInFlightRef.current && (now - lastRefreshTsRef.current < 1500)) return;
-    if (!forceFresh && (now - lastRefreshTsRef.current < 2000)) return;
+    // Non-fresh requests can be throttled/deduplicated; forceFresh is NEVER dropped or throttled
+    if (!forceFresh) {
+      if (refreshInFlightRef.current) return;
+      if (now - lastRefreshTsRef.current < 2000) return;
+    }
     refreshInFlightRef.current = true;
     lastRefreshTsRef.current = now;
 
@@ -352,10 +366,14 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (productsRef.current.length === 0) {
       setProductsLoading(true);
     }
-    const url = forceFresh ? '/api/products?fresh=1' : '/api/products';
+    const url = forceFresh ? `/api/products?fresh=1&_t=${Date.now()}` : '/api/products';
     const opts: RequestInit = {
       cache: 'no-store',
-      headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate', Pragma: 'no-cache' },
+      headers: {
+        'Cache-Control': 'no-cache, no-store, max-age=0, must-revalidate',
+        Pragma: 'no-cache',
+        'x-admin-request': '1',
+      },
       signal: AbortSignal.timeout(10_000),
     };
     fetch(url, opts)
@@ -734,6 +752,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           inStock: upd.inStock,
           status: newStatus,
           isComingSoon: upd.isComingSoon !== undefined ? upd.isComingSoon : p.isComingSoon,
+          is_coming_soon: upd.isComingSoon !== undefined ? upd.isComingSoon : (p as any).is_coming_soon,
           price: newPrice,
           mrp: newMrp,
           discount: newDiscount,
@@ -956,15 +975,14 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         es = null;
         if (!stopped) {
           if (retryTimer) clearTimeout(retryTimer);
-          retryTimer = setTimeout(connect, 15000);
+          retryTimer = setTimeout(connect, 3000);
         }
       };
     };
 
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
-        // Delay slightly so we don't race with the SSE reconnect
-        setTimeout(() => refreshProducts(), 1000);
+        refreshProducts(true);
         connect();
       } else {
         disconnect();
@@ -981,13 +999,62 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     };
   }, []);
 
-  // Lightweight delta poll: only checks price and stock deltas (~200 bytes)
-  // instead of re-downloading the entire catalog every 20 seconds.
+  // Cross-tab and multi-window instant live synchronization bus
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    let bc: BroadcastChannel | null = null;
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        bc = new BroadcastChannel('bpg_catalog_bus');
+        bc.onmessage = (evt) => {
+          if (evt.data?.type === 'CATALOG_MUTATED') {
+            try {
+              sessionStorage.removeItem(CATALOG_CACHE_KEY);
+              localStorage.removeItem(CATALOG_CACHE_KEY);
+            } catch {}
+            refreshProducts(true);
+            window.dispatchEvent(new CustomEvent('bpg:catalog-changed', { detail: evt.data.detail }));
+          }
+        };
+      }
+    } catch {}
+
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'bpg_catalog_sync_signal') {
+        try {
+          sessionStorage.removeItem(CATALOG_CACHE_KEY);
+          localStorage.removeItem(CATALOG_CACHE_KEY);
+        } catch {}
+        refreshProducts(true);
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+
+    const handleFocus = () => {
+      refreshProducts(true);
+    };
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      try {
+        bc?.close();
+      } catch {}
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, []);
+
+  // Fast lightweight delta poll: only checks price, stock, and coming soon deltas (~200 bytes)
+  // Runs every 5s so changes are immediately live across all devices and browsers with no refresh
   useEffect(() => {
     const pollLiveStock = async () => {
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
       try {
-        const res = await fetch('/api/products/live', { signal: AbortSignal.timeout(6000) });
+        const res = await fetch('/api/products/live', {
+          headers: { 'Cache-Control': 'no-cache' },
+          signal: AbortSignal.timeout(6000),
+        });
         if (!res.ok) return;
         const data = await res.json();
         if (data?.ok && data.books && typeof data.books === 'object') {
@@ -997,16 +1064,14 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       } catch {}
     };
 
-    // Safety fallback: if SSE is disconnected, poll every 30s; if SSE is active, only lightweight check every 90s
     const stockInterval = setInterval(() => {
       void pollLiveStock();
-    }, sseConnectedRef.current ? 90_000 : 30_000);
+    }, 5000);
 
-    // Full catalog refresh only once every 3 minutes as an ultimate safety net
     const catalogSafetyInterval = setInterval(() => {
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
       refreshProducts(false);
-    }, 180_000);
+    }, 60_000);
 
     return () => {
       clearInterval(stockInterval);
@@ -2054,7 +2119,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
     recentAdminEditsRef.current.set(String(id), Date.now());
     const previousProducts = products;
-    setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, ...withDerived } : p)));
+    setProducts((prev) => {
+      const updated = prev.map((p) => (String(p.id) === String(id) ? { ...p, ...withDerived } : p));
+      writeCatalogCache(updated);
+      return updated;
+    });
 
     // Immediately mirror price/stock/language changes into active cart & savedForLater with zero latency
     setCart((prev) => {
@@ -2151,11 +2220,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
       try {
         sessionStorage.removeItem(CATALOG_CACHE_KEY);
+        localStorage.removeItem(CATALOG_CACHE_KEY);
       } catch {}
       recentAdminEditsRef.current.delete(String(id));
-      // Do NOT call refreshProducts here — the server PATCH already triggers
-      // notifyCatalogChanged → SSE CATALOG_CHANGED → refreshProducts.
-      // Calling it here too causes a double-refresh flicker.
+      broadcastCatalogSignal({ id: String(id), action: 'UPDATE' });
+      refreshProducts(true);
       showToast(
         rest.stock !== undefined
           ? `✓ Stock updated — ${Math.max(0, Math.floor(Number(rest.stock) || 0))} units`
@@ -2256,15 +2325,19 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         recentAdminEditsRef.current.set(String(data.id), Date.now());
         setProducts((prev) => {
           const alreadyHasServerId = prev.some((p) => String(p.id) === String(data.id));
-          if (alreadyHasServerId) {
-            return prev.filter((p) => p.id !== tempId);
-          }
-          return prev.map((p) => (p.id === tempId ? { ...p, ...data, id: data.id, slug: data.slug || data.id } : p));
+          const updated = alreadyHasServerId
+            ? prev.filter((p) => p.id !== tempId)
+            : prev.map((p) => (p.id === tempId ? { ...p, ...data, id: data.id, slug: data.slug || data.id } : p));
+          writeCatalogCache(updated);
+          return updated;
         });
       }
-      // Server POST already triggers notifyCatalogChanged → SSE → auto-refresh.
-      // Only do a delayed refresh as a fallback in case SSE is disconnected.
-      setTimeout(() => { if (!sseConnectedRef.current) refreshProducts(true); }, 3000);
+      try {
+        sessionStorage.removeItem(CATALOG_CACHE_KEY);
+        localStorage.removeItem(CATALOG_CACHE_KEY);
+      } catch {}
+      broadcastCatalogSignal({ id: data?.id, action: 'CREATE' });
+      refreshProducts(true);
       return data;
     } catch (err: any) {
       recentAdminEditsRef.current.delete(tempId);
@@ -2281,7 +2354,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const deleteProductFromDb = async (id: string | number) => {
     recentAdminEditsRef.current.delete(String(id));
     const previousProducts = products;
-    setProducts((prev) => prev.filter((p) => p.id !== id));
+    setProducts((prev) => {
+      const updated = prev.filter((p) => String(p.id) !== String(id));
+      writeCatalogCache(updated);
+      return updated;
+    });
     try {
       const res = await fetch(`/api/products?id=${encodeURIComponent(String(id))}`, {
         method: 'DELETE',
@@ -2292,8 +2369,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || 'Delete failed');
       }
-      // Server DELETE already triggers notifyCatalogChanged → SSE → auto-refresh.
-      setTimeout(() => { if (!sseConnectedRef.current) refreshProducts(true); }, 3000);
+      try {
+        sessionStorage.removeItem(CATALOG_CACHE_KEY);
+        localStorage.removeItem(CATALOG_CACHE_KEY);
+      } catch {}
+      broadcastCatalogSignal({ id: String(id), action: 'DELETE' });
+      refreshProducts(true);
       showToast(`🗑️ Book removed from database`);
       return true;
     } catch (err: any) {

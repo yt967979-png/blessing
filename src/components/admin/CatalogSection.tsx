@@ -475,6 +475,7 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
         status: editComingSoon ? 'coming_soon' : (isAvailable ? 'published' : 'out_of_stock'),
         samplePdfUrl: editSamplePdf.trim() || null,
       });
+      refreshProducts(true);
       onShowToast('✅ Publication details updated');
       setEditingId(null);
     } catch {
@@ -522,12 +523,14 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
             status: 'published',
           });
         }
+        refreshProducts(true);
         onShowToast(`📦 ${p.title} marked IN STOCK`);
       } else {
         await onUpdateProduct(p.id, {
           inStock: false,
           status: 'out_of_stock',
         });
+        refreshProducts(true);
         onShowToast(`⚠️ ${p.title} marked OUT OF STOCK`);
       }
     } catch {
@@ -718,6 +721,7 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
         }
         // Server POST triggers notifyCatalogChanged → SSE → auto-refresh via StoreContext
       }
+      refreshProducts(true);
 
       onShowToast(
         newComingSoon

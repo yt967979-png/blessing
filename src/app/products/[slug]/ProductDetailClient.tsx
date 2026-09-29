@@ -308,7 +308,7 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
 
   // Listen for realtime catalog & stock change events pushed via SSE / StoreContext
   useEffect(() => {
-    const handleLiveCatalogChange = (e: any) => {
+    const handleLiveCatalogChange = (e?: any) => {
       const currentId = dbProduct?.id || storeProduct?.id;
       // If the event provided detailed book data directly (e.g. from stock-changed), apply it immediately
       if (Array.isArray(e?.detail) && currentId) {
@@ -324,7 +324,10 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
         }
       }
       const fetchSlug = currentId ? String(currentId) : (normalizedSlug || slug);
-      fetch(`/api/products?slug=${encodeURIComponent(fetchSlug)}&fresh=1`)
+      fetch(`/api/products?slug=${encodeURIComponent(fetchSlug)}&fresh=1&_t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache, no-store' },
+      })
         .then((res) => (res.ok ? res.json() : null))
         .then((list) => {
           if (Array.isArray(list) && list.length > 0) {
@@ -334,9 +337,18 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
         .catch(() => {});
     };
 
+    let bc: BroadcastChannel | null = null;
+    try {
+      if (typeof window !== 'undefined' && typeof BroadcastChannel !== 'undefined') {
+        bc = new BroadcastChannel('bpg_catalog_bus');
+        bc.onmessage = () => handleLiveCatalogChange();
+      }
+    } catch (_) {}
+
     window.addEventListener('bpg:catalog-changed', handleLiveCatalogChange);
     window.addEventListener('bpg:stock-changed', handleLiveCatalogChange);
     return () => {
+      try { bc?.close(); } catch (_) {}
       window.removeEventListener('bpg:catalog-changed', handleLiveCatalogChange);
       window.removeEventListener('bpg:stock-changed', handleLiveCatalogChange);
     };
