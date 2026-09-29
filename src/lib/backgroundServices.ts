@@ -37,11 +37,13 @@ export async function startLeaderBackgroundServices() {
     const sweep = async () => {
       const t0 = Date.now();
       try {
-        const { reconcileUnfinalizedRefunds, retryFailedWebhookEvents } = await import('@/lib/orphanRefundSweep');
+        const { reconcileUnfinalizedRefunds, retryFailedWebhookEvents, retryFailedRefunds } = await import('@/lib/orphanRefundSweep');
         const rec = await reconcileUnfinalizedRefunds();
         if (rec > 0) console.log(`[refund-reconcile] auto-reconciled ${rec} unfinalized refund order(s)`);
         const dl = await retryFailedWebhookEvents();
         if (dl.resolved > 0) console.log(`[dead-letter-replay] replayed ${dl.replayed}, resolved ${dl.resolved} webhook event(s)`);
+        const rfr = await retryFailedRefunds();
+        if (rfr.resolved > 0) console.log(`[failed-refund-retry] resolved ${rfr.resolved} previously failed refund(s)`);
         
         try {
           const { reconcilePendingCheckoutSessions } = await import('@/lib/paymentReconciler');

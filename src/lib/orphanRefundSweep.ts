@@ -265,3 +265,86 @@ export async function retryFailedWebhookEvents(): Promise<{ replayed: number; re
   }
   return { replayed, resolved };
 }
+
+/**
+ * Durable retry sweeper for orders where an online refund failed (e.g. timeout / network drop / 500).
+ * Checks Razorpay API to see if refund already processed, or retries the refund call.
+ * Closes the financial recovery gap identified in the audit.
+ */
+export async function retryFailedRefunds(): Promise<{ retried: number; resolved: number }> {
+  let retried = 0;
+  let resolved = 0;
+
+  try {
+    const failedRows = await queryDb(
+      `SELECT o.id, o.order_number, o.razorpay_payment_id, o.razorpay_refund_id, o.total_amount
+       FROM orders o
+       WHERE (
+         o.payment_status = 'REFUND_FAILED'
+         OR EXISTS (
+           SELECT 1 FROM payments p
+           WHERE (p.order_id = o.id OR p.payment_id = o.razorpay_payment_id)
+             AND (p.status = 'REFUND_FAILED' OR p.status = 'REFUND_PENDING')
+         )
+       )
+       AND o.updated_at < NOW() - INTERVAL '1 minute'
+       ORDER BY o.updated_at ASC
+       LIMIT 10`
+    );
+
+    for (const row of failedRows.rows) {
+      const payId = String(row.razorpay_payment_id || '').trim();
+      if (!payId) continue;
+      retried++;
+
+      try {
+        const refund = await refundRazorpayPayment({
+          paymentId: payId,
+          orderNumber: row.order_number,
+          existingRefundId: row.razorpay_refund_id,
+        });
+
+        if (refund.ok) {
+          resolved++;
+          const refundId = refund.refundId;
+          await queryDb(
+            `UPDATE orders
+             SET payment_status = 'Refunded',
+                 razorpay_refund_id = $2,
+                 updated_at = NOW()
+             WHERE id = $1`,
+            [row.id, refundId]
+          );
+          await queryDb(
+            `UPDATE payments
+             SET status = 'REFUNDED'
+             WHERE order_id = $1 OR payment_id = $2`,
+            [row.id, payId]
+          ).catch(() => {});
+
+          await queryDb(
+            `INSERT INTO refunds (id, order_id, razorpay_refund_id, razorpay_payment_id, amount, status, reason)
+             VALUES ($1, $2, $3, $4, $5, 'PROCESSED', 'Auto-reconciled failed refund retry')
+             ON CONFLICT (id) DO NOTHING`,
+            [
+              `ref-retry-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+              row.id,
+              refundId,
+              payId,
+              Number(row.total_amount || 0),
+            ]
+          ).catch(() => {});
+
+          console.log(`[failed-refund-retry] Successfully resolved refund for order #${row.order_number} (Refund ID: ${refundId})`);
+        }
+      } catch (err: any) {
+        console.warn(`[failed-refund-retry] Retry failed for order #${row.order_number}:`, err?.message || err);
+      }
+    }
+  } catch (e: any) {
+    console.warn('[failed-refund-retry] Sweep error:', e?.message || e);
+  }
+
+  return { retried, resolved };
+}
+

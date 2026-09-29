@@ -33,6 +33,8 @@ export function needsRazorpayRefund(row: {
   const payId = String(row.razorpay_payment_id || '').trim();
   if (!payId) return false;
   const ps = String(row.payment_status || '').toLowerCase();
+  // If a previous refund attempt failed, it DEFINITELY still needs a refund!
+  if (ps.includes('refund_failed') || ps === 'refund_failed') return true;
   if (ps.includes('fail') || ps.includes('unpaid')) return false;
   // Already marked refunded in DB — treat as no new refund needed (idempotent path).
   if (ps.includes('refund') || String(row.razorpay_refund_id || '').trim()) return true;
@@ -119,7 +121,7 @@ export async function refundRazorpayPayment(opts: {
       };
     }
 
-    const refundRes = await fetch(`https://api.razorpay.com/v1/payments/${paymentId}/refunds`, {
+    const refundRes = await fetch(`https://api.razorpay.com/v1/payments/${paymentId}/refund`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

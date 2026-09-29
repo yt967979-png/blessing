@@ -371,7 +371,20 @@ export async function finalizeOrderFromPayment(opts: FinalizeOrderOptions): Prom
           await client.query('ROLLBACK');
           if (rzpPayId) {
             const { refundRazorpayPayment } = await import('@/lib/razorpayRefund');
-            await refundRazorpayPayment({ paymentId: rzpPayId, orderNumber });
+            const refund = await refundRazorpayPayment({ paymentId: rzpPayId, orderNumber }).catch(() => ({ ok: false as const, error: 'Network timeout during auto-refund' }));
+            if (!refund.ok) {
+              // Persist durable REFUND_PENDING record so background sweeper retries and guarantees refund!
+              try {
+                await queryDb(
+                  `INSERT INTO payments (id, payment_id, transaction_id, amount, currency, status)
+                   VALUES ($1, $2, $3, $4, 'INR', 'REFUND_PENDING')
+                   ON CONFLICT (payment_id) DO UPDATE SET status = 'REFUND_PENDING', updated_at = NOW()`,
+                  [`pay-rfnd-${Date.now()}`, rzpPayId, rzpOrderId || rzpPayId, Number(totalAmount || 0)]
+                );
+              } catch (recErr: any) {
+                console.error('[orderFinalizer] Failed to persist REFUND_PENDING:', recErr?.message || recErr);
+              }
+            }
           }
           return {
             ok: false,
