@@ -29,7 +29,7 @@ blessingpowerguide.in {
 		header Cache-Control "public, max-age=2592000, stale-while-revalidate=86400"
 	}
 
-	@seo_files path /robots.txt /sitemap.xml /favicon.ico /favicon-48x48.png /icon.png /icon1.png /logo.png /apple-touch-icon.png /manifest.webmanifest /bpg-og-emblem.png
+	@seo_files path /favicon.ico /favicon-48x48.png /icon.png /icon1.png /logo.png /apple-touch-icon.png /manifest.webmanifest /bpg-og-emblem.png
 	handle @seo_files {
 		root * /opt/blessing/public
 		file_server
