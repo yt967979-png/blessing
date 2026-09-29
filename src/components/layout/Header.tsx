@@ -26,6 +26,8 @@ export const Header = () => {
     setSelectedClass,
     setIsAuthOpen,
     user,
+    addToCart,
+    showToast,
   } = useStore();
 
   const [showSearchDropdown, setShowSearchDropdown] = useState(false);
@@ -111,18 +113,23 @@ export const Header = () => {
     setShowSearchDropdown(false);
   };
 
-  const queryText = (searchQuery || '').trim();
+  const queryText = (localQuery || '').trim();
   const filteredSearch = queryText
     ? products
-        .filter(
-          (p) =>
-            p.inStock &&
-            (p.title.toLowerCase().includes(queryText.toLowerCase()) ||
-              p.cls.toLowerCase().includes(queryText.toLowerCase()) ||
-              p.subject.toLowerCase().includes(queryText.toLowerCase()) ||
-              (p.category && p.category.toLowerCase().includes(queryText.toLowerCase())))
-        )
-        .slice(0, 6)
+        .filter((p) => {
+          if (!p.inStock) return false;
+          if (selectedClass !== 'all' && String(p.cls).toLowerCase() !== selectedClass.toLowerCase()) {
+            return false;
+          }
+          const q = queryText.toLowerCase();
+          return (
+            p.title.toLowerCase().includes(q) ||
+            p.cls.toLowerCase().includes(q) ||
+            p.subject.toLowerCase().includes(q) ||
+            (p.category && p.category.toLowerCase().includes(q))
+          );
+        })
+        .slice(0, 8)
     : [];
 
   const goSearch = () => {
@@ -145,65 +152,80 @@ export const Header = () => {
   const searchHit = (p: (typeof products)[number]) => {
     const isCombo = isComboItem(p);
     return (
-      <button
-        type="button"
+      <div
         key={p.id}
         onPointerEnter={() => prefetchProduct(p.slug)}
-        onMouseDown={(e) => {
-          e.preventDefault();
+        onClick={() => {
           router.push(`/products/${p.slug}`);
           setShowSearchDropdown(false);
         }}
-        className="w-full p-2.5 sm:p-3 hover:bg-blue-50/70 active:bg-blue-100/60 cursor-pointer flex items-center gap-3 text-left transition-colors group touch-manipulation"
+        className="w-full p-2.5 sm:p-3 hover:bg-blue-50/70 active:bg-blue-100/60 cursor-pointer flex items-center justify-between gap-3 text-left transition-colors group touch-manipulation"
       >
-        <div className="w-12 h-14 sm:w-13 sm:h-15 rounded-lg bg-slate-100 border border-slate-200/80 p-1 flex items-center justify-center shrink-0 overflow-hidden group-hover:scale-105 transition-transform">
-          <Image
-            src={
-              p.image ||
-              'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=120&q=80'
-            }
-            alt=""
-            width={52}
-            height={60}
-            className="w-full h-full object-contain"
-            unoptimized={imageNeedsUnoptimized(p.image || '')}
-          />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
-            <span className="text-[10px] font-extrabold text-blue-700 bg-blue-50 border border-blue-200/70 px-1.5 py-0.2 rounded uppercase">
-              {p.cls} Std • {p.subject}
-            </span>
-            {isCombo && (
-              <span className="text-[9px] font-black text-amber-800 bg-amber-100 border border-amber-300 px-1.5 py-0.2 rounded uppercase">
-                🎁 Combo
-              </span>
-            )}
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <div className="w-12 h-14 sm:w-13 sm:h-15 rounded-lg bg-slate-100 border border-slate-200/80 p-1 flex items-center justify-center shrink-0 overflow-hidden group-hover:scale-105 transition-transform">
+            <Image
+              src={
+                p.image ||
+                'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=120&q=80'
+              }
+              alt=""
+              width={52}
+              height={60}
+              className="w-full h-full object-contain"
+              unoptimized={imageNeedsUnoptimized(p.image || '')}
+            />
           </div>
-          <div className="font-extrabold text-xs sm:text-sm text-[#001B3A] group-hover:text-blue-700 transition-colors line-clamp-1">
-            {p.title}
-          </div>
-          <div className="text-xs text-slate-500 flex items-center gap-2 mt-1">
-            <span className="font-black text-slate-900 text-xs sm:text-sm">₹{p.price}</span>
-            {p.mrp > p.price ? (
-              <span className="line-through text-[11px] text-slate-400 font-semibold">₹{p.mrp}</span>
-            ) : null}
-            {p.discount > 0 ? (
-              <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
-                {p.discount}% OFF
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
+              <span className="text-[10px] font-extrabold text-blue-700 bg-blue-50 border border-blue-200/70 px-1.5 py-0.2 rounded uppercase">
+                {p.cls} Std • {p.subject}
               </span>
-            ) : null}
-            {typeof p.stock === 'number' && p.stock <= 8 && (
-              <span className="text-[9px] font-extrabold text-amber-700 bg-amber-50 px-1.5 py-0.2 rounded">
-                Only {p.stock} left
-              </span>
-            )}
+              {isCombo && (
+                <span className="text-[9px] font-black text-amber-800 bg-amber-100 border border-amber-300 px-1.5 py-0.2 rounded uppercase">
+                  🎁 Combo
+                </span>
+              )}
+            </div>
+            <div className="font-extrabold text-xs sm:text-sm text-[#001B3A] group-hover:text-blue-700 transition-colors line-clamp-1">
+              {p.title}
+            </div>
+            <div className="text-xs text-slate-500 flex items-center gap-2 mt-1">
+              <span className="font-black text-slate-900 text-xs sm:text-sm">₹{p.price}</span>
+              {p.mrp > p.price ? (
+                <span className="line-through text-[11px] text-slate-400 font-semibold">₹{p.mrp}</span>
+              ) : null}
+              {p.discount > 0 ? (
+                <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
+                  {p.discount}% OFF
+                </span>
+              ) : null}
+              {typeof p.stock === 'number' && p.stock <= 8 && (
+                <span className="text-[9px] font-extrabold text-amber-700 bg-amber-50 px-1.5 py-0.2 rounded">
+                  Only {p.stock} left
+                </span>
+              )}
+            </div>
           </div>
         </div>
-        <div className="text-slate-300 group-hover:text-blue-600 transition-colors shrink-0 pr-1">
-          <ArrowRight className="w-4 h-4" />
+
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            title="Quick add to cart"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              addToCart(p, 1);
+              showToast?.(`⚡ Added "${p.title}" to cart!`);
+            }}
+            className="px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-600 text-blue-700 hover:text-white border border-blue-200 hover:border-blue-600 font-extrabold text-[11px] flex items-center gap-1 transition-all shadow-xs cursor-pointer"
+          >
+            <ShoppingBag className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Add</span>
+          </button>
+          <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-blue-600 transition-colors" />
         </div>
-      </button>
+      </div>
     );
   };
 
