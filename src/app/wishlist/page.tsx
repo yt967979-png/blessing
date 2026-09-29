@@ -42,9 +42,17 @@ export default function WishlistPage() {
     wishlist.some((w) => String(w) === String(p.id))
   );
 
-  const inStockItems = items.filter((p) => p.inStock !== false && (p.stock ?? 1) > 0);
+  const inStockItems = items.filter((p) => {
+    const isCS = Boolean(p.isComingSoon || (p as any).is_coming_soon || p.status === 'coming_soon');
+    return !isCS && p.inStock !== false && (p.stock ?? 1) > 0;
+  });
 
   const handleAddSingleToCart = (product: any) => {
+    const isCS = Boolean(product.isComingSoon || (product as any).is_coming_soon || product.status === 'coming_soon');
+    if (isCS) {
+      showToast(`🚀 "${product.title}" is coming soon! Pre-orders will open shortly.`);
+      return;
+    }
     if (product.inStock === false || (product.stock ?? 0) <= 0) {
       showToast(`⚠️ "${product.title}" is currently out of stock`);
       return;
@@ -211,7 +219,10 @@ export default function WishlistPage() {
             {items.map((product) => {
               const sId = String(product.id);
               const isAdded = Boolean(addedIds[sId]);
-              const isOOS = product.inStock === false || (product.stock ?? 0) <= 0;
+              const isComingSoon = Boolean(
+                product.isComingSoon || (product as any).is_coming_soon || product.status === 'coming_soon'
+              );
+              const isOOS = !isComingSoon && (product.inStock === false || (product.stock ?? 0) <= 0);
               const disc =
                 product.mrp > product.price
                   ? Math.round(((product.mrp - product.price) / product.mrp) * 100)
@@ -221,7 +232,11 @@ export default function WishlistPage() {
                 <div
                   key={product.id}
                   className={`bg-white rounded-2xl border transition-all duration-200 flex flex-col relative group p-4 shadow-xs hover:shadow-md ${
-                    isOOS ? 'border-slate-200 opacity-90' : 'border-slate-200 hover:border-blue-300'
+                    isComingSoon
+                      ? 'border-amber-200/90 bg-amber-50/15 hover:border-amber-300'
+                      : isOOS
+                      ? 'border-slate-200 opacity-90'
+                      : 'border-slate-200 hover:border-blue-300'
                   }`}
                 >
                   {/* Remove Button */}
@@ -251,11 +266,24 @@ export default function WishlistPage() {
                       className="max-h-full max-w-full object-contain"
                       unoptimized={imageNeedsUnoptimized(product.image || '')}
                     />
-                    {product.badge && (
-                      <span className="absolute top-2 left-2 text-[9px] font-black text-white px-2 py-0.5 rounded-md bg-blue-600 uppercase shadow-xs">
-                        {product.badge}
-                      </span>
-                    )}
+                    <div className="absolute top-2 left-2 z-10 flex flex-col gap-1 items-start">
+                      {isComingSoon && (
+                        <span className="text-[9.5px] font-black text-amber-950 px-2 py-0.5 rounded-md bg-gradient-to-r from-amber-400 to-amber-300 shadow-xs border border-amber-500/30 flex items-center gap-1">
+                          <Sparkles className="w-2.5 h-2.5 text-amber-900" />
+                          <span>COMING SOON</span>
+                        </span>
+                      )}
+                      {isOOS && !isComingSoon && (
+                        <span className="text-[9px] font-black text-white px-2 py-0.5 rounded-md bg-slate-700 shadow-xs">
+                          OUT OF STOCK
+                        </span>
+                      )}
+                      {product.badge && !isComingSoon && !isOOS && (
+                        <span className="text-[9px] font-black text-white px-2 py-0.5 rounded-md bg-blue-600 uppercase shadow-xs">
+                          {product.badge}
+                        </span>
+                      )}
+                    </div>
                   </Link>
 
                   {/* Standard & Subject Badges */}
@@ -297,43 +325,64 @@ export default function WishlistPage() {
 
                   {/* Stock Indicator */}
                   <div className="flex items-center gap-1.5 text-[11px] mb-3">
-                    <span
-                      className={`w-2 h-2 rounded-full ${
-                        isOOS ? 'bg-slate-400' : 'bg-emerald-500 animate-pulse'
-                      }`}
-                    />
-                    <span className={isOOS ? 'text-slate-400 font-medium' : 'text-emerald-700 font-bold'}>
-                      {isOOS ? 'Out of Stock' : 'In Stock & Ready for ST Courier'}
-                    </span>
-                  </div>
-
-                  {/* Add / Move to Cart Button */}
-                  <button
-                    type="button"
-                    disabled={isOOS}
-                    onClick={() => handleAddSingleToCart(product)}
-                    className={`w-full py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs ${
-                      isOOS
-                        ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
-                        : isAdded
-                          ? 'bg-emerald-600 text-white'
-                          : 'bg-[#2874f0] hover:bg-blue-700 text-white active:scale-98'
-                    }`}
-                  >
-                    {isAdded ? (
+                    {isComingSoon ? (
                       <>
-                        <Check className="w-3.5 h-3.5" />
-                        <span>Added to Cart!</span>
+                        <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                        <span className="text-amber-800 font-bold flex items-center gap-1">
+                          <Sparkles className="w-3 h-3 text-amber-600" />
+                          <span>Coming Soon (Pre-Order)</span>
+                        </span>
                       </>
                     ) : isOOS ? (
-                      <span>Out of Stock</span>
+                      <>
+                        <span className="w-2 h-2 rounded-full bg-slate-400" />
+                        <span className="text-slate-400 font-medium">Out of Stock</span>
+                      </>
                     ) : (
                       <>
-                        <ShoppingBag className="w-3.5 h-3.5" />
-                        <span>Add to Cart</span>
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                        <span className="text-emerald-700 font-bold">In Stock & Ready for ST Courier</span>
                       </>
                     )}
-                  </button>
+                  </div>
+
+                  {/* Add / Move to Cart or Coming Soon Button */}
+                  {isComingSoon ? (
+                    <Link
+                      href={`/products/${product.slug}`}
+                      className="w-full py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-2xs bg-gradient-to-r from-amber-500/15 via-amber-400/25 to-amber-500/15 border border-amber-400/60 text-amber-900 hover:bg-amber-100/70"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                      <span>View Details (Coming Soon)</span>
+                    </Link>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={isOOS}
+                      onClick={() => handleAddSingleToCart(product)}
+                      className={`w-full py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs ${
+                        isOOS
+                          ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+                          : isAdded
+                            ? 'bg-emerald-600 text-white'
+                            : 'bg-[#2874f0] hover:bg-blue-700 text-white active:scale-98'
+                      }`}
+                    >
+                      {isAdded ? (
+                        <>
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Added to Cart!</span>
+                        </>
+                      ) : isOOS ? (
+                        <span>Out of Stock</span>
+                      ) : (
+                        <>
+                          <ShoppingBag className="w-3.5 h-3.5" />
+                          <span>Add to Cart</span>
+                        </>
+                      )}
+                    </button>
+                  )}
                 </div>
               );
             })}

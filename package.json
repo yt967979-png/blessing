@@ -17,7 +17,9 @@
     "test:logic": "node scripts/test-concurrency-logic.js",
     "test:regression": "node scripts/adversarial-master-runner.js",
     "test:browser": "playwright test",
-    "audit:seo": "node scripts/seo-content-audit.js"
+    "audit:seo": "node scripts/seo-content-audit.js",
+    "ops:check": "node scripts/daily-ops-audit.js",
+    "ops:fix": "node scripts/daily-ops-audit.js --fix"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",

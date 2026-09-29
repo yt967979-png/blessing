@@ -57,6 +57,7 @@ public/whatsapp_status.json
 
 # backups and database dumps
 backups/
+logs/
 *.dump
 *.sql
 *.env
