@@ -13,7 +13,7 @@
  *    or the phone restarts during UPI app switch, the order is safely created.
  */
 
-import { getDbClient, releaseDbClient } from '@/lib/db';
+import { getDbClient, releaseDbClient, queryDb } from '@/lib/db';
 import { confirmStockHolds } from '@/lib/stockHold';
 import { generateNextGstInvoiceNumber } from '@/lib/invoiceGenerator';
 import { isOrderCancelled } from '@/lib/orderStatus';
