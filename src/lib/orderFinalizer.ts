@@ -304,12 +304,21 @@ export async function finalizeOrderFromPayment(opts: FinalizeOrderOptions): Prom
       ]
     );
 
-    // 4. INSERT ORDER ITEMS
-    for (const it of itemsToInsert) {
+    // 4. INSERT ORDER ITEMS (Batched in single multi-row network roundtrip)
+    if (itemsToInsert.length > 0) {
+      const valuePlaceholders: string[] = [];
+      const flatParams: any[] = [];
+      itemsToInsert.forEach((it, idx) => {
+        const offset = idx * 8;
+        valuePlaceholders.push(
+          `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8})`
+        );
+        flatParams.push(it.id, orderId, it.bookId, it.title, it.price, it.qty, it.subtotal, it.medium || null);
+      });
       await client.query(
         `INSERT INTO order_items (id, order_id, book_id, book_title, book_price, quantity, subtotal, medium)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [it.id, orderId, it.bookId, it.title, it.price, it.qty, it.subtotal, it.medium || null]
+         VALUES ${valuePlaceholders.join(', ')}`,
+        flatParams
       );
     }
 

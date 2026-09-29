@@ -1677,6 +1677,49 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, [user?.id, user?.token, wishlist]);
 
+  // Global post-payment recovery: If customer paid via UPI / card but their browser closed, crashed,
+  // or reloaded to another page (like homepage or products) instead of /checkout,
+  // verify the pending Razorpay order, clear the cart, and notify the customer!
+  useEffect(() => {
+    if (!hydrated || typeof window === 'undefined') return;
+    // If the customer is directly on /checkout, let checkout page handle its dedicated redirect
+    if (window.location.pathname === '/checkout') return;
+
+    try {
+      let pendingRzpId = sessionStorage.getItem('bpg_pending_rzp_order');
+      if (!pendingRzpId) {
+        try {
+          const raw = localStorage.getItem('bpg_pending_rzp_order');
+          if (raw) {
+            const p = JSON.parse(raw);
+            if (p?.orderId && p?.time && Date.now() - p.time < 2 * 60 * 60 * 1000) {
+              pendingRzpId = p.orderId;
+            } else {
+              localStorage.removeItem('bpg_pending_rzp_order');
+            }
+          }
+        } catch {}
+      }
+
+      if (!pendingRzpId) return;
+
+      fetch(`/api/checkout/status?orderId=${encodeURIComponent(pendingRzpId)}`)
+        .then((r) => r.json())
+        .then((d) => {
+          if (d?.status === 'ORDER_CONFIRMED' && d?.orderId) {
+            sessionStorage.removeItem('bpg_pending_rzp_order');
+            try { localStorage.removeItem('bpg_pending_rzp_order'); } catch {}
+            clearCartAfterOrder();
+            showToast(`🎉 Order #${d.orderId} was confirmed!`);
+          } else if (d?.status === 'PAYMENT_FAILED' || d?.status === 'CANCELLED') {
+            sessionStorage.removeItem('bpg_pending_rzp_order');
+            try { localStorage.removeItem('bpg_pending_rzp_order'); } catch {}
+          }
+        })
+        .catch(() => {});
+    } catch {}
+  }, [hydrated, clearCartAfterOrder, showToast]);
+
   /**
    * Authoritative live stock check against the DB (not just the polled catalog
    * snapshot). Clamps quantities, drops out-of-stock items, and toasts what

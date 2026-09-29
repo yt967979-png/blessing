@@ -17,7 +17,7 @@ import { releaseStockHolds } from '@/lib/stockHold';
 
 export async function reconcilePendingCheckoutSessions(
   minAgeMinutes = 2,
-  maxAgeMinutes = 30
+  maxAgeMinutes = 120
 ): Promise<{ reconciled: number; expired: number; errors: number }> {
   let reconciled = 0;
   let expired = 0;
