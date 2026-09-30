@@ -158,7 +158,12 @@ export function verifyStreamTicket(
     const payload = JSON.parse(payloadStr);
     if (payload.purpose !== 'sse_stream') return null;
     if (!payload.exp || payload.exp < Date.now()) return null;
-    if (payload.did && deviceId && !timingSafeUtf8Equal(payload.did, deviceId)) return null;
+    const bound = String(payload.did || '');
+    if (bound) {
+      if (!deviceId || !timingSafeUtf8Equal(bound, deviceId)) {
+        return null;
+      }
+    }
     return { userId: payload.userId, role: payload.role };
   } catch {
     return null;

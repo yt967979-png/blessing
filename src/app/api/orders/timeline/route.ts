@@ -6,7 +6,7 @@ import {
   getAuthenticatedUser,
   unauthorizedResponse,
 } from '@/lib/serverSecurity';
-import { blocksShippingActions, isOrderCancelled } from '@/lib/orderStatus';
+import { blocksShippingActions, isOrderCancelled, canTransitionOrderStatus } from '@/lib/orderStatus';
 
 // Stage metadata - mirrors ST Courier's real logistics stages
 const STAGE_META: Record<string, { emoji: string; label: string; desc: string }> = {
@@ -78,6 +78,12 @@ export async function POST(request: Request) {
     const eventId = `TL-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
     const meta = STAGE_META[status];
     const statusLabel = meta.label;
+
+    const transitionCheck = canTransitionOrderStatus(order.order_status, statusLabel);
+    if (!transitionCheck.allowed) {
+      return NextResponse.json({ error: transitionCheck.reason }, { status: 400 });
+    }
+
     const awb = awbNumber || order.awb_number || '';
 
     // Insert timeline event

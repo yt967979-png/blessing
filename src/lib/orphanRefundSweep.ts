@@ -21,10 +21,10 @@ export async function refundStaleOrphanCaptures(maxAgeMinutes = 10): Promise<num
   try {
     const stale = await queryDb(
       `SELECT id, payment_id, transaction_id FROM payments
-       WHERE status = 'ORPHAN_CAPTURED'
+       WHERE (status = 'ORPHAN_CAPTURED' OR status = 'REFUND_PENDING')
          AND order_id IS NULL
-         AND paid_at < NOW() - ($1::int * INTERVAL '1 minute')
-       ORDER BY paid_at ASC
+         AND (paid_at < NOW() - ($1::int * INTERVAL '1 minute') OR (paid_at IS NULL AND updated_at < NOW() - ($1::int * INTERVAL '1 minute')))
+       ORDER BY COALESCE(paid_at, updated_at) ASC
        LIMIT 20`,
       [maxAgeMinutes]
     );
@@ -68,7 +68,7 @@ export async function refundStaleOrphanCaptures(maxAgeMinutes = 10): Promise<num
       const claimed = await queryDb(
         `UPDATE payments
          SET status = 'REFUNDING', updated_at = NOW()
-         WHERE id = $1 AND status = 'ORPHAN_CAPTURED'
+         WHERE id = $1 AND (status = 'ORPHAN_CAPTURED' OR status = 'REFUND_PENDING')
          RETURNING id`,
         [row.id]
       );
@@ -317,7 +317,7 @@ export async function retryFailedRefunds(): Promise<{ retried: number; resolved:
           );
           await queryDb(
             `UPDATE payments
-             SET status = 'REFUNDED'
+             SET status = 'REFUNDED', updated_at = NOW()
              WHERE order_id = $1 OR payment_id = $2`,
             [row.id, payId]
           ).catch(() => {});
@@ -339,6 +339,66 @@ export async function retryFailedRefunds(): Promise<{ retried: number; resolved:
         }
       } catch (err: any) {
         console.warn(`[failed-refund-retry] Retry failed for order #${row.order_number}:`, err?.message || err);
+      }
+    }
+
+    // 2. Standalone orphaned payments (checkout transaction rolled back due to out-of-stock race)
+    const standaloneFailed = await queryDb(
+      `SELECT id, payment_id, transaction_id, amount
+       FROM payments
+       WHERE order_id IS NULL
+         AND (status = 'REFUND_FAILED' OR status = 'REFUND_PENDING' OR status = 'ORPHAN_CAPTURED')
+         AND (updated_at < NOW() - INTERVAL '1 minute' OR (updated_at IS NULL AND paid_at < NOW() - INTERVAL '1 minute'))
+       ORDER BY COALESCE(updated_at, paid_at) ASC
+       LIMIT 10`
+    );
+
+    for (const sRow of standaloneFailed.rows) {
+      const payId = String(sRow.payment_id || '').trim();
+      if (!payId) continue;
+
+      // ATOMIC CLAIM: Only one worker claims this payment row
+      const claimed = await queryDb(
+        `UPDATE payments
+         SET status = 'REFUNDING', updated_at = NOW()
+         WHERE id = $1 AND (status = 'REFUND_FAILED' OR status = 'REFUND_PENDING' OR status = 'ORPHAN_CAPTURED')
+         RETURNING id`,
+        [sRow.id]
+      );
+      if (claimed.rowCount === 0) continue;
+
+      retried++;
+      try {
+        const refund = await refundRazorpayPayment({
+          paymentId: payId,
+          orderNumber: sRow.transaction_id || undefined,
+        });
+
+        if (refund.ok) {
+          resolved++;
+          await queryDb(
+            `UPDATE payments
+             SET status = 'REFUNDED', updated_at = NOW()
+             WHERE id = $1`,
+            [sRow.id]
+          );
+          console.log(`[failed-refund-retry] Successfully resolved standalone refund for payment ${payId} (Refund ID: ${refund.refundId})`);
+        } else {
+          await queryDb(
+            `UPDATE payments
+             SET status = 'REFUND_FAILED', updated_at = NOW()
+             WHERE id = $1 AND status = 'REFUNDING'`,
+            [sRow.id]
+          ).catch(() => {});
+        }
+      } catch (err: any) {
+        await queryDb(
+          `UPDATE payments
+           SET status = 'REFUND_FAILED', updated_at = NOW()
+           WHERE id = $1 AND status = 'REFUNDING'`,
+          [sRow.id]
+        ).catch(() => {});
+        console.warn(`[failed-refund-retry] Standalone retry failed for payment ${payId}:`, err?.message || err);
       }
     }
   } catch (e: any) {
