@@ -91,18 +91,19 @@ export async function POST(request: Request) {
     }
 
     try {
+      const { optimizeUploadMedia } = await import('@/lib/mediaOptimizer');
+      const optimized = await optimizeUploadMedia(buffer, kind);
+
       const uploadSubDir = isReviewUpload ? 'reviews' : kind === 'pdf' ? 'samples' : 'catalog';
-      const ext = kind === 'jpeg' ? 'jpg' : kind;
       const prefix = kind === 'pdf' ? 'sample-' : 'img-';
-      const filename = `${prefix}${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-      const mimeType = kind === 'pdf' ? 'application/pdf' : `image/${kind}`;
+      const filename = `${prefix}${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${optimized.ext}`;
 
       const { getStorageProvider } = await import('@/lib/storage');
       const storage = getStorageProvider();
       const saved = await storage.saveFile({
-        buffer,
+        buffer: optimized.buffer,
         filename,
-        mimeType,
+        mimeType: optimized.mimeType,
         subDir: uploadSubDir,
       });
 
@@ -110,6 +111,9 @@ export async function POST(request: Request) {
         url: saved.url,
         provider: saved.provider,
         key: saved.key,
+        originalSize: optimized.originalSize,
+        optimizedSize: optimized.optimizedSize,
+        savingsPercent: optimized.savingsPercent,
       });
     } catch (saveErr: any) {
       console.error('[upload] Storage save failed:', saveErr);
