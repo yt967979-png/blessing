@@ -22,7 +22,7 @@ import {
 export interface WhatsAppSession {
   phone: string;
   name: string | null;
-  step: 'IDLE' | 'SEARCH' | 'AWAITING_ADDRESS' | 'CHECKOUT_GENERATED';
+  step: 'IDLE' | 'SEARCH' | 'AWAITING_NAME' | 'AWAITING_ADDRESS' | 'CHECKOUT_GENERATED';
   cart: Array<{
     id: string;
     title: string;
@@ -214,6 +214,17 @@ export async function lookupOrderTracking(phone: string, queryStr?: string): Pro
   return outLines.join('\n');
 }
 
+/** Remove 4-byte characters (emojis) and non-ASCII characters that trigger Razorpay MySQL utf8mb3 collation errors */
+function sanitizeForRazorpay(input: string, maxLen = 40): string {
+  if (!input) return '';
+  return input
+    .replace(/[\u{10000}-\u{10FFFF}]/gu, '')
+    .replace(/[^\x20-\x7E]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, maxLen);
+}
+
 /** Generate Razorpay Payment Link for WhatsApp Checkout */
 export async function createWhatsAppPaymentLink(session: WhatsAppSession, totals: ReturnType<typeof calculateWhatsAppCartTotals>) {
   const keyId = process.env.RAZORPAY_KEY_ID;
@@ -227,15 +238,23 @@ export async function createWhatsAppPaymentLink(session: WhatsAppSession, totals
   const authHeader = `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString('base64')}`;
   const amountPaisa = Math.round(totals.totalAmount * 100);
   const addr = session.shipping_address || {};
-  const customerName = addr.name || session.name || 'Valued Student';
+  const rawCustomerName = addr.name || session.name || 'Valued Student';
+  const customerName = sanitizeForRazorpay(rawCustomerName, 40) || 'Valued Student';
   const cleanPhone = session.phone.replace(/\D/g, '').slice(-10);
+  const safeAddress = sanitizeForRazorpay(addr.address || '', 200);
+  const safeCity = sanitizeForRazorpay(addr.city || 'Tamil Nadu', 40);
+  const safePincode = (String(addr.pincode || '').match(/\b\d{6}\b/) || ['600001'])[0];
+  const cartSummary = sanitizeForRazorpay(
+    session.cart.map((c) => `${c.title} x${c.qty}`).join(', '),
+    100
+  );
 
   // 1. Create Razorpay Payment Link
   const linkPayload = {
     amount: amountPaisa,
     currency: 'INR',
     accept_partial: false,
-    description: `Blessing Power Guide - WhatsApp Order for ${customerName}`,
+    description: `Order for ${customerName}`.slice(0, 50),
     customer: {
       name: customerName,
       contact: `+91${cleanPhone}`,
@@ -249,10 +268,10 @@ export async function createWhatsAppPaymentLink(session: WhatsAppSession, totals
       order_source: 'whatsapp',
       whatsapp_phone: session.phone,
       delivery_name: customerName,
-      delivery_address: addr.address || '',
-      delivery_city: addr.city || '',
-      delivery_pincode: addr.pincode || '',
-      cart_summary: session.cart.map((c) => `${c.title} x${c.qty}`).join(', '),
+      delivery_address: safeAddress,
+      delivery_city: safeCity,
+      delivery_pincode: safePincode,
+      cart_summary: cartSummary,
     },
     callback_url: `${siteUrl}/orders`,
     callback_method: 'get',
@@ -368,7 +387,11 @@ export async function handleIncomingWhatsAppMessage(
     const totals = calculateWhatsAppCartTotals(session.cart);
 
     if (session.cart.length === 0) {
-      return sendWhatsAppText(fromPhone, cartText);
+      const buttons: WhatsAppButton[] = [
+        { id: 'ACTION_BROWSE_10TH', title: '📚 Browse Guides' },
+        { id: 'ACTION_MAIN_MENU', title: '🏠 Main Menu' },
+      ];
+      return sendWhatsAppButtons(fromPhone, cartText, buttons);
     }
 
     if (totals.isMoqMet) {
@@ -404,34 +427,91 @@ export async function handleIncomingWhatsAppMessage(
       );
     }
 
+    const currentName = session.name || senderName || 'Valued Student';
+    const cleanPhone = fromPhone.replace(/\D/g, '').slice(-10);
+
+    const promptText = [
+      `📍 *DELIVERY CONFIRMATION*`,
+      ``,
+      `👤 *Recipient*: ${currentName}`,
+      `📞 *Phone*: +91 ${cleanPhone}`,
+      ``,
+      `Tap below to confirm recipient name or edit:`,
+    ].join('\n');
+
+    const buttons: WhatsAppButton[] = [
+      { id: 'ACTION_CONFIRM_NAME', title: '✅ Yes, Enter Address' },
+      { id: 'ACTION_EDIT_NAME', title: '✏️ Change Name' },
+    ];
+    return sendWhatsAppButtons(fromPhone, promptText, buttons);
+  }
+
+  // 5b. Confirm Name -> Ask Address
+  if (actionId === 'ACTION_CONFIRM_NAME') {
     session.step = 'AWAITING_ADDRESS';
     await saveWhatsAppSession(session);
 
-    const addrPrompt = [
-      `📍 *DELIVERY ADDRESS REQUIRED*`,
-      ``,
-      `Please reply with your complete delivery address in this format:`,
-      ``,
-      `*Name*: Student / Parent Name`,
-      `*Address*: Door No, Street / Area`,
-      `*Town/City*: `,
-      `*District*: `,
-      `*Pincode*: 6 digits`,
-      ``,
-      `*(All parcels are packaged from our Chennai hub and delivered via ST Courier Express)* 🚚`,
-    ].join('\n');
-
-    return sendWhatsAppText(fromPhone, addrPrompt);
+    return sendWhatsAppText(
+      fromPhone,
+      `🏠 *DELIVERY ADDRESS & PINCODE*\n\nPlease reply with your complete doorstep delivery address:\n\n👉 *Example:*\n*Door No. 12, Anna Salai, T. Nagar, Chennai - 600017*\n\n*(Delivered across Tamil Nadu via ST Courier Express)* 🚚`
+    );
   }
 
-  // 6. Address Input State
-  if (session.step === 'AWAITING_ADDRESS' && !actionId.startsWith('ADD_BOOK_')) {
-    // Parse address lines
+  // 5c. Edit Name
+  if (actionId === 'ACTION_EDIT_NAME') {
+    session.step = 'AWAITING_NAME';
+    await saveWhatsAppSession(session);
+
+    return sendWhatsAppText(
+      fromPhone,
+      `✍️ Please reply with the *Student / Recipient Full Name*:`
+    );
+  }
+
+  // 5d. Name Input State
+  if (session.step === 'AWAITING_NAME' && !actionId) {
+    session.name = text.slice(0, 60);
+    session.step = 'AWAITING_ADDRESS';
+    await saveWhatsAppSession(session);
+
+    return sendWhatsAppText(
+      fromPhone,
+      `✅ Name saved as *${session.name}*!\n\n🏠 *Now please reply with your complete Delivery Address & 6-digit Pincode:*\n\n👉 *Example:*\n*Door No. 12, Anna Salai, T. Nagar, Chennai - 600017*`
+    );
+  }
+
+  // 6. Address Input State (Only when user types text, not when clicking interactive buttons)
+  if (session.step === 'AWAITING_ADDRESS' && !actionId) {
+    // Smart address parser (handles multi-line labels like Name:, Address:, Pincode: OR single block text)
+    let extractedName = session.name || senderName || 'Valued Student';
+    const nameMatch = text.match(/Name\s*:\s*([^\n\r]+)/i);
+    if (nameMatch && nameMatch[1].trim()) {
+      extractedName = nameMatch[1].trim();
+      session.name = extractedName;
+    }
+
+    // Clean address by stripping labels like Name:, Town/City:, District:, Address:, Pincode:
+    let cleanAddr = text
+      .replace(/Name\s*:[^\n\r]+/gi, '')
+      .replace(/Town\/City\s*:/gi, '')
+      .replace(/District\s*:/gi, '')
+      .replace(/Address\s*:/gi, '')
+      .replace(/Pincode\s*:[^\n\r]+/gi, '')
+      .replace(/(\r\n|\n|\r)+/g, ', ')
+      .replace(/,\s*,/g, ',')
+      .replace(/^[\s,]+|[\s,]+$/g, '')
+      .trim();
+
+    if (!cleanAddr || cleanAddr.length < 3) {
+      cleanAddr = text.trim();
+    }
+
+    const pincodeMatch = text.match(/\b\d{6}\b/);
     const parsedAddr = {
-      name: session.name || 'Student',
-      address: text,
+      name: extractedName,
+      address: cleanAddr,
       city: 'Tamil Nadu',
-      pincode: (text.match(/\b\d{6}\b/) || ['600001'])[0],
+      pincode: pincodeMatch ? pincodeMatch[0] : '600001',
     };
 
     session.shipping_address = parsedAddr;
@@ -443,12 +523,13 @@ export async function handleIncomingWhatsAppMessage(
       const payPrompt = [
         `✅ *ADDRESS SAVED & ORDER READY!*`,
         ``,
-        `📍 *Delivery To*:`,
-        `${parsedAddr.address}`,
+        `👤 *Recipient*: ${parsedAddr.name}`,
+        `📍 *Delivery Address*: ${parsedAddr.address}`,
+        `📮 *Pincode*: ${parsedAddr.pincode}`,
         ``,
         `💳 *BILL SUMMARY*:`,
         `• Books Subtotal: ₹${totals.subtotal}`,
-        `• Delivery: ${totals.isFreeDelivery ? 'FREE Doorstep Delivery' : `₹${totals.shippingFee}`}`,
+        `• Delivery: ${totals.isFreeDelivery ? '🎁 FREE Doorstep Delivery' : `₹${totals.shippingFee}`}`,
         `• *Total Payable: ₹${totals.totalAmount}*`,
         ``,
         `👉 *Click here to Pay securely via GPay / PhonePe / Paytm / UPI*:`,
@@ -459,6 +540,7 @@ export async function handleIncomingWhatsAppMessage(
 
       return sendWhatsAppText(fromPhone, payPrompt);
     } catch (err: any) {
+      console.error('[Create Payment Link Error]', err);
       return sendWhatsAppText(
         fromPhone,
         `⚠️ We encountered an issue setting up online payment: ${err?.message || 'Please try again in a few moments.'}`
