@@ -157,6 +157,7 @@ export async function sendWhatsAppList(
 
 /** Send order confirmation message upon verified payment */
 import { generateTrackingToken } from '@/lib/trackToken';
+import { publicSiteOrigin } from '@/lib/publicSiteUrl';
 
 export async function sendWhatsAppOrderConfirmed(
   phone: string,
@@ -168,7 +169,7 @@ export async function sendWhatsAppOrderConfirmed(
     customerEmail?: string;
   }
 ) {
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://blessingpowerguide.in';
+  const siteUrl = publicSiteOrigin();
   const cleanPhone = phone.replace(/\D/g, '').slice(-10);
   const trackToken = cleanPhone ? generateTrackingToken(details.orderNumber, cleanPhone) : '';
   const tokenParam = trackToken ? `&t=${trackToken}` : '';
@@ -211,7 +212,7 @@ export async function sendWhatsAppTrackingUpdate(
     trackingUrl?: string;
   }
 ) {
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://blessingpowerguide.in';
+  const siteUrl = publicSiteOrigin();
   const cleanPhone = phone.replace(/\D/g, '').slice(-10);
   const trackToken = cleanPhone ? generateTrackingToken(details.orderNumber, cleanPhone) : '';
   const tokenParam = trackToken ? `&t=${trackToken}` : '';
