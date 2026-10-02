@@ -57,10 +57,12 @@ function TrackForm() {
   }, [user]);
 
   const runTrack = async (oid?: string, ph?: string, opts?: { soft?: boolean; token?: string }) => {
-    const id = (oid ?? orderId).trim();
+    const rawTarget = oid ?? orderId;
+    const id = String(rawTarget || '').trim().replace(/^#+/, '').replace(/\s+/g, '-');
     const mobile = (ph ?? phone ?? user?.phone ?? '').trim();
     const token = (opts?.token ?? trackToken).trim();
     setError(null);
+    if (!id) return;
     if (!opts?.soft) {
       setLoading(true);
       setOrder(null);
@@ -74,7 +76,7 @@ function TrackForm() {
       const data = await res.json();
       if (!res.ok) {
         if (!opts?.soft) {
-          setError(data.error || 'Could not track order. Please verify Order ID and Mobile number.');
+          setError(data.error || 'Could not track order. Please verify Order ID.');
         }
         return;
       }
@@ -87,16 +89,16 @@ function TrackForm() {
   };
 
   useEffect(() => {
-    const oid = searchParams.get('orderId') || searchParams.get('order');
-    const ph = searchParams.get('phone') || user?.phone;
+    const rawOid = searchParams.get('orderId') || searchParams.get('order');
+    const cleanOid = rawOid ? rawOid.trim().replace(/^#+/, '').replace(/\s+/g, '-') : '';
+    const ph = searchParams.get('phone') || user?.phone || '';
     const t = searchParams.get('t') || searchParams.get('token') || '';
-    if (oid) setOrderId(oid);
+    if (cleanOid) setOrderId(cleanOid);
     if (ph) setPhone(ph);
     if (t) setTrackToken(t);
-    if (oid) {
-      void runTrack(oid, ph, { token: t });
+    if (cleanOid) {
+      void runTrack(cleanOid, ph, { token: t });
     }
-     
   }, [searchParams, user]);
 
   // Auto-refresh while Track page is open — stop after delivered / cancelled
@@ -180,60 +182,78 @@ function TrackForm() {
         </div>
       )}
 
-      {/* Track Form for Guests or Manual Search */}
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          void runTrack();
-        }}
-        className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3"
-      >
-        <div>
-          <label className="text-[11px] font-bold text-slate-600 uppercase">Order ID</label>
-          <input
-            value={orderId}
-            onChange={(e) => setOrderId(e.target.value.toUpperCase())}
-            placeholder="e.g. BPG-1048"
-            className="mt-1 w-full px-3 py-3 border border-slate-300 rounded-xl text-sm font-bold outline-none focus:border-blue-600 min-h-12 uppercase"
-            required
-          />
-        </div>
-        <div>
-          <label className="text-[11px] font-bold text-slate-600 uppercase">Mobile Number</label>
-          <input
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            placeholder="10-digit mobile number from checkout"
-            inputMode="tel"
-            className="mt-1 w-full px-3 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-blue-600 min-h-12"
-            required
-          />
-        </div>
-        {error && (
-          <p className="text-xs font-semibold text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
-            {error}
+      {/* Live Loading State when opening from direct tracking link */}
+      {loading && (
+        <div className="bg-white border border-blue-100 rounded-2xl p-8 shadow-sm flex flex-col items-center justify-center text-center space-y-3 animate-pulse">
+          <div className="w-10 h-10 border-4 border-[#001B3A] border-t-blue-500 rounded-full animate-spin" />
+          <p className="font-heading font-black text-base text-[#001B3A]">
+            Locating Shipment {orderId ? `#${orderId}` : ''}…
           </p>
-        )}
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full bg-[#001B3A] hover:bg-blue-700 text-white font-extrabold text-xs py-3.5 rounded-xl uppercase tracking-wider min-h-12 flex items-center justify-center gap-2 disabled:opacity-60 cursor-pointer shadow-md transition-all"
-        >
-          <Search className="w-4 h-4" />
-          {loading ? 'Checking ST Courier…' : 'Track shipment'}
-        </button>
-      </form>
+          <p className="text-xs text-slate-500">
+            Checking live parcel scans from ST Courier Express hub network
+          </p>
+        </div>
+      )}
 
-      {/* Flipkart-style live ST result */}
-      {order && (
+      {/* Track Form for Guests or Manual Search (displayed if no order is currently active) */}
+      {(!order || !order.orderId) && !loading && (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void runTrack();
+          }}
+          className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3"
+        >
+          <div>
+            <label className="text-[11px] font-bold text-slate-600 uppercase">Order ID</label>
+            <input
+              value={orderId}
+              onChange={(e) => setOrderId(e.target.value.toUpperCase())}
+              placeholder="e.g. BPG-1048"
+              className="mt-1 w-full px-3 py-3 border border-slate-300 rounded-xl text-sm font-bold outline-none focus:border-blue-600 min-h-12 uppercase"
+              required
+            />
+          </div>
+          <div>
+            <label className="text-[11px] font-bold text-slate-600 uppercase flex items-center justify-between">
+              <span>Mobile Number</span>
+              <span className="text-slate-400 font-normal lowercase text-[10px]">(optional)</span>
+            </label>
+            <input
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="10-digit mobile number (optional)"
+              inputMode="tel"
+              className="mt-1 w-full px-3 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-blue-600 min-h-12"
+            />
+          </div>
+          {error && (
+            <p className="text-xs font-semibold text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
+              {error}
+            </p>
+          )}
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-[#001B3A] hover:bg-blue-700 text-white font-extrabold text-xs py-3.5 rounded-xl uppercase tracking-wider min-h-12 flex items-center justify-center gap-2 disabled:opacity-60 cursor-pointer shadow-md transition-all"
+          >
+            <Search className="w-4 h-4" />
+            {loading ? 'Checking ST Courier…' : 'Track shipment'}
+          </button>
+        </form>
+      )}
+
+      {/* Flipkart-style live ST result - Displayed Immediately */}
+      {order && !loading && (
         <div className="space-y-4">
           <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="text-[10px] font-bold text-slate-400 uppercase">Order</p>
+              <p className="text-[10px] font-bold text-slate-400 uppercase">Tracking Order</p>
               <p className="font-heading font-black text-xl text-[#001B3A]">#{order.orderId}</p>
               <p className="text-xs text-slate-500 mt-1">
                 {order.customer?.name}
                 {order.customer?.phone ? ` · ${order.customer.phone}` : ''}
+                {order.customer?.city ? ` · ${order.customer.city}` : ''}
               </p>
             </div>
             <span
@@ -350,6 +370,22 @@ function TrackForm() {
               <MessageSquare className="w-4 h-4" />
               <span>Chat with Support</span>
             </Link>
+          </div>
+
+          {/* Quick link to search another order */}
+          <div className="text-center pt-1 pb-2">
+            <button
+              type="button"
+              onClick={() => {
+                setOrder(null);
+                setOrderId('');
+                setError(null);
+              }}
+              className="text-xs font-bold text-[#0044AA] hover:underline inline-flex items-center gap-1.5 cursor-pointer py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors"
+            >
+              <Search className="w-3.5 h-3.5" />
+              <span>Track a different shipment</span>
+            </button>
           </div>
         </div>
       )}

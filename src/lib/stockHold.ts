@@ -83,38 +83,28 @@ export async function createStockHolds(opts: {
       const med = String(item.selectedMedium || '').toLowerCase();
       const isTamil = med.includes('tamil');
       const isEnglish = med.includes('english');
+      const isCombo = med.includes('combo') || (!isTamil && !isEnglish);
 
-      let updateSql = `
+      const updateSql = `
         UPDATE books
-        SET stock = COALESCE(stock, 0) - $1,
-            status = CASE WHEN COALESCE(stock, 0) - $1 <= 0 THEN 'out_of_stock' ELSE status END,
+        SET stock = GREATEST(0, COALESCE(stock, 0) - $1),
+            stock_tamil = CASE 
+              WHEN stock_tamil IS NOT NULL AND ($3::boolean OR ($5::boolean AND stock_english IS NULL))
+              THEN GREATEST(0, stock_tamil - $1)
+              ELSE stock_tamil
+            END,
+            stock_english = CASE 
+              WHEN stock_english IS NOT NULL AND ($4::boolean OR ($5::boolean AND stock_tamil IS NULL))
+              THEN GREATEST(0, stock_english - $1)
+              ELSE stock_english
+            END,
+            status = CASE WHEN GREATEST(0, COALESCE(stock, 0) - $1) <= 0 THEN 'out_of_stock' ELSE status END,
             updated_at = NOW()
         WHERE id = $2 AND COALESCE(stock, 0) >= $1
         RETURNING id, title
       `;
-      if (isTamil) {
-        updateSql = `
-          UPDATE books
-          SET stock = COALESCE(stock, 0) - $1,
-              stock_tamil = CASE WHEN stock_tamil IS NOT NULL THEN GREATEST(0, stock_tamil - $1) ELSE stock_tamil END,
-              status = CASE WHEN COALESCE(stock, 0) - $1 <= 0 THEN 'out_of_stock' ELSE status END,
-              updated_at = NOW()
-          WHERE id = $2 AND COALESCE(stock, 0) >= $1 AND (stock_tamil IS NULL OR stock_tamil >= $1)
-          RETURNING id, title
-        `;
-      } else if (isEnglish) {
-        updateSql = `
-          UPDATE books
-          SET stock = COALESCE(stock, 0) - $1,
-              stock_english = CASE WHEN stock_english IS NOT NULL THEN GREATEST(0, stock_english - $1) ELSE stock_english END,
-              status = CASE WHEN COALESCE(stock, 0) - $1 <= 0 THEN 'out_of_stock' ELSE status END,
-              updated_at = NOW()
-          WHERE id = $2 AND COALESCE(stock, 0) >= $1 AND (stock_english IS NULL OR stock_english >= $1)
-          RETURNING id, title
-        `;
-      }
 
-      const bookRes = await client.query(updateSql, [qty, item.id]);
+      const bookRes = await client.query(updateSql, [qty, item.id, isTamil, isEnglish, isCombo]);
       if (bookRes.rowCount === 0) {
         await client.query('ROLLBACK');
         return {

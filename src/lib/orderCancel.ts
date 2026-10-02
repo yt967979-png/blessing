@@ -346,33 +346,28 @@ export async function executeOrderCancel(opts: CancelOrderOpts): Promise<CancelR
             const bId = it.book_id;
             const qty = Number(it.quantity) || 1;
             const med = String(it.medium || '').toLowerCase();
-            let restoreSql = `
+            const isTamil = med.includes('tamil');
+            const isEnglish = med.includes('english');
+            const isCombo = med.includes('combo') || (!isTamil && !isEnglish);
+
+            const restoreSql = `
               UPDATE books
               SET stock = COALESCE(stock, 0) + $1,
+                  stock_tamil = CASE 
+                    WHEN stock_tamil IS NOT NULL AND ($3::boolean OR ($5::boolean AND stock_english IS NULL))
+                    THEN stock_tamil + $1
+                    ELSE stock_tamil
+                  END,
+                  stock_english = CASE 
+                    WHEN stock_english IS NOT NULL AND ($4::boolean OR ($5::boolean AND stock_tamil IS NULL))
+                    THEN stock_english + $1
+                    ELSE stock_english
+                  END,
                   status = CASE WHEN status = 'out_of_stock' AND COALESCE(stock, 0) + $1 > 0 THEN 'published' ELSE status END,
                   updated_at = NOW()
               WHERE id = $2
             `;
-            if (med.includes('tamil')) {
-              restoreSql = `
-                UPDATE books
-                SET stock = COALESCE(stock, 0) + $1,
-                    stock_tamil = CASE WHEN stock_tamil IS NOT NULL THEN stock_tamil + $1 ELSE stock_tamil END,
-                    status = CASE WHEN status = 'out_of_stock' AND COALESCE(stock, 0) + $1 > 0 THEN 'published' ELSE status END,
-                    updated_at = NOW()
-                WHERE id = $2
-              `;
-            } else if (med.includes('english')) {
-              restoreSql = `
-                UPDATE books
-                SET stock = COALESCE(stock, 0) + $1,
-                    stock_english = CASE WHEN stock_english IS NOT NULL THEN stock_english + $1 ELSE stock_english END,
-                    status = CASE WHEN status = 'out_of_stock' AND COALESCE(stock, 0) + $1 > 0 THEN 'published' ELSE status END,
-                    updated_at = NOW()
-                WHERE id = $2
-              `;
-            }
-            await queryDb(restoreSql, [qty, bId]);
+            await queryDb(restoreSql, [qty, bId, isTamil, isEnglish, isCombo]);
             bookIdsToNotify.push(bId);
           }
           if (bookIdsToNotify.length > 0) {

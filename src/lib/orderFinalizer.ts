@@ -455,36 +455,29 @@ export async function finalizeOrderFromPayment(opts: FinalizeOrderOptions): Prom
       if (heldQty < it.qty) {
         const shortfall = it.qty - heldQty;
         const lowerMed = String(it.medium || '').toLowerCase();
-        let shortfallSql = `
+        const isTamil = lowerMed.includes('tamil');
+        const isEnglish = lowerMed.includes('english');
+        const isCombo = lowerMed.includes('combo') || (!isTamil && !isEnglish);
+
+        const shortfallSql = `
           UPDATE books
-          SET stock = COALESCE(stock, 0) - $1,
-              status = CASE WHEN COALESCE(stock, 0) - $1 <= 0 THEN 'out_of_stock' ELSE status END,
+          SET stock = GREATEST(0, COALESCE(stock, 0) - $1),
+              stock_tamil = CASE 
+                WHEN stock_tamil IS NOT NULL AND ($3::boolean OR ($5::boolean AND stock_english IS NULL))
+                THEN GREATEST(0, stock_tamil - $1)
+                ELSE stock_tamil
+              END,
+              stock_english = CASE 
+                WHEN stock_english IS NOT NULL AND ($4::boolean OR ($5::boolean AND stock_tamil IS NULL))
+                THEN GREATEST(0, stock_english - $1)
+                ELSE stock_english
+              END,
+              status = CASE WHEN GREATEST(0, COALESCE(stock, 0) - $1) <= 0 THEN 'out_of_stock' ELSE status END,
               updated_at = NOW()
           WHERE id = $2 AND COALESCE(stock, 0) >= $1
-          RETURNING id, title, stock
+          RETURNING id, title, stock, stock_tamil, stock_english
         `;
-        if (lowerMed.includes('tamil')) {
-          shortfallSql = `
-            UPDATE books
-            SET stock = COALESCE(stock, 0) - $1,
-                stock_tamil = CASE WHEN stock_tamil IS NOT NULL THEN GREATEST(0, stock_tamil - $1) ELSE stock_tamil END,
-                status = CASE WHEN COALESCE(stock, 0) - $1 <= 0 THEN 'out_of_stock' ELSE status END,
-                updated_at = NOW()
-            WHERE id = $2 AND COALESCE(stock, 0) >= $1 AND (stock_tamil IS NULL OR stock_tamil >= $1)
-            RETURNING id, title, stock
-          `;
-        } else if (lowerMed.includes('english')) {
-          shortfallSql = `
-            UPDATE books
-            SET stock = COALESCE(stock, 0) - $1,
-                stock_english = CASE WHEN stock_english IS NOT NULL THEN GREATEST(0, stock_english - $1) ELSE stock_english END,
-                status = CASE WHEN COALESCE(stock, 0) - $1 <= 0 THEN 'out_of_stock' ELSE status END,
-                updated_at = NOW()
-            WHERE id = $2 AND COALESCE(stock, 0) >= $1 AND (stock_english IS NULL OR stock_english >= $1)
-            RETURNING id, title, stock
-          `;
-        }
-        const stockRes = await client.query(shortfallSql, [shortfall, it.bookId]);
+        const stockRes = await client.query(shortfallSql, [shortfall, it.bookId, isTamil, isEnglish, isCombo]);
         if (stockRes.rowCount === 0) {
           // Stock was claimed by another customer while hold was released / webhook was delayed!
           await client.query('ROLLBACK');
@@ -620,6 +613,17 @@ export async function finalizeOrderFromPayment(opts: FinalizeOrderOptions): Prom
       broadcastOrderChange(orderEvent);
       await notifyOrderChanged(orderEvent);
     } catch (_) {}
+
+    // 10b. REAL-TIME RACK STOCK BROADCAST (Live inventory decrease across all browsers & admin rack)
+    try {
+      const { notifyStockChanged } = await import('@/app/api/stock/stream/route');
+      const bookIdsToNotify = Array.from(new Set(itemsToInsert.map((it: any) => it.bookId).filter(Boolean)));
+      if (bookIdsToNotify.length > 0) {
+        void notifyStockChanged(bookIdsToNotify);
+      }
+    } catch (stockErr: any) {
+      console.warn('[orderFinalizer] Failed to notify live stock change:', stockErr?.message || stockErr);
+    }
 
     // 11. AUTOMATED WHATSAPP ORDER CONFIRMATION
     try {

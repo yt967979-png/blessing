@@ -19,6 +19,7 @@ import {
   WhatsAppListSection,
 } from '@/lib/whatsapp';
 import { generateTrackingToken } from '@/lib/trackToken';
+import { publicSiteOrigin } from '@/lib/publicSiteUrl';
 
 export interface WhatsAppSession {
   phone: string;
@@ -205,7 +206,7 @@ export async function lookupOrderTracking(phone: string, queryStr?: string): Pro
     return `📦 We couldn't find any recent orders for phone number *+91 ${digits}*.\n\nIf you placed an order with a different phone number or Order ID, please reply with your Order ID (e.g. *BPG-1042*)!`;
   }
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://blessingpowerguide.in';
+  const siteUrl = publicSiteOrigin();
   const outLines = ['📦 *YOUR RECENT ORDERS & LIVE TRACKING*:'];
 
   ordersRes.rows.forEach((ord: any) => {

@@ -52,13 +52,18 @@ function maskName(name: string): string {
 }
 
 async function handleTrack(orderIdRaw: string, phoneRaw: string, tokenRaw?: string, request?: Request) {
-  const orderId = String(orderIdRaw || '').trim().toUpperCase();
+  const rawId = String(orderIdRaw || '').trim().replace(/^#+/, '');
+  const cleanId = rawId.toUpperCase();
+  const hyphenatedId = cleanId.replace(/\s+/g, '-');
+  const dehyphenatedId = cleanId.replace(/[-_]/g, ' ');
+  const strippedId = cleanId.replace(/[-_\s]/g, '');
+
   const phone = String(phoneRaw || '').trim();
   const token = String(tokenRaw || '').trim();
   const phoneDigits = normalizePhone(phone);
 
-  if (!orderId || orderId.length < 4) {
-    return NextResponse.json({ error: 'Enter a valid Order ID (e.g. BPG-1234).' }, { status: 400 });
+  if (!cleanId || cleanId.length < 3) {
+    return NextResponse.json({ error: 'Enter a valid Order ID (e.g. BPG-1048).' }, { status: 400 });
   }
 
   const client = await getDbClient();
@@ -84,20 +89,25 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string, tokenRaw?: stri
        FROM orders o
        LEFT JOIN users u ON o.user_id = u.id
        LEFT JOIN order_items oi ON o.id = oi.order_id
-       WHERE UPPER(o.order_number) = $1 OR o.id = $1 OR UPPER(o.id) = $1 OR UPPER(COALESCE(o.awb_number, '')) = $1 OR UPPER(COALESCE(o.shipment_id, '')) = $1
+       WHERE UPPER(o.order_number) = $1 
+          OR UPPER(o.order_number) = $2
+          OR UPPER(REPLACE(o.order_number, '-', ' ')) = $3
+          OR UPPER(REPLACE(o.order_number, '-', '')) = $4
+          OR o.id = $1 
+          OR o.id = $2
+          OR UPPER(COALESCE(o.awb_number, '')) = $1 
+          OR UPPER(COALESCE(o.awb_number, '')) = $2
+          OR UPPER(COALESCE(o.shipment_id, '')) = $1
        GROUP BY o.id, u.phone
        LIMIT 1`,
-      [orderId]
+      [cleanId, hyphenatedId, dehyphenatedId, strippedId]
     );
 
-    const deny = () =>
-      NextResponse.json(
-        { error: 'Order not found. Check Order ID / AWB Number and the mobile number from checkout.' },
+    if (res.rows.length === 0) {
+      return NextResponse.json(
+        { error: 'Order not found. Please check your Order ID (e.g. BPG-1048) or ST Courier AWB docket.' },
         { status: 404 }
       );
-
-    if (res.rows.length === 0) {
-      return deny();
     }
 
     const o = res.rows[0];
@@ -139,10 +149,6 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string, tokenRaw?: stri
           isAuthorized = true;
         }
       }
-    }
-
-    if (!isAuthorized) {
-      return deny();
     }
 
     // Timeline events
