@@ -27,6 +27,31 @@ export const SubjectFilterBar = () => {
   const { searchQuery, setSearchQuery, selectedClass, setSelectedClass, products } = useStore();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
+  const allFilterSubjects = React.useMemo(() => {
+    const list = [...SUBJECTS];
+    const seen = new Set(list.map((s) => s.id.toLowerCase()));
+
+    (products || []).forEach((p) => {
+      const subj = (p.subject || '').trim();
+      if (!subj) return;
+      const lower = subj.toLowerCase();
+      if (
+        !seen.has(lower) &&
+        !lower.includes('all-in-one') &&
+        lower !== 'combo'
+      ) {
+        list.push({
+          id: subj,
+          label: subj,
+          icon: '📖',
+        });
+        seen.add(lower);
+      }
+    });
+
+    return list;
+  }, [products]);
+
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
 
@@ -141,7 +166,7 @@ export const SubjectFilterBar = () => {
           className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar scroll-smooth py-1 px-1 flex-1 select-none touch-pan-x"
           style={{ WebkitOverflowScrolling: 'touch' }}
         >
-          {SUBJECTS.map((s) => {
+          {allFilterSubjects.map((s) => {
             const isActive =
               (s.id === 'all' && !searchQuery) ||
               (s.id !== 'all' && searchQuery.toLowerCase() === s.id.toLowerCase());

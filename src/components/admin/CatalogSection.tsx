@@ -207,6 +207,8 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
   const [editStockEnglish, setEditStockEnglish] = useState<number>(0);
   const [editCls, setEditCls] = useState<string>('10th');
   const [editSubject, setEditSubject] = useState<string>('Mathematics');
+  const [editIsCustomSubject, setEditIsCustomSubject] = useState<boolean>(false);
+  const [editCustomSubjectText, setEditCustomSubjectText] = useState<string>('');
   const [editTitle, setEditTitle] = useState<string>('');
   const [editBadge, setEditBadge] = useState<string>('');
   const [editImage, setEditImage] = useState<string>('');
@@ -254,14 +256,68 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
 
   const classesList = ['all', '6th', '7th', '8th', '9th', '10th', '11th', '12th'];
 
-  // Dynamically merge subjects from existing catalog with default subjects
+  // Persistent custom subjects added by admin
+  const [customSubjects, setCustomSubjects] = useState<string[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('blessing_custom_subjects');
+        return saved ? JSON.parse(saved) : [];
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  });
+
+  const addCustomSubject = (newSub: string) => {
+    const trimmed = newSub.trim();
+    if (!trimmed || trimmed === '__custom__') return;
+    setCustomSubjects((prev) => {
+      if (prev.some((s) => s.toLowerCase() === trimmed.toLowerCase())) return prev;
+      const updated = [...prev, trimmed];
+      try {
+        localStorage.setItem('blessing_custom_subjects', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+  };
+
+  // Dynamically merge subjects from default list, existing catalog, and custom added subjects
   const availableSubjects = useMemo(() => {
     const set = new Set(DEFAULT_SUBJECTS);
     products.forEach((p) => {
       if (p.subject && p.subject.trim()) set.add(p.subject.trim());
     });
+    customSubjects.forEach((s) => {
+      if (s && s.trim()) set.add(s.trim());
+    });
     return Array.from(set);
-  }, [products]);
+  }, [products, customSubjects]);
+
+  // Dynamically compute all subjects for Combo Pickers (standard + catalog + custom)
+  const allComboSubjectChoices = useMemo(() => {
+    const list = [...STANDARD_COMBO_CHOICES];
+    const existingNames = new Set(list.map((c) => c.name.toLowerCase()));
+
+    availableSubjects.forEach((subj) => {
+      const lower = subj.toLowerCase();
+      if (
+        !existingNames.has(lower) &&
+        !lower.includes('combo') &&
+        !lower.includes('all-in-one') &&
+        subj !== '__custom__'
+      ) {
+        list.push({
+          name: subj,
+          icon: '📖',
+          tamilName: '',
+        });
+        existingNames.add(lower);
+      }
+    });
+
+    return list;
+  }, [availableSubjects]);
 
   const resolvedSubject = useMemo(() => {
     if (selectedSubjectOption === '__custom__') {
@@ -352,7 +408,11 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
     setEditStockEnglish(stEnglish);
     setEditSamplePdf(p.samplePdfUrl || '');
     setEditCls(p.cls || '10th');
-    setEditSubject(p.subject || 'Mathematics');
+    const curSub = p.subject || 'Mathematics';
+    setEditSubject(curSub);
+    const isCustomSub = !DEFAULT_SUBJECTS.includes(curSub) && !customSubjects.includes(curSub);
+    setEditIsCustomSubject(isCustomSub);
+    setEditCustomSubjectText(isCustomSub ? curSub : '');
     const isCombo = isProductOrEditACombo(p);
     const initialSubs = isCombo
       ? (p.comboSubjects && p.comboSubjects.length > 0
@@ -445,18 +505,30 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
       ? ((numStockTamil || 0) > 0 || (numStockEnglish || 0) > 0)
       : numStock > 0;
 
+    const finalSubjectToSave = editIsCustomSubject
+      ? (editCustomSubjectText.trim() || 'General')
+      : editSubject.trim();
+
+    if (finalSubjectToSave) {
+      addCustomSubject(finalSubjectToSave);
+    }
+
     const isCombo = isProductOrEditACombo({
-      subject: editSubject,
+      subject: finalSubjectToSave,
       title: editTitle,
     });
     const cleanComboSubjects = isCombo ? editComboSubjects : [];
+    if (isCombo) {
+      cleanComboSubjects.forEach((s) => addCustomSubject(s));
+    }
+
     try {
       await onUpdateProduct(id, {
         title: editTitle.trim(),
         badge: editBadge.trim(),
         image: editImage.trim() || undefined,
         cls: editCls,
-        subject: editSubject.trim(),
+        subject: finalSubjectToSave,
         language: editMedium,
         category: isCombo ? 'combo' : 'guide',
         category_id: isCombo ? 'cat-combos' : `cat-${String(editCls).toLowerCase().trim()}`,
@@ -674,6 +746,13 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
         ? (numStockTamil || 0) + (numStockEnglish || 0)
         : Math.max(0, Number(newStock) || 0);
 
+      if (resolvedSubject && resolvedSubject !== '__custom__') {
+        addCustomSubject(resolvedSubject);
+      }
+      if (isCombo && selectedComboSubjects.length > 0) {
+        selectedComboSubjects.forEach((s) => addCustomSubject(s));
+      }
+
       const payload = {
         title: newTitle.trim(),
         cls: newCls,
@@ -760,7 +839,7 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
     <div className="space-y-4">
       {/* Subject suggestions datalist for edit inputs */}
       <datalist id="admin-subject-options">
-        {DEFAULT_SUBJECTS.map((s) => (
+        {availableSubjects.map((s) => (
           <option key={s} value={s} />
         ))}
       </datalist>
@@ -1078,7 +1157,7 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                                 </div>
 
                                 <div className="grid grid-cols-2 gap-1.5 max-h-36 overflow-y-auto pr-1">
-                                  {STANDARD_COMBO_CHOICES.map((choice) => {
+                                  {allComboSubjectChoices.map((choice) => {
                                     const isTicked = editComboSubjects.includes(choice.name);
                                     return (
                                       <label
@@ -1184,20 +1263,45 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                                 </option>
                               ))}
                             </select>
-                            <input
-                              type="text"
-                              list="admin-subject-options"
-                              value={editSubject}
+                            <select
+                              value={editIsCustomSubject ? '__custom__' : editSubject}
                               onChange={(e) => {
                                 const val = e.target.value;
-                                setEditSubject(val);
-                                if (isProductOrEditACombo({ subject: val, title: editTitle }) && editComboSubjects.length === 0) {
-                                  setEditComboSubjects(getComboIncludedSubjects({ cls: editCls, title: editTitle }).map((s) => s.name));
+                                if (val === '__custom__') {
+                                  setEditIsCustomSubject(true);
+                                  setEditCustomSubjectText('');
+                                } else {
+                                  setEditIsCustomSubject(false);
+                                  setEditSubject(val);
+                                  if (isProductOrEditACombo({ subject: val, title: editTitle }) && editComboSubjects.length === 0) {
+                                    setEditComboSubjects(getComboIncludedSubjects({ cls: editCls, title: editTitle }).map((s) => s.name));
+                                  }
                                 }
                               }}
-                              placeholder="Subject (e.g. Tamil)"
-                              className="w-full px-2 py-1 bg-white border border-slate-300 rounded-lg text-xs font-medium outline-none focus:border-[#2874f0]"
-                            />
+                              className="w-full px-2 py-1 bg-white border border-slate-300 rounded-lg text-xs font-semibold outline-none focus:border-[#2874f0] cursor-pointer"
+                            >
+                              {availableSubjects.map((s) => (
+                                <option key={s} value={s}>
+                                  {s}
+                                </option>
+                              ))}
+                              <option value="__custom__">+ Add Custom Subject...</option>
+                            </select>
+
+                            {editIsCustomSubject && (
+                              <input
+                                type="text"
+                                placeholder="Type subject name..."
+                                value={editCustomSubjectText}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setEditCustomSubjectText(val);
+                                  setEditSubject(val);
+                                }}
+                                className="w-full px-2 py-1 bg-amber-50 border border-amber-300 rounded-lg text-xs font-medium outline-none focus:border-amber-500 text-slate-900"
+                                autoFocus
+                              />
+                            )}
                           </div>
                         ) : (
                           <div>
@@ -1495,19 +1599,45 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                       </div>
                       <div>
                         <label className="text-[11px] font-bold text-slate-700 block mb-1">Subject</label>
-                        <input
-                          type="text"
-                          list="admin-subject-options"
-                          value={editSubject}
+                        <select
+                          value={editIsCustomSubject ? '__custom__' : editSubject}
                           onChange={(e) => {
                             const val = e.target.value;
-                            setEditSubject(val);
-                            if (isProductOrEditACombo({ subject: val, title: editTitle }) && editComboSubjects.length === 0) {
-                              setEditComboSubjects(getComboIncludedSubjects({ cls: editCls, title: editTitle }).map((s) => s.name));
+                            if (val === '__custom__') {
+                              setEditIsCustomSubject(true);
+                              setEditCustomSubjectText('');
+                            } else {
+                              setEditIsCustomSubject(false);
+                              setEditSubject(val);
+                              if (isProductOrEditACombo({ subject: val, title: editTitle }) && editComboSubjects.length === 0) {
+                                setEditComboSubjects(getComboIncludedSubjects({ cls: editCls, title: editTitle }).map((s) => s.name));
+                              }
                             }
                           }}
-                          className="w-full px-2 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs outline-none"
-                        />
+                          className="w-full px-2 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold outline-none focus:border-[#2874f0] cursor-pointer"
+                        >
+                          {availableSubjects.map((s) => (
+                            <option key={s} value={s}>
+                              {s}
+                            </option>
+                          ))}
+                          <option value="__custom__">+ Add Custom Subject...</option>
+                        </select>
+
+                        {editIsCustomSubject && (
+                          <input
+                            type="text"
+                            placeholder="Type subject name..."
+                            value={editCustomSubjectText}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setEditCustomSubjectText(val);
+                              setEditSubject(val);
+                            }}
+                            className="w-full mt-1.5 px-2 py-1.5 bg-amber-50 border border-amber-300 rounded-lg text-xs font-medium outline-none focus:border-amber-500 text-slate-900"
+                            autoFocus
+                          />
+                        )}
                       </div>
                     </div>
 
@@ -1541,7 +1671,7 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                           </button>
                         </div>
                         <div className="grid grid-cols-2 gap-1.5 max-h-36 overflow-y-auto pr-1">
-                          {STANDARD_COMBO_CHOICES.map((choice) => {
+                          {allComboSubjectChoices.map((choice) => {
                             const isTicked = editComboSubjects.includes(choice.name);
                             return (
                               <label
@@ -1568,6 +1698,41 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                             );
                           })}
                         </div>
+                        <div className="flex items-center gap-1.5 pt-1">
+                          <input
+                            type="text"
+                            placeholder="+ Add extra book to combo..."
+                            value={editCustomComboSubjectInput}
+                            onChange={(e) => setEditCustomComboSubjectInput(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                const v = editCustomComboSubjectInput.trim();
+                                if (v && !editComboSubjects.includes(v)) {
+                                  setEditComboSubjects((prev) => [...prev, v]);
+                                  addCustomSubject(v);
+                                  setEditCustomComboSubjectInput('');
+                                }
+                              }
+                            }}
+                            className="flex-1 px-2.5 py-1.5 bg-white border border-purple-200 rounded-lg text-xs outline-none text-slate-900"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const v = editCustomComboSubjectInput.trim();
+                              if (v && !editComboSubjects.includes(v)) {
+                                setEditComboSubjects((prev) => [...prev, v]);
+                                addCustomSubject(v);
+                                setEditCustomComboSubjectInput('');
+                              }
+                            }}
+                            className="px-2.5 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold cursor-pointer"
+                          >
+                            + Add
+                          </button>
+                        </div>
+
                         <div className="p-2 bg-amber-50/90 border border-dashed border-amber-300 rounded-xl">
                           <span className="text-[10px] font-black text-amber-900 block mb-1">
                             📦 Inside This Pack ({editComboSubjects.length} Books):
@@ -2037,7 +2202,7 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
 
                     {/* Subject Checkbox Grid */}
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1">
-                      {STANDARD_COMBO_CHOICES.map((choice) => {
+                      {allComboSubjectChoices.map((choice) => {
                         const isTicked = selectedComboSubjects.includes(choice.name);
                         return (
                           <label
@@ -2085,6 +2250,7 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                             const val = customComboSubjectInput.trim();
                             if (val && !selectedComboSubjects.includes(val)) {
                               setSelectedComboSubjects((prev) => [...prev, val]);
+                              addCustomSubject(val);
                               setCustomComboSubjectInput('');
                             }
                           }
@@ -2097,6 +2263,7 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                           const val = customComboSubjectInput.trim();
                           if (val && !selectedComboSubjects.includes(val)) {
                             setSelectedComboSubjects((prev) => [...prev, val]);
+                            addCustomSubject(val);
                             setCustomComboSubjectInput('');
                           }
                         }}
