@@ -235,6 +235,22 @@ export async function createWhatsAppPaymentLink(session: WhatsAppSession, totals
     throw new Error('Razorpay keys not configured on server env.');
   }
 
+  // Pre-payment live stock re-verification: if any book sold out on website, block payment immediately
+  for (const item of session.cart) {
+    const stockRes = await queryDb(
+      `SELECT title, stock, status, stock_tamil, stock_english FROM books WHERE id = $1 LIMIT 1`,
+      [item.id]
+    );
+    if (stockRes.rows.length === 0) {
+      throw new Error(`"${item.title}" is no longer available.`);
+    }
+    const b = stockRes.rows[0];
+    const isOut = b.status === 'out_of_stock' || (b.stock !== null && b.stock < item.qty);
+    if (isOut) {
+      throw new Error(`"${b.title}" just sold out and is currently out of stock.`);
+    }
+  }
+
   const authHeader = `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString('base64')}`;
   const amountPaisa = Math.round(totals.totalAmount * 100);
   const addr = session.shipping_address || {};
