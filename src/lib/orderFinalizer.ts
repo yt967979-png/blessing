@@ -127,10 +127,10 @@ export async function finalizeOrderFromPayment(opts: FinalizeOrderOptions): Prom
     if (rzpOrderId || plinkId || sessId || waPhoneClean) {
       const sessionRes = await client.query(
         `SELECT * FROM checkout_sessions 
-         WHERE (razorpay_order_id = $1)
-            OR ($2 IS NOT NULL AND razorpay_order_id = $2)
-            OR ($3 IS NOT NULL AND id = $3)
-            OR (source = 'whatsapp' AND status = 'PAYMENT_PENDING' AND $4 IS NOT NULL AND user_id = $4)
+         WHERE (razorpay_order_id = $1::text)
+            OR ($2::text IS NOT NULL AND razorpay_order_id = $2::text)
+            OR ($3::text IS NOT NULL AND id = $3::text)
+            OR (source = 'whatsapp' AND status = 'PAYMENT_PENDING' AND $4::text IS NOT NULL AND user_id = $4::text)
          ORDER BY created_at DESC
          LIMIT 1
          FOR UPDATE`,
@@ -317,9 +317,9 @@ export async function finalizeOrderFromPayment(opts: FinalizeOrderOptions): Prom
     if (customerEmail || cleanPhone) {
       const uMatch = await client.query(
         `SELECT id, name, email, phone FROM users 
-         WHERE (LOWER(email) = $1 AND $1 <> '')
-            OR (phone = $2 AND $2 <> '')
-            OR (phone = $3 AND $3 <> '')
+         WHERE (LOWER(email) = $1::text AND $1::text <> '')
+            OR (phone = $2::text AND $2::text <> '')
+            OR (phone = $3::text AND $3::text <> '')
          ORDER BY (role = 'super_admin') DESC, created_at ASC
          LIMIT 1`,
         [customerEmail, cleanPhone, `91${cleanPhone}`]

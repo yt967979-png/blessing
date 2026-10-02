@@ -156,6 +156,8 @@ export async function sendWhatsAppList(
 }
 
 /** Send order confirmation message upon verified payment */
+import { generateTrackingToken } from '@/lib/trackToken';
+
 export async function sendWhatsAppOrderConfirmed(
   phone: string,
   details: {
@@ -167,7 +169,10 @@ export async function sendWhatsAppOrderConfirmed(
   }
 ) {
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://blessingpowerguide.in';
-  const liveTrackLink = `${siteUrl}/track?order=${encodeURIComponent(details.orderNumber)}`;
+  const cleanPhone = phone.replace(/\D/g, '').slice(-10);
+  const trackToken = cleanPhone ? generateTrackingToken(details.orderNumber, cleanPhone) : '';
+  const tokenParam = trackToken ? `&t=${trackToken}` : '';
+  const liveTrackLink = `${siteUrl}/track?order=${encodeURIComponent(details.orderNumber)}${tokenParam}`;
   const emailLine =
     details.customerEmail && !details.customerEmail.includes('@blessingpowerguide.in')
       ? `🌐 *Website Sync*: Log in with *${details.customerEmail}* at ${siteUrl}/orders to view GST invoice & tracking.`
@@ -207,7 +212,10 @@ export async function sendWhatsAppTrackingUpdate(
   }
 ) {
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://blessingpowerguide.in';
-  const liveTrackLink = details.trackingUrl || `${siteUrl}/track?order=${encodeURIComponent(details.orderNumber)}`;
+  const cleanPhone = phone.replace(/\D/g, '').slice(-10);
+  const trackToken = cleanPhone ? generateTrackingToken(details.orderNumber, cleanPhone) : '';
+  const tokenParam = trackToken ? `&t=${trackToken}` : '';
+  const liveTrackLink = details.trackingUrl || `${siteUrl}/track?order=${encodeURIComponent(details.orderNumber)}${tokenParam}`;
 
   const msg = [
     `🚚 *YOUR PARCEL HAS BEEN DISPATCHED!*`,

@@ -28,7 +28,7 @@ function TrackForm() {
   const searchParams = useSearchParams();
   const { user } = useStore();
 
-  const [orderId, setOrderId] = useState(searchParams.get('orderId') || '');
+  const [orderId, setOrderId] = useState(searchParams.get('orderId') || searchParams.get('order') || '');
   const [phone, setPhone] = useState(searchParams.get('phone') || user?.phone || '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -87,13 +87,13 @@ function TrackForm() {
   };
 
   useEffect(() => {
-    const oid = searchParams.get('orderId');
+    const oid = searchParams.get('orderId') || searchParams.get('order');
     const ph = searchParams.get('phone') || user?.phone;
     const t = searchParams.get('t') || searchParams.get('token') || '';
     if (oid) setOrderId(oid);
     if (ph) setPhone(ph);
     if (t) setTrackToken(t);
-    if (oid && (ph || t)) {
+    if (oid) {
       void runTrack(oid, ph, { token: t });
     }
      

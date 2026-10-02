@@ -18,6 +18,7 @@ import {
   WhatsAppButton,
   WhatsAppListSection,
 } from '@/lib/whatsapp';
+import { generateTrackingToken } from '@/lib/trackToken';
 
 export interface WhatsAppSession {
   phone: string;
@@ -213,12 +214,17 @@ export async function lookupOrderTracking(phone: string, queryStr?: string): Pro
     outLines.push(`• Status: *${ord.order_status || 'Processing'}*`);
     outLines.push(`• Amount: *₹${ord.total_amount}*`);
 
+    const token = digits ? generateTrackingToken(ord.order_number || ord.id, digits) : '';
+    const tokenParam = token ? `&t=${token}` : '';
+    const trackLink = `${siteUrl}/track?order=${encodeURIComponent(ord.order_number || ord.id)}${tokenParam}`;
+
     if (ord.awb_number) {
       outLines.push(`• Courier: *${ord.courier_name || 'ST Courier Express'}*`);
       outLines.push(`• Docket (AWB): \`${ord.awb_number}\``);
-      outLines.push(`• Live Tracker: ${siteUrl}/track?order=${encodeURIComponent(ord.order_number)}`);
+      outLines.push(`• Live Tracker: ${trackLink}`);
     } else {
-      outLines.push(`• Status: 📦 Being packaged at our Chennai central hub. Tracking docket will be sent once dispatched.`);
+      outLines.push(`• Status: 📦 Being packaged in Chennai hub.`);
+      outLines.push(`• Live Tracker: ${trackLink}`);
     }
   });
 

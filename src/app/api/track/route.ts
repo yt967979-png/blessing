@@ -284,7 +284,7 @@ export async function GET(request: Request) {
   }
   const { searchParams } = new URL(request.url);
   return handleTrack(
-    searchParams.get('orderId') || '',
+    searchParams.get('orderId') || searchParams.get('order') || '',
     searchParams.get('phone') || '',
     searchParams.get('t') || searchParams.get('token') || '',
     request
