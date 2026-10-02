@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createHmac, timingSafeEqual } from 'crypto';
-import { getDbClient, releaseDbClient } from '@/lib/db';
+import { getDbClient, releaseDbClient, queryDb } from '@/lib/db';
 import { isOrderCancelled } from '@/lib/orderStatus';
 import { refundRazorpayPayment } from '@/lib/razorpayRefund';
 import { confirmStockHolds, releaseStockHolds } from '@/lib/stockHold';
@@ -226,7 +226,6 @@ export async function POST(request: Request) {
       }
 
       if (targetOrderNumber) {
-        releaseDbClient(client);
         const { executeOrderCancel } = await import('@/lib/orderCancel');
         const cancelResult = await executeOrderCancel({
           orderId: targetOrderNumber,
@@ -251,13 +250,10 @@ export async function POST(request: Request) {
         }
       }
 
-      releaseDbClient(client);
       return NextResponse.json({ ok: true, action: 'refund_processed_recorded', paymentId: refundPayId });
     }
 
     // Payment is captured — finalize the order through the server-authoritative engine
-    releaseDbClient(client);
-
     const notes = entity?.notes || event?.payload?.payment?.entity?.notes || {};
     const paymentLinkId =
       String(event?.payload?.payment_link?.entity?.id || entity?.payment_link_id || '').trim();
@@ -299,20 +295,18 @@ export async function POST(request: Request) {
   } catch (err: any) {
     console.error('[razorpay-webhook]', err?.message || err);
     try {
-      if (client) {
-        const failedId = `fwe-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-        await client.query(
-          `INSERT INTO failed_webhook_events (id, event_id, event_type, payload, error_message, status)
-           VALUES ($1, $2, $3, $4, $5, 'pending')`,
-          [
-            failedId,
-            String(event?.id || event?.event_id || 'unknown'),
-            String(event?.event || 'unknown'),
-            JSON.stringify(event || {}),
-            String(err?.message || err),
-          ]
-        );
-      }
+      const failedId = `fwe-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      await queryDb(
+        `INSERT INTO failed_webhook_events (id, event_id, event_type, payload, error_message, status)
+         VALUES ($1, $2, $3, $4, $5, 'pending')`,
+        [
+          failedId,
+          String(event?.id || event?.event_id || 'unknown'),
+          String(event?.event || 'unknown'),
+          JSON.stringify(event || {}),
+          String(err?.message || err),
+        ]
+      );
     } catch (dbErr: any) {
       console.error('[razorpay-webhook] could not log to failed_webhook_events:', dbErr?.message);
     }

@@ -76,13 +76,14 @@ async function callWhatsAppGraphApi(payload: any, senderPhoneNumberId?: string):
 /** Send standard text message */
 export async function sendWhatsAppText(to: string, text: string, senderPhoneNumberId?: string) {
   const recipient = normalizeWhatsAppRecipient(to);
+  const safeText = String(text || '').slice(0, 4090);
   return callWhatsAppGraphApi(
     {
       messaging_product: 'whatsapp',
       recipient_type: 'individual',
       to: recipient,
       type: 'text',
-      text: { preview_url: true, body: text },
+      text: { preview_url: true, body: safeText },
     },
     senderPhoneNumberId
   );
@@ -96,6 +97,7 @@ export async function sendWhatsAppButtons(
   senderPhoneNumberId?: string
 ) {
   const recipient = normalizeWhatsAppRecipient(to);
+  const safeBody = String(bodyText || '').slice(0, 1020);
   const formattedButtons = buttons.slice(0, 3).map((b) => ({
     type: 'reply',
     reply: {
@@ -112,7 +114,7 @@ export async function sendWhatsAppButtons(
       type: 'interactive',
       interactive: {
         type: 'button',
-        body: { text: bodyText },
+        body: { text: safeBody },
         action: { buttons: formattedButtons },
       },
     },
@@ -129,6 +131,7 @@ export async function sendWhatsAppList(
   senderPhoneNumberId?: string
 ) {
   const recipient = normalizeWhatsAppRecipient(to);
+  const safeBody = String(bodyText || '').slice(0, 1020);
   return callWhatsAppGraphApi(
     {
       messaging_product: 'whatsapp',
@@ -137,7 +140,7 @@ export async function sendWhatsAppList(
       type: 'interactive',
       interactive: {
         type: 'list',
-        body: { text: bodyText },
+        body: { text: safeBody },
         action: {
           button: buttonLabel.slice(0, 20),
           sections: sections.map((sec) => ({

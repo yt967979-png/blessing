@@ -572,7 +572,10 @@ export async function POST(request: Request) {
               END,
               status = CASE WHEN GREATEST(0, COALESCE(stock, 0) - $1) <= 0 THEN 'out_of_stock' ELSE status END,
               updated_at = NOW()
-          WHERE id = $2 AND COALESCE(stock, 0) >= $1
+          WHERE id = $2 
+            AND COALESCE(stock, 0) >= $1
+            AND (NOT ($3::boolean AND stock_tamil IS NOT NULL) OR stock_tamil >= $1)
+            AND (NOT ($4::boolean AND stock_english IS NOT NULL) OR stock_english >= $1)
           RETURNING id, title, stock, stock_tamil, stock_english
         `;
         const stockRes = await client.query(shortfallSql, [shortfall, item.id, isTamil, isEnglish, isCombo]);
