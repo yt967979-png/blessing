@@ -1,7 +1,73 @@
 import { NextRequest, NextResponse } from 'next/server';
+import crypto from 'crypto';
 import { handleIncomingWhatsAppMessage } from '@/lib/whatsappCommerce';
+import { queryDb } from '@/lib/db';
+import { getRedisClient } from '@/lib/redis';
 
 export const runtime = 'nodejs';
+
+/**
+ * Meta X-Hub-Signature-256 HMAC verification
+ * Uses constant-time buffer comparison to prevent timing attacks.
+ */
+function verifyMetaSignature(rawBody: string, signatureHeader: string | null, appSecret: string): boolean {
+  if (!signatureHeader || !signatureHeader.startsWith('sha256=')) {
+    return false;
+  }
+  const signatureHex = signatureHeader.slice('sha256='.length).trim();
+  const hmac = crypto.createHmac('sha256', appSecret);
+  const expectedHex = hmac.update(rawBody, 'utf8').digest('hex');
+
+  try {
+    const sigBuffer = Buffer.from(signatureHex, 'hex');
+    const expectedBuffer = Buffer.from(expectedHex, 'hex');
+    if (sigBuffer.length !== expectedBuffer.length) {
+      return false;
+    }
+    return crypto.timingSafeEqual(sigBuffer, expectedBuffer);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Multi-layer event deduplication (Redis SETNX + PostgreSQL ledger)
+ * Prevents Meta webhook retries from causing duplicate messages, double cart actions, or duplicate orders.
+ */
+async function isEventAlreadyProcessed(eventId: string, eventType: string = 'whatsapp_message'): Promise<boolean> {
+  if (!eventId) return false;
+
+  // 1. Fast Redis check (10 min TTL)
+  try {
+    const redis = getRedisClient();
+    if (redis) {
+      const setRes = await redis.set(`wa:event:${eventId}`, '1', 'EX', 600, 'NX');
+      if (!setRes) {
+        return true; // Already processed!
+      }
+    }
+  } catch (err: any) {
+    console.warn('[WhatsApp Dedup] Redis check skipped:', err?.message || err);
+  }
+
+  // 2. Persistent PostgreSQL ledger check
+  try {
+    const dbRes = await queryDb(
+      `INSERT INTO whatsapp_processed_events (event_id, event_type, processed_at)
+       VALUES ($1, $2, NOW())
+       ON CONFLICT (event_id) DO NOTHING
+       RETURNING event_id`,
+      [eventId, eventType]
+    );
+    if (dbRes.rowCount === 0) {
+      return true; // Already processed!
+    }
+  } catch (err: any) {
+    console.warn('[WhatsApp Dedup] DB check skipped:', err?.message || err);
+  }
+
+  return false;
+}
 
 /**
  * Meta WhatsApp Cloud API Webhook Handshake (GET)
@@ -27,10 +93,30 @@ export async function GET(request: NextRequest) {
 /**
  * Meta WhatsApp Cloud API Event Consumer (POST)
  * Receives incoming customer messages, quick button taps, and list selections.
+ * Enforces X-Hub-Signature-256 HMAC verification and message deduplication.
  */
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json().catch(() => null);
+    const rawBody = await request.text();
+    const appSecret = (process.env.WHATSAPP_APP_SECRET || '').trim();
+
+    // 1. Meta Webhook HMAC-SHA256 Signature Verification (WA-03)
+    if (appSecret) {
+      const signatureHeader = request.headers.get('x-hub-signature-256');
+      if (!verifyMetaSignature(rawBody, signatureHeader, appSecret)) {
+        console.warn('[WhatsApp Webhook] SECURITY ALERT: Invalid Meta X-Hub-Signature-256 received');
+        return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
+      }
+    } else if (process.env.NODE_ENV === 'production') {
+      console.warn('[WhatsApp Webhook] WHATSAPP_APP_SECRET not configured. Please set WHATSAPP_APP_SECRET to prevent forged webhook requests.');
+    }
+
+    let body: any = null;
+    try {
+      body = JSON.parse(rawBody);
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON payload' }, { status: 400 });
+    }
 
     if (!body || body.object !== 'whatsapp_business_account') {
       return NextResponse.json({ status: 'ignored' }, { status: 200 });
@@ -48,7 +134,17 @@ export async function POST(request: NextRequest) {
 
         for (const message of value.messages) {
           const fromPhone = message.from;
+          const messageId = String(message.id || '').trim();
           if (!fromPhone) continue;
+
+          // 2. Webhook Event Deduplication (WA-04)
+          if (messageId) {
+            const isDuplicate = await isEventAlreadyProcessed(messageId, 'whatsapp_message');
+            if (isDuplicate) {
+              console.log(`[WhatsApp Webhook] Duplicate message skipped: ${messageId}`);
+              continue;
+            }
+          }
 
           let incomingText = '';
           let interactiveId: string | undefined = undefined;

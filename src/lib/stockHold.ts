@@ -170,7 +170,7 @@ export async function confirmStockHolds(razorpayOrderId: string, client?: any): 
     client,
     `UPDATE stock_holds
      SET status = 'confirmed', updated_at = NOW()
-     WHERE razorpay_order_id = $1 AND status = 'held'
+     WHERE (razorpay_order_id = $1 OR hold_group_id = $1) AND status = 'held'
      RETURNING book_id, qty`,
     [rzpOrderId]
   );
@@ -184,7 +184,7 @@ export async function confirmStockHolds(razorpayOrderId: string, client?: any): 
   const existing = await execQuery(
     client,
     `SELECT book_id, qty FROM stock_holds
-     WHERE razorpay_order_id = $1 AND status = 'confirmed'`,
+     WHERE (razorpay_order_id = $1 OR hold_group_id = $1) AND status = 'confirmed'`,
     [rzpOrderId]
   );
   return (existing.rows || []).map((r: any) => ({
@@ -266,7 +266,7 @@ export async function releaseStockHolds(
   const params: any[] = [];
   if (identifier.razorpayOrderId) {
     params.push(identifier.razorpayOrderId);
-    whereParts.push(`razorpay_order_id = $${params.length}`);
+    whereParts.push(`(razorpay_order_id = $${params.length} OR hold_group_id = $${params.length})`);
   }
   if (identifier.holdGroupId) {
     params.push(identifier.holdGroupId);

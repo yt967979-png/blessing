@@ -1044,7 +1044,8 @@ async function runSchemaInit(client: any) {
           amount NUMERIC NOT NULL,
           currency VARCHAR(10) DEFAULT 'INR',
           status VARCHAR(50) DEFAULT 'SUCCESS',
-          paid_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          paid_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
         CREATE TABLE IF NOT EXISTS reviews (
@@ -1407,6 +1408,7 @@ async function runSchemaInit(client: any) {
       `ALTER TABLE courier_tracking ADD COLUMN IF NOT EXISTS docket_number VARCHAR(255)`,
       `ALTER TABLE courier_tracking ADD COLUMN IF NOT EXISTS current_status VARCHAR(255)`,
       `ALTER TABLE courier_tracking ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`,
+      `ALTER TABLE payments ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`,
       `ALTER TABLE books ADD COLUMN IF NOT EXISTS badge VARCHAR(100) DEFAULT ''`,
       `ALTER TABLE books ADD COLUMN IF NOT EXISTS stock INT DEFAULT 50`,
       `ALTER TABLE books ADD COLUMN IF NOT EXISTS discount_price NUMERIC`,
@@ -1456,6 +1458,7 @@ async function runSchemaInit(client: any) {
       // Unified WhatsApp Commerce Integration
       `ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_source VARCHAR(50) DEFAULT 'website'`,
       `ALTER TABLE checkout_sessions ADD COLUMN IF NOT EXISTS source VARCHAR(50) DEFAULT 'website'`,
+      `ALTER TABLE checkout_sessions ADD COLUMN IF NOT EXISTS hold_group_id VARCHAR(255)`,
       `ALTER TABLE whatsapp_sessions ADD COLUMN IF NOT EXISTS email VARCHAR(255)`,
       `CREATE TABLE IF NOT EXISTS whatsapp_sessions (
         phone VARCHAR(30) PRIMARY KEY,
@@ -1471,6 +1474,12 @@ async function runSchemaInit(client: any) {
         created_at TIMESTAMPTZ DEFAULT NOW(),
         updated_at TIMESTAMPTZ DEFAULT NOW()
       )`,
+      `CREATE TABLE IF NOT EXISTS whatsapp_processed_events (
+        event_id VARCHAR(255) PRIMARY KEY,
+        event_type VARCHAR(50),
+        processed_at TIMESTAMPTZ DEFAULT NOW()
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_whatsapp_processed_events_time ON whatsapp_processed_events(processed_at)`,
       `CREATE INDEX IF NOT EXISTS idx_orders_order_source ON orders(order_source)`,
       `CREATE INDEX IF NOT EXISTS idx_whatsapp_sessions_phone ON whatsapp_sessions(phone)`,
     ];

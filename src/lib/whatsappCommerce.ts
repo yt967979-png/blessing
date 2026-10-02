@@ -20,6 +20,14 @@ import {
 } from '@/lib/whatsapp';
 import { generateTrackingToken } from '@/lib/trackToken';
 import { publicSiteOrigin } from '@/lib/publicSiteUrl';
+import { priceCheckoutOrder } from '@/lib/checkoutPricing';
+import { createStockHolds, attachRazorpayOrderId, releaseStockHolds } from '@/lib/stockHold';
+import {
+  effectiveBookCount,
+  cartHasCombo,
+  deliveryFeeForQty,
+  isMoqSatisfied,
+} from '@/lib/deliveryRules';
 
 export interface WhatsAppSession {
   phone: string;
@@ -108,31 +116,19 @@ export async function saveWhatsAppSession(session: WhatsAppSession) {
   );
 }
 
-/** Calculate cart totals, MOQ compliance, and shipping fee */
+/** Calculate cart totals, MOQ compliance, and shipping fee using canonical delivery rules */
 export function calculateWhatsAppCartTotals(cart: WhatsAppSession['cart']) {
   let subtotal = 0;
-  let totalBookCount = 0;
-  let hasCombo = false;
-
   for (const item of cart) {
-    const qty = item.qty || 1;
-    subtotal += item.price * qty;
-    if (item.isCombo) {
-      hasCombo = true;
-      totalBookCount += 5 * qty;
-    } else {
-      totalBookCount += qty;
-    }
+    const qty = Math.max(1, Math.floor(Number(item.qty) || 1));
+    subtotal += Number(item.price || 0) * qty;
   }
 
-  // Business Rules:
-  // 1. Any Combo pack qualifies for FREE delivery automatically.
-  // 2. 5 or more individual books qualify for FREE delivery.
-  // 3. 4 books MOQ has a flat ₹150 courier fee across Tamil Nadu.
-  // 4. Less than 4 books cannot checkout (MOQ = 4 books or 1 Combo).
-  const isMoqMet = hasCombo || totalBookCount >= 4;
-  const isFreeDelivery = hasCombo || totalBookCount >= 5;
-  const shippingFee = isMoqMet && !isFreeDelivery ? 150 : 0;
+  const hasCombo = cartHasCombo(cart);
+  const totalBookCount = effectiveBookCount(cart);
+  const isMoqMet = isMoqSatisfied(cart);
+  const shippingFee = deliveryFeeForQty(totalBookCount, hasCombo);
+  const isFreeDelivery = isMoqMet && shippingFee === 0;
   const totalAmount = subtotal + shippingFee;
 
   return {
@@ -368,39 +364,55 @@ function sanitizeForRazorpay(input: string, maxLen = 40): string {
     .slice(0, maxLen);
 }
 
-/** Generate Razorpay Payment Link for WhatsApp Checkout */
-export async function createWhatsAppPaymentLink(
-  session: WhatsAppSession,
-  totals: ReturnType<typeof calculateWhatsAppCartTotals>
-) {
+/** Generate Razorpay Payment Link for WhatsApp Checkout with Canonical Pricing & 20-min Stock Hold */
+export async function createWhatsAppPaymentLink(session: WhatsAppSession) {
   const keyId = process.env.RAZORPAY_KEY_ID;
   const keySecret = process.env.RAZORPAY_KEY_SECRET;
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://blessingpowerguide.in';
+  const siteUrl = publicSiteOrigin();
 
   if (!keyId || !keySecret) {
     throw new Error('Razorpay keys not configured on server env.');
   }
 
-  // Pre-payment live stock re-verification: if any book sold out on website, block payment immediately
-  for (const item of session.cart) {
-    const stockRes = await queryDb(
-      `SELECT title, stock, status, stock_tamil, stock_english FROM books WHERE id = $1 LIMIT 1`,
-      [item.id]
-    );
-    if (stockRes.rows.length === 0) {
-      throw new Error(`"${item.title}" is no longer available.`);
-    }
-    const b = stockRes.rows[0];
-    const isOut = b.status === 'out_of_stock' || (b.stock !== null && b.stock < item.qty);
-    if (isOut) {
-      throw new Error(`"${b.title}" just sold out and is currently out of stock.`);
-    }
+  const cleanPhone = session.phone.replace(/\D/g, '').slice(-10);
+
+  // 1. CANONICAL PRICING & INVENTORY VERIFICATION (WA-05)
+  // Queries live books table, checks stock availability and medium availability
+  const checkout = await priceCheckoutOrder(queryDb, {
+    items: session.cart,
+    userId: `wa-${cleanPhone}`,
+  });
+
+  if (!checkout.ok) {
+    throw new Error(checkout.error);
   }
 
+  // 2. RELEASE ANY STALE HOLD FROM PREVIOUS ATTEMPT ON THIS SESSION
+  if (session.razorpay_order_id) {
+    await releaseStockHolds({ razorpayOrderId: session.razorpay_order_id }, 'replaced_by_new_payment_link').catch(() => {});
+  }
+
+  // 3. ATOMIC 20-MINUTE STOCK HOLD RESERVATION (WA-02)
+  // Atomically decrements books.stock NOW with WHERE stock >= qty guard
+  // Race-proof: if website buys the last unit, this call returns status 409 error
+  const hold = await createStockHolds({
+    items: checkout.verifiedItems.map((i: any) => ({
+      id: i.id,
+      qty: i.qty,
+      title: i.title,
+      selectedMedium: i.selectedMedium || i.medium || undefined,
+    })),
+    userId: `wa-${cleanPhone}`,
+  });
+
+  if (!hold.ok) {
+    throw new Error(hold.error);
+  }
+
+  const holdGroupId = hold.holdGroupId;
   const authHeader = `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString('base64')}`;
-  const amountPaisa = Math.round(totals.totalAmount * 100);
+  const amountPaisa = Math.round(checkout.totalAmount * 100);
   const addr = session.shipping_address || {};
-  const cleanPhone = session.phone.replace(/\D/g, '').slice(-10);
   const checkoutSessionId = `chk-wa-${Date.now()}`;
   const rawCustomerName = addr.name || session.name || 'Valued Student';
   const customerName = sanitizeForRazorpay(rawCustomerName, 40) || 'Valued Student';
@@ -409,11 +421,11 @@ export async function createWhatsAppPaymentLink(
   const safeCity = sanitizeForRazorpay(addr.city || 'Tamil Nadu', 40);
   const safePincode = (String(addr.pincode || '').match(/\b\d{6}\b/) || ['600001'])[0];
   const cartSummary = sanitizeForRazorpay(
-    session.cart.map((c) => `${c.title} x${c.qty}`).join(', '),
+    checkout.verifiedItems.map((c: any) => `${c.title} x${c.qty}`).join(', '),
     100
   );
 
-  // 1. Create Razorpay Payment Link
+  // 4. Create Razorpay Payment Link
   const linkPayload = {
     amount: amountPaisa,
     currency: 'INR',
@@ -433,6 +445,8 @@ export async function createWhatsAppPaymentLink(
       order_source: 'whatsapp',
       whatsapp_phone: session.phone,
       session_id: checkoutSessionId,
+      hold_group_id: holdGroupId,
+      holdGroupId: holdGroupId,
       customer_email: customerEmail,
       customer_name: customerName,
       delivery_name: customerName,
@@ -445,18 +459,28 @@ export async function createWhatsAppPaymentLink(
     callback_method: 'get',
   };
 
-  const linkRes = await fetch('https://api.razorpay.com/v1/payment_links', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: authHeader,
-    },
-    body: JSON.stringify(linkPayload),
-  });
+  let linkRes: Response;
+  let linkData: any;
+  try {
+    linkRes = await fetch('https://api.razorpay.com/v1/payment_links', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: authHeader,
+      },
+      body: JSON.stringify(linkPayload),
+    });
+    linkData = await linkRes.json().catch(() => ({}));
+  } catch (fetchErr: any) {
+    // Release stock hold immediately if Razorpay is unreachable
+    await releaseStockHolds({ holdGroupId }, 'razorpay_link_network_error').catch(() => {});
+    throw new Error('Could not reach payment gateway. Please try again.');
+  }
 
-  const linkData = await linkRes.json().catch(() => ({}));
   if (!linkRes.ok || !linkData.short_url) {
     console.error('[Razorpay Payment Link Error]', linkData);
+    // Release stock hold immediately if Razorpay rejected the request
+    await releaseStockHolds({ holdGroupId }, 'razorpay_link_rejected').catch(() => {});
     throw new Error(linkData?.error?.description || 'Could not generate Razorpay payment link.');
   }
 
@@ -464,15 +488,26 @@ export async function createWhatsAppPaymentLink(
   const rzpOrderId = String(linkData.order_id || linkData.id || '').trim();
   const paymentLinkUrl = linkData.short_url;
 
-  // 2. Pre-create checkout_sessions row with both IDs so webhook matches instantly
+  // 5. Attach Razorpay Order ID to the Hold ledger
+  await attachRazorpayOrderId(holdGroupId, rzpOrderId);
+  if (paymentLinkId && paymentLinkId !== rzpOrderId) {
+    await queryDb(
+      `UPDATE stock_holds SET razorpay_order_id = $2, updated_at = NOW()
+       WHERE hold_group_id = $1 AND status = 'held'`,
+      [holdGroupId, paymentLinkId]
+    ).catch(() => {});
+  }
+
+  // 6. Pre-create checkout_sessions snapshot with hold_group_id
   await queryDb(
     `INSERT INTO checkout_sessions (
-      id, user_id, razorpay_order_id, status, source,
+      id, user_id, razorpay_order_id, hold_group_id, status, source,
       cart_snapshot, price_snapshot, shipping_address,
       subtotal, discount, shipping_fee, total_amount,
       created_at, updated_at
-    ) VALUES ($1, $2, $3, 'PAYMENT_PENDING', 'whatsapp', $4, $5, $6, $7, 0, $8, $9, NOW(), NOW())
+    ) VALUES ($1, $2, $3, $4, 'PAYMENT_PENDING', 'whatsapp', $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())
     ON CONFLICT (razorpay_order_id) DO UPDATE SET 
+      hold_group_id = EXCLUDED.hold_group_id,
       shipping_address = EXCLUDED.shipping_address,
       cart_snapshot = EXCLUDED.cart_snapshot,
       total_amount = EXCLUDED.total_amount,
@@ -481,8 +516,14 @@ export async function createWhatsAppPaymentLink(
       checkoutSessionId,
       `wa-${cleanPhone}`,
       paymentLinkId,
-      JSON.stringify(session.cart),
-      JSON.stringify({ subtotal: totals.subtotal, total: totals.totalAmount, shipping: totals.shippingFee }),
+      holdGroupId,
+      JSON.stringify(checkout.verifiedItems),
+      JSON.stringify({
+        subtotal: checkout.subtotal,
+        total: checkout.totalAmount,
+        shipping: checkout.shippingFee,
+        discount: checkout.discountAmount || 0,
+      }),
       JSON.stringify({
         name: customerName,
         email: customerEmail,
@@ -491,9 +532,10 @@ export async function createWhatsAppPaymentLink(
         city: safeCity,
         pincode: safePincode,
       }),
-      totals.subtotal,
-      totals.shippingFee,
-      totals.totalAmount,
+      checkout.subtotal,
+      checkout.discountAmount || 0,
+      checkout.shippingFee,
+      checkout.totalAmount,
     ]
   );
 
@@ -503,7 +545,7 @@ export async function createWhatsAppPaymentLink(
   session.step = 'CHECKOUT_GENERATED';
   await saveWhatsAppSession(session);
 
-  return paymentLinkUrl;
+  return { paymentLinkUrl, totals: checkout };
 }
 
 /** Main Entry Point: Process incoming WhatsApp message */
@@ -521,7 +563,13 @@ export async function handleIncomingWhatsAppMessage(
 
   // 1. Reset / Clear Cart
   if (lower === 'clear' || lower === 'reset' || actionId === 'ACTION_CLEAR_CART') {
+    if (session.razorpay_order_id) {
+      await releaseStockHolds({ razorpayOrderId: session.razorpay_order_id }, 'cleared_by_whatsapp_customer').catch(() => {});
+    }
     session.cart = [];
+    session.razorpay_order_id = undefined;
+    session.razorpay_payment_link_id = undefined;
+    session.razorpay_payment_link_url = undefined;
     session.step = 'IDLE';
     await saveWhatsAppSession(session);
     return sendWhatsAppText(
@@ -654,7 +702,7 @@ export async function handleIncomingWhatsAppMessage(
     }
 
     try {
-      const paymentLinkUrl = await createWhatsAppPaymentLink(session, totals);
+      const { paymentLinkUrl, totals: canonicalTotals } = await createWhatsAppPaymentLink(session);
       const addr = session.shipping_address || {};
 
       const payPrompt = [
@@ -666,9 +714,11 @@ export async function handleIncomingWhatsAppMessage(
         `📮 *Pincode*: ${addr.pincode}`,
         ``,
         `💳 *BILL SUMMARY*:`,
-        `• Books Subtotal: ₹${totals.subtotal}`,
-        `• ST Courier Delivery: ${totals.isFreeDelivery ? '🎁 FREE Doorstep Delivery' : `₹${totals.shippingFee}`}`,
-        `• *Total Payable: ₹${totals.totalAmount}*`,
+        `• Books Subtotal: ₹${canonicalTotals.subtotal}`,
+        `• ST Courier Delivery: ${canonicalTotals.shippingFee === 0 ? '🎁 FREE Doorstep Delivery' : `₹${canonicalTotals.shippingFee}`}`,
+        `• *Total Payable: ₹${canonicalTotals.totalAmount}*`,
+        ``,
+        `⏳ *Stock Reserved*: Your copies are locked in dispatch hold for 20 minutes!`,
         ``,
         `👉 *Click here to Pay securely via UPI / GPay / PhonePe / Paytm*:`,
         `${paymentLinkUrl}`,
@@ -803,7 +853,7 @@ export async function handleIncomingWhatsAppMessage(
     }
 
     try {
-      const paymentLinkUrl = await createWhatsAppPaymentLink(session, totals);
+      const { paymentLinkUrl, totals: canonicalTotals } = await createWhatsAppPaymentLink(session);
 
       const payPrompt = [
         `✅ *ADDRESS SAVED & ORDER READY!*`,
@@ -814,9 +864,11 @@ export async function handleIncomingWhatsAppMessage(
         `📮 *Pincode*: ${parsedAddr.pincode}`,
         ``,
         `💳 *BILL SUMMARY*:`,
-        `• Books Subtotal: ₹${totals.subtotal}`,
-        `• ST Courier Delivery: ${totals.isFreeDelivery ? '🎁 FREE Doorstep Delivery' : `₹${totals.shippingFee}`}`,
-        `• *Total Payable: ₹${totals.totalAmount}*`,
+        `• Books Subtotal: ₹${canonicalTotals.subtotal}`,
+        `• ST Courier Delivery: ${canonicalTotals.shippingFee === 0 ? '🎁 FREE Doorstep Delivery' : `₹${canonicalTotals.shippingFee}`}`,
+        `• *Total Payable: ₹${canonicalTotals.totalAmount}*`,
+        ``,
+        `⏳ *Stock Reserved*: Your copies are locked in dispatch hold for 20 minutes!`,
         ``,
         `👉 *Click here to Pay securely via UPI / GPay / PhonePe / Paytm*:`,
         `${paymentLinkUrl}`,

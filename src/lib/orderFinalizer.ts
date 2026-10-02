@@ -442,7 +442,13 @@ export async function finalizeOrderFromPayment(opts: FinalizeOrderOptions): Prom
     }
 
     // 5. CONVERT INVENTORY RESERVATION -> SOLD (Confirmed)
-    const confirmedHolds = rzpOrderId ? await confirmStockHolds(rzpOrderId, client) : [];
+    let confirmedHolds = rzpOrderId ? await confirmStockHolds(rzpOrderId, client) : [];
+    if (confirmedHolds.length === 0 && sessionRow?.hold_group_id) {
+      confirmedHolds = await confirmStockHolds(sessionRow.hold_group_id, client);
+    }
+    if (confirmedHolds.length === 0 && plinkId) {
+      confirmedHolds = await confirmStockHolds(plinkId, client);
+    }
     const heldQtyByBook = new Map<string, number>();
     for (const h of confirmedHolds) {
       heldQtyByBook.set(h.bookId, (heldQtyByBook.get(h.bookId) || 0) + h.qty);
