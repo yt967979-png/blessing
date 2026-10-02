@@ -106,6 +106,7 @@ export async function POST(request: Request) {
   const isCapture =
     eventName === 'payment.captured' ||
     eventName === 'order.paid' ||
+    eventName === 'payment_link.paid' ||
     eventName === 'payment.authorized';
   const isFailure = eventName === 'payment.failed';
   const isRefund =
@@ -257,11 +258,22 @@ export async function POST(request: Request) {
     // Payment is captured — finalize the order through the server-authoritative engine
     releaseDbClient(client);
 
+    const notes = entity?.notes || event?.payload?.payment?.entity?.notes || {};
+    const paymentLinkId =
+      String(event?.payload?.payment_link?.entity?.id || entity?.payment_link_id || '').trim();
+    const customerEmail =
+      String(notes.customer_email || entity?.email || event?.payload?.payment?.entity?.email || '').trim().toLowerCase();
+    const sessionId = String(notes.session_id || '').trim();
+
     const finalization = await finalizeOrderFromPayment({
       razorpayOrderId: effectiveOrderId,
       razorpayPaymentId: effectivePaymentId,
       amountRupees,
       source: 'webhook',
+      whatsappPhone: notes.whatsapp_phone,
+      paymentLinkId,
+      sessionId,
+      customerEmail,
     });
 
     if (finalization.ok) {

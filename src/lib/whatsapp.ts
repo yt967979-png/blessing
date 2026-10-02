@@ -163,12 +163,20 @@ export async function sendWhatsAppOrderConfirmed(
     totalAmount: number;
     itemCount: number;
     customerName?: string;
+    customerEmail?: string;
   }
 ) {
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://blessingpowerguide.in';
+  const liveTrackLink = `${siteUrl}/track?order=${encodeURIComponent(details.orderNumber)}`;
+  const emailLine =
+    details.customerEmail && !details.customerEmail.includes('@blessingpowerguide.in')
+      ? `🌐 *Website Sync*: Log in with *${details.customerEmail}* at ${siteUrl}/orders to view GST invoice & tracking.`
+      : '';
+
   const msg = [
     `✅ *PAYMENT VERIFIED & ORDER CONFIRMED!*`,
     ``,
-    `Hello ${details.customerName ? details.customerName : 'Student / Parent'}! 🙏`,
+    `Hello ${details.customerName ? details.customerName : 'Valued Student'}! 🙏`,
     `Your order has been safely placed with *Blessing Power Guide Chennai*.`,
     ``,
     `📋 *Order ID*: #${details.orderNumber}`,
@@ -176,11 +184,14 @@ export async function sendWhatsAppOrderConfirmed(
     `💰 *Amount Paid*: ₹${details.totalAmount}`,
     `🚚 *Delivery*: 100% Free Doorstep Delivery via ST Courier`,
     ``,
-    `📦 We are currently packing your books in tamper-proof waterproof packaging.`,
-    `As soon as your parcel is handed to ST Courier Express, we will send your official live tracking docket right here! 🚀`,
+    `📦 We are currently packing your books in tamper-proof packaging.`,
+    `📍 *Live Order Tracker*:`,
+    `${liveTrackLink}`,
+    emailLine ? `\n${emailLine}\n` : '',
+    `As soon as your parcel is handed to ST Courier Express, we will send your official tracking docket right here! 🚀`,
     ``,
     `Thank you for studying with Blessing Power Guide! 🌟`,
-  ].join('\n');
+  ].filter(Boolean).join('\n');
 
   return sendWhatsAppText(phone, msg);
 }

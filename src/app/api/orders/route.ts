@@ -191,8 +191,27 @@ export async function GET(request: Request) {
     }
 
     if (!isAdminRequest) {
+      const { queryDb } = await import('@/lib/db');
+      const uRes = await queryDb(`SELECT email, phone FROM users WHERE id = $1 LIMIT 1`, [session.userId]);
+      const uEmail = (uRes.rows[0]?.email || '').trim().toLowerCase();
+      const uPhone = (uRes.rows[0]?.phone || '').replace(/\D/g, '').slice(-10);
+
       params.push(session.userId);
-      whereClauses.push(`o.user_id = $${params.length}`);
+      const userIdx = params.length;
+
+      let userMatchCondition = `(o.user_id = $${userIdx}`;
+      if (uPhone) {
+        params.push(`wa-${uPhone}`);
+        userMatchCondition += ` OR o.user_id = $${params.length}`;
+        params.push(`%${uPhone}%`);
+        userMatchCondition += ` OR o.shipping_address ILIKE $${params.length}`;
+      }
+      if (uEmail && !uEmail.includes('@blessingpowerguide.in')) {
+        params.push(`%${uEmail}%`);
+        userMatchCondition += ` OR o.shipping_address ILIKE $${params.length}`;
+      }
+      userMatchCondition += `)`;
+      whereClauses.push(userMatchCondition);
     }
 
     if (whereClauses.length === 0 && !isAdminRequest) {

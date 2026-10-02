@@ -19,12 +19,16 @@ import { generateNextGstInvoiceNumber } from '@/lib/invoiceGenerator';
 import { isOrderCancelled } from '@/lib/orderStatus';
 
 export interface FinalizeOrderOptions {
-  razorpayOrderId: string;
-  razorpayPaymentId: string;
+  razorpayOrderId?: string | null;
+  razorpayPaymentId?: string | null;
   amountRupees?: number;
   source: 'webhook' | 'client_verification' | 'background_reconciliation';
   signature?: string | null;
   paymentMethod?: string;
+  whatsappPhone?: string;
+  paymentLinkId?: string;
+  sessionId?: string;
+  customerEmail?: string;
 }
 
 export type FinalizeOrderResult =
@@ -48,8 +52,8 @@ export async function finalizeOrderFromPayment(opts: FinalizeOrderOptions): Prom
   const rzpOrderId = String(opts.razorpayOrderId || '').trim();
   const rzpPayId = String(opts.razorpayPaymentId || '').trim();
 
-  if (!rzpOrderId && !rzpPayId) {
-    return { ok: false, error: 'Missing Razorpay order or payment ID.', status: 400 };
+  if (!rzpOrderId && !rzpPayId && !opts.paymentLinkId) {
+    return { ok: false, error: 'Missing Razorpay order, payment, or payment link ID.', status: 400 };
   }
 
   const client = await getDbClient();
@@ -116,13 +120,31 @@ export async function finalizeOrderFromPayment(opts: FinalizeOrderOptions): Prom
 
     // Re-check inside transaction with FOR UPDATE lock on session to prevent concurrent races
     let sessionRow: any = null;
-    if (rzpOrderId) {
+    const plinkId = opts.paymentLinkId ? String(opts.paymentLinkId).trim() : null;
+    const sessId = opts.sessionId ? String(opts.sessionId).trim() : null;
+    const waPhoneClean = opts.whatsappPhone ? String(opts.whatsappPhone).replace(/\D/g, '').slice(-10) : null;
+
+    if (rzpOrderId || plinkId || sessId || waPhoneClean) {
       const sessionRes = await client.query(
-        `SELECT * FROM checkout_sessions WHERE razorpay_order_id = $1 FOR UPDATE`,
-        [rzpOrderId]
+        `SELECT * FROM checkout_sessions 
+         WHERE (razorpay_order_id = $1)
+            OR ($2 IS NOT NULL AND razorpay_order_id = $2)
+            OR ($3 IS NOT NULL AND id = $3)
+            OR (source = 'whatsapp' AND status = 'PAYMENT_PENDING' AND $4 IS NOT NULL AND user_id = $4)
+         ORDER BY created_at DESC
+         LIMIT 1
+         FOR UPDATE`,
+        [rzpOrderId, plinkId, sessId, waPhoneClean ? `wa-${waPhoneClean}` : null]
       );
       if (sessionRes.rows.length > 0) {
         sessionRow = sessionRes.rows[0];
+        // Heal checkout_sessions razorpay_order_id if it was saved with plink_...
+        if (rzpOrderId && sessionRow.razorpay_order_id !== rzpOrderId) {
+          await client.query(
+            `UPDATE checkout_sessions SET razorpay_order_id = $1, updated_at = NOW() WHERE id = $2`,
+            [rzpOrderId, sessionRow.id]
+          );
+        }
       }
     }
 
@@ -272,6 +294,101 @@ export async function finalizeOrderFromPayment(opts: FinalizeOrderOptions): Prom
     const invoiceNumber = await generateNextGstInvoiceNumber(client);
     const orderSource = sessionRow?.source || 'website';
 
+    const cleanPhone = (
+      shippingAddressObj?.phone ||
+      opts.whatsappPhone ||
+      (userId && String(userId).startsWith('wa-') ? String(userId).replace('wa-', '') : '')
+    ).replace(/\D/g, '').slice(-10);
+
+    const customerEmail = (
+      shippingAddressObj?.email ||
+      opts.customerEmail ||
+      ''
+    ).trim().toLowerCase();
+
+    const customerName = (
+      shippingAddressObj?.name ||
+      'Valued Student'
+    ).trim();
+
+    let resolvedUserId = userId;
+
+    // Check if user exists in `users` table by email OR phone to link the website account!
+    if (customerEmail || cleanPhone) {
+      const uMatch = await client.query(
+        `SELECT id, name, email, phone FROM users 
+         WHERE (LOWER(email) = $1 AND $1 <> '')
+            OR (phone = $2 AND $2 <> '')
+            OR (phone = $3 AND $3 <> '')
+         ORDER BY (role = 'super_admin') DESC, created_at ASC
+         LIMIT 1`,
+        [customerEmail, cleanPhone, `91${cleanPhone}`]
+      );
+
+      if (uMatch.rows.length > 0) {
+        resolvedUserId = uMatch.rows[0].id;
+        // If user's phone in DB is empty or dummy ('0000000000'), update with real phone
+        if ((!uMatch.rows[0].phone || uMatch.rows[0].phone === '0000000000') && cleanPhone) {
+          await client.query(`UPDATE users SET phone = $1, updated_at = NOW() WHERE id = $2`, [cleanPhone, resolvedUserId]);
+        }
+      } else if (customerEmail && !customerEmail.includes('@blessingpowerguide.in')) {
+        // Auto-create customer account in users table so they can log in via Google/Email on website
+        const newUid = `usr-wa-${Date.now()}`;
+        const { hashPassword } = await import('@/lib/auth');
+        const crypto = await import('crypto');
+        const autoPass = hashPassword(crypto.randomBytes(32).toString('hex'));
+
+        await client.query(
+          `INSERT INTO users (id, name, email, phone, password_hash, role, status, profile_completed)
+           VALUES ($1, $2, $3, $4, $5, 'customer', 'active', TRUE)
+           ON CONFLICT (email) DO NOTHING`,
+          [newUid, customerName, customerEmail, cleanPhone || '0000000000', autoPass]
+        );
+
+        await client.query(
+          `INSERT INTO cart (id, user_id) VALUES ($1, $2) ON CONFLICT (user_id) DO NOTHING`,
+          [`cart-${newUid}`, newUid]
+        );
+
+        resolvedUserId = newUid;
+      }
+    }
+
+    // Auto-save address in addresses table if user is registered and has no address
+    if (resolvedUserId && !String(resolvedUserId).startsWith('wa-')) {
+      const addrCheck = await client.query(
+        `SELECT id FROM addresses WHERE user_id = $1 LIMIT 1`,
+        [resolvedUserId]
+      );
+      if (addrCheck.rows.length === 0 && shippingAddressObj?.address) {
+        const newAddrId = `addr-wa-${Date.now()}`;
+        await client.query(
+          `INSERT INTO addresses (id, user_id, full_name, phone, address_line1, city, state, country, pincode, is_default)
+           VALUES ($1, $2, $3, $4, $5, $6, 'Tamil Nadu', 'India', $7, TRUE)
+           ON CONFLICT (id) DO NOTHING`,
+          [
+            newAddrId,
+            resolvedUserId,
+            customerName,
+            cleanPhone,
+            shippingAddressObj.address,
+            shippingAddressObj.city || 'Tamil Nadu',
+            shippingAddressObj.pincode || '600001',
+          ]
+        );
+        addressId = newAddrId;
+      } else if (addrCheck.rows.length > 0) {
+        addressId = addrCheck.rows[0].id;
+      }
+    }
+
+    shippingAddressObj = {
+      ...shippingAddressObj,
+      name: customerName,
+      email: customerEmail || shippingAddressObj?.email || '',
+      phone: cleanPhone || shippingAddressObj?.phone || '',
+    };
+
     // 3. INSERT AUTHORITATIVE ORDER
     await client.query(
       `INSERT INTO orders (
@@ -288,7 +405,7 @@ export async function finalizeOrderFromPayment(opts: FinalizeOrderOptions): Prom
       [
         orderId,
         orderNumber,
-        userId,
+        resolvedUserId,
         addressId,
         subtotal,
         discountAmount,
@@ -508,16 +625,24 @@ export async function finalizeOrderFromPayment(opts: FinalizeOrderOptions): Prom
     try {
       const waPhone =
         shippingAddressObj?.phone ||
-        (userId && String(userId).startsWith('wa-') ? String(userId).replace('wa-', '') : null);
+        (userId && String(userId).startsWith('wa-') ? String(userId).replace('wa-', '') : null) ||
+        (opts.whatsappPhone ? String(opts.whatsappPhone).replace(/\D/g, '').slice(-10) : null);
 
-      if (waPhone && (orderSource === 'whatsapp' || String(userId || '').startsWith('wa-'))) {
+      if (waPhone && (orderSource === 'whatsapp' || String(userId || '').startsWith('wa-') || opts.whatsappPhone)) {
         const { sendWhatsAppOrderConfirmed } = await import('@/lib/whatsapp');
         sendWhatsAppOrderConfirmed(waPhone, {
           orderNumber,
           totalAmount,
           itemCount: itemsToInsert.length,
           customerName: shippingAddressObj?.name,
+          customerEmail,
         }).catch((waErr) => console.warn('[orderFinalizer] WhatsApp notification error:', waErr?.message || waErr));
+
+        // Clear customer cart and reset session step in whatsapp_sessions
+        await queryDb(
+          `UPDATE whatsapp_sessions SET cart = '[]'::jsonb, step = 'IDLE', updated_at = NOW() WHERE phone LIKE $1`,
+          [`%${waPhone}%`]
+        ).catch(() => {});
       }
     } catch (_) {}
 

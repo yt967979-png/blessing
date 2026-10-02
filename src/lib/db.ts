@@ -1456,9 +1456,11 @@ async function runSchemaInit(client: any) {
       // Unified WhatsApp Commerce Integration
       `ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_source VARCHAR(50) DEFAULT 'website'`,
       `ALTER TABLE checkout_sessions ADD COLUMN IF NOT EXISTS source VARCHAR(50) DEFAULT 'website'`,
+      `ALTER TABLE whatsapp_sessions ADD COLUMN IF NOT EXISTS email VARCHAR(255)`,
       `CREATE TABLE IF NOT EXISTS whatsapp_sessions (
         phone VARCHAR(30) PRIMARY KEY,
         name VARCHAR(255),
+        email VARCHAR(255),
         step VARCHAR(50) DEFAULT 'IDLE',
         cart JSONB DEFAULT '[]'::jsonb,
         shipping_address JSONB,

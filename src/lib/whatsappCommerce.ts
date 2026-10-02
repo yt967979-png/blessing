@@ -22,7 +22,8 @@ import {
 export interface WhatsAppSession {
   phone: string;
   name: string | null;
-  step: 'IDLE' | 'SEARCH' | 'AWAITING_NAME' | 'AWAITING_ADDRESS' | 'CHECKOUT_GENERATED';
+  email?: string | null;
+  step: 'IDLE' | 'SEARCH' | 'AWAITING_NAME' | 'AWAITING_EMAIL' | 'AWAITING_ADDRESS' | 'CHECKOUT_GENERATED';
   cart: Array<{
     id: string;
     title: string;
@@ -33,12 +34,13 @@ export interface WhatsAppSession {
   }>;
   shipping_address: any;
   razorpay_order_id?: string;
+  razorpay_payment_link_id?: string;
   razorpay_payment_link_url?: string;
 }
 
 export async function getOrCreateWhatsAppSession(phone: string, senderName?: string): Promise<WhatsAppSession> {
   const selectRes = await queryDb(
-    `SELECT phone, name, step, cart, shipping_address, razorpay_order_id, razorpay_payment_link_url
+    `SELECT phone, name, email, step, cart, shipping_address, razorpay_order_id, razorpay_payment_link_id, razorpay_payment_link_url
      FROM whatsapp_sessions WHERE phone = $1 LIMIT 1`,
     [phone]
   );
@@ -48,18 +50,20 @@ export async function getOrCreateWhatsAppSession(phone: string, senderName?: str
     return {
       phone: row.phone,
       name: row.name || senderName || null,
+      email: row.email || null,
       step: row.step || 'IDLE',
       cart: Array.isArray(row.cart) ? row.cart : [],
       shipping_address: row.shipping_address || null,
       razorpay_order_id: row.razorpay_order_id || undefined,
+      razorpay_payment_link_id: row.razorpay_payment_link_id || undefined,
       razorpay_payment_link_url: row.razorpay_payment_link_url || undefined,
     };
   }
 
   const initialCart: any[] = [];
   await queryDb(
-    `INSERT INTO whatsapp_sessions (phone, name, step, cart, last_interaction, created_at, updated_at)
-     VALUES ($1, $2, 'IDLE', $3, NOW(), NOW(), NOW())
+    `INSERT INTO whatsapp_sessions (phone, name, email, step, cart, last_interaction, created_at, updated_at)
+     VALUES ($1, $2, NULL, 'IDLE', $3, NOW(), NOW(), NOW())
      ON CONFLICT (phone) DO UPDATE SET updated_at = NOW()`,
     [phone, senderName || null, JSON.stringify(initialCart)]
   );
@@ -67,6 +71,7 @@ export async function getOrCreateWhatsAppSession(phone: string, senderName?: str
   return {
     phone,
     name: senderName || null,
+    email: null,
     step: 'IDLE',
     cart: [],
     shipping_address: null,
@@ -80,16 +85,22 @@ export async function saveWhatsAppSession(session: WhatsAppSession) {
          cart = $2,
          shipping_address = $3,
          razorpay_order_id = $4,
-         razorpay_payment_link_url = $5,
+         razorpay_payment_link_id = $5,
+         razorpay_payment_link_url = $6,
+         name = $7,
+         email = $8,
          last_interaction = NOW(),
          updated_at = NOW()
-     WHERE phone = $6`,
+     WHERE phone = $9`,
     [
       session.step,
       JSON.stringify(session.cart || []),
       session.shipping_address ? JSON.stringify(session.shipping_address) : null,
       session.razorpay_order_id || null,
+      session.razorpay_payment_link_id || null,
       session.razorpay_payment_link_url || null,
+      session.name || null,
+      session.email || null,
       session.phone,
     ]
   );
@@ -214,6 +225,131 @@ export async function lookupOrderTracking(phone: string, queryStr?: string): Pro
   return outLines.join('\n');
 }
 
+export interface SavedCustomerProfile {
+  userId: string;
+  name: string;
+  email: string;
+  phone: string;
+  addressObj: {
+    name: string;
+    email: string;
+    phone: string;
+    address: string;
+    city: string;
+    pincode: string;
+  };
+  displayAddress: string;
+}
+
+/** Look up existing registered customer profile from website DB */
+export async function findSavedCustomerProfile(phone: string): Promise<SavedCustomerProfile | null> {
+  const cleanPhone = phone.replace(/\D/g, '').slice(-10);
+  if (!cleanPhone || cleanPhone.length < 10) return null;
+
+  try {
+    // 1. Try finding in `users` + `addresses` table
+    const userRes = await queryDb(
+      `SELECT u.id as user_id, u.name as user_name, u.email as user_email, u.phone as user_phone,
+              a.id as address_id, a.full_name, a.address_line1, a.address_line2, a.city, a.district, a.state, a.pincode
+       FROM users u
+       LEFT JOIN addresses a ON a.user_id = u.id
+       WHERE u.phone LIKE $1 OR u.phone LIKE $2
+       ORDER BY a.is_default DESC NULLS LAST, a.created_at DESC NULLS LAST
+       LIMIT 1`,
+      [`%${cleanPhone}`, `%${cleanPhone}%`]
+    );
+
+    if (userRes.rows.length > 0) {
+      const row = userRes.rows[0];
+      const email = (row.user_email || '').trim().toLowerCase();
+      const name = (row.full_name || row.user_name || 'Valued Student').trim();
+      const line1 = (row.address_line1 || '').trim();
+      const line2 = (row.address_line2 || '').trim();
+      const city = (row.city || 'Tamil Nadu').trim();
+      const pincode = (row.pincode || '600001').trim();
+
+      if (line1) {
+        const fullAddr = [line1, line2, city].filter(Boolean).join(', ') + (pincode ? ` - ${pincode}` : '');
+        return {
+          userId: row.user_id,
+          name,
+          email,
+          phone: cleanPhone,
+          addressObj: {
+            name,
+            email,
+            phone: cleanPhone,
+            address: [line1, line2].filter(Boolean).join(', '),
+            city,
+            pincode,
+          },
+          displayAddress: fullAddr,
+        };
+      } else if (email) {
+        // User found but no address yet
+        return {
+          userId: row.user_id,
+          name,
+          email,
+          phone: cleanPhone,
+          addressObj: {
+            name,
+            email,
+            phone: cleanPhone,
+            address: '',
+            city: 'Tamil Nadu',
+            pincode: '600001',
+          },
+          displayAddress: '',
+        };
+      }
+    }
+
+    // 2. Try finding recent completed order in `orders` table
+    const orderRes = await queryDb(
+      `SELECT user_id, shipping_address
+       FROM orders
+       WHERE shipping_address ILIKE $1
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [`%${cleanPhone}%`]
+    );
+
+    if (orderRes.rows.length > 0) {
+      try {
+        const rawAddr = orderRes.rows[0].shipping_address;
+        const parsed = typeof rawAddr === 'string' ? JSON.parse(rawAddr) : rawAddr;
+        if (parsed && (parsed.address || parsed.address_line1)) {
+          const addrText = (parsed.address || parsed.address_line1 || '').trim();
+          const name = (parsed.name || parsed.full_name || 'Valued Student').trim();
+          const email = (parsed.email || '').trim().toLowerCase();
+          const city = (parsed.city || 'Tamil Nadu').trim();
+          const pincode = (parsed.pincode || '600001').trim();
+          return {
+            userId: orderRes.rows[0].user_id || '',
+            name,
+            email,
+            phone: cleanPhone,
+            addressObj: {
+              name,
+              email,
+              phone: cleanPhone,
+              address: addrText,
+              city,
+              pincode,
+            },
+            displayAddress: `${addrText}, ${city} - ${pincode}`,
+          };
+        }
+      } catch {}
+    }
+  } catch (err) {
+    console.error('[findSavedCustomerProfile Error]', err);
+  }
+
+  return null;
+}
+
 /** Remove 4-byte characters (emojis) and non-ASCII characters that trigger Razorpay MySQL utf8mb3 collation errors */
 function sanitizeForRazorpay(input: string, maxLen = 40): string {
   if (!input) return '';
@@ -226,7 +362,10 @@ function sanitizeForRazorpay(input: string, maxLen = 40): string {
 }
 
 /** Generate Razorpay Payment Link for WhatsApp Checkout */
-export async function createWhatsAppPaymentLink(session: WhatsAppSession, totals: ReturnType<typeof calculateWhatsAppCartTotals>) {
+export async function createWhatsAppPaymentLink(
+  session: WhatsAppSession,
+  totals: ReturnType<typeof calculateWhatsAppCartTotals>
+) {
   const keyId = process.env.RAZORPAY_KEY_ID;
   const keySecret = process.env.RAZORPAY_KEY_SECRET;
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://blessingpowerguide.in';
@@ -254,9 +393,11 @@ export async function createWhatsAppPaymentLink(session: WhatsAppSession, totals
   const authHeader = `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString('base64')}`;
   const amountPaisa = Math.round(totals.totalAmount * 100);
   const addr = session.shipping_address || {};
+  const cleanPhone = session.phone.replace(/\D/g, '').slice(-10);
+  const checkoutSessionId = `chk-wa-${Date.now()}`;
   const rawCustomerName = addr.name || session.name || 'Valued Student';
   const customerName = sanitizeForRazorpay(rawCustomerName, 40) || 'Valued Student';
-  const cleanPhone = session.phone.replace(/\D/g, '').slice(-10);
+  const customerEmail = (session.email || addr.email || `${cleanPhone}@blessingpowerguide.in`).trim().toLowerCase();
   const safeAddress = sanitizeForRazorpay(addr.address || '', 200);
   const safeCity = sanitizeForRazorpay(addr.city || 'Tamil Nadu', 40);
   const safePincode = (String(addr.pincode || '').match(/\b\d{6}\b/) || ['600001'])[0];
@@ -273,6 +414,7 @@ export async function createWhatsAppPaymentLink(session: WhatsAppSession, totals
     description: `Order for ${customerName}`.slice(0, 50),
     customer: {
       name: customerName,
+      email: customerEmail,
       contact: `+91${cleanPhone}`,
     },
     notify: {
@@ -283,6 +425,9 @@ export async function createWhatsAppPaymentLink(session: WhatsAppSession, totals
     notes: {
       order_source: 'whatsapp',
       whatsapp_phone: session.phone,
+      session_id: checkoutSessionId,
+      customer_email: customerEmail,
+      customer_name: customerName,
       delivery_name: customerName,
       delivery_address: safeAddress,
       delivery_city: safeCity,
@@ -308,11 +453,11 @@ export async function createWhatsAppPaymentLink(session: WhatsAppSession, totals
     throw new Error(linkData?.error?.description || 'Could not generate Razorpay payment link.');
   }
 
-  const rzpOrderId = linkData.order_id || linkData.id;
+  const paymentLinkId = String(linkData.id || '').trim();
+  const rzpOrderId = String(linkData.order_id || linkData.id || '').trim();
   const paymentLinkUrl = linkData.short_url;
 
-  // 2. Pre-create checkout_sessions row so when Razorpay webhook arrives,
-  // orderFinalizer.ts executes atomically with complete cart snapshot & address
+  // 2. Pre-create checkout_sessions row with both IDs so webhook matches instantly
   await queryDb(
     `INSERT INTO checkout_sessions (
       id, user_id, razorpay_order_id, status, source,
@@ -320,14 +465,25 @@ export async function createWhatsAppPaymentLink(session: WhatsAppSession, totals
       subtotal, discount, shipping_fee, total_amount,
       created_at, updated_at
     ) VALUES ($1, $2, $3, 'PAYMENT_PENDING', 'whatsapp', $4, $5, $6, $7, 0, $8, $9, NOW(), NOW())
-    ON CONFLICT (razorpay_order_id) DO UPDATE SET updated_at = NOW()`,
+    ON CONFLICT (razorpay_order_id) DO UPDATE SET 
+      shipping_address = EXCLUDED.shipping_address,
+      cart_snapshot = EXCLUDED.cart_snapshot,
+      total_amount = EXCLUDED.total_amount,
+      updated_at = NOW()`,
     [
-      `chk-wa-${Date.now()}`,
+      checkoutSessionId,
       `wa-${cleanPhone}`,
-      rzpOrderId,
+      paymentLinkId,
       JSON.stringify(session.cart),
       JSON.stringify({ subtotal: totals.subtotal, total: totals.totalAmount, shipping: totals.shippingFee }),
-      JSON.stringify(addr),
+      JSON.stringify({
+        name: customerName,
+        email: customerEmail,
+        phone: cleanPhone,
+        address: safeAddress,
+        city: safeCity,
+        pincode: safePincode,
+      }),
       totals.subtotal,
       totals.shippingFee,
       totals.totalAmount,
@@ -335,6 +491,7 @@ export async function createWhatsAppPaymentLink(session: WhatsAppSession, totals
   );
 
   session.razorpay_order_id = rzpOrderId;
+  session.razorpay_payment_link_id = paymentLinkId;
   session.razorpay_payment_link_url = paymentLinkUrl;
   session.step = 'CHECKOUT_GENERATED';
   await saveWhatsAppSession(session);
@@ -353,6 +510,7 @@ export async function handleIncomingWhatsAppMessage(
   const text = (incomingText || '').trim();
   const lower = text.toLowerCase();
   const actionId = interactiveId || '';
+  const cleanPhone = fromPhone.replace(/\D/g, '').slice(-10);
 
   // 1. Reset / Clear Cart
   if (lower === 'clear' || lower === 'reset' || actionId === 'ACTION_CLEAR_CART') {
@@ -377,7 +535,7 @@ export async function handleIncomingWhatsAppMessage(
     session.step = 'IDLE';
     await saveWhatsAppSession(session);
 
-    const greeting = senderName ? `Hello ${senderName}! 🙏` : 'Hello! 🙏';
+    const greeting = session.name || senderName ? `Hello ${session.name || senderName}! 🙏` : 'Hello! 🙏';
     const welcome = [
       `${greeting} Welcome to *Blessing Power Guide Official Store* (Chennai). 📚`,
       ``,
@@ -443,72 +601,166 @@ export async function handleIncomingWhatsAppMessage(
       );
     }
 
-    const currentName = session.name || senderName || 'Valued Student';
-    const cleanPhone = fromPhone.replace(/\D/g, '').slice(-10);
+    // Check if customer profile & address are already in website DB
+    const savedProfile = await findSavedCustomerProfile(fromPhone);
 
-    const promptText = [
-      `📍 *DELIVERY CONFIRMATION*`,
-      ``,
-      `👤 *Recipient*: ${currentName}`,
-      `📞 *Phone*: +91 ${cleanPhone}`,
-      ``,
-      `Tap below to confirm recipient name or edit:`,
-    ].join('\n');
+    if (savedProfile && savedProfile.displayAddress) {
+      session.name = savedProfile.name;
+      session.email = savedProfile.email;
+      session.shipping_address = savedProfile.addressObj;
+      session.step = 'IDLE';
+      await saveWhatsAppSession(session);
 
-    const buttons: WhatsAppButton[] = [
-      { id: 'ACTION_CONFIRM_NAME', title: '✅ Yes, Enter Address' },
-      { id: 'ACTION_EDIT_NAME', title: '✏️ Change Name' },
-    ];
-    return sendWhatsAppButtons(fromPhone, promptText, buttons);
-  }
+      const promptText = [
+        `📍 *SAVED DELIVERY ADDRESS FOUND!*`,
+        ``,
+        `Welcome back, *${savedProfile.name}*! 🙏`,
+        savedProfile.email ? `We found your account (*${savedProfile.email}*).` : `Found your registered address.`,
+        ``,
+        `📦 *Deliver to your saved address?*`,
+        `🏠 *${savedProfile.displayAddress}*`,
+        `📞 +91 ${cleanPhone}`,
+      ].join('\n');
 
-  // 5b. Confirm Name -> Ask Address
-  if (actionId === 'ACTION_CONFIRM_NAME') {
-    session.step = 'AWAITING_ADDRESS';
-    await saveWhatsAppSession(session);
+      const buttons: WhatsAppButton[] = [
+        { id: 'ACTION_USE_SAVED_ADDRESS', title: '✅ Deliver to this Address' },
+        { id: 'ACTION_ENTER_NEW_ADDRESS', title: '✏️ Use New Address' },
+      ];
+      return sendWhatsAppButtons(fromPhone, promptText, buttons);
+    }
 
-    return sendWhatsAppText(
-      fromPhone,
-      `🏠 *DELIVERY ADDRESS & PINCODE*\n\nPlease reply with your complete doorstep delivery address:\n\n👉 *Example:*\n*Door No. 12, Anna Salai, T. Nagar, Chennai - 600017*\n\n*(Delivered across Tamil Nadu via ST Courier Express)* 🚚`
-    );
-  }
-
-  // 5c. Edit Name
-  if (actionId === 'ACTION_EDIT_NAME') {
+    // No saved address: start clean step-by-step entry
     session.step = 'AWAITING_NAME';
     await saveWhatsAppSession(session);
 
     return sendWhatsAppText(
       fromPhone,
-      `✍️ Please reply with the *Student / Recipient Full Name*:`
+      `✍️ *STEP 1 OF 3: RECIPIENT NAME*\n\nPlease reply with the *Student / Recipient Full Name*:`
     );
   }
 
-  // 5d. Name Input State
+  // 5b. Use Saved Address -> Generate Payment Link Immediately
+  if (actionId === 'ACTION_USE_SAVED_ADDRESS') {
+    const totals = calculateWhatsAppCartTotals(session.cart);
+    if (!totals.isMoqMet) {
+      return sendWhatsAppText(fromPhone, `⚠️ Cart requires minimum 4 books or 1 Combo to checkout.`);
+    }
+
+    try {
+      const paymentLinkUrl = await createWhatsAppPaymentLink(session, totals);
+      const addr = session.shipping_address || {};
+
+      const payPrompt = [
+        `✅ *ORDER READY & VERIFIED!*`,
+        ``,
+        `👤 *Recipient*: ${addr.name || session.name}`,
+        session.email ? `📧 *Account Email*: ${session.email}` : '',
+        `📍 *Delivery Address*: ${addr.address}`,
+        `📮 *Pincode*: ${addr.pincode}`,
+        ``,
+        `💳 *BILL SUMMARY*:`,
+        `• Books Subtotal: ₹${totals.subtotal}`,
+        `• ST Courier Delivery: ${totals.isFreeDelivery ? '🎁 FREE Doorstep Delivery' : `₹${totals.shippingFee}`}`,
+        `• *Total Payable: ₹${totals.totalAmount}*`,
+        ``,
+        `👉 *Click here to Pay securely via UPI / GPay / PhonePe / Paytm*:`,
+        `${paymentLinkUrl}`,
+        ``,
+        `⚡ *Instant Verification*: Once paid, your order is verified and confirmed automatically right here in WhatsApp with your ST Courier live tracking docket!`,
+      ].filter(Boolean).join('\n');
+
+      return sendWhatsAppText(fromPhone, payPrompt);
+    } catch (err: any) {
+      console.error('[Create Payment Link Error]', err);
+      return sendWhatsAppText(
+        fromPhone,
+        `⚠️ Could not generate payment link: ${err?.message || 'Please try again.'}`
+      );
+    }
+  }
+
+  // 5c. New Address or Change Name
+  if (actionId === 'ACTION_ENTER_NEW_ADDRESS' || actionId === 'ACTION_EDIT_NAME') {
+    session.step = 'AWAITING_NAME';
+    await saveWhatsAppSession(session);
+
+    return sendWhatsAppText(
+      fromPhone,
+      `✍️ *STEP 1 OF 3: RECIPIENT NAME*\n\nPlease reply with the *Student / Recipient Full Name*:`
+    );
+  }
+
+  // 5d. Name Input Step
   if (session.step === 'AWAITING_NAME' && !actionId) {
-    session.name = text.slice(0, 60);
+    const cleanName = sanitizeForRazorpay(text, 40).replace(/[^a-zA-Z\s.]/g, '').trim();
+    if (!cleanName || cleanName.length < 2) {
+      return sendWhatsAppText(fromPhone, `⚠️ Please reply with a valid *Student / Recipient Full Name* (letters only):`);
+    }
+
+    session.name = cleanName;
+    session.step = 'AWAITING_EMAIL';
+    await saveWhatsAppSession(session);
+
+    return sendWhatsAppText(
+      fromPhone,
+      `📧 *STEP 2 OF 3: EMAIL ADDRESS*\n\nHello *${cleanName}*! Please reply with your *Email Address*:\n\n*(This links your order to blessingpowerguide.in so you can view your official GST invoice and track delivery)*`
+    );
+  }
+
+  // 5e. Email Input Step
+  if (session.step === 'AWAITING_EMAIL' && !actionId) {
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    if (lower === 'skip' || lower === 'no' || lower === 'none') {
+      session.email = `${cleanPhone}@blessingpowerguide.in`;
+    } else if (emailRegex.test(text.trim())) {
+      session.email = text.trim().toLowerCase();
+    } else {
+      return sendWhatsAppText(
+        fromPhone,
+        `⚠️ Please enter a valid email address (e.g. *student@gmail.com*) or reply *skip* to proceed:`
+      );
+    }
+
     session.step = 'AWAITING_ADDRESS';
     await saveWhatsAppSession(session);
 
     return sendWhatsAppText(
       fromPhone,
-      `✅ Name saved as *${session.name}*!\n\n🏠 *Now please reply with your complete Delivery Address & 6-digit Pincode:*\n\n👉 *Example:*\n*Door No. 12, Anna Salai, T. Nagar, Chennai - 600017*`
+      `🏠 *STEP 3 OF 3: DELIVERY ADDRESS*\n\nPlease reply with your complete *Doorstep Delivery Address & 6-digit Pincode*:\n\n👉 *Example:*\n*Door No. 12, Anna Salai, T. Nagar, Chennai - 600017*\n\n*(100% Free Doorstep Delivery across Tamil Nadu via ST Courier Express)* 🚚`
     );
   }
 
-  // 6. Address Input State (Only when user types text, not when clicking interactive buttons)
-  if (session.step === 'AWAITING_ADDRESS' && !actionId) {
-    // Smart address parser (handles multi-line labels like Name:, Address:, Pincode: OR single block text)
+  // 6. Address Input Step (Or all-in-one address detector)
+  const isAddressStep = session.step === 'AWAITING_ADDRESS' && !actionId;
+  const hasPincodeAndKeywords =
+    !actionId &&
+    session.cart.length > 0 &&
+    /\b\d{6}\b/.test(text) &&
+    /(nagar|street|road|salai|chennai|arani|tiruvallur|coimbatore|madurai|door|house|no\b|st\b|near)/i.test(text);
+
+  if (isAddressStep || hasPincodeAndKeywords) {
+    // Extract name if provided as label (e.g. Name: ...)
     let extractedName = session.name || senderName || 'Valued Student';
     const nameMatch = text.match(/Name\s*:\s*([^\n\r]+)/i);
     if (nameMatch && nameMatch[1].trim()) {
-      extractedName = nameMatch[1].trim();
+      extractedName = sanitizeForRazorpay(nameMatch[1].trim(), 40);
       session.name = extractedName;
     }
 
-    // Clean address by stripping labels like Name:, Town/City:, District:, Address:, Pincode:
+    // Extract email if provided
+    const emailMatch = text.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
+    if (emailMatch && emailMatch[1]) {
+      session.email = emailMatch[1].toLowerCase().trim();
+    } else if (!session.email) {
+      session.email = `${cleanPhone}@blessingpowerguide.in`;
+    }
+
+    // Clean address by stripping labels
     let cleanAddr = text
       .replace(/Name\s*:[^\n\r]+/gi, '')
+      .replace(/Email\s*:[^\n\r]+/gi, '')
+      .replace(/Phone\s*:[^\n\r]+/gi, '')
+      .replace(/Mobile\s*:[^\n\r]+/gi, '')
       .replace(/Town\/City\s*:/gi, '')
       .replace(/District\s*:/gi, '')
       .replace(/Address\s*:/gi, '')
@@ -525,6 +777,8 @@ export async function handleIncomingWhatsAppMessage(
     const pincodeMatch = text.match(/\b\d{6}\b/);
     const parsedAddr = {
       name: extractedName,
+      email: session.email,
+      phone: cleanPhone,
       address: cleanAddr,
       city: 'Tamil Nadu',
       pincode: pincodeMatch ? pincodeMatch[0] : '600001',
@@ -533,6 +787,14 @@ export async function handleIncomingWhatsAppMessage(
     session.shipping_address = parsedAddr;
     const totals = calculateWhatsAppCartTotals(session.cart);
 
+    if (!totals.isMoqMet) {
+      await saveWhatsAppSession(session);
+      return sendWhatsAppText(
+        fromPhone,
+        `📍 Address saved for *${parsedAddr.name}*!\n\n⚠️ *Minimum Order Notice*: You currently have ${totals.totalBookCount} book(s) in your cart. Please add more books (Minimum 4 books or 1 Combo) to proceed to payment!`
+      );
+    }
+
     try {
       const paymentLinkUrl = await createWhatsAppPaymentLink(session, totals);
 
@@ -540,18 +802,19 @@ export async function handleIncomingWhatsAppMessage(
         `✅ *ADDRESS SAVED & ORDER READY!*`,
         ``,
         `👤 *Recipient*: ${parsedAddr.name}`,
+        `📧 *Account Email*: ${parsedAddr.email}`,
         `📍 *Delivery Address*: ${parsedAddr.address}`,
         `📮 *Pincode*: ${parsedAddr.pincode}`,
         ``,
         `💳 *BILL SUMMARY*:`,
         `• Books Subtotal: ₹${totals.subtotal}`,
-        `• Delivery: ${totals.isFreeDelivery ? '🎁 FREE Doorstep Delivery' : `₹${totals.shippingFee}`}`,
+        `• ST Courier Delivery: ${totals.isFreeDelivery ? '🎁 FREE Doorstep Delivery' : `₹${totals.shippingFee}`}`,
         `• *Total Payable: ₹${totals.totalAmount}*`,
         ``,
-        `👉 *Click here to Pay securely via GPay / PhonePe / Paytm / UPI*:`,
+        `👉 *Click here to Pay securely via UPI / GPay / PhonePe / Paytm*:`,
         `${paymentLinkUrl}`,
         ``,
-        `⚡ *Instant Verification*: Once payment is complete, your order is verified and confirmed automatically right here in this WhatsApp chat!`,
+        `⚡ *Instant Verification*: Once paid, your order is verified and confirmed automatically right here in WhatsApp with your ST Courier live tracking docket!`,
       ].join('\n');
 
       return sendWhatsAppText(fromPhone, payPrompt);
