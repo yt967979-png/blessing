@@ -466,11 +466,48 @@ export async function handleIncomingWhatsAppMessage(
     }
   }
 
-  // 7. Add to Cart Selection (e.g. from interactive list / buttons)
-  if (actionId.startsWith('ADD_BOOK_')) {
-    const [_, bookId, mediumChoice] = actionId.split(':');
+  // 7. Pick Medium for Bilingual Guides (Maths, Science, Social)
+  if (actionId.startsWith('PICK_MEDIUM_')) {
+    const bookId = actionId.replace('PICK_MEDIUM_', '');
     const bookRes = await queryDb(
-      `SELECT id, title, price, discount_price, stock, stock_tamil, stock_english, status, is_combo
+      `SELECT id, title, price, discount_price, language
+       FROM books WHERE id = $1 LIMIT 1`,
+      [bookId]
+    );
+
+    if (bookRes.rows.length === 0) {
+      return sendWhatsAppText(fromPhone, '⚠️ Book not found or unavailable.');
+    }
+
+    const b = bookRes.rows[0];
+    const finalPrice = Number(b.discount_price || b.price || 330);
+    const promptText = [
+      `📘 *${b.title}* (₹${finalPrice})`,
+      ``,
+      `Please select your medium of study:`,
+    ].join('\n');
+
+    const buttons: WhatsAppButton[] = [
+      { id: `ADD_BOOK_${b.id}:Tamil Medium`, title: '📕 Tamil Medium' },
+      { id: `ADD_BOOK_${b.id}:English Medium`, title: '📗 English Medium' },
+    ];
+
+    return sendWhatsAppButtons(fromPhone, promptText, buttons);
+  }
+
+  // 8. Add to Cart Selection (from interactive list / buttons)
+  if (actionId.startsWith('ADD_BOOK_')) {
+    const parts = actionId.replace('ADD_BOOK_', '').split(':');
+    const bookId = parts[0];
+    const mediumChoice = parts[1] || '';
+
+    const bookRes = await queryDb(
+      `SELECT id, title, price, discount_price, stock, stock_tamil, stock_english, status,
+        CASE 
+          WHEN category_id = 'cat-combos' OR title ILIKE '%combo%' OR (combo_subjects IS NOT NULL AND combo_subjects != '[]'::jsonb) 
+          THEN true 
+          ELSE false 
+        END AS is_combo
        FROM books WHERE id = $1 LIMIT 1`,
       [bookId]
     );
@@ -517,7 +554,7 @@ export async function handleIncomingWhatsAppMessage(
 
     await saveWhatsAppSession(session);
 
-    const addedMed = mediumChoice ? ` (${mediumChoice})` : '';
+    const addedMed = mediumChoice && mediumChoice !== 'Combo' ? ` (${mediumChoice})` : '';
     const replyText = [
       `✅ Added *${b.title}${addedMed}* to your cart!`,
       ``,
@@ -539,41 +576,168 @@ export async function handleIncomingWhatsAppMessage(
     return sendWhatsAppButtons(fromPhone, replyText, buttons);
   }
 
-  // 8. Search / Browse Catalog
-  const searchTerm = actionId === 'ACTION_BROWSE_10TH' ? '10th' : text;
-  const booksRes = await queryDb(
-    `SELECT id, title, price, discount_price, stock, status, is_combo
-     FROM books
-     WHERE is_active = true
-       AND (title ILIKE $1 OR description ILIKE $1 OR category ILIKE $1)
-     ORDER BY is_combo DESC, title ASC
-     LIMIT 8`,
-    [`%${searchTerm}%`]
-  );
+  // 9. Natural Language Quick Add / Search Shortcuts
+  if (lower.includes('combo') || lower.includes('full set') || lower.includes('5 in 1')) {
+    const comboRes = await queryDb(
+      `SELECT id, title, price, discount_price FROM books
+       WHERE category_id = 'cat-combos' OR title ILIKE '%combo%' LIMIT 1`
+    );
+    if (comboRes.rows.length > 0) {
+      const b = comboRes.rows[0];
+      const price = b.discount_price || b.price;
+      const buttons: WhatsAppButton[] = [
+        { id: `ADD_BOOK_${b.id}:Combo`, title: '🎁 Add Combo to Cart' },
+        { id: 'ACTION_BROWSE_10TH', title: '📚 View All Guides' },
+      ];
+      return sendWhatsAppButtons(
+        fromPhone,
+        `🎁 *10th Standard 5-in-1 Combo Pack* (₹${price})\n• Includes all 5 subjects: Tamil, English, Maths, Science, Social Science\n• *100% FREE ST Courier Doorstep Delivery*\n\nTap below to add to cart:`,
+        buttons
+      );
+    }
+  }
+
+  if (lower.includes('math')) {
+    const mathRes = await queryDb(`SELECT id, title FROM books WHERE subject ILIKE '%math%' OR title ILIKE '%math%' LIMIT 1`);
+    if (mathRes.rows.length > 0) {
+      const b = mathRes.rows[0];
+      if (lower.includes('tamil')) {
+        return handleIncomingWhatsAppMessage(fromPhone, '', `ADD_BOOK_${b.id}:Tamil Medium`, senderName);
+      }
+      if (lower.includes('english')) {
+        return handleIncomingWhatsAppMessage(fromPhone, '', `ADD_BOOK_${b.id}:English Medium`, senderName);
+      }
+      const buttons: WhatsAppButton[] = [
+        { id: `ADD_BOOK_${b.id}:Tamil Medium`, title: '📕 Tamil Medium' },
+        { id: `ADD_BOOK_${b.id}:English Medium`, title: '📗 English Medium' },
+      ];
+      return sendWhatsAppButtons(fromPhone, `📘 *10th Maths Guide*\nPlease choose your Medium:`, buttons);
+    }
+  }
+
+  if (lower.includes('science')) {
+    const sciRes = await queryDb(`SELECT id, title FROM books WHERE subject ILIKE '%science%' OR title ILIKE '%science%' LIMIT 1`);
+    if (sciRes.rows.length > 0) {
+      const b = sciRes.rows[0];
+      if (lower.includes('tamil')) {
+        return handleIncomingWhatsAppMessage(fromPhone, '', `ADD_BOOK_${b.id}:Tamil Medium`, senderName);
+      }
+      if (lower.includes('english')) {
+        return handleIncomingWhatsAppMessage(fromPhone, '', `ADD_BOOK_${b.id}:English Medium`, senderName);
+      }
+      const buttons: WhatsAppButton[] = [
+        { id: `ADD_BOOK_${b.id}:Tamil Medium`, title: '📕 Tamil Medium' },
+        { id: `ADD_BOOK_${b.id}:English Medium`, title: '📗 English Medium' },
+      ];
+      return sendWhatsAppButtons(fromPhone, `🔬 *10th Science Guide*\nPlease choose your Medium:`, buttons);
+    }
+  }
+
+  if (lower.includes('social')) {
+    const socRes = await queryDb(`SELECT id, title FROM books WHERE subject ILIKE '%social%' OR title ILIKE '%social%' LIMIT 1`);
+    if (socRes.rows.length > 0) {
+      const b = socRes.rows[0];
+      if (lower.includes('tamil')) {
+        return handleIncomingWhatsAppMessage(fromPhone, '', `ADD_BOOK_${b.id}:Tamil Medium`, senderName);
+      }
+      if (lower.includes('english')) {
+        return handleIncomingWhatsAppMessage(fromPhone, '', `ADD_BOOK_${b.id}:English Medium`, senderName);
+      }
+      const buttons: WhatsAppButton[] = [
+        { id: `ADD_BOOK_${b.id}:Tamil Medium`, title: '📕 Tamil Medium' },
+        { id: `ADD_BOOK_${b.id}:English Medium`, title: '📗 English Medium' },
+      ];
+      return sendWhatsAppButtons(fromPhone, `🌍 *10th Social Science Guide*\nPlease choose your Medium:`, buttons);
+    }
+  }
+
+  // 10. Search / Browse Catalog
+  const searchTerm = actionId === 'ACTION_BROWSE_10TH' ? '' : text.trim();
+  const isBrowseAll = actionId === 'ACTION_BROWSE_10TH' || !searchTerm || /^(all|browse|catalog|books|guides|10th)/i.test(searchTerm);
+
+  let booksRes;
+  if (isBrowseAll) {
+    booksRes = await queryDb(
+      `SELECT id, title, price, discount_price, stock, status, language,
+        CASE 
+          WHEN category_id = 'cat-combos' OR title ILIKE '%combo%' OR (combo_subjects IS NOT NULL AND combo_subjects != '[]'::jsonb) 
+          THEN true 
+          ELSE false 
+        END AS is_combo
+       FROM books
+       WHERE (status = 'published' OR status IS NULL)
+       ORDER BY (CASE WHEN category_id = 'cat-combos' OR title ILIKE '%combo%' THEN 1 ELSE 2 END), title ASC
+       LIMIT 10`
+    );
+  } else {
+    booksRes = await queryDb(
+      `SELECT id, title, price, discount_price, stock, status, language,
+        CASE 
+          WHEN category_id = 'cat-combos' OR title ILIKE '%combo%' OR (combo_subjects IS NOT NULL AND combo_subjects != '[]'::jsonb) 
+          THEN true 
+          ELSE false 
+        END AS is_combo
+       FROM books
+       WHERE (status = 'published' OR status IS NULL)
+         AND (title ILIKE $1 OR COALESCE(subject, '') ILIKE $1 OR COALESCE(description, '') ILIKE $1 OR category_id ILIKE $1)
+       ORDER BY (CASE WHEN category_id = 'cat-combos' OR title ILIKE '%combo%' THEN 1 ELSE 2 END), title ASC
+       LIMIT 10`,
+      [`%${searchTerm}%`]
+    );
+
+    // Fall back to all published books if no match
+    if (booksRes.rows.length === 0) {
+      booksRes = await queryDb(
+        `SELECT id, title, price, discount_price, stock, status, language,
+          CASE 
+            WHEN category_id = 'cat-combos' OR title ILIKE '%combo%' OR (combo_subjects IS NOT NULL AND combo_subjects != '[]'::jsonb) 
+            THEN true 
+            ELSE false 
+          END AS is_combo
+         FROM books
+         WHERE (status = 'published' OR status IS NULL)
+         ORDER BY (CASE WHEN category_id = 'cat-combos' OR title ILIKE '%combo%' THEN 1 ELSE 2 END), title ASC
+         LIMIT 10`
+      );
+    }
+  }
 
   if (booksRes.rows.length === 0) {
     return sendWhatsAppText(
       fromPhone,
-      `🔍 No books found matching *"${text}"*.\n\nTry searching for: *"10th"*, *"Maths"*, *"Science"*, or *"Combo"*!`
+      `🔍 No books are currently published in the catalog.\n\nPlease type *"menu"* to return to the main options!`
     );
   }
 
   // Build Interactive List Picker for Found Books
   const sections: WhatsAppListSection[] = [
     {
-      title: 'Available Guides',
+      title: 'Blessing Power Guides',
       rows: booksRes.rows.map((b: any) => {
         const isOutOfStock = b.status === 'out_of_stock' || (b.stock !== null && b.stock <= 0);
         const isComingSoon = b.status === 'coming_soon';
         const price = b.discount_price || b.price;
+        const isCombo = Boolean(b.is_combo);
 
         let statusText = `₹${price}`;
-        if (b.is_combo) statusText += ' • 🎁 Free Courier';
+        if (isCombo) statusText += ' • 🎁 Free Courier';
+        else statusText += ' • 4 Books MOQ';
+
         if (isComingSoon) statusText = '🚀 Coming Soon';
         if (isOutOfStock) statusText = '⚠️ Out of Stock';
 
+        // Direct action depending on book type
+        let actionId = `PICK_MEDIUM_${b.id}`;
+        if (isCombo) {
+          actionId = `ADD_BOOK_${b.id}:Combo`;
+        } else if (b.language === 'Tamil') {
+          actionId = `ADD_BOOK_${b.id}:Tamil Medium`;
+        } else if (b.language === 'English') {
+          actionId = `ADD_BOOK_${b.id}:English Medium`;
+        }
+
         return {
-          id: `ADD_BOOK_${b.id}:Tamil Medium`,
+          id: actionId,
           title: b.title.slice(0, 24),
           description: statusText.slice(0, 72),
         };
@@ -581,10 +745,14 @@ export async function handleIncomingWhatsAppMessage(
     },
   ];
 
+  const headerMsg = isBrowseAll
+    ? `📚 *Available 10th Guides & Combos:*\nSelect any book below to add to your cart or choose medium:`
+    : `📚 *Found Guides for "${searchTerm}":*\nSelect any book below to add to your cart:`;
+
   return sendWhatsAppList(
     fromPhone,
-    `📚 *Found ${booksRes.rows.length} Guides for "${searchTerm}"*:\nSelect any book below to add to your cart:`,
-    'Select Book',
+    headerMsg,
+    'Select Guide',
     sections
   );
 }

@@ -39,8 +39,8 @@ export function isWhatsAppConfigured(): boolean {
   );
 }
 
-async function callWhatsAppGraphApi(payload: any): Promise<{ ok: boolean; data?: any; error?: string }> {
-  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+async function callWhatsAppGraphApi(payload: any, senderPhoneNumberId?: string): Promise<{ ok: boolean; data?: any; error?: string }> {
+  const phoneNumberId = senderPhoneNumberId || process.env.WHATSAPP_PHONE_NUMBER_ID;
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
 
   if (!phoneNumberId || !accessToken) {
@@ -74,19 +74,27 @@ async function callWhatsAppGraphApi(payload: any): Promise<{ ok: boolean; data?:
 }
 
 /** Send standard text message */
-export async function sendWhatsAppText(to: string, text: string) {
+export async function sendWhatsAppText(to: string, text: string, senderPhoneNumberId?: string) {
   const recipient = normalizeWhatsAppRecipient(to);
-  return callWhatsAppGraphApi({
-    messaging_product: 'whatsapp',
-    recipient_type: 'individual',
-    to: recipient,
-    type: 'text',
-    text: { preview_url: true, body: text },
-  });
+  return callWhatsAppGraphApi(
+    {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: recipient,
+      type: 'text',
+      text: { preview_url: true, body: text },
+    },
+    senderPhoneNumberId
+  );
 }
 
 /** Send interactive reply buttons (up to 3 buttons) */
-export async function sendWhatsAppButtons(to: string, bodyText: string, buttons: WhatsAppButton[]) {
+export async function sendWhatsAppButtons(
+  to: string,
+  bodyText: string,
+  buttons: WhatsAppButton[],
+  senderPhoneNumberId?: string
+) {
   const recipient = normalizeWhatsAppRecipient(to);
   const formattedButtons = buttons.slice(0, 3).map((b) => ({
     type: 'reply',
@@ -96,17 +104,20 @@ export async function sendWhatsAppButtons(to: string, bodyText: string, buttons:
     },
   }));
 
-  return callWhatsAppGraphApi({
-    messaging_product: 'whatsapp',
-    recipient_type: 'individual',
-    to: recipient,
-    type: 'interactive',
-    interactive: {
-      type: 'button',
-      body: { text: bodyText },
-      action: { buttons: formattedButtons },
+  return callWhatsAppGraphApi(
+    {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: recipient,
+      type: 'interactive',
+      interactive: {
+        type: 'button',
+        body: { text: bodyText },
+        action: { buttons: formattedButtons },
+      },
     },
-  });
+    senderPhoneNumberId
+  );
 }
 
 /** Send interactive list picker (e.g. books or subject choices) */
@@ -114,30 +125,34 @@ export async function sendWhatsAppList(
   to: string,
   bodyText: string,
   buttonLabel: string,
-  sections: WhatsAppListSection[]
+  sections: WhatsAppListSection[],
+  senderPhoneNumberId?: string
 ) {
   const recipient = normalizeWhatsAppRecipient(to);
-  return callWhatsAppGraphApi({
-    messaging_product: 'whatsapp',
-    recipient_type: 'individual',
-    to: recipient,
-    type: 'interactive',
-    interactive: {
-      type: 'list',
-      body: { text: bodyText },
-      action: {
-        button: buttonLabel.slice(0, 20),
-        sections: sections.map((sec) => ({
-          title: sec.title.slice(0, 24),
-          rows: sec.rows.slice(0, 10).map((r) => ({
-            id: r.id,
-            title: r.title.slice(0, 24),
-            description: r.description ? r.description.slice(0, 72) : undefined,
+  return callWhatsAppGraphApi(
+    {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: recipient,
+      type: 'interactive',
+      interactive: {
+        type: 'list',
+        body: { text: bodyText },
+        action: {
+          button: buttonLabel.slice(0, 20),
+          sections: sections.map((sec) => ({
+            title: sec.title.slice(0, 24),
+            rows: sec.rows.slice(0, 10).map((r) => ({
+              id: r.id,
+              title: r.title.slice(0, 24),
+              description: r.description ? r.description.slice(0, 72) : undefined,
+            })),
           })),
-        })),
+        },
       },
     },
-  });
+    senderPhoneNumberId
+  );
 }
 
 /** Send order confirmation message upon verified payment */
