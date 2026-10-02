@@ -26,6 +26,7 @@ server/node_modules
 .DS_Store
 *.pem
 *.tar.gz
+icon1.png
 *.tar
 *.zip
 

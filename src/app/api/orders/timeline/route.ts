@@ -126,6 +126,31 @@ export async function POST(request: Request) {
       console.warn('[timeline] order broadcast failed:', e?.message || e);
     }
 
+    // Send automated WhatsApp ST Courier tracking link to customer
+    if (awb && (statusLabel.toLowerCase().includes('dispatch') || statusLabel.toLowerCase().includes('transit') || statusLabel.toLowerCase().includes('courier') || !order.awb_number)) {
+      try {
+        let customerPhone: string | null = null;
+        if (order.shipping_address) {
+          try {
+            const parsed = typeof order.shipping_address === 'string' ? JSON.parse(order.shipping_address) : order.shipping_address;
+            customerPhone = parsed.phone || null;
+          } catch (_) {}
+        }
+        if (!customerPhone && order.user_id && String(order.user_id).startsWith('wa-')) {
+          customerPhone = String(order.user_id).replace('wa-', '');
+        }
+
+        if (customerPhone) {
+          const { sendWhatsAppTrackingUpdate } = await import('@/lib/whatsapp');
+          sendWhatsAppTrackingUpdate(customerPhone, {
+            orderNumber: order.order_number || order.id,
+            awb,
+            courierName: 'ST Courier Express',
+          }).catch((err) => console.warn('[timeline] WhatsApp tracking dispatch alert failed:', err?.message || err));
+        }
+      } catch (_) {}
+    }
+
     return NextResponse.json({ success: true, eventId, status, statusLabel });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });

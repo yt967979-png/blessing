@@ -270,6 +270,7 @@ export async function finalizeOrderFromPayment(opts: FinalizeOrderOptions): Prom
     const ymd = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     const internalShipmentId = `SHP-${ymd}-${Math.floor(100000 + Math.random() * 900000)}`;
     const invoiceNumber = await generateNextGstInvoiceNumber(client);
+    const orderSource = sessionRow?.source || 'website';
 
     // 3. INSERT AUTHORITATIVE ORDER
     await client.query(
@@ -277,12 +278,12 @@ export async function finalizeOrderFromPayment(opts: FinalizeOrderOptions): Prom
         id, order_number, user_id, address_id, subtotal, discount, shipping_charge, total_amount,
         payment_method, payment_status, order_status, courier_name, shipment_id,
         shipping_address, razorpay_order_id, razorpay_payment_id, invoice_number,
-        coupon_code, coupon_id, ordered_at, created_at, updated_at
+        coupon_code, coupon_id, order_source, ordered_at, created_at, updated_at
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8,
         $9, 'Payment Confirmed', 'Confirmed', 'ST Courier Express', $10,
         $11, $12, $13, $14,
-        $15, $16, NOW(), NOW(), NOW()
+        $15, $16, $17, NOW(), NOW(), NOW()
       )`,
       [
         orderId,
@@ -301,6 +302,7 @@ export async function finalizeOrderFromPayment(opts: FinalizeOrderOptions): Prom
         invoiceNumber,
         couponCode,
         couponId,
+        orderSource,
       ]
     );
 
@@ -500,6 +502,23 @@ export async function finalizeOrderFromPayment(opts: FinalizeOrderOptions): Prom
       };
       broadcastOrderChange(orderEvent);
       await notifyOrderChanged(orderEvent);
+    } catch (_) {}
+
+    // 11. AUTOMATED WHATSAPP ORDER CONFIRMATION
+    try {
+      const waPhone =
+        shippingAddressObj?.phone ||
+        (userId && String(userId).startsWith('wa-') ? String(userId).replace('wa-', '') : null);
+
+      if (waPhone && (orderSource === 'whatsapp' || String(userId || '').startsWith('wa-'))) {
+        const { sendWhatsAppOrderConfirmed } = await import('@/lib/whatsapp');
+        sendWhatsAppOrderConfirmed(waPhone, {
+          orderNumber,
+          totalAmount,
+          itemCount: itemsToInsert.length,
+          customerName: shippingAddressObj?.name,
+        }).catch((waErr) => console.warn('[orderFinalizer] WhatsApp notification error:', waErr?.message || waErr));
+      }
     } catch (_) {}
 
     return {

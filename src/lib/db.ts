@@ -1449,11 +1449,28 @@ async function runSchemaInit(client: any) {
       `UPDATE courier_tracking SET status = COALESCE(NULLIF(status, ''), current_status) WHERE status IS NULL OR status = ''`,
       `UPDATE orders SET ordered_at = COALESCE(ordered_at, created_at, updated_at, NOW()) WHERE ordered_at IS NULL`,
       `UPDATE orders SET created_at = COALESCE(created_at, ordered_at, updated_at, NOW()) WHERE created_at IS NULL`,
-      // Drop unused Baileys / WhatsApp bot tables (wa.me chat links do not need these)
+      // Drop unused Baileys bot artifacts (we use official Meta Cloud API)
       `DROP TABLE IF EXISTS whatsapp_outbox CASCADE`,
       `DROP TABLE IF EXISTS whatsapp_logs CASCADE`,
-      `DROP TABLE IF EXISTS whatsapp_sessions CASCADE`,
       `DROP TABLE IF EXISTS whatsapp_otps CASCADE`,
+      // Unified WhatsApp Commerce Integration
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_source VARCHAR(50) DEFAULT 'website'`,
+      `ALTER TABLE checkout_sessions ADD COLUMN IF NOT EXISTS source VARCHAR(50) DEFAULT 'website'`,
+      `CREATE TABLE IF NOT EXISTS whatsapp_sessions (
+        phone VARCHAR(30) PRIMARY KEY,
+        name VARCHAR(255),
+        step VARCHAR(50) DEFAULT 'IDLE',
+        cart JSONB DEFAULT '[]'::jsonb,
+        shipping_address JSONB,
+        razorpay_order_id VARCHAR(255),
+        razorpay_payment_link_id VARCHAR(255),
+        razorpay_payment_link_url TEXT,
+        last_interaction TIMESTAMPTZ DEFAULT NOW(),
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_orders_order_source ON orders(order_source)`,
+      `CREATE INDEX IF NOT EXISTS idx_whatsapp_sessions_phone ON whatsapp_sessions(phone)`,
     ];
     for (const sql of heals) {
       try {

@@ -60,6 +60,7 @@ interface Order {
   createdAt: string;
   isCancelled?: boolean;
   orderStatus?: string;
+  orderSource?: string;
 }
 
 interface OrdersSectionProps {
@@ -530,6 +531,17 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
                               year: 'numeric',
                             })}
                           </span>
+                          <div className="mt-1">
+                            {order.orderSource === 'whatsapp' ? (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                💬 WhatsApp
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-black bg-blue-50 text-blue-700 border border-blue-200">
+                                🌐 Website
+                              </span>
+                            )}
+                          </div>
                         </td>
 
                         {/* Customer & City */}
@@ -712,9 +724,20 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
                 <span className="text-[10px] font-bold tracking-widest text-slate-400 uppercase">
                   Order Details
                 </span>
-                <h3 className="font-bold text-base text-slate-900 font-mono">
-                  #{activeDrawerOrder.orderId}
-                </h3>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <h3 className="font-bold text-base text-slate-900 font-mono">
+                    #{activeDrawerOrder.orderId}
+                  </h3>
+                  {activeDrawerOrder.orderSource === 'whatsapp' ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
+                      💬 WhatsApp
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-blue-50 text-blue-700 border border-blue-200">
+                      🌐 Website
+                    </span>
+                  )}
+                </div>
               </div>
               <button
                 type="button"

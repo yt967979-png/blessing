@@ -57,3 +57,11 @@ export function samplePdfWhatsAppUrl(bookTitle: string, standard?: string): stri
   const text = `Hi Blessing Power Guide, please send me the sample chapter PDF for "${bookTitle}"${stdText}. Thank you!`;
   return shopWhatsAppChatUrl(text);
 }
+
+/** Pre-filled WhatsApp URL for 1-click WhatsApp Book Orders */
+export function orderBookWhatsAppUrl(bookTitle: string, medium?: string, price?: number): string {
+  const medText = medium ? `\n🌐 Medium: ${medium}` : '';
+  const priceText = price ? `\n💰 Price: ₹${price}` : '';
+  const text = `Hi Blessing Power Guide, I would like to order this guide directly via WhatsApp:\n📚 Book: "${bookTitle}"${medText}${priceText}\n\nMy Delivery Details:\nName:\nDelivery Address:\nPincode:\n\nPlease send your GPay/PhonePe QR code for payment. Thank you!`;
+  return shopWhatsAppChatUrl(text);
+}

@@ -138,6 +138,7 @@ function mapOrderRow(o: any) {
     isOfficialAwb,
     trackingUrl,
     courierName: o.courier_name || 'ST Courier Express',
+    orderSource: o.order_source || (o.user_id && String(o.user_id).startsWith('wa-') ? 'whatsapp' : 'website'),
     items: Array.isArray(o.items) ? o.items : [],
     packedAt: o.packed_at ? new Date(o.packed_at).toLocaleString('en-IN') : null,
     shippedAt: o.shipped_at ? new Date(o.shipped_at).toLocaleString('en-IN') : null,
