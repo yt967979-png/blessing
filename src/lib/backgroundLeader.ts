@@ -103,6 +103,7 @@ async function handleLeadershipLost(reason: string) {
 
 async function tryAcquireLockOnce(): Promise<boolean> {
   if (backgroundJobsDisabled()) return false;
+  if (process.env.PORT && process.env.PORT !== '3000') return false;
   if (forceLeader()) {
     if (!isLeader) {
       isLeader = true;
@@ -115,16 +116,21 @@ async function tryAcquireLockOnce(): Promise<boolean> {
   if (acquirePromise) return acquirePromise;
 
   acquirePromise = (async () => {
+    let client: Client | null = null;
     try {
       const cfg = getDbConnectionConfig();
-      const client = new Client(cfg);
+      client = new Client(cfg);
       await client.connect();
       const { rows } = await client.query<{ pg_try_advisory_lock: boolean }>(
         'SELECT pg_try_advisory_lock($1::bigint) AS pg_try_advisory_lock',
         [ADVISORY_LOCK_KEY]
       );
       if (!rows[0]?.pg_try_advisory_lock) {
-        await client.end().catch(() => {});
+        try {
+          await client.end();
+        } catch (_) {}
+        (client as any)?._connection?.stream?.destroy?.();
+        client = null;
         return false;
       }
 
@@ -152,6 +158,13 @@ async function tryAcquireLockOnce(): Promise<boolean> {
       return true;
     } catch (err: any) {
       console.warn('[leader] could not acquire lock:', err?.message || err);
+      if (client) {
+        try {
+          await client.end();
+        } catch (_) {}
+        (client as any)?._connection?.stream?.destroy?.();
+        client = null;
+      }
       return false;
     } finally {
       acquirePromise = null;
@@ -172,6 +185,14 @@ export function startAutomaticLeaderElection(
 ) {
   if (backgroundJobsDisabled()) {
     console.log('[leader] background jobs disabled (DISABLE_BACKGROUND_JOBS=true)');
+    return;
+  }
+
+  // Multi-worker cluster: worker on port 3001+ acts as an HTTP serving replica.
+  // Only the primary worker on port 3000 manages background leader election.
+  if (process.env.PORT && process.env.PORT !== '3000') {
+    console.log(`[leader] secondary worker (PORT=${process.env.PORT}) — standing by as replica (skipping background leader loop)`);
+    if (onFollowerCallback) void onFollowerCallback();
     return;
   }
 
