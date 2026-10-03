@@ -179,12 +179,11 @@ export async function getAuthenticatedUser(
       }
     } catch (_) {}
 
-    // 2. Query DB to ensure user exists and is active
-    const { queryEphemeral } = await import('@/lib/db');
-    const res = await queryEphemeral(
+    // 2. Query DB via pooled queryDb to ensure user exists and is active
+    const { queryDb } = await import('@/lib/db');
+    const res = await queryDb(
       `SELECT status, role FROM users WHERE id::text = $1::text LIMIT 1`,
-      [decoded.userId],
-      { budgetMs: 3_000, statementTimeoutMs: 2_000, label: 'authUserCheck' }
+      [decoded.userId]
     );
     if (!res.rows.length) {
       return null;
@@ -252,11 +251,10 @@ export async function verifyAdminRequest(
     }
 
     try {
-      const { queryEphemeral } = await import('@/lib/db');
-      const res = await queryEphemeral(
+      const { queryDb } = await import('@/lib/db');
+      const res = await queryDb(
         `SELECT role, status FROM users WHERE id = $1 LIMIT 1`,
-        [session.userId],
-        { budgetMs: 5_000, statementTimeoutMs: 3_000, label: 'adminCheck' }
+        [session.userId]
       );
       if (res.rows.length === 0) {
         return { isAdmin: false, isSuperAdmin: false, error: 'Unauthorized: User not found' };

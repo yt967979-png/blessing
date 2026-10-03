@@ -103,10 +103,13 @@ export async function POST(request: NextRequest) {
     // 1. Meta Webhook HMAC-SHA256 Signature Verification (WA-03)
     if (appSecret) {
       const signatureHeader = request.headers.get('x-hub-signature-256');
-      if (!verifyMetaSignature(rawBody, signatureHeader, appSecret)) {
-        console.warn('[WhatsApp Webhook] SECURITY ALERT: Invalid Meta X-Hub-Signature-256 received');
-        return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
+      if (!signatureHeader || !verifyMetaSignature(rawBody, signatureHeader, appSecret)) {
+        console.warn('[WhatsApp Webhook] SECURITY ALERT: Invalid or missing Meta X-Hub-Signature-256 received');
+        return NextResponse.json({ error: 'Invalid or missing signature' }, { status: 401 });
       }
+    } else if (process.env.NODE_ENV === 'production' && (process.env.STRICT_WEBHOOK_SECURITY === 'true' || process.env.ENFORCE_META_SIGNATURE === 'true')) {
+      console.error('[WhatsApp Webhook] STRICT MODE: WHATSAPP_APP_SECRET is not configured in production. Rejecting request.');
+      return NextResponse.json({ error: 'Webhook signature verification required in production' }, { status: 401 });
     } else if (process.env.NODE_ENV === 'production') {
       console.warn('[WhatsApp Webhook] WHATSAPP_APP_SECRET not configured. Please set WHATSAPP_APP_SECRET to prevent forged webhook requests.');
     }
