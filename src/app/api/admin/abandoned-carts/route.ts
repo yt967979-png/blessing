@@ -45,13 +45,14 @@ export async function GET(request: NextRequest) {
         ORDER BY ac.updated_at DESC
         LIMIT 100
       `),
-      client.query(`SELECT id, title, subject, price, discount_price, stock, status, language FROM books`),
+      client.query(`SELECT id, title, subject, price, discount_price, stock, status, language, is_coming_soon FROM books`),
     ]);
 
     const catalogBooks: CatalogBookRow[] = booksRes.rows || [];
     const updatesToPersist: Promise<any>[] = [];
 
-    const carts = res.rows.map((row: any) => {
+    const carts: any[] = [];
+    for (const row of res.rows) {
       let rawItems: any[] = [];
       try {
         rawItems = JSON.parse(row.cart_json || '[]');
@@ -59,10 +60,19 @@ export async function GET(request: NextRequest) {
         rawItems = [];
       }
 
-      // Synchronize and reconcile all items with the live catalog
+      // Synchronize and reconcile all items with the live catalog (removes out-of-stock and coming-soon)
       const syncResult = syncCartItemsWithBooks(rawItems, catalogBooks);
 
-      // If price, title, or book ID changed compared to stored JSON, auto-update the DB row
+      // If all items in this cart became out of stock or coming soon, delete the abandoned cart from DB
+      if (syncResult.items.length === 0) {
+        updatesToPersist.push(
+          client.query(`DELETE FROM abandoned_carts WHERE id = $1`, [row.id])
+            .catch((e: any) => console.warn('[abandoned-carts] Failed to purge out-of-stock cart:', e?.message || e))
+        );
+        continue;
+      }
+
+      // If price, title, book ID, or out-of-stock items changed compared to stored JSON, auto-update the DB row
       if (syncResult.changed) {
         updatesToPersist.push(
           client.query(
@@ -72,7 +82,7 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      return {
+      carts.push({
         id: row.id,
         userId: row.user_id,
         phone: row.phone,
@@ -86,8 +96,8 @@ export async function GET(request: NextRequest) {
         converted: Boolean(row.converted),
         createdAt: row.created_at,
         updatedAt: row.updated_at,
-      };
-    });
+      });
+    }
 
     if (updatesToPersist.length > 0) {
       await Promise.all(updatesToPersist);

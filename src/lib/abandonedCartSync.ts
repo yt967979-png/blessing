@@ -121,6 +121,17 @@ export function syncCartItemsWithBooks(
     const qty = Math.max(1, Math.floor(Number(raw.qty || 1)));
 
     if (matchedBook) {
+      const isComingSoon = Boolean(matchedBook.is_coming_soon || matchedBook.status === 'coming_soon');
+      const isOutOfStock =
+        matchedBook.status !== 'published' ||
+        (matchedBook.stock !== undefined && matchedBook.stock !== null && Number(matchedBook.stock) <= 0);
+
+      // Remove Out of Stock and Coming Soon items from abandoned carts (mirrors /api/cart/validate)
+      if (isComingSoon || isOutOfStock) {
+        changed = true;
+        continue;
+      }
+
       const { price: livePrice, mrp: liveMrp } = calculateBookPrices(matchedBook);
       const isPriceDiff = Math.abs(livePrice - originalPrice) > 0.001;
       const isIdDiff = String(raw.id) !== String(matchedBook.id);
@@ -137,17 +148,12 @@ export function syncCartItemsWithBooks(
         price: livePrice,
         mrp: liveMrp,
         snapshotPrice: raw.snapshotPrice !== undefined ? raw.snapshotPrice : originalPrice,
-        inStock: matchedBook.status === 'published' && (matchedBook.stock === undefined || Number(matchedBook.stock) > 0),
+        inStock: true,
         qty,
       });
     } else {
-      // Book not found in live catalog, keep item with snapshot price
-      items.push({
-        ...raw,
-        price: originalPrice,
-        snapshotPrice: originalPrice,
-        qty,
-      });
+      // Book deleted from catalog -> drop it from abandoned cart
+      changed = true;
     }
   }
 
@@ -171,7 +177,7 @@ export function syncCartItemsWithBooks(
 
 /**
  * Re-syncs all rows in the `abandoned_carts` table in Postgres against the latest `books` catalog.
- * Updates `cart_json` in place if prices, titles, or book IDs changed.
+ * Purges empty/out-of-stock carts and updates `cart_json` in place.
  */
 export async function syncAllAbandonedCartsInDb(existingClient?: any): Promise<{ updatedCount: number; totalCount: number }> {
   const { getDbClient, releaseDbClient } = await import('@/lib/db');
@@ -185,7 +191,7 @@ export async function syncAllAbandonedCartsInDb(existingClient?: any): Promise<{
     }
 
     const [booksRes, cartsRes] = await Promise.all([
-      client.query(`SELECT id, title, subject, price, discount_price, stock, status, language FROM books`),
+      client.query(`SELECT id, title, subject, price, discount_price, stock, status, language, is_coming_soon FROM books`),
       client.query(
         `SELECT id, cart_json FROM abandoned_carts 
          WHERE updated_at > NOW() - INTERVAL '7 days' 
@@ -206,10 +212,14 @@ export async function syncAllAbandonedCartsInDb(existingClient?: any): Promise<{
         continue;
       }
 
-      if (!Array.isArray(rawItems) || rawItems.length === 0) continue;
+      if (!Array.isArray(rawItems)) continue;
 
       const syncResult = syncCartItemsWithBooks(rawItems, catalogBooks);
-      if (syncResult.changed) {
+      if (syncResult.items.length === 0) {
+        // If all items became out of stock or coming soon, delete the abandoned cart
+        await client.query(`DELETE FROM abandoned_carts WHERE id = $1`, [row.id]);
+        updatedCount++;
+      } else if (syncResult.changed) {
         await client.query(
           `UPDATE abandoned_carts 
            SET cart_json = $1, updated_at = NOW() 
@@ -230,3 +240,4 @@ export async function syncAllAbandonedCartsInDb(existingClient?: any): Promise<{
     }
   }
 }
+
