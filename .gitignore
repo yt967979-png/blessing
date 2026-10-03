@@ -61,6 +61,6 @@ backups/
 logs/
 *.dump
 *.sql
+*.sql.gz
 *.env
-
-
+scripts/
