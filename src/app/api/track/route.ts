@@ -76,19 +76,26 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string, tokenRaw?: stri
   try {
     const res = await client.query(
       `SELECT o.id, o.order_number, o.order_status, o.awb_number, o.shipment_id, o.tracking_url,
-              o.courier_name, o.total_amount, o.ordered_at, o.packed_at, o.shipped_at, o.delivered_at,
-              o.shipping_address, o.payment_status, o.user_id, u.phone as user_phone,
+              o.courier_name, o.subtotal, o.discount, o.shipping_charge, o.total_amount,
+              o.payment_method, o.payment_status, o.invoice_number,
+              o.ordered_at, o.packed_at, o.shipped_at, o.delivered_at,
+              o.shipping_address, o.user_id, u.phone as user_phone,
               COALESCE(
                 json_agg(
                   json_build_object(
                     'title', oi.book_title,
-                    'qty', oi.quantity
+                    'qty', oi.quantity,
+                    'price', oi.book_price,
+                    'subtotal', oi.subtotal,
+                    'medium', oi.medium,
+                    'mrp', COALESCE(b.price, oi.book_price)
                   )
                 ) FILTER (WHERE oi.id IS NOT NULL), '[]'
               ) as items
        FROM orders o
        LEFT JOIN users u ON o.user_id = u.id
        LEFT JOIN order_items oi ON o.id = oi.order_id
+       LEFT JOIN books b ON oi.book_id = b.id
        WHERE UPPER(o.order_number) = $1 
           OR UPPER(o.order_number) = $2
           OR UPPER(REPLACE(o.order_number, '-', ' ')) = $3
@@ -238,6 +245,16 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string, tokenRaw?: stri
         courierName: o.courier_name || 'ST Courier Express',
         trackingUrl: cancelled ? null : trackingUrl,
         paymentStatus: o.payment_status,
+        paymentMethod: o.payment_method || 'Prepaid',
+        bill: {
+          subtotal: Number(o.subtotal || o.total_amount || 0),
+          discount: Number(o.discount || 0),
+          shippingCharge: Number(o.shipping_charge || 0),
+          totalAmount: Number(o.total_amount || 0),
+          paymentMethod: o.payment_method || 'Prepaid',
+          paymentStatus: o.payment_status || 'Paid',
+          invoiceNumber: o.invoice_number || null,
+        },
         placedAt: o.ordered_at,
         estimatedArrival: cancelled ? null : eta,
         estimatedArrivalHint: cancelled || delivered ? null : `Rough guide around ${shopEta.formattedDate}`,
@@ -252,8 +269,17 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string, tokenRaw?: stri
           state: addr.state || 'Tamil Nadu',
         },
         items: Array.isArray(o.items)
-          ? o.items.map((it: any) => ({ title: it.title, qty: it.qty }))
+          ? o.items.map((it: any) => ({
+              title: it.title,
+              qty: Number(it.qty || 1),
+              price: Number(it.price || 0),
+              subtotal: Number(it.subtotal || 0),
+              medium: it.medium || null,
+              mrp: Number(it.mrp || it.price || 0),
+            }))
           : [],
+        invoiceUrl: `/api/orders/${encodeURIComponent(o.order_number || o.id)}/invoice${token ? `?t=${encodeURIComponent(token)}` : ''}`,
+        trackToken: isAuthorized ? (token || null) : null,
         timeline,
         scans: cancelled ? [] : scans,
         liveSynced: !cancelled && !!(live && live.verified),

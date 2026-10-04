@@ -13,6 +13,10 @@ import {
   Headphones,
   MessageSquare,
   HelpCircle,
+  ReceiptText,
+  FileText,
+  ArrowDownToLine,
+  Tag,
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
@@ -334,17 +338,128 @@ function TrackForm() {
             onRefresh={() => void runTrack(order.orderId, phone || user?.phone || '', { soft: true })}
           />
 
-          {Array.isArray(order.items) && order.items.length > 0 && (
-            <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
-              <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Items in this order</p>
-              <ul className="space-y-1.5">
-                {order.items.map((it: any, idx: number) => (
-                  <li key={idx} className="text-xs font-semibold text-slate-700 flex justify-between gap-2">
-                    <span className="truncate">{it.title}</span>
-                    <span className="text-slate-400 shrink-0">×{it.qty}</span>
-                  </li>
-                ))}
-              </ul>
+          {/* ── Flipkart/Amazon-Style Product, MRP & Bill Details Card ──────────── */}
+          {((Array.isArray(order.items) && order.items.length > 0) || order.bill) && (
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-blue-50 text-[#0044AA] flex items-center justify-center font-bold">
+                    <ReceiptText className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="font-heading font-black text-sm text-[#001B3A]">
+                      Order Bill & Product Details
+                    </h3>
+                    <p className="text-[11px] text-slate-400">
+                      HSN 4901 · Official Tax Invoice for Educational Guides
+                    </p>
+                  </div>
+                </div>
+
+                {order.invoiceUrl && (
+                  <a
+                    href={order.invoiceUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-[#0044AA] text-xs font-bold rounded-xl transition-colors border border-blue-200 shadow-2xs"
+                  >
+                    <ArrowDownToLine className="w-3.5 h-3.5" />
+                    <span>Download Tax Bill / Invoice</span>
+                  </a>
+                )}
+              </div>
+
+              {/* Items with MRP & Discount Breakdown */}
+              {Array.isArray(order.items) && order.items.length > 0 && (
+                <div className="space-y-2.5">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                    Books in this Package ({order.items.reduce((s: number, it: any) => s + (it.qty || 1), 0)} items)
+                  </p>
+                  <div className="divide-y divide-slate-100">
+                    {order.items.map((it: any, idx: number) => {
+                      const qty = Number(it.qty || 1);
+                      const price = Number(it.price || 0);
+                      const mrp = Number(it.mrp || price || 0);
+                      const subtotal = Number(it.subtotal || price * qty);
+                      const hasDiscount = mrp > price && price > 0;
+
+                      return (
+                        <div key={idx} className="py-2.5 flex items-start justify-between gap-3 text-xs">
+                          <div className="flex-1 min-w-0">
+                            <div className="font-bold text-slate-800 text-xs sm:text-sm truncate">
+                              {it.title}
+                            </div>
+                            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                              {it.medium && (
+                                <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-100">
+                                  {it.medium}
+                                </span>
+                              )}
+                              <span className="text-[11px] text-slate-500 font-semibold">
+                                Qty: {qty}
+                              </span>
+                              {hasDiscount && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
+                                  <Tag className="w-2.5 h-2.5" /> Save ₹{mrp - price}/book
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="text-right shrink-0">
+                            <div className="font-black text-slate-900 text-xs sm:text-sm">
+                              {price > 0 ? `₹${(subtotal || price * qty).toLocaleString('en-IN')}` : 'Included'}
+                            </div>
+                            {hasDiscount && (
+                              <div className="text-[11px] text-slate-400 line-through">
+                                MRP ₹{(mrp * qty).toLocaleString('en-IN')}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Complete Bill Summary */}
+              {order.bill && (
+                <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3.5 space-y-2 text-xs">
+                  <div className="flex justify-between text-slate-600 font-medium">
+                    <span>Subtotal / Books MRP:</span>
+                    <span className="font-bold text-slate-800">
+                      ₹{Number(order.bill.subtotal || order.bill.totalAmount || 0).toLocaleString('en-IN')}
+                    </span>
+                  </div>
+
+                  {Number(order.bill.discount || 0) > 0 && (
+                    <div className="flex justify-between text-emerald-700 font-bold">
+                      <span>Discount / Coupon Applied:</span>
+                      <span>-₹{Number(order.bill.discount).toLocaleString('en-IN')}</span>
+                    </div>
+                  )}
+
+                  <div className="flex justify-between text-slate-600 font-medium">
+                    <span>ST Courier Delivery:</span>
+                    <span className="font-bold text-emerald-700">
+                      {Number(order.bill.shippingCharge || 0) === 0 ? 'FREE' : `₹${Number(order.bill.shippingCharge)}`}
+                    </span>
+                  </div>
+
+                  <div className="border-t border-slate-200 pt-2 flex justify-between items-center text-sm font-black text-[#001B3A]">
+                    <span>Total Amount Paid:</span>
+                    <span className="text-base text-[#0044AA]">
+                      ₹{Number(order.bill.totalAmount || 0).toLocaleString('en-IN')}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-200/60">
+                    <span>Payment Mode: <strong>{order.bill.paymentMethod || 'Online (Razorpay)'}</strong></span>
+                    <span className="font-bold text-emerald-700">✓ {order.bill.paymentStatus || 'Payment Verified'}</span>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

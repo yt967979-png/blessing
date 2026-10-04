@@ -56,7 +56,7 @@ export function generateSingleThermalLabelHtml(o: ShippingLabelOrder, qrSvg: str
     : new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 
   const itemsLine = (o.items || [])
-    .map((it) => `${esc(it.title || 'Guide Book')} × ${it.qty || 1}`)
+    .map((it) => `${esc(it.title || 'Guide Book')} × ${it.qty || 1}${it.price ? ` [₹${it.price}]` : ''}`)
     .join(' · ') || 'Educational School Guides';
 
   return `
