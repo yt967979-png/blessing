@@ -26,7 +26,8 @@ export async function GET(
                    'title', oi.book_title,
                    'price', oi.book_price,
                    'qty', oi.quantity,
-                   'subtotal', oi.subtotal
+                   'subtotal', oi.subtotal,
+                   'medium', oi.medium
                  )
                ) FILTER (WHERE oi.id IS NOT NULL), '[]'
              ) as items
@@ -90,9 +91,12 @@ export async function GET(
       address: addrObj.address || '—',
       city: addrObj.city || 'Chennai',
       pincode: addrObj.pincode || '',
+      state: addrObj.state || 'Tamil Nadu',
       totalAmount: Number(o.total_amount || 0),
-      paymentMethod: o.payment_method || 'Razorpay UPI',
-      paymentStatus: o.payment_status || 'PAID',
+      discount: Number(o.discount || 0),
+      paymentMethod: o.payment_method || 'Razorpay UPI / Online',
+      paymentStatus: o.payment_status || 'Payment Confirmed',
+      paymentId: o.razorpay_payment_id || null,
       orderStatus: o.order_status || '',
       courierStatus: o.order_status || '',
       courierName: o.courier_name || 'ST Courier Express',

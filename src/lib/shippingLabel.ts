@@ -44,7 +44,7 @@ function esc(s: string): string {
 export function generateSingleThermalLabelHtml(o: ShippingLabelOrder, qrSvg: string = ''): string {
   const isCancelled = isRecordCancelled(o);
   const hasAwb = Boolean(o.trackingNumber && !String(o.trackingNumber).startsWith('SHP-') && !String(o.trackingNumber).includes('Pending'));
-  const barcodeText = hasAwb ? String(o.trackingNumber) : String(o.orderId || 'BPG-00000');
+  const barcodeText = String(o.orderId || 'BPG-00000');
   const barcodeSvg = generateCode128Svg(barcodeText, { height: 46, barWidth: 2, showText: true });
 
   const totalAmount = Number(o.totalAmount || 0);
@@ -67,7 +67,7 @@ export function generateSingleThermalLabelHtml(o: ShippingLabelOrder, qrSvg: str
     <div class="top-row">
       <div>
         <div class="brand-name">BLESSING POWER GUIDE</div>
-        <div class="brand-sub">ST COURIER EXPRESS DOORSTEP DISPATCH</div>
+        <div class="brand-sub">DOORSTEP DISPATCH · ST COURIER</div>
       </div>
       <div class="order-id-box">
         <div class="order-id-lbl">ORDER REF</div>
@@ -96,8 +96,8 @@ export function generateSingleThermalLabelHtml(o: ShippingLabelOrder, qrSvg: str
 
     <div class="awb-barcode-section">
       <div class="awb-header">
-        <div class="awb-lbl">ST COURIER DOCKET / AWB NUMBER</div>
-        <div class="awb-status">${hasAwb ? 'OFFICIAL DOCKET ASSIGNED' : 'MANUAL DISPATCH DOCKET'}</div>
+        <div class="awb-lbl">ORDER &amp; BILL REFERENCE BARCODE</div>
+        <div class="awb-status">${hasAwb ? `ST COURIER AWB: ${esc(o.trackingNumber || '')}` : 'DISPATCH MANIFEST'}</div>
       </div>
       <div class="barcode-container">
         ${barcodeSvg}
@@ -106,8 +106,9 @@ export function generateSingleThermalLabelHtml(o: ShippingLabelOrder, qrSvg: str
 
     <div class="contents-grid">
       <div class="contents-box">
-        <div class="section-lbl">CONTENTS (${totalItems} BOOK${totalItems === 1 ? '' : 'S'} · ~${estWeightGrams}g)</div>
+        <div class="section-lbl">ORDERED PRODUCTS &amp; BILL (${totalItems} BOOK${totalItems === 1 ? '' : 'S'} · ~${estWeightGrams}g)</div>
         <div class="contents-line">${itemsLine}</div>
+        <div style="font-size:8.5px;font-weight:800;color:#000000;margin-top:2px;">Bill Total: ₹${totalAmount.toLocaleString('en-IN')} (Prepaid)</div>
       </div>
       <div class="qr-box">
         ${qrSvg ? `<div class="qr-svg-wrapper">${qrSvg}</div>` : ''}
