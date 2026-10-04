@@ -19,6 +19,7 @@ import {
   AlertCircle,
   X,
   Users,
+  Edit2,
 } from 'lucide-react';
 import { authHeaders } from '@/lib/clientAuth';
 import { useStore } from '@/context/StoreContext';
@@ -47,6 +48,7 @@ export default function CouponsSection() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [editingCoupon, setEditingCoupon] = useState<Coupon | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -197,52 +199,87 @@ export default function CouponsSection() {
     setFormCode(`${prefix}${num}`);
   };
 
-  const handleCreateCoupon = async (e: React.FormEvent) => {
+  const handleStartEdit = (coupon: Coupon) => {
+    setEditingCoupon(coupon);
+    setFormCode(coupon.code || '');
+    setFormTitle(coupon.title || '');
+    setFormType(coupon.discountType || 'percentage');
+    setFormValue(coupon.discountValue || 10);
+    setFormMinQty(coupon.minCartQty ?? 4);
+    setFormMinAmount(coupon.minOrderAmount ?? 0);
+    setFormMaxDiscount(
+      coupon.maxDiscountAmount !== null && coupon.maxDiscountAmount !== undefined
+        ? coupon.maxDiscountAmount
+        : ''
+    );
+    setFormMaxUses(coupon.maxUses ?? 100);
+    setFormExpiresAt(coupon.expiresAt ? coupon.expiresAt.slice(0, 10) : '');
+    setFormIsActive(coupon.isActive ?? true);
+    setFormShowOnHero(coupon.showOnHero ?? false);
+    setError(null);
+    setIsModalOpen(true);
+  };
+
+  const handleSubmitCoupon = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
     setError(null);
 
     try {
-      const res = await fetch('/api/admin/coupons', {
-        method: 'POST',
+      const isEditing = Boolean(editingCoupon);
+      const endpoint = '/api/admin/coupons';
+      const method = isEditing ? 'PATCH' : 'POST';
+      const payload: Record<string, any> = {
+        code: formCode,
+        discountType: formType,
+        discountValue: formValue,
+        minCartQty: formMinQty,
+        minOrderAmount: formMinAmount,
+        maxDiscountAmount: formType === 'percentage' && formMaxDiscount ? formMaxDiscount : null,
+        maxUses: formMaxUses,
+        expiresAt: formExpiresAt ? formExpiresAt : null,
+        isActive: formIsActive,
+        title: formTitle,
+        showOnHero: formShowOnHero,
+      };
+
+      if (isEditing && editingCoupon) {
+        payload.id = editingCoupon.id;
+      }
+
+      const res = await fetch(endpoint, {
+        method,
         headers: {
           'Content-Type': 'application/json',
           ...authHeaders(user),
         },
-        body: JSON.stringify({
-          code: formCode,
-          discountType: formType,
-          discountValue: formValue,
-          minCartQty: formMinQty,
-          minOrderAmount: formMinAmount,
-          maxDiscountAmount: formType === 'percentage' && formMaxDiscount ? formMaxDiscount : null,
-          maxUses: formMaxUses,
-          expiresAt: formExpiresAt ? formExpiresAt : null,
-          isActive: formIsActive,
-          title: formTitle,
-          showOnHero: formShowOnHero,
-        }),
+        body: JSON.stringify(payload),
       });
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || 'Failed to create coupon');
+        throw new Error(data.error || (isEditing ? 'Failed to update coupon' : 'Failed to create coupon'));
       }
 
-      setSuccessMsg(`Coupon "${data.coupon.code}" created successfully!`);
+      setSuccessMsg(
+        isEditing
+          ? `Coupon "${data.coupon?.code || formCode}" updated successfully!`
+          : `Coupon "${data.coupon?.code || formCode}" created successfully!`
+      );
       setTimeout(() => setSuccessMsg(null), 3000);
       setIsModalOpen(false);
       resetForm();
       fetchCoupons();
       notifyLocalCouponsChanged();
     } catch (err: any) {
-      setError(err.message || 'Error creating coupon');
+      setError(err.message || (editingCoupon ? 'Error updating coupon' : 'Error creating coupon'));
     } finally {
       setSubmitting(false);
     }
   };
 
   const resetForm = () => {
+    setEditingCoupon(null);
     setFormCode('');
     setFormType('percentage');
     setFormValue(10);
@@ -450,6 +487,14 @@ export default function CouponsSection() {
                   </div>
                 </div>
                 <div className="flex items-center justify-end gap-1 pt-1 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => handleStartEdit(coupon)}
+                    className="p-2 min-h-11 min-w-11 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                    title="Edit Coupon"
+                  >
+                    <Edit2 className="w-4 h-4 mx-auto" />
+                  </button>
                   <button type="button" onClick={() => handleToggleHero(coupon)} className="p-2 min-h-11 min-w-11" title="Hero">
                     <Sparkles className={`w-4 h-4 mx-auto ${coupon.showOnHero ? 'text-amber-500' : 'text-slate-400'}`} />
                   </button>
@@ -602,7 +647,15 @@ export default function CouponsSection() {
 
                       {/* Actions */}
                       <td className="px-5 py-4 text-right">
-                        <div className="flex items-center justify-end gap-2">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleStartEdit(coupon)}
+                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            title="Edit Coupon"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
                           <button
                             type="button"
                             onClick={() => handleToggleHero(coupon)}
@@ -660,9 +713,13 @@ export default function CouponsSection() {
                 </div>
                 <div className="min-w-0">
                   <h3 className="font-heading font-black text-slate-900 text-sm sm:text-base truncate">
-                    Create Discount Coupon
+                    {editingCoupon ? `Edit Coupon: ${editingCoupon.code}` : 'Create Discount Coupon'}
                   </h3>
-                  <p className="text-[11px] text-slate-400 font-medium">Add a promo code for students</p>
+                  <p className="text-[11px] text-slate-400 font-medium">
+                    {editingCoupon
+                      ? 'Modify discount, expiry, usage caps, or conditions'
+                      : 'Add a promo code for students'}
+                  </p>
                 </div>
               </div>
               <button
@@ -674,7 +731,7 @@ export default function CouponsSection() {
               </button>
             </div>
 
-            <form onSubmit={handleCreateCoupon} className="flex flex-col min-h-0 flex-1">
+            <form onSubmit={handleSubmitCoupon} className="flex flex-col min-h-0 flex-1">
               <div className="p-4 sm:p-6 space-y-4 overflow-y-auto overscroll-contain flex-1 min-h-0">
               {error && (
                 <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs font-semibold flex items-start gap-2">
@@ -884,8 +941,10 @@ export default function CouponsSection() {
                   {submitting ? (
                     <>
                       <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                      Creating...
+                      {editingCoupon ? 'Updating...' : 'Creating...'}
                     </>
+                  ) : editingCoupon ? (
+                    'Save Coupon Changes'
                   ) : (
                     'Save & Launch Coupon'
                   )}

@@ -141,36 +141,137 @@ export async function PATCH(request: Request) {
 
   try {
     const body = await request.json().catch(() => ({}));
-    const { id, isActive, showOnHero } = body;
+    const {
+      id,
+      code,
+      title,
+      discountType,
+      discountValue,
+      minCartQty,
+      minOrderAmount,
+      maxDiscountAmount,
+      maxUses,
+      expiresAt,
+      isActive,
+      showOnHero,
+    } = body;
 
     if (!id) {
       return NextResponse.json({ error: 'Coupon ID is required.' }, { status: 400 });
     }
 
-    if (showOnHero === true) {
-      await queryDb(`UPDATE coupons SET show_on_hero = FALSE WHERE id <> $1`, [id]);
+    const existingResult = await queryDb(`SELECT * FROM coupons WHERE id = $1`, [id]);
+    if (!existingResult || (existingResult.rowCount ?? 0) === 0) {
+      return NextResponse.json({ error: 'Coupon not found.' }, { status: 404 });
     }
+    const current = existingResult.rows[0];
 
     const sets: string[] = [];
     const params: any[] = [];
+
+    if (code !== undefined) {
+      const cleanCode = String(code || '').trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '');
+      if (!cleanCode || cleanCode.length < 3) {
+        return NextResponse.json({ error: 'Coupon code must be at least 3 alphanumeric characters.' }, { status: 400 });
+      }
+      const duplicateCode = await queryDb(
+        `SELECT id FROM coupons WHERE code = $1 AND id <> $2 LIMIT 1`,
+        [cleanCode, id]
+      );
+      if (duplicateCode && (duplicateCode.rowCount ?? 0) > 0) {
+        return NextResponse.json({ error: 'A coupon with this code already exists.' }, { status: 409 });
+      }
+      params.push(cleanCode);
+      sets.push(`code = $${params.length}`);
+    }
+
+    if (title !== undefined) {
+      const offerTitle = String(title || '')
+        .replace(/<[^>]*>/g, '')
+        .trim()
+        .slice(0, 200);
+      params.push(offerTitle || null);
+      sets.push(`title = $${params.length}`);
+    }
+
+    let effectiveType = current.discount_type;
+    if (discountType !== undefined) {
+      const type = String(discountType || 'percentage').toLowerCase();
+      if (type !== 'percentage' && type !== 'flat') {
+        return NextResponse.json({ error: 'Discount type must be percentage or flat.' }, { status: 400 });
+      }
+      effectiveType = type;
+      params.push(type);
+      sets.push(`discount_type = $${params.length}`);
+    }
+
+    if (discountValue !== undefined) {
+      const val = Number(discountValue);
+      if (!val || isNaN(val) || val <= 0) {
+        return NextResponse.json({ error: 'Valid discount value is required.' }, { status: 400 });
+      }
+      if (effectiveType === 'percentage' && val > 90) {
+        return NextResponse.json({ error: 'Percentage discount cannot exceed 90%.' }, { status: 400 });
+      }
+      params.push(val);
+      sets.push(`discount_value = $${params.length}`);
+    }
+
+    if (minCartQty !== undefined) {
+      const qty = Math.max(1, Number(minCartQty) || 4);
+      params.push(qty);
+      sets.push(`min_cart_qty = $${params.length}`);
+    }
+
+    if (minOrderAmount !== undefined) {
+      const amount = Math.max(0, Number(minOrderAmount) || 0);
+      params.push(amount);
+      sets.push(`min_order_amount = $${params.length}`);
+    }
+
+    if (maxDiscountAmount !== undefined) {
+      const maxDisc = maxDiscountAmount ? Number(maxDiscountAmount) : null;
+      params.push(maxDisc);
+      sets.push(`max_discount_amount = $${params.length}`);
+    }
+
+    if (maxUses !== undefined) {
+      const uses = Math.max(1, Number(maxUses) || 100);
+      params.push(uses);
+      sets.push(`max_uses = $${params.length}`);
+    }
+
+    if (expiresAt !== undefined) {
+      const parsedExpiresAt = expiresAt ? new Date(expiresAt).toISOString() : null;
+      params.push(parsedExpiresAt);
+      sets.push(`expires_at = $${params.length}`);
+    }
+
     if (isActive !== undefined) {
       params.push(Boolean(isActive));
       sets.push(`is_active = $${params.length}`);
     }
+
     if (showOnHero !== undefined) {
-      params.push(Boolean(showOnHero));
+      const pinHero = Boolean(showOnHero);
+      if (pinHero) {
+        await queryDb(`UPDATE coupons SET show_on_hero = FALSE WHERE id <> $1`, [id]);
+      }
+      params.push(pinHero);
       sets.push(`show_on_hero = $${params.length}`);
     }
+
     if (sets.length === 0) {
       return NextResponse.json({ error: 'Nothing to update.' }, { status: 400 });
     }
+
     params.push(id);
     const result = await queryDb(
       `UPDATE coupons SET ${sets.join(', ')} WHERE id = $${params.length} RETURNING *`,
       params
     );
 
-    if (!result || result.rowCount === 0) {
+    if (!result || (result.rowCount ?? 0) === 0) {
       return NextResponse.json({ error: 'Coupon not found.' }, { status: 404 });
     }
 
@@ -181,6 +282,9 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ success: true, coupon: mapAdminCoupon(result.rows[0]) });
   } catch (error: any) {
     console.error('[admin/coupons] PATCH error:', error);
+    if (error.code === '23505' || String(error.message).includes('unique')) {
+      return NextResponse.json({ error: 'A coupon with this code already exists.' }, { status: 409 });
+    }
     return NextResponse.json({ error: error.message || 'Failed to update coupon' }, { status: 500 });
   }
 }
@@ -205,7 +309,7 @@ export async function DELETE(request: Request) {
 
     const result = await queryDb(`DELETE FROM coupons WHERE id = $1 RETURNING id`, [id]);
 
-    if (!result || result.rowCount === 0) {
+    if (!result || (result.rowCount ?? 0) === 0) {
       return NextResponse.json({ error: 'Coupon not found.' }, { status: 404 });
     }
 
