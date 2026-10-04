@@ -26,6 +26,8 @@ import {
 import OrderStatusStamp from './OrderStatusStamp';
 import { openShippingLabelPrint } from '@/lib/shippingLabel';
 import { CreateCustomOrderModal } from './CreateCustomOrderModal';
+import { PackingPickListModal } from './PackingPickListModal';
+import { CustomerPhoneLookupModal } from './CustomerPhoneLookupModal';
 import type { Product } from '@/context/StoreContext';
 import { adminFulfillmentBucket, fulfillmentStatus, isRecordCancelled, isParcelDelivered } from '@/lib/orderStatus';
 
@@ -157,6 +159,9 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
   const [awbInputs, setAwbInputs] = useState<Record<string, string>>({});
   const [awbSaving, setAwbSaving] = useState<Record<string, boolean>>({});
   const [showCustomOrderModal, setShowCustomOrderModal] = useState(false);
+  const [showPickListModal, setShowPickListModal] = useState(false);
+  const [showCustomerLookupModal, setShowCustomerLookupModal] = useState(false);
+  const [customerLookupQuery, setCustomerLookupQuery] = useState('');
 
   // ── Modal state for Pre-AWB Cancel & Refund ──────────────────────────────────
   const [orderToCancel, setOrderToCancel] = useState<Order | null>(null);
@@ -369,21 +374,82 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
               placeholder="Search by Order #, Name, Phone, City, or AWB..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-[#2874f0] focus:bg-white text-slate-900 shadow-inner"
+              className="w-full pl-10 pr-24 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-[#2874f0] focus:bg-white text-slate-900 shadow-inner"
             />
+            {search && /\d{5,}/.test(search) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setCustomerLookupQuery(search);
+                  setShowCustomerLookupModal(true);
+                }}
+                className="absolute right-2 top-1/2 -translate-y-1/2 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 text-[10px] font-black px-2 py-1 rounded-lg flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                title="Lookup customer intelligence for this phone number"
+              >
+                <Phone className="w-3 h-3 text-emerald-700" />
+                <span>Phone Lookup</span>
+              </button>
+            )}
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
+            {/* 1. Daily Packing Pick-List (Feature 1) */}
+            <button
+              type="button"
+              onClick={() => setShowPickListModal(true)}
+              className="px-3.5 py-2.5 bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer"
+              title="Open Daily Packing Pick-List & Warehouse Shelf Manifest"
+            >
+              <FileText className="w-3.5 h-3.5 text-blue-600" />
+              <span>📋 Packing Pick-List {counts.pending > 0 ? `(${counts.pending})` : ''}</span>
+            </button>
+
+            {/* 2. Customer Phone Lookup (Feature 3) */}
+            <button
+              type="button"
+              onClick={() => {
+                setCustomerLookupQuery(search);
+                setShowCustomerLookupModal(true);
+              }}
+              className="px-3.5 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer"
+              title="Lookup student or parent by phone number, past orders & 1-click WhatsApp"
+            >
+              <Phone className="w-3.5 h-3.5 text-emerald-600" />
+              <span>🔍 Phone Lookup</span>
+            </button>
+
+            {/* 3. Batch Print All Unpacked (Feature 4) */}
             {counts.pending > 0 && selectedIds.size === 0 && (
-              <button
-                type="button"
-                onClick={handleSelectAllUnpacked}
-                className="px-3 py-2 bg-blue-50 hover:bg-blue-100 text-[#2874f0] border border-blue-200 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer"
-                title="Quickly select all unpacked orders for batch printing"
-              >
-                <Package className="w-3.5 h-3.5 text-[#2874f0]" />
-                <span>Select All Unpacked ({counts.pending})</span>
-              </button>
+              <div className="inline-flex rounded-xl shadow-2xs">
+                <button
+                  type="button"
+                  onClick={handleSelectAllUnpacked}
+                  className="px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 rounded-l-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                  title="Select all unpacked orders for batch operations"
+                >
+                  <CheckSquare className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Select All ({counts.pending})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const unpacked = filteredOrders.filter(
+                      (o) => adminFulfillmentBucket(o) === 'pending' && !isRecordCancelled(o)
+                    );
+                    if (unpacked.length === 0) {
+                      onShowToast('No unpacked orders found.');
+                      return;
+                    }
+                    openShippingLabelPrint(unpacked, 'thermal4x6');
+                    onShowToast(`🖨️ Printing ${unpacked.length} shipping labels...`);
+                  }}
+                  className="px-2.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border-t border-b border-r border-amber-200 rounded-r-xl text-xs font-bold flex items-center gap-1 transition-all cursor-pointer"
+                  title="Direct 1-click print for all unpacked orders"
+                >
+                  <Printer className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Print All</span>
+                </button>
+              </div>
             )}
 
             <button
@@ -1057,6 +1123,25 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
         onOrderCreated={() => onRefreshOrders?.()}
         onShowToast={onShowToast}
       />
+
+      {/* ─── Packing Pick-List Modal (Feature 1) ────────────────────────────── */}
+      {showPickListModal && (
+        <PackingPickListModal
+          orders={orders}
+          onClose={() => setShowPickListModal(false)}
+          onShowToast={onShowToast}
+        />
+      )}
+
+      {/* ─── Customer Phone Lookup Modal (Feature 3) ────────────────────────── */}
+      {showCustomerLookupModal && (
+        <CustomerPhoneLookupModal
+          orders={orders}
+          initialQuery={customerLookupQuery}
+          onClose={() => setShowCustomerLookupModal(false)}
+          onShowToast={onShowToast}
+        />
+      )}
     </div>
   );
 };
