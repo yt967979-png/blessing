@@ -63,4 +63,5 @@ logs/
 *.sql
 *.sql.gz
 *.env
-scripts/
+scripts/*
+!scripts/init-db.js
