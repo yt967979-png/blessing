@@ -1,175 +1,147 @@
-import fs from 'fs';
-import path from 'path';
-import { formatGstinLine, getShopInvoiceAddress, getShopLegalName } from '@/lib/shopConfig';
-import { OFFICE_COMPANY_NAME } from '@/lib/officeLocation';
-import { generateQrSvg } from '@/lib/qrCode';
-import { isOrderCancelled } from '@/lib/orderStatus';
-import { publicSiteOrigin } from '@/lib/publicSiteUrl';
-
-export function getFinancialYearString(date: Date = new Date()): string {
-  const month = date.getMonth(); // 0 = Jan, 3 = Apr
-  const year = date.getFullYear();
-  const startYear = month >= 3 ? year : year - 1;
-  const endYear = (startYear + 1) % 100;
-  return `${String(startYear).slice(-2)}-${String(endYear).padStart(2, '0')}`;
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.getFinancialYearString = getFinancialYearString;
+exports.formatGstInvoiceNumber = formatGstInvoiceNumber;
+exports.generateNextGstInvoiceNumber = generateNextGstInvoiceNumber;
+exports.numberToIndianRupeesWords = numberToIndianRupeesWords;
+exports.generateTaxInvoiceHtml = generateTaxInvoiceHtml;
+exports.downloadTaxInvoice = downloadTaxInvoice;
+const fs_1 = require("fs");
+const path_1 = require("path");
+const shopConfig_1 = require("./shopConfig");
+const officeLocation_1 = require("./officeLocation");
+const qrCode_1 = require("./qrCode");
+const orderStatus_1 = require("./orderStatus");
+const publicSiteUrl_1 = require("./publicSiteUrl");
+function getFinancialYearString(date = new Date()) {
+    const month = date.getMonth(); // 0 = Jan, 3 = Apr
+    const year = date.getFullYear();
+    const startYear = month >= 3 ? year : year - 1;
+    const endYear = (startYear + 1) % 100;
+    return `${String(startYear).slice(-2)}-${String(endYear).padStart(2, '0')}`;
 }
-
-export function formatGstInvoiceNumber(orderId: string, createdAt?: string | Date, storedInvoiceNumber?: string | null): string {
-  if (storedInvoiceNumber && storedInvoiceNumber.startsWith('BPG/')) {
-    return storedInvoiceNumber;
-  }
-  const d = createdAt ? new Date(createdAt) : new Date();
-  const fy = getFinancialYearString(isNaN(d.getTime()) ? new Date() : d);
-  const cleanId = String(orderId || '').replace(/^BPG-?/i, '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-  return `BPG/${fy}/${cleanId || '00001'}`;
+function formatGstInvoiceNumber(orderId, createdAt, storedInvoiceNumber) {
+    if (storedInvoiceNumber && storedInvoiceNumber.startsWith('BPG/')) {
+        return storedInvoiceNumber;
+    }
+    const d = createdAt ? new Date(createdAt) : new Date();
+    const fy = getFinancialYearString(isNaN(d.getTime()) ? new Date() : d);
+    const cleanId = String(orderId || '').replace(/^BPG-?/i, '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    return `BPG/${fy}/${cleanId || '00001'}`;
 }
-
-export async function generateNextGstInvoiceNumber(client: any, date: Date = new Date()): Promise<string> {
-  const fy = getFinancialYearString(date);
-  try {
-    const res = await client.query(
-      `INSERT INTO invoice_sequences (financial_year, last_number, updated_at)
+async function generateNextGstInvoiceNumber(client, date = new Date()) {
+    const fy = getFinancialYearString(date);
+    try {
+        const res = await client.query(`INSERT INTO invoice_sequences (financial_year, last_number, updated_at)
        VALUES ($1, 1, NOW())
        ON CONFLICT (financial_year) DO UPDATE
        SET last_number = invoice_sequences.last_number + 1, updated_at = NOW()
-       RETURNING last_number`,
-      [fy]
-    );
-    const seqNum = Number(res.rows[0]?.last_number || 1);
-    return `BPG/${fy}/${String(seqNum).padStart(5, '0')}`;
-  } catch {
-    return `BPG/${fy}/00001`;
-  }
+       RETURNING last_number`, [fy]);
+        const seqNum = Number(res.rows[0]?.last_number || 1);
+        return `BPG/${fy}/${String(seqNum).padStart(5, '0')}`;
+    }
+    catch {
+        return `BPG/${fy}/00001`;
+    }
 }
-
-function esc(s: string): string {
-  return String(s || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+function esc(s) {
+    return String(s || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
 }
-
-export function numberToIndianRupeesWords(num: number): string {
-  const a = [
-    '', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
-    'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen',
-  ];
-  const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
-  const n = Math.floor(Math.abs(num));
-  if (n === 0) return 'Rupees Zero Only';
-
-  const inWords = (val: number): string => {
-    if (val < 20) return a[val];
-    if (val < 100) return b[Math.floor(val / 10)] + (val % 10 ? ' ' + a[val % 10] : '');
-    if (val < 1000) return a[Math.floor(val / 100)] + ' Hundred' + (val % 100 ? ' ' + inWords(val % 100) : '');
-    if (val < 100000) return inWords(Math.floor(val / 1000)) + ' Thousand' + (val % 1000 ? ' ' + inWords(val % 1000) : '');
-    if (val < 10000000) return inWords(Math.floor(val / 100000)) + ' Lakh' + (val % 100000 ? ' ' + inWords(val % 100000) : '');
-    return inWords(Math.floor(val / 10000000)) + ' Crore' + (val % 10000000 ? ' ' + inWords(val % 10000000) : '');
-  };
-
-  return `Rupees ${inWords(n)} Only`;
+function numberToIndianRupeesWords(num) {
+    const a = [
+        '', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
+        'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen',
+    ];
+    const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+    const n = Math.floor(Math.abs(num));
+    if (n === 0)
+        return 'Rupees Zero Only';
+    const inWords = (val) => {
+        if (val < 20)
+            return a[val];
+        if (val < 100)
+            return b[Math.floor(val / 10)] + (val % 10 ? ' ' + a[val % 10] : '');
+        if (val < 1000)
+            return a[Math.floor(val / 100)] + ' Hundred' + (val % 100 ? ' ' + inWords(val % 100) : '');
+        if (val < 100000)
+            return inWords(Math.floor(val / 1000)) + ' Thousand' + (val % 1000 ? ' ' + inWords(val % 1000) : '');
+        if (val < 10000000)
+            return inWords(Math.floor(val / 100000)) + ' Lakh' + (val % 100000 ? ' ' + inWords(val % 100000) : '');
+        return inWords(Math.floor(val / 10000000)) + ' Crore' + (val % 10000000 ? ' ' + inWords(val % 10000000) : '');
+    };
+    return `Rupees ${inWords(n)} Only`;
 }
-
 // In-memory cache for official logo base64
-let cachedLogoDataUrl: string | null = null;
-function getOfficialLogoDataUrl(siteUrl: string): string {
-  if (cachedLogoDataUrl) return cachedLogoDataUrl;
-  try {
-    const logoFilePath = path.join(process.cwd(), 'public', 'logo.png');
-    if (fs.existsSync(logoFilePath)) {
-      const buffer = fs.readFileSync(logoFilePath);
-      cachedLogoDataUrl = `data:image/png;base64,${buffer.toString('base64')}`;
-      return cachedLogoDataUrl;
+let cachedLogoDataUrl = null;
+function getOfficialLogoDataUrl(siteUrl) {
+    if (cachedLogoDataUrl)
+        return cachedLogoDataUrl;
+    try {
+        const logoFilePath = path_1.default.join(process.cwd(), 'public', 'logo.png');
+        if (fs_1.default.existsSync(logoFilePath)) {
+            const buffer = fs_1.default.readFileSync(logoFilePath);
+            cachedLogoDataUrl = `data:image/png;base64,${buffer.toString('base64')}`;
+            return cachedLogoDataUrl;
+        }
     }
-  } catch {
-    // fallback to static URL
-  }
-  return `${siteUrl}/logo.png?v=4`;
+    catch {
+        // fallback to static URL
+    }
+    return `${siteUrl}/logo.png?v=4`;
 }
-
 // In-memory cache for official signature base64
-let cachedSigDataUrl: string | null = null;
-function getSignatureDataUrl(siteUrl: string): string {
-  if (cachedSigDataUrl) return cachedSigDataUrl;
-  try {
-    const sigPath = path.join(process.cwd(), 'public', 'signature.png');
-    if (fs.existsSync(sigPath)) {
-      const buffer = fs.readFileSync(sigPath);
-      cachedSigDataUrl = `data:image/png;base64,${buffer.toString('base64')}`;
-      return cachedSigDataUrl;
+let cachedSigDataUrl = null;
+function getSignatureDataUrl(siteUrl) {
+    if (cachedSigDataUrl)
+        return cachedSigDataUrl;
+    try {
+        const sigPath = path_1.default.join(process.cwd(), 'public', 'signature.png');
+        if (fs_1.default.existsSync(sigPath)) {
+            const buffer = fs_1.default.readFileSync(sigPath);
+            cachedSigDataUrl = `data:image/png;base64,${buffer.toString('base64')}`;
+            return cachedSigDataUrl;
+        }
     }
-  } catch {
-    // fallback
-  }
-  return `${siteUrl}/signature.png?v=1`;
+    catch {
+        // fallback
+    }
+    return `${siteUrl}/signature.png?v=1`;
 }
-
-export interface InvoiceData {
-  orderId: string;
-  invoiceNumber?: string | null;
-  customerName: string;
-  customerPhone: string;
-  customerAltPhone?: string;
-  address?: string;
-  city?: string;
-  pincode?: string;
-  state?: string;
-  totalAmount: number;
-  paymentMethod: string;
-  items?: Array<{ title?: string; qty?: number; price?: number; subtotal?: number; hsn?: string; medium?: string; mrp?: number }>;
-  trackingNumber?: string;
-  courierName?: string;
-  paymentStatus?: string;
-  orderStatus?: string;
-  courierStatus?: string;
-  createdAt?: string;
-  paymentId?: string;
-  shippingCharge?: number;
-  discount?: number;
-}
-
 /**
  * Generates an executive, award-winning A4 Bill of Supply for educational printed books (HSN 4901, 0% GST Exempt).
  * Uses official Blessing Power Guide logo, official handwritten signatory stamp, and precise 1-A4-sheet fit.
  */
-export async function generateTaxInvoiceHtml(orderData: InvoiceData): Promise<string> {
-  const dateStr = orderData.createdAt
-    ? new Date(orderData.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-    : new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-
-  const invoiceNumber = formatGstInvoiceNumber(orderData.orderId, orderData.createdAt, orderData.invoiceNumber);
-  const itemsList = orderData.items && orderData.items.length > 0
-    ? orderData.items
-    : [{ title: 'Educational Guide Book', qty: 1, price: orderData.totalAmount, hsn: '4901' }];
-
-  const cancelled = isOrderCancelled(orderData.orderStatus || orderData.courierStatus);
-  const totalAmount = Number(orderData.totalAmount || 0);
-  const wordsAmount = numberToIndianRupeesWords(totalAmount);
-  const gstinLine = formatGstinLine();
-  const legalName = getShopLegalName();
-  const siteUrl = publicSiteOrigin();
-
-  const logoSrc = getOfficialLogoDataUrl(siteUrl);
-  const signatureSrc = getSignatureDataUrl(siteUrl);
-
-  const cleanPhone = (orderData.customerPhone || '').replace(/\D/g, '').slice(-10);
-  const trackTargetUrl = `${siteUrl}/track?orderId=${encodeURIComponent(orderData.orderId)}${cleanPhone ? `&phone=${encodeURIComponent(cleanPhone)}` : ''}`;
-  const qrSvg = await generateQrSvg(trackTargetUrl, { size: 100, margin: 0 });
-
-  const itemsSubtotal = itemsList.reduce((sum, it) => sum + (Number(it.price || it.subtotal || 0) * (it.qty || 1)), 0);
-  const discountAmount = Number(orderData.discount || 0);
-  const shippingCharge = orderData.shippingCharge !== undefined ? orderData.shippingCharge : Math.max(0, totalAmount - itemsSubtotal + discountAmount);
-
-  const hasAwb = Boolean(
-    orderData.trackingNumber &&
-    !String(orderData.trackingNumber).startsWith('SHP-') &&
-    !String(orderData.trackingNumber).includes('Pending')
-  );
-
-  const transactionId = orderData.paymentId || (orderData.orderId ? `TXN_${orderData.orderId.replace(/[^a-zA-Z0-9]/g, '')}` : 'TXN_ONLINE');
-
-  return `<!DOCTYPE html>
+async function generateTaxInvoiceHtml(orderData) {
+    const dateStr = orderData.createdAt
+        ? new Date(orderData.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+        : new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+    const invoiceNumber = formatGstInvoiceNumber(orderData.orderId, orderData.createdAt, orderData.invoiceNumber);
+    const itemsList = orderData.items && orderData.items.length > 0
+        ? orderData.items
+        : [{ title: 'Educational Guide Book', qty: 1, price: orderData.totalAmount, hsn: '4901' }];
+    const cancelled = (0, orderStatus_1.isOrderCancelled)(orderData.orderStatus || orderData.courierStatus);
+    const totalAmount = Number(orderData.totalAmount || 0);
+    const wordsAmount = numberToIndianRupeesWords(totalAmount);
+    const gstinLine = (0, shopConfig_1.formatGstinLine)();
+    const legalName = (0, shopConfig_1.getShopLegalName)();
+    const siteUrl = (0, publicSiteUrl_1.publicSiteOrigin)();
+    const logoSrc = getOfficialLogoDataUrl(siteUrl);
+    const signatureSrc = getSignatureDataUrl(siteUrl);
+    const cleanPhone = (orderData.customerPhone || '').replace(/\D/g, '').slice(-10);
+    const trackTargetUrl = `${siteUrl}/track?orderId=${encodeURIComponent(orderData.orderId)}${cleanPhone ? `&phone=${encodeURIComponent(cleanPhone)}` : ''}`;
+    const qrSvg = await (0, qrCode_1.generateQrSvg)(trackTargetUrl, { size: 100, margin: 0 });
+    const itemsSubtotal = itemsList.reduce((sum, it) => sum + (Number(it.price || it.subtotal || 0) * (it.qty || 1)), 0);
+    const discountAmount = Number(orderData.discount || 0);
+    const shippingCharge = orderData.shippingCharge !== undefined ? orderData.shippingCharge : Math.max(0, totalAmount - itemsSubtotal + discountAmount);
+    const hasAwb = Boolean(orderData.trackingNumber &&
+        !String(orderData.trackingNumber).startsWith('SHP-') &&
+        !String(orderData.trackingNumber).includes('Pending'));
+    const transactionId = orderData.paymentId || (orderData.orderId ? `TXN_${orderData.orderId.replace(/[^a-zA-Z0-9]/g, '')}` : 'TXN_ONLINE');
+    return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -922,11 +894,11 @@ export async function generateTaxInvoiceHtml(orderData: InvoiceData): Promise<st
           </tr>
         </thead>
         <tbody>
-          ${itemsList.map((item: any, idx: number) => {
-            const unitPrice = Number(item.price || item.subtotal || 0);
-            const qty = Number(item.qty || 1);
-            const lineTotal = unitPrice * qty;
-            return `
+          ${itemsList.map((item, idx) => {
+        const unitPrice = Number(item.price || item.subtotal || 0);
+        const qty = Number(item.qty || 1);
+        const lineTotal = unitPrice * qty;
+        return `
             <tr>
               <td style="text-align:center;color:#64748b;font-weight:700;">${idx + 1}</td>
               <td>
@@ -942,7 +914,7 @@ export async function generateTaxInvoiceHtml(orderData: InvoiceData): Promise<st
               <td style="text-align:center;" class="tax-exempt-tag">0% (Exempt)</td>
               <td style="text-align:right;font-family:monospace;font-weight:900;color:#001b3a;">₹${lineTotal.toFixed(2)}</td>
             </tr>`;
-          }).join('')}
+    }).join('')}
         </tbody>
       </table>
 
@@ -1051,7 +1023,7 @@ export async function generateTaxInvoiceHtml(orderData: InvoiceData): Promise<st
 
         <!-- Authorized Signatory with User's Official Signature Image -->
         <div class="signatory-card">
-          <div class="sig-for">For ${esc(OFFICE_COMPANY_NAME)}</div>
+          <div class="sig-for">For ${esc(officeLocation_1.OFFICE_COMPANY_NAME)}</div>
           <div class="sig-wrapper">
             <img src="${signatureSrc}" alt="Authorized Signatory" class="sig-img" />
           </div>
@@ -1099,12 +1071,11 @@ export async function generateTaxInvoiceHtml(orderData: InvoiceData): Promise<st
 </body>
 </html>`;
 }
-
-export async function downloadTaxInvoice(orderData: InvoiceData): Promise<void> {
-  const htmlContent = await generateTaxInvoiceHtml(orderData);
-  const printWindow = window.open('', '_blank', 'width=900,height=1100');
-  if (printWindow) {
-    printWindow.document.write(htmlContent);
-    printWindow.document.close();
-  }
+async function downloadTaxInvoice(orderData) {
+    const htmlContent = await generateTaxInvoiceHtml(orderData);
+    const printWindow = window.open('', '_blank', 'width=900,height=1100');
+    if (printWindow) {
+        printWindow.document.write(htmlContent);
+        printWindow.document.close();
+    }
 }
