@@ -158,6 +158,16 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string, tokenRaw?: stri
       }
     }
 
+    // IDOR & Privacy Protection:
+    // When tracking by Order ID, requests must be authorized via buyer session, valid HMAC tracking token, or matching customer phone.
+    // Only direct official ST Courier AWB docket lookups are permitted without prior authorization (and return masked PII).
+    if (!isAuthorized && !isOfficialAwb(cleanId)) {
+      return NextResponse.json(
+        { error: 'Order not found. Please verify your Order ID and 10-digit mobile number.' },
+        { status: 404 }
+      );
+    }
+
     // Timeline events
     let timeline: any[] = [];
     try {

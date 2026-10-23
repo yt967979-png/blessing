@@ -70,6 +70,7 @@ async function getBookMeta(slug: string) {
                 ELSE b.cover_image
               END AS cover_image,
               b.discount_price, b.price, b.status, b.stock, b.stock_tamil, b.stock_english,
+              COALESCE(b.is_coming_soon, false) AS is_coming_soon,
               b.sample_pdf_url,
               b.updated_at,
               COALESCE(COUNT(r.id), 0)::int as review_count,
@@ -209,6 +210,8 @@ function mapBookToClientProduct(book: any) {
     }
   }
 
+  const isComingSoon = Boolean(book.is_coming_soon || book.status === 'coming_soon');
+
   return {
     id: book.id,
     slug: book.slug || book.id,
@@ -221,6 +224,9 @@ function mapBookToClientProduct(book: any) {
     price,
     mrp,
     discount,
+    status: book.status || (isComingSoon ? 'coming_soon' : 'published'),
+    isComingSoon,
+    is_coming_soon: isComingSoon,
     rating: Number(book.review_count) > 0 ? Number(book.avg_rating || 0) : 0,
     reviews: Number(book.review_count || 0),
     badge: book.badge || '',

@@ -193,7 +193,9 @@ function mapCatalogRows(rows: any[]) {
       stock_tamil: d.stock_tamil !== null && d.stock_tamil !== undefined ? Number(d.stock_tamil) : null,
       stock_english: d.stock_english !== null && d.stock_english !== undefined ? Number(d.stock_english) : null,
       isBestSeller: String(d.badge || '').toUpperCase().includes('BEST'),
+      status: d.status || (Boolean(d.is_coming_soon || d.status === 'coming_soon') ? 'coming_soon' : 'published'),
       isComingSoon: Boolean(d.is_coming_soon || d.status === 'coming_soon'),
+      is_coming_soon: Boolean(d.is_coming_soon || d.status === 'coming_soon'),
       language: d.language || 'Both',
     };
   });

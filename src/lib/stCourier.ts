@@ -33,8 +33,8 @@ export function cleanDocket(docket: string): string {
 export function isOfficialAwb(awb: string | null | undefined): boolean {
   if (!awb) return false;
   const a = cleanDocket(awb);
-  if (!a || a.startsWith('SHP-')) return false;
-  return VALID_DOCKET_PATTERN.test(a) || (!a.startsWith('SHP-') && a.length >= 8);
+  if (!a || a.startsWith('SHP-') || a.startsWith('BPG') || a.startsWith('ORD') || a.includes('-')) return false;
+  return VALID_DOCKET_PATTERN.test(a);
 }
 
 /** Map ST Courier / ERP raw status text → our customer-facing status */

@@ -221,12 +221,12 @@ function TrackForm() {
           <div>
             <label className="text-[11px] font-bold text-slate-600 uppercase flex items-center justify-between">
               <span>Mobile Number</span>
-              <span className="text-slate-400 font-normal lowercase text-[10px]">(optional)</span>
+              <span className="text-slate-400 font-normal lowercase text-[10px]">(used at checkout)</span>
             </label>
             <input
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              placeholder="10-digit mobile number (optional)"
+              placeholder="10-digit mobile number used at checkout"
               inputMode="tel"
               className="mt-1 w-full px-3 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-blue-600 min-h-12"
             />

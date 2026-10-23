@@ -14,7 +14,6 @@ import { FAQSection } from '@/components/home/FAQSection';
 import { TrustBar } from '@/components/home/TrustBar';
 import { Footer } from '@/components/layout/Footer';
 import { ContactSection } from '@/components/home/ContactSection';
-import { PromoSection } from '@/components/home/PromoSection';
 import { HomeCouponsSection } from '@/components/home/HomeCouponsSection';
 import { serializeJsonLd } from '@/lib/jsonLd';
 
@@ -96,7 +95,6 @@ export default function Home() {
       <HeroSection />
       <ClassPicker />
       <ProductGrid />
-      <PromoSection />
       <HomeCouponsSection />
       <WhyChoose />
       <ContactSection />

@@ -239,9 +239,29 @@ async function destroyPool(keepSchema = false) {
   heartbeatFailures = 0;
   if (oldPool) {
     try {
-      // Stuck clients can make pool.end() hang — never block invalidate forever.
-      await withTimeout(oldPool.end(), 3_000, 'pool.end');
-    } catch (_) {}
+      // Forcibly destroy underlying client sockets if pool.end hangs or doesn't close immediately
+      const clients = (oldPool as any)._clients;
+      if (Array.isArray(clients)) {
+        for (const c of clients) {
+          try {
+            c.connection?.stream?.destroy?.();
+            c.end?.();
+          } catch (_) {}
+        }
+      }
+      await withTimeout(oldPool.end(), 1_500, 'pool.end');
+    } catch (_) {
+      try {
+        const clients = (oldPool as any)._clients;
+        if (Array.isArray(clients)) {
+          for (const c of clients) {
+            try {
+              c.connection?.stream?.destroy?.();
+            } catch (_) {}
+          }
+        }
+      } catch (_) {}
+    }
   }
   if (!keepSchema) {
     isSchemaInitialized = false;
@@ -357,12 +377,13 @@ function createPool(connectionString: string): Pool {
   const neon = isNeonUrl(normalized);
   const isLocal = /(@localhost[:/]|@127\.0\.0\.1[:/]|host=localhost|host=127\.0\.0\.1)/.test(normalized);
   const poolerFriendly = !isLocal && (neon || isAwsHosted());
-  const idleRaw = Number(process.env.DB_IDLE_TIMEOUT_MS || (poolerFriendly ? 5_000 : 600_000));
+  // For local PostgreSQL on VPS, drop idle connections after 30s so sockets don't linger for 10 minutes
+  const idleRaw = Number(process.env.DB_IDLE_TIMEOUT_MS || (isLocal ? 30_000 : poolerFriendly ? 5_000 : 60_000));
   const idleTimeoutMillis = poolerFriendly
     ? Math.min(Math.max(Number.isFinite(idleRaw) ? idleRaw : 5_000, 1_000), 8_000)
     : idleRaw;
   const queryMs = defaultQueryTimeoutMs();
-  const poolMax = isLocal ? 20 : (poolerFriendly ? Math.min(defaultPoolMax(), 5) : defaultPoolMax());
+  const poolMax = isLocal ? 12 : (poolerFriendly ? Math.min(defaultPoolMax(), 5) : defaultPoolMax());
   const p = new Pool({
     connectionString: normalized,
     max: poolMax,
@@ -444,8 +465,9 @@ export async function queryDb(text: string, params?: any[]) {
     );
   } catch (err: any) {
     const msg = String(err?.message || err);
-    if (/timeout|terminat|ECONNRESET|not queryable/i.test(msg)) {
-      await invalidatePool('queryDb timeout/reset');
+    // Only invalidate if the socket is actually closed/reset, not on simple query/statement timeouts
+    if (/terminat|ECONNRESET|ECONNREFUSED|not queryable|postmaster/i.test(msg)) {
+      await invalidatePool('queryDb socket reset');
     }
     throw err;
   }
@@ -595,8 +617,8 @@ export async function pingDb(): Promise<{ ok: boolean; host?: string; message?: 
         return { ok: true, host };
       } catch (err: any) {
         lastMsg = err?.message || 'Database unreachable';
-        if (/timeout/i.test(lastMsg)) {
-          await invalidatePool('pingDb timeout');
+        if (/terminat|ECONNRESET|ECONNREFUSED|not queryable|postmaster/i.test(lastMsg)) {
+          await invalidatePool('pingDb socket reset');
         }
         if (!isRecoverablePgError(err) || attempt === retries - 1) break;
         await sleep(200 * (attempt + 1));
@@ -678,10 +700,29 @@ export async function resolveDbConnectionConfig() {
 
 function wrapPoolClient(client: any) {
   client._released = false;
-  if (client._hasEndAlias) return client;
-  client._hasEndAlias = true;
+
+  // Watchdog timer: automatically release client back to pool if caller fails to release within 30 seconds
+  if (client._leakTimer) clearTimeout(client._leakTimer);
+  client._leakTimer = setTimeout(() => {
+    if (!client._released) {
+      console.warn('[db] auto-releasing unreturned client lease after 30s');
+      try {
+        client.release(new Error('auto-released after lease expiration'));
+      } catch (_) {}
+    }
+  }, 30_000);
+  if (typeof client._leakTimer?.unref === 'function') {
+    client._leakTimer.unref();
+  }
+
+  if (client._hasSafeRelease) return client;
+  client._hasSafeRelease = true;
   const originalRelease = client.release.bind(client);
   const safeRelease = (err?: Error | boolean) => {
+    if (client._leakTimer) {
+      clearTimeout(client._leakTimer);
+      client._leakTimer = null;
+    }
     if (client._released) return;
     client._released = true;
     try {
@@ -690,8 +731,8 @@ function wrapPoolClient(client: any) {
       /* already returned to pool */
     }
   };
-  client.end = safeRelease;
   client.release = safeRelease;
+  // NOTE: Never overwrite client.end! pg-pool relies on the real client.end to close idle TCP sockets.
   return client;
 }
 

@@ -148,9 +148,14 @@ export async function POST(request: Request) {
       const passHash = hashPassword(crypto.randomBytes(32).toString('hex'));
       const role = bootstrapRole || 'customer';
 
-      await queryDb(
+      const insertRes = await queryDb(
         `INSERT INTO users (id, name, email, phone, password_hash, google_id, profile_image, profile_completed, role, status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, FALSE, $8, 'active')`,
+         VALUES ($1, $2, $3, $4, $5, $6, $7, FALSE, $8, 'active')
+         ON CONFLICT (email) DO UPDATE SET
+           google_id = COALESCE(users.google_id, EXCLUDED.google_id),
+           profile_image = COALESCE(users.profile_image, EXCLUDED.profile_image),
+           updated_at = NOW()
+         RETURNING *`,
         [
           userId,
           googleUser.name,
@@ -162,19 +167,16 @@ export async function POST(request: Request) {
           role,
         ]
       );
+      if (insertRes.rows.length > 0) {
+        dbUser = insertRes.rows[0];
+      } else {
+        const refetch = await queryDb(`SELECT * FROM users WHERE LOWER(email) = $1 LIMIT 1`, [googleUser.email]);
+        dbUser = refetch.rows[0];
+      }
       await queryDb(
         `INSERT INTO cart (id, user_id) VALUES ($1, $2) ON CONFLICT (user_id) DO NOTHING`,
-        [`cart-${userId}`, userId]
+        [`cart-${dbUser.id}`, dbUser.id]
       );
-      dbUser = {
-        id: userId,
-        name: googleUser.name,
-        email: googleUser.email,
-        phone: '0000000000',
-        role,
-        profile_image: googleUser.picture,
-        profile_completed: false,
-      };
     } else if (dbUser.status === 'banned') {
       return NextResponse.json({ error: 'This account is disabled. Contact support.' }, { status: 403 });
     } else {
@@ -212,11 +214,15 @@ export async function POST(request: Request) {
     console.error('[auth/google]', err?.message || err);
     const msg = String(err?.message || err);
     const dbBusy =
-      msg.includes('timeout') || msg.includes('Could not acquire') || msg.includes('unreachable');
+      msg.includes('timeout') ||
+      msg.includes('Could not acquire') ||
+      msg.includes('unreachable') ||
+      msg.includes('too many clients') ||
+      msg.includes('ECONNREFUSED');
     return NextResponse.json(
       {
         error: dbBusy
-          ? 'Server is busy connecting to the database. Please try again in a few seconds.'
+          ? 'Server is temporarily busy connecting to the database. Please try again in a few seconds.'
           : 'Google sign-in failed. Please try again.',
       },
       { status: dbBusy ? 503 : 500 }
