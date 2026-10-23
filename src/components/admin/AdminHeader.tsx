@@ -59,8 +59,8 @@ const TAB_TITLES: Record<AdminTab, { title: string; subtitle: string }> = {
     subtitle: 'Customer directory, order histories, and staff access permissions',
   },
   reviews: {
-    title: 'Student Reviews & Store FAQs',
-    subtitle: 'Moderate student book ratings and manage customer help articles',
+    title: 'Store FAQs & Announcements',
+    subtitle: 'Manage customer help articles, FAQs, and store announcements',
   },
   analytics: {
     title: 'GST & Sales Reports',

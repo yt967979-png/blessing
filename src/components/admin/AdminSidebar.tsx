@@ -19,6 +19,7 @@ import {
   Tag,
   ShoppingBag,
   ShieldCheck,
+  HelpCircle,
 } from 'lucide-react';
 import { BrandLogo } from '@/components/ui/BrandLogo';
 
@@ -127,9 +128,9 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
     },
     {
       key: 'reviews' as AdminTab,
-      label: 'Reviews & FAQs',
-      subtitle: 'Student feedback & help articles',
-      icon: Star,
+      label: 'Store FAQs & Notices',
+      subtitle: 'Help articles & announcements',
+      icon: HelpCircle,
     },
     {
       key: 'analytics' as AdminTab,

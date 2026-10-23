@@ -15,7 +15,6 @@ import { authHeaders } from '@/lib/clientAuth';
 
 import { BrandLogo } from '@/components/ui/BrandLogo';
 import AdminUsersTab from '@/components/admin/AdminUsersTab';
-import AdminReviewsTab from '@/components/admin/AdminReviewsTab';
 import AdminSidebar, { AdminTab, ADMIN_TAB_KEYS } from '@/components/admin/AdminSidebar';
 import { adminFulfillmentBucket } from '@/lib/orderStatus';
 import AdminHeader from '@/components/admin/AdminHeader';
@@ -859,11 +858,9 @@ function AdminPageInner() {
             <AdminUsersTab user={user} showToast={showToast} />
           )}
 
-          {/* SECTION F: REVIEWS & FAQS */}
+          {/* SECTION F: STORE FAQS & NOTICES */}
           {activeTab === 'reviews' && (
             <div className="space-y-6">
-              {user && <AdminReviewsTab user={user} showToast={showToast} />}
-
               {/* FAQs & Store Notices */}
               <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
                 <div className="border-b border-slate-100 pb-3 flex items-center justify-between">
