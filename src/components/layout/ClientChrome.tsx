@@ -8,7 +8,6 @@ import { FloatingActions } from '@/components/layout/FloatingActions';
 import { ScrollRestore } from '@/components/layout/ScrollRestore';
 import { Modals } from '@/components/modals/Modals';
 import { BlessingChatWidget } from '@/components/chat/BlessingChatWidget';
-import { SampleChapterReaderModal } from '@/components/books/SampleChapterReaderModal';
 import { NetworkResilienceIndicator } from '@/components/ui/NetworkResilienceIndicator';
 
 /** Shared storefront chrome — mount once from root layout */
@@ -61,7 +60,6 @@ export function ClientChrome({ children }: { children: React.ReactNode }) {
       <Toast />
       <CartDrawer />
       <Modals />
-      <SampleChapterReaderModal />
       <BlessingChatWidget />
       <FloatingActions />
       <MobileBottomNav />

@@ -638,10 +638,9 @@ export async function generateSupportRagAnswer(
     };
   }
 
-  // ── 11. Sample PDFs & Book Preview ───────────────────────────────────────────
   if (q.includes('sample') || q.includes('pdf') || q.includes('preview') || q.includes('inside book') || q.includes('demo') || q.includes('view page')) {
     return {
-      answer: `📄 **Sample PDFs**:\n\nYou can preview and download sample chapter PDFs for all available 10th standard guides directly on each book's page on our website before placing an order.`,
+      answer: `📄 **Book Details & Contents**:\n\nYou can view full syllabus coverage, chapters, and subject details directly on each book's page in our store catalog. For specific inquiries, contact our team directly on WhatsApp.`,
       suggestions: ['📚 Browse 10th Guides', '🛒 Buy 10th Full Set', '🚚 Check Delivery Days', '👨‍💼 Talk to Admin'],
       shouldEscalate: false,
     };
@@ -703,7 +702,7 @@ export async function generateSupportRagAnswer(
     }
 
     return {
-      answer: `📚 **Official Guides Available in Store**:\n\n${bookListText}\n\n• **Minimum Order**: 4 books (flat ₹150 courier fee)\n• **Free Delivery**: 5 or more books qualify for **100% Free Doorstep Delivery** across Tamil Nadu!\n• **Sample PDFs**: Free sample PDFs can be previewed directly on each book's page.`,
+      answer: `📚 **Official Guides Available in Store**:\n\n${bookListText}\n\n• **Minimum Order**: 4 books (flat ₹150 courier fee)\n• **Free Delivery**: 5 or more books qualify for **100% Free Doorstep Delivery** across Tamil Nadu!`,
       suggestions: ['📚 Browse Books Catalog', '🚚 Check Delivery Timelines', '👨‍💼 Talk to Admin'],
       shouldEscalate: false,
       cardType: 'books',
@@ -740,8 +739,8 @@ export async function generateSupportRagAnswer(
     q.includes('guide details')
   ) {
     return {
-      answer: `📚 **Tamil Nadu Samacheer Kalvi Guides**:\n\nBlessing Power Guide publishes high-scoring guides with step-by-step solutions and model question papers.\n\nYou can preview and download sample chapter PDFs directly on each book page before ordering.`,
-      suggestions: ['📚 Browse Books Catalog', '📄 Download Sample PDF', '👨‍💼 Talk to Admin'],
+      answer: `📚 **Tamil Nadu Samacheer Kalvi Guides**:\n\nBlessing Power Guide publishes high-scoring guides with step-by-step solutions and model question papers.\n\nYou can view chapter details, syllabus coverage, and book descriptions directly on each book page.`,
+      suggestions: ['📚 Browse Books Catalog', '🛒 Order 10th Full Set', '👨‍💼 Talk to Admin'],
       shouldEscalate: false,
     };
   }

@@ -23,8 +23,6 @@ import {
   ShieldCheck,
   Clock,
   Unlock,
-  FileText,
-  ExternalLink,
   Loader2,
   Copy,
 } from 'lucide-react';
@@ -248,11 +246,6 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   const [imageUploading, setImageUploading] = useState(false);
-  const [editSamplePdf, setEditSamplePdf] = useState<string>('');
-  const [newSamplePdf, setNewSamplePdf] = useState('');
-  const [pdfUploading, setPdfUploading] = useState(false);
-  const pdfInputRef = useRef<HTMLInputElement>(null);
-  const editPdfInputRef = useRef<HTMLInputElement>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [publishStatus, setPublishStatus] = useState<'published' | 'draft'>('published');
 
@@ -408,7 +401,6 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
     setEditStock(stTotal);
     setEditStockTamil(stTamil);
     setEditStockEnglish(stEnglish);
-    setEditSamplePdf(p.samplePdfUrl || '');
     setEditCls(p.cls || '10th');
     const curSub = p.subject || 'Mathematics';
     setEditSubject(curSub);
@@ -518,7 +510,6 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
 
     setNewBadge(product.badge || '');
     setNewImage(product.image || '');
-    setNewSamplePdf(product.samplePdfUrl || '');
     setNewComingSoon(Boolean(product.isComingSoon || product.is_coming_soon || product.status === 'coming_soon'));
     setPublishStatus(product.status === 'draft' ? 'draft' : 'published');
     setShowAdvanced(false);
@@ -629,7 +620,6 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
         is_coming_soon: editComingSoon,
         inStock: editComingSoon ? false : isAvailable,
         status: editComingSoon ? 'coming_soon' : (isAvailable ? 'published' : 'out_of_stock'),
-        samplePdfUrl: editSamplePdf.trim() || null,
       });
       refreshProducts(true);
       onShowToast('✅ Publication details updated');
@@ -729,76 +719,6 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
     }
   };
 
-  const handleDevicePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (file.size > 25 * 1024 * 1024) {
-      onShowToast('❌ PDF too large. Max allowed is 25MB.');
-      return;
-    }
-
-    setPdfUploading(true);
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('folder', 'samples');
-
-    try {
-      const res = await fetch('/api/upload', {
-        method: 'POST',
-        headers: authFormHeaders(user),
-        body: formData,
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'PDF upload failed');
-      }
-
-      setNewSamplePdf(data.url);
-      onShowToast('✅ Sample pages PDF uploaded successfully');
-    } catch (err: any) {
-      onShowToast(`❌ PDF upload failed: ${err.message}`);
-    } finally {
-      setPdfUploading(false);
-    }
-  };
-
-  const handleEditDevicePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (file.size > 25 * 1024 * 1024) {
-      onShowToast('❌ PDF too large. Max allowed is 25MB.');
-      return;
-    }
-
-    setPdfUploading(true);
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('folder', 'samples');
-
-    try {
-      const res = await fetch('/api/upload', {
-        method: 'POST',
-        headers: authFormHeaders(user),
-        body: formData,
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'PDF upload failed');
-      }
-
-      setEditSamplePdf(data.url);
-      onShowToast('✅ Sample pages PDF attached');
-    } catch (err: any) {
-      onShowToast(`❌ PDF upload failed: ${err.message}`);
-    } finally {
-      setPdfUploading(false);
-    }
-  };
-
   const handleSubmit = async (targetStatus: 'published' | 'draft') => {
     if (!newTitle.trim()) {
       onShowToast('Please enter a book title');
@@ -859,7 +779,6 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
           ? `Complete ${newCls} Standard All-in-One Combo Guide Pack (${selectedComboSubjects.join(', ')}). Covers full Tamil Nadu State Board syllabus with solved question papers.`
           : `Complete ${newCls} Standard ${resolvedSubject} guide covering Tamil Nadu Samacheer Kalvi syllabus with question banks and answers.`,
         image: newImage.trim() || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80',
-        samplePdfUrl: newSamplePdf.trim() || null,
       };
 
       const creator = onAddNewProduct || onCreateProduct;
@@ -898,7 +817,6 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
       // Reset form
       setDuplicatingFrom(null);
       setNewTitle('');
-      setNewSamplePdf('');
       setSelectedSubjectOption('Mathematics');
       setCustomSubjectText('');
       setNewMrp('350');
@@ -1165,50 +1083,8 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                                       </span>
                                     );
                                   })()}
-                                  {p.samplePdfUrl && (
-                                    <a
-                                      href={p.samplePdfUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="inline-flex items-center gap-1 text-[9px] font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 px-2 py-0.5 rounded-md"
-                                      title="Click to view sample pages PDF"
-                                    >
-                                      <FileText className="w-2.5 h-2.5 text-purple-600" />
-                                      <span>Sample PDF</span>
-                                      <ExternalLink className="w-2 h-2 text-purple-500" />
-                                    </a>
-                                  )}
-                                </div>
+                                  </div>
                               </>
-                            )}
-                            {isEditing && (
-                              <div className="mt-2 pt-1 border-t border-slate-200 flex items-center gap-2">
-                                <input
-                                  ref={editPdfInputRef}
-                                  type="file"
-                                  accept="application/pdf,.pdf"
-                                  onChange={handleEditDevicePdfUpload}
-                                  className="hidden"
-                                />
-                                <button
-                                  type="button"
-                                  disabled={pdfUploading}
-                                  onClick={() => editPdfInputRef.current?.click()}
-                                  className="text-[10px] font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 px-2 py-1 rounded-md cursor-pointer flex items-center gap-1"
-                                >
-                                  <FileText className="w-3 h-3" />
-                                  <span>{editSamplePdf ? 'Replace PDF' : '+ Attach Sample PDF'}</span>
-                                </button>
-                                {editSamplePdf && (
-                                  <button
-                                    type="button"
-                                    onClick={() => setEditSamplePdf('')}
-                                    className="text-[10px] text-red-600 hover:underline cursor-pointer"
-                                  >
-                                    Remove
-                                  </button>
-                                )}
-                              </div>
                             )}
                             {isEditing && isProductOrEditACombo({ subject: editSubject, title: editTitle }) && (
                               <div className="mt-3 p-3 bg-purple-50/80 border border-purple-200 rounded-xl space-y-2">
@@ -2704,83 +2580,7 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                   </div>
                 )}
 
-                {/* Sample Pages PDF Upload (Preview Before Buying) */}
-                <div className="pt-3 border-t border-slate-200">
-                  <div className="font-bold text-[11px] text-slate-800 uppercase tracking-wider flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-1.5">
-                      <FileText className="w-3.5 h-3.5 text-purple-600" />
-                      <span>Sample Pages PDF (Preview Before Buying)</span>
-                    </div>
-                    <span className="text-[10px] text-slate-400 font-normal">Optional · Max 25MB</span>
-                  </div>
 
-                  <input
-                    ref={pdfInputRef}
-                    type="file"
-                    accept="application/pdf,.pdf"
-                    onChange={handleDevicePdfUpload}
-                    className="hidden"
-                  />
-
-                  {newSamplePdf ? (
-                    <div className="flex items-center justify-between p-3 bg-purple-50/70 border border-purple-200 rounded-xl">
-                      <div className="flex items-center gap-2.5">
-                        <FileText className="w-6 h-6 text-purple-600 shrink-0" />
-                        <div>
-                          <div className="text-xs font-bold text-purple-900 flex items-center gap-1">
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                            <span>Sample Pages PDF Ready</span>
-                          </div>
-                          <a
-                            href={newSamplePdf}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-[10px] text-purple-700 hover:underline inline-flex items-center gap-1 mt-0.5"
-                          >
-                            <span>Open PDF Preview</span>
-                            <ExternalLink className="w-3 h-3" />
-                          </a>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => pdfInputRef.current?.click()}
-                          className="text-xs text-purple-700 font-bold px-2.5 py-1 hover:bg-purple-100 rounded-lg cursor-pointer"
-                        >
-                          Change
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setNewSamplePdf('')}
-                          className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg cursor-pointer"
-                          title="Remove PDF"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      disabled={pdfUploading}
-                      onClick={() => pdfInputRef.current?.click()}
-                      className="w-full py-2.5 px-3 bg-white border border-dashed border-purple-300 hover:border-purple-500 rounded-xl text-center cursor-pointer transition-all flex items-center justify-center gap-2 text-purple-700 hover:bg-purple-50/50"
-                    >
-                      {pdfUploading ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin text-purple-600" />
-                          <span className="font-bold text-xs">Uploading PDF...</span>
-                        </>
-                      ) : (
-                        <>
-                          <FileText className="w-4 h-4 text-purple-600" />
-                          <span className="font-bold text-xs">Upload Sample Pages PDF (e.g. Chapter 1)</span>
-                        </>
-                      )}
-                    </button>
-                  )}
-                </div>
               </div>
 
               {/* LIVE STOREFRONT PREVIEW CARD */}
