@@ -6,7 +6,9 @@ import { useStore } from '@/context/StoreContext';
 import { isAdminShopPreview } from '@/lib/adminShopPreview';
 import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
 import { Header } from '@/components/layout/Header';
+import { FestiveHeroBanner } from '@/components/home/FestiveHeroBanner';
 import { HeroSection } from '@/components/home/HeroSection';
+import { ExamTimetableSection } from '@/components/home/ExamTimetableSection';
 import { ClassPicker } from '@/components/home/ClassPicker';
 import { ProductGrid } from '@/components/home/ProductGrid';
 import { WhyChoose } from '@/components/home/WhyChoose';
@@ -92,7 +94,9 @@ export default function Home() {
       />
       <AnnouncementBar />
       <Header />
+      <FestiveHeroBanner />
       <HeroSection />
+      <ExamTimetableSection />
       <ClassPicker />
       <ProductGrid />
       <HomeCouponsSection />

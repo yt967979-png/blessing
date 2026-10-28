@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const conversationId = String(body.conversationId || '').trim();
     const text = String(body.text || '').trim();
-    const isTyping = body.typing === true;
+    const isTyping = body.typing === true || body.isTyping === true;
 
     if (!conversationId) {
       return NextResponse.json({ error: 'conversationId is required' }, { status: 400 });
@@ -177,6 +177,19 @@ export async function POST(req: NextRequest) {
     };
 
     await notifySupportEvent(ev);
+
+    // If customer sent a message and chat is not claimed by human admin, invoke AI Co-Pilot
+    if (senderType === 'CUSTOMER' && (conv.status !== 'ACTIVE' || !conv.assigned_admin_id)) {
+      const { executeAiReplyCycle } = await import('@/lib/supportAiEngine');
+      void executeAiReplyCycle({
+        conversationId,
+        customerMessage: sanitizedText,
+        customerName: conv.customer_name || senderName,
+        customerPhone: conv.customer_phone || undefined,
+        customerId: conv.customer_id || user?.userId || undefined,
+        linkedOrderId: conv.order_id || undefined,
+      }).catch((e) => console.warn('[support/message] AI reply error:', e));
+    }
 
     return NextResponse.json({
       success: true,

@@ -7,6 +7,7 @@ import { verifyGoogleIdToken, getGoogleClientId } from '@/lib/googleAuth';
 import { userNeedsProfile } from '@/lib/userProfile';
 import { isBookInStock } from '@/lib/stock';
 import { isComboItem } from '@/lib/deliveryRules';
+import { recordAdminAudit } from '@/lib/adminAudit';
 
 function setSessionCookie(response: NextResponse, token: string, role: string | undefined, deviceId: string) {
   applySessionCookies(response, { token, deviceId, role });
@@ -71,7 +72,10 @@ async function loadUserSessionData(queryFn: any, userId: string) {
       name: row.full_name,
       phone: row.phone,
       alternatePhone: row.alternate_phone || '',
+      doorNo: row.door_no || '',
+      floorNo: row.floor_no || '',
       address: row.address_line1,
+      town: row.town || '',
       landmark: row.near_landmark || '',
       city: row.city,
       pincode: row.pincode,
@@ -176,6 +180,22 @@ export async function POST(request: Request) {
       await queryDb(
         `INSERT INTO cart (id, user_id) VALUES ($1, $2) ON CONFLICT (user_id) DO NOTHING`,
         [`cart-${dbUser.id}`, dbUser.id]
+      );
+      void recordAdminAudit(
+        {
+          actorId: dbUser.id,
+          actorEmail: dbUser.email,
+          action: 'USER_REGISTERED',
+          targetType: 'user',
+          targetId: dbUser.id,
+          details: {
+            name: dbUser.name,
+            email: dbUser.email,
+            role: dbUser.role || role,
+            authMethod: 'google_oauth',
+          },
+        },
+        request
       );
     } else if (dbUser.status === 'banned') {
       return NextResponse.json({ error: 'This account is disabled. Contact support.' }, { status: 403 });

@@ -27,6 +27,7 @@ import AnalyticsSection from '@/components/admin/AnalyticsSection';
 import { LiveSupportSection } from '@/components/admin/LiveSupportSection';
 import AbandonedCartsSection from '@/components/admin/AbandonedCartsSection';
 import AdminAuditTab from '@/components/admin/AdminAuditTab';
+import CoFounderSection from '@/components/admin/CoFounderSection';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface OrderItem { title: string; qty: number; price?: number; subtotal?: number; }
@@ -781,6 +782,14 @@ function AdminPageInner() {
               activeStockHolds={activeStockHolds}
               onNavigate={(tab) => setActiveTab(tab)}
               onReleaseHold={handleReleaseHold}
+            />
+          )}
+
+          {/* SECTION: AI CO-FOUNDER */}
+          {activeTab === 'cofounder' && (
+            <CoFounderSection
+              user={user}
+              onShowToast={showToast}
             />
           )}
 

@@ -20,11 +20,13 @@ import {
   ShoppingBag,
   ShieldCheck,
   HelpCircle,
+  Bot,
 } from 'lucide-react';
 import { BrandLogo } from '@/components/ui/BrandLogo';
 
 export type AdminTab =
   | 'overview'
+  | 'cofounder'
   | 'orders'
   | 'abandoned'
   | 'support'
@@ -38,6 +40,7 @@ export type AdminTab =
 
 export const ADMIN_TAB_KEYS: AdminTab[] = [
   'overview',
+  'cofounder',
   'orders',
   'abandoned',
   'support',
@@ -77,6 +80,14 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
       label: 'Storefront Overview',
       subtitle: 'Quick metrics & alerts',
       icon: LayoutDashboard,
+    },
+    {
+      key: 'cofounder' as AdminTab,
+      label: '👑 AI Co-Founder',
+      subtitle: 'Executive intelligence & autonomous ops',
+      icon: Bot,
+      badge: 'Live',
+      badgeColor: 'bg-indigo-600 text-white font-mono text-[10px]',
     },
     {
       key: 'orders' as AdminTab,

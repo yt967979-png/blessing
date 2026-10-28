@@ -140,12 +140,28 @@ export async function POST(request: Request) {
         if (addrRes.rows.length > 0) {
           const a = addrRes.rows[0];
           resolvedAddress = {
-            name: a.full_name,
+            studentName: a.student_name || a.full_name,
+            parentName: a.parent_name || '',
+            name: a.student_name || a.full_name,
             phone: a.phone,
             alternatePhone: a.alternate_phone || '',
-            address: a.address_line1 + (a.address_line2 ? ', ' + a.address_line2 : ''),
-            city: a.city,
+            whatsappNumber: a.whatsapp_number || '',
+            email: a.primary_email || '',
+            alternateEmail: a.alternate_email || '',
+            doorNo: a.door_no || '',
+            floorNo: a.floor_no || '',
+            buildingName: a.building_name || '',
+            streetName: a.street_name || a.address_line1 || '',
+            areaLocality: a.area_locality || '',
+            townCity: a.town_city || a.city || '',
+            taluk: a.taluk || '',
+            district: a.district || a.city || 'Chennai',
+            state: a.state || 'Tamil Nadu',
             pincode: a.pincode,
+            landmark: a.landmark || '',
+            deliveryInstructions: a.delivery_instructions || '',
+            address: a.address_line1 + (a.address_line2 ? ', ' + a.address_line2 : ''),
+            city: a.district || a.city || 'Chennai',
           };
         }
       }

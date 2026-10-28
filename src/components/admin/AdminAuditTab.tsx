@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { ShieldCheck, RefreshCw, Filter, Search, Download, AlertCircle, Clock, Globe } from 'lucide-react';
 import { authHeaders } from '@/lib/clientAuth';
+import { formatIndianDateTime } from '@/lib/indianTime';
 import type { UserData } from '@/context/StoreContext';
 
 interface AuditLog {
@@ -83,10 +84,10 @@ export default function AdminAuditTab({
 
   const exportCsv = () => {
     if (!filteredLogs.length) return;
-    const headers = ['ID', 'Timestamp', 'Actor', 'Action', 'Target Type', 'Target ID', 'Details', 'IP Address'];
+    const headers = ['ID', 'Timestamp (IST)', 'Actor', 'Action', 'Target Type', 'Target ID', 'Details', 'IP Address'];
     const rows = filteredLogs.map((l) => [
       l.id,
-      new Date(l.created_at).toISOString(),
+      `"${formatIndianDateTime(l.created_at, true)}"`,
       `"${(l.actor_id || '').replace(/"/g, '""')}"`,
       l.action,
       l.target_type,
@@ -112,8 +113,14 @@ export default function AdminAuditTab({
     if (act.includes('PRICE') || act.includes('STOCK') || act.includes('UPDATE')) {
       return 'bg-amber-500/10 text-amber-400 border border-amber-500/30';
     }
-    if (act.includes('CREATE') || act.includes('SUCCESS')) {
+    if (act.includes('CREATE') || act.includes('SUCCESS') || act.includes('REGISTERED')) {
       return 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30';
+    }
+    if (act.includes('ORDER')) {
+      return 'bg-purple-500/10 text-purple-400 border border-purple-500/30';
+    }
+    if (act.includes('COUPON')) {
+      return 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/30';
     }
     return 'bg-blue-500/10 text-blue-400 border border-blue-500/30';
   };
@@ -177,14 +184,22 @@ export default function AdminAuditTab({
             className="bg-slate-900/80 border border-slate-800 rounded-xl text-sm text-white px-3 py-2.5 focus:outline-none focus:border-emerald-500/50"
           >
             <option value="">All Actions</option>
+            <option value="USER_REGISTERED">User Signups & Registrations</option>
+            <option value="USER_PROFILE_UPDATED">User Profile Updates</option>
+            <option value="USER_ROLE_CHANGED">Role Changes</option>
+            <option value="USER_BANNED">User Bans</option>
+            <option value="USER_DELETED">User Deletions</option>
+            <option value="ORDER_PLACED">Orders Placed</option>
+            <option value="ORDER_STATUS_UPDATED">Order Status Updates</option>
+            <option value="ORDER_TIMELINE_ADDED">Order Timeline Events</option>
+            <option value="ORDER_CANCELLED">Order Cancellations</option>
             <option value="PRICE_CHANGED">Price Changes</option>
             <option value="STOCK_CHANGED">Stock Changes</option>
             <option value="PRODUCT_CREATED">Product Creations</option>
             <option value="PRODUCT_DELETED">Product Deletions</option>
-            <option value="ORDER_CANCELLED">Order Cancellations</option>
-            <option value="USER_ROLE_CHANGED">Role Changes</option>
-            <option value="USER_BANNED">User Bans</option>
-            <option value="USER_DELETED">User Deletions</option>
+            <option value="COUPON_CREATED">Coupons Created</option>
+            <option value="COUPON_UPDATED">Coupons Updated</option>
+            <option value="COUPON_DELETED">Coupons Deleted</option>
           </select>
         </div>
       </div>
@@ -207,7 +222,7 @@ export default function AdminAuditTab({
             <table className="w-full text-left text-sm border-collapse">
               <thead>
                 <tr className="border-b border-slate-800 bg-slate-950/40 text-slate-400 text-xs uppercase tracking-wider font-semibold">
-                  <th className="py-3 px-4">Timestamp</th>
+                  <th className="py-3 px-4">Timestamp (IST)</th>
                   <th className="py-3 px-4">Actor</th>
                   <th className="py-3 px-4">Action</th>
                   <th className="py-3 px-4">Target</th>
@@ -227,15 +242,9 @@ export default function AdminAuditTab({
                   }
                   return (
                     <tr key={log.id} className="hover:bg-slate-800/30 transition">
-                      <td className="py-3.5 px-4 whitespace-nowrap text-xs text-slate-400 font-mono flex items-center gap-1.5">
-                        <Clock className="w-3.5 h-3.5 text-slate-500" />
-                        {new Date(log.created_at).toLocaleString('en-IN', {
-                          day: '2-digit',
-                          month: 'short',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                          second: '2-digit',
-                        })}
+                      <td className="py-3.5 px-4 whitespace-nowrap text-xs text-slate-300 font-mono flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5 text-emerald-400" />
+                        {formatIndianDateTime(log.created_at, true)}
                       </td>
                       <td className="py-3.5 px-4 text-xs font-medium text-slate-200">
                         <span className="truncate max-w-[180px] block" title={log.actor_id}>

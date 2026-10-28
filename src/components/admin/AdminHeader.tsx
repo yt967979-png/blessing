@@ -30,6 +30,10 @@ const TAB_TITLES: Record<AdminTab, { title: string; subtitle: string }> = {
     title: 'Store Overview',
     subtitle: "Today's sales volume, order counts, and warehouse packing queue",
   },
+  cofounder: {
+    title: 'AI Co-Founder & Executive Intelligence',
+    subtitle: 'Autonomous business monitoring, technical diagnostics, 12 departments, and task approval queue',
+  },
   orders: {
     title: 'Live Orders & Fulfillment',
     subtitle: 'Process student orders, print packing slips, and assign ST Courier AWBs',

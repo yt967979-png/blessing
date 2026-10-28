@@ -30,6 +30,7 @@ import { PackingPickListModal } from './PackingPickListModal';
 import { CustomerPhoneLookupModal } from './CustomerPhoneLookupModal';
 import type { Product } from '@/context/StoreContext';
 import { adminFulfillmentBucket, fulfillmentStatus, isRecordCancelled, isParcelDelivered } from '@/lib/orderStatus';
+import { formatIndianDateTime } from '@/lib/indianTime';
 
 interface OrderItem {
   title: string;
@@ -76,69 +77,31 @@ interface OrdersSectionProps {
   onShowToast: (msg: string) => void;
 }
 
+import { buildWhatsAppAwbShareUrl, buildWhatsAppOrderSummaryUrl } from '@/lib/whatsappTracking';
+export { buildWhatsAppAwbShareUrl };
+
 const fmt = (n: number) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
 
 /**
- * Builds prefilled WhatsApp order summary link (same format as custom WhatsApp order flow)
+ * Builds prefilled WhatsApp order summary or AWB tracking link
  */
 export function getWhatsAppShareUrl(order: Order): string {
-  const cleanPhone = String(order.customerPhone || '').replace(/\D/g, '').slice(-10);
-  const cleanName = order.customerName || 'Customer';
-  const orderNumber = order.orderId || order.id;
-  const trackingUrl = `https://blessingpowerguide.in/track?orderId=${encodeURIComponent(orderNumber)}`;
-
-  const items = Array.isArray(order.items) ? order.items : [];
-  const itemsSummary = items.length > 0
-    ? items.map((i) => `• ${i.qty}x ${i.title}${i.medium ? ` (${i.medium})` : ''}${i.subtotal ? ` - ₹${i.subtotal}` : i.price ? ` - ₹${i.price * i.qty}` : ''}`).join('\n')
-    : '• Study Guide Books';
-
-  const totalBooks = items.reduce((acc, cur) => acc + (cur.qty || 1), 0);
-  const addressParts = [order.address, order.city, order.pincode ? `- ${order.pincode}` : '', order.state].filter(Boolean);
-  const deliveryLine = addressParts.join(', ');
-
-  const hasAwb = Boolean(order.trackingNumber && !order.trackingNumber.startsWith('SHP-') && !order.trackingNumber.includes('Pending'));
   const currentFulfillment = fulfillmentStatus(order) || order.courierStatus || 'Processing';
-
-  const lines = [
-    `Dear ${cleanName},`,
-    '',
-    'Thank you for your order with Blessing Power Guide.',
-    '',
-    `Order ID: #${orderNumber}`,
-    `Books: ${totalBooks}`,
-    `Amount payable: ₹${order.totalAmount}`,
-    `Payment: ${order.paymentMethod || 'Online'} (${order.paymentStatus || 'Paid'})`,
-    `Status: ${currentFulfillment}`,
-  ];
-
-  if (hasAwb) {
-    lines.push(`ST Courier AWB: ${order.trackingNumber}`);
-    lines.push(`Courier Tracking: ${order.trackingUrl || `https://stcourier.com/track/view?docket=${order.trackingNumber}`}`);
-  }
-
-  lines.push('');
-  lines.push('Items:');
-  lines.push(itemsSummary);
-
-  if (deliveryLine) {
-    lines.push('');
-    lines.push('Delivery address:');
-    lines.push(deliveryLine);
-  }
-
-  lines.push('');
-  lines.push('Track your order:');
-  lines.push(trackingUrl);
-  lines.push('');
-  lines.push('Your order will be dispatched via ST Courier Express.');
-  lines.push('');
-  lines.push('Blessing Power Guide');
-  lines.push('Tamil Nadu State Board guides (Classes 6–12)');
-
-  const message = lines.join('\n');
-  return cleanPhone
-    ? `https://wa.me/91${cleanPhone}?text=${encodeURIComponent(message)}`
-    : `https://wa.me/?text=${encodeURIComponent(message)}`;
+  return buildWhatsAppOrderSummaryUrl({
+    orderNumber: order.orderId || order.id,
+    customerName: order.customerName,
+    customerPhone: order.customerPhone,
+    trackingNumber: order.trackingNumber,
+    items: order.items,
+    address: order.address,
+    city: order.city,
+    pincode: order.pincode,
+    state: order.state,
+    totalAmount: order.totalAmount,
+    paymentMethod: order.paymentMethod,
+    paymentStatus: order.paymentStatus,
+    status: currentFulfillment,
+  });
 }
 
 export const OrdersSection: React.FC<OrdersSectionProps> = ({
@@ -322,6 +285,29 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
         delete next[orderId];
         return next;
       });
+
+      // Directly open prefilled WhatsApp message with ST Courier & site tracking links
+      const targetOrder = orders.find((o) => o.id === orderId || o.orderId === orderId);
+      if (targetOrder) {
+        const waUrl = buildWhatsAppAwbShareUrl({
+          orderNumber: targetOrder.orderId || targetOrder.id,
+          customerName: targetOrder.customerName,
+          customerPhone: targetOrder.customerPhone,
+          customerAltPhone: targetOrder.customerAltPhone,
+          trackingNumber: docket,
+          courierName: targetOrder.courierName || 'ST Courier Express',
+          items: targetOrder.items,
+          address: targetOrder.address,
+          city: targetOrder.city,
+          pincode: targetOrder.pincode,
+          state: targetOrder.state,
+          totalAmount: targetOrder.totalAmount,
+          paymentMethod: targetOrder.paymentMethod,
+          paymentStatus: targetOrder.paymentStatus,
+        });
+        window.open(waUrl, '_blank', 'noopener,noreferrer');
+        onShowToast(`🚚 ST Courier AWB ${docket} saved! WhatsApp customer message opened.`);
+      }
     } finally {
       setAwbSaving((prev) => ({ ...prev, [orderId]: false }));
     }
@@ -590,12 +576,8 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
                           <span className="font-bold text-slate-900 block">
                             #{order.orderId}
                           </span>
-                          <span className="text-[10px] text-slate-400 block">
-                            {new Date(order.createdAt).toLocaleDateString('en-IN', {
-                              day: '2-digit',
-                              month: 'short',
-                              year: 'numeric',
-                            })}
+                          <span className="text-[10px] text-slate-500 font-medium block whitespace-nowrap">
+                            {formatIndianDateTime(order.createdAt)}
                           </span>
                           <div className="mt-1">
                             {order.orderSource === 'whatsapp' ? (
@@ -638,15 +620,27 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
                         {/* ST Courier AWB */}
                         <td className="p-3.5 font-mono">
                           {hasAwb ? (
-                            <a
-                              href={order.trackingUrl || `https://stcourier.com/track/view?docket=${order.trackingNumber}`}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-xs font-bold text-blue-600 hover:text-blue-800 hover:underline inline-flex items-center gap-1"
-                            >
-                              <span>{order.trackingNumber}</span>
-                              <ExternalLink className="w-3 h-3" />
-                            </a>
+                            <div className="flex items-center gap-1.5">
+                              <a
+                                href={order.trackingUrl || `https://stcourier.com/track/shipment?docket=${encodeURIComponent(order.trackingNumber)}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-xs font-bold text-blue-600 hover:text-blue-800 hover:underline inline-flex items-center gap-1"
+                                title="Open official ST Courier tracking"
+                              >
+                                <span>{order.trackingNumber}</span>
+                                <ExternalLink className="w-3 h-3" />
+                              </a>
+                              <a
+                                href={getWhatsAppShareUrl(order)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="p-1 rounded-md bg-[#25D366]/15 hover:bg-[#25D366]/30 text-[#128C7E] border border-[#25D366]/30 transition-all inline-flex items-center justify-center cursor-pointer shadow-2xs"
+                                title={`Share AWB ${order.trackingNumber} on WhatsApp`}
+                              >
+                                <MessageCircle className="w-3.5 h-3.5 text-[#25D366] fill-[#25D366]/20" />
+                              </a>
+                            </div>
                           ) : isCancelled ? (
                             <span className="text-slate-400 text-[11px]">—</span>
                           ) : (

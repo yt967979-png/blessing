@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Home, BookOpen, ShoppingBag, User } from 'lucide-react';
+import { Home, BookOpen, ShoppingBag, User, MessageSquare } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { useCartBadgeBump } from '@/hooks/useCartBadgeBump';
 
@@ -13,13 +13,22 @@ export const MobileBottomNav = () => {
   const { cartCount, user, setIsAuthOpen, isCheckoutOpen, isAuthOpen } = useStore();
   const cartBump = useCartBadgeBump(cartCount);
   const [mounted, setMounted] = React.useState(false);
+  const [isChatOpen, setIsChatOpen] = React.useState(false);
 
   React.useEffect(() => {
     setMounted(true);
+    const handleChatOpen = () => setIsChatOpen(true);
+    const handleChatClose = () => setIsChatOpen(false);
+    window.addEventListener('bpg:chat-opened', handleChatOpen);
+    window.addEventListener('bpg:chat-closed', handleChatClose);
+    return () => {
+      window.removeEventListener('bpg:chat-opened', handleChatOpen);
+      window.removeEventListener('bpg:chat-closed', handleChatClose);
+    };
   }, []);
 
   if (pathname.startsWith('/admin') || pathname.startsWith('/checkout') || pathname.startsWith('/products/')) return null;
-  if (isCheckoutOpen || isAuthOpen) return null;
+  if (isCheckoutOpen || isAuthOpen || isChatOpen) return null;
 
   const isHome = pathname === '/';
   const isGuides = pathname.startsWith('/search') || pathname.startsWith('/products');
@@ -58,6 +67,17 @@ export const MobileBottomNav = () => {
   const items: NavItem[] = [
     { key: 'home', label: 'Home', href: '/', active: isHome, icon: Home, onEnter: () => router.prefetch('/') },
     { key: 'guides', label: 'Guides', href: '/search', active: isGuides, icon: BookOpen, onEnter: () => router.prefetch('/search') },
+    {
+      key: 'support',
+      label: 'Support',
+      active: false,
+      icon: MessageSquare,
+      onClick: () => {
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('bpg:open-chat'));
+        }
+      },
+    },
     {
       key: 'cart',
       label: 'Cart',

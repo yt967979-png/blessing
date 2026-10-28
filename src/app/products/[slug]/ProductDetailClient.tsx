@@ -11,6 +11,7 @@ import {
   Truck,
   Share2,
   CheckCircle,
+  ChevronLeft,
   ChevronRight,
   Download,
   ThumbsUp,
@@ -20,7 +21,9 @@ import {
   Check,
   Zap,
   Sparkles,
+  Layers,
 } from 'lucide-react';
+
 import { useStore } from '@/context/StoreContext';
 import { Header } from '@/components/layout/Header';
 import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
@@ -34,13 +37,65 @@ import { pincodeDeliveryMessage } from '@/lib/pincode';
 import { authHeaders, authFormHeaders } from '@/lib/clientAuth';
 import { imageNeedsUnoptimized } from '@/lib/productImage';
 import { MIN_BOOKS_PER_ORDER, booksUntilMinOrder, minOrderCheckoutMessage, isComboItem } from '@/lib/deliveryRules';
-import { getComboIncludedSubjects, getComboSavingsSummary } from '@/lib/comboMetadata';
+import { getComboIncludedSubjects, getComboSavingsSummary, type ComboSubject } from '@/lib/comboMetadata';
 import {
   normalizeProductMedium,
   isProductMultiMedium,
   getProductMediumBadge,
   resolveCartItemMedium,
 } from '@/lib/productMedium';
+
+export const PDP_RELEASE_VERSION = 'bpg-pdp-v20261025-r3';
+
+function getGalleryCoverMeta(
+  product: any,
+  index: number,
+  totalCovers: number,
+  comboSubjects: ComboSubject[]
+): { title: string; subtitle?: string; badge: string } {
+  const isCombo = isComboItem(product);
+  if (!isCombo) {
+    return {
+      title: `${product?.title || 'Book'} (Cover #${index + 1})`,
+      subtitle: undefined,
+      badge: `#${index + 1}`,
+    };
+  }
+
+  // Check if index 0 is the full combo box set cover
+  const hasDistinctBoxCover = Boolean(
+    product?.image &&
+    Array.isArray(product?.images) &&
+    product.images.some((img: string) => img !== product.image)
+  );
+
+  if (index === 0 && hasDistinctBoxCover) {
+    const count = comboSubjects.length > 0 ? `${comboSubjects.length}-in-1 ` : '';
+    return {
+      title: `${product?.cls ? `${product.cls} Std ` : ''}${count}Combo Box Set`,
+      subtitle: `Complete ${comboSubjects.length || totalCovers - 1}-Book Bundle`,
+      badge: 'Box Set',
+    };
+  }
+
+  // Determine subject index: if index 0 is Box Set, then subject index is index - 1
+  const subjIndex = hasDistinctBoxCover ? index - 1 : index;
+  const sub = comboSubjects[subjIndex];
+
+  if (sub) {
+    return {
+      title: `${sub.name} Guide`,
+      subtitle: sub.tamilName || undefined,
+      badge: sub.shortName || sub.name,
+    };
+  }
+
+  return {
+    title: `Guide Cover #${index + 1}`,
+    subtitle: undefined,
+    badge: `#${index + 1}`,
+  };
+}
 
 function applyReviewsPayload(
   data: any,
@@ -137,9 +192,54 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
           : storeProduct.features || ['Solved Papers', 'Chapter Notes'],
       samplePdfUrl: dbProduct.samplePdfUrl !== undefined ? dbProduct.samplePdfUrl : storeProduct.samplePdfUrl,
       image: dbProduct.image || storeProduct.image,
+      images: (Array.isArray(dbProduct.images) && dbProduct.images.length > 0)
+        ? dbProduct.images
+        : (Array.isArray(storeProduct.images) && storeProduct.images.length > 0)
+        ? storeProduct.images
+        : undefined,
     };
   }, [dbProduct, storeProduct]);
-  const [activeImg, setActiveImg] = useState('');
+
+  const allImages = useMemo(() => {
+    const list: string[] = [];
+    const sourceImages = (Array.isArray(product?.images) && product.images.length > 0)
+      ? product.images
+      : (product?.image ? [product.image] : []);
+
+    sourceImages.forEach((img: any) => {
+      const s = String(img || '').trim();
+      if (s && !s.startsWith('data:') && !list.includes(s)) list.push(s);
+    });
+
+    if (product?.image && !list.includes(product.image)) {
+      list.unshift(product.image);
+    }
+    if (product?.hoverImage && !list.includes(product.hoverImage)) {
+      list.push(product.hoverImage);
+    }
+    return list.length > 0 ? list : ['https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=600&q=80'];
+  }, [product?.images, product?.image, product?.hoverImage]);
+
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [isCarouselPaused, setIsCarouselPaused] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
+
+  // Auto-cycle through covers every 3.5 seconds if more than 1 image and not paused/hovered
+  useEffect(() => {
+    if (allImages.length <= 1 || isCarouselPaused || isHovered) return;
+    const interval = setInterval(() => {
+      setActiveImageIndex((prev) => (prev + 1) % allImages.length);
+    }, 3500);
+    return () => clearInterval(interval);
+  }, [allImages.length, isCarouselPaused, isHovered]);
+
+  // Keep index within bounds if images change
+  useEffect(() => {
+    if (activeImageIndex >= allImages.length) {
+      setActiveImageIndex(0);
+    }
+  }, [allImages.length, activeImageIndex]);
+
   const [isMobileAdded, setIsMobileAdded] = useState(false);
   const minOrderMsg = minOrderCheckoutMessage(cartCount);
 
@@ -352,10 +452,19 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
   }, [slug, normalizedSlug, dbProduct?.id, storeProduct?.id]);
 
   useEffect(() => {
-    if (product?.image) {
-      setActiveImg(product.image);
+    if (typeof window !== 'undefined') {
+      const p = new URLSearchParams(window.location.search);
+      const coverParam = p.get('cover');
+      if (coverParam !== null) {
+        const idx = parseInt(coverParam, 10);
+        if (!isNaN(idx) && idx >= 0 && idx < allImages.length) {
+          setActiveImageIndex(idx);
+          return;
+        }
+      }
     }
-  }, [product?.image]);
+    setActiveImageIndex(0);
+  }, [product?.id, product?.image, allImages.length]);
 
   useEffect(() => {
     if (product?.title) {
@@ -645,55 +754,141 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
 
       <div className="max-w-7xl mx-auto px-4 py-5 sm:py-8 flex-1">
         <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 md:p-8 shadow-xs grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-8 mb-12">
-          {/* Gallery */}
-          <div className="lg:col-span-5 flex flex-col items-center">
-            <div className={`w-full h-80 border rounded-xl p-4 flex items-center justify-center relative overflow-hidden mb-4 transition-all ${isProductOutOfStock ? 'bg-slate-100 border-slate-300' : 'bg-slate-50 border-slate-200'}`}>
-              <Image
-                src={
-                  activeImg ||
-                  product.image ||
-                  'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=600&q=80'
-                }
-                alt={`${product.title}${product.cls ? ` Class ${product.cls}` : ''} Guide Book Cover — Blessing Power Guide`}
-                width={480}
-                height={480}
-                priority
-                className={`max-h-full max-w-full object-contain transition-transform duration-300 hover:scale-105 ${isProductOutOfStock ? 'grayscale opacity-60' : ''}`}
-                sizes="(max-width: 1024px) 90vw, 480px"
-                unoptimized={imageNeedsUnoptimized(activeImg || product.image || '')}
-              />
+          {/* Gallery with Multi-cover Smooth Auto-Cycling Carousel */}
+          <div
+            className="lg:col-span-5 flex flex-col items-center"
+            onMouseEnter={() => setIsHovered(true)}
+            onMouseLeave={() => setIsHovered(false)}
+          >
+            <div className={`w-full h-84 sm:h-96 md:h-[400px] border rounded-2xl p-4 flex items-center justify-center relative overflow-hidden mb-3 transition-all select-none ${isProductOutOfStock ? 'bg-slate-100 border-slate-300' : 'bg-gradient-to-b from-slate-50 to-slate-100/70 border-slate-200'}`}>
+              <div
+                key={activeImageIndex}
+                className="w-full h-full flex items-center justify-center transition-all duration-500 ease-out animate-in fade-in zoom-in-95"
+              >
+                <Image
+                  src={
+                    allImages[activeImageIndex] ||
+                    product.image ||
+                    'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=600&q=80'
+                  }
+                  alt={`${product.title}${product.cls ? ` Class ${product.cls}` : ''} Guide Book Cover ${activeImageIndex + 1} of ${allImages.length} — Blessing Power Guide`}
+                  width={480}
+                  height={480}
+                  priority={activeImageIndex === 0}
+                  className={`max-h-full max-w-full object-contain drop-shadow-md transition-transform duration-300 hover:scale-105 ${isProductOutOfStock ? 'grayscale opacity-60' : ''}`}
+                  sizes="(max-width: 1024px) 90vw, 480px"
+                  unoptimized={imageNeedsUnoptimized(allImages[activeImageIndex] || product.image || '')}
+                />
+              </div>
+
               {isProductOutOfStock ? (
-                <span className="absolute top-3 left-3 text-[10px] font-black text-white px-2.5 py-1 rounded shadow-xs uppercase tracking-wider bg-slate-700">
+                <span className="absolute top-3 left-3 text-[10px] font-black text-white px-2.5 py-1 rounded shadow-xs uppercase tracking-wider bg-slate-700 z-10">
                   OUT OF STOCK
                 </span>
               ) : product.badge ? (
-                <span className={`absolute top-3 left-3 text-[10px] font-extrabold text-white px-2.5 py-1 rounded shadow-xs uppercase tracking-wider ${product.badgeColor || 'bg-blue-600'}`}>
+                <span className={`absolute top-3 left-3 text-[10px] font-extrabold text-white px-2.5 py-1 rounded shadow-xs uppercase tracking-wider z-10 ${product.badgeColor || 'bg-blue-600'}`}>
                   {product.badge}
                 </span>
               ) : null}
+
+              {allImages.length > 1 && (
+                <div className="absolute top-3 right-3 z-10">
+                  <span className="bg-slate-900/80 backdrop-blur-md text-white text-[11px] font-extrabold px-3 py-1 rounded-full shadow-md flex items-center gap-1.5 border border-white/10">
+                    <Layers className="w-3.5 h-3.5 text-blue-400" />
+                    <span>
+                      {getGalleryCoverMeta(product, activeImageIndex, allImages.length, comboSubjects).title} ({activeImageIndex + 1}/{allImages.length})
+                    </span>
+                  </span>
+                </div>
+              )}
+
+              {allImages.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActiveImageIndex((prev) => (prev - 1 + allImages.length) % allImages.length);
+                    }}
+                    className="absolute left-2.5 top-1/2 -translate-y-1/2 z-10 w-9 h-9 rounded-full bg-white/90 hover:bg-white text-slate-800 shadow-md flex items-center justify-center transition-all hover:scale-110 active:scale-95 cursor-pointer border border-slate-200"
+                    title="Previous cover"
+                    aria-label="Previous cover"
+                  >
+                    <ChevronLeft className="w-5 h-5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActiveImageIndex((prev) => (prev + 1) % allImages.length);
+                    }}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 z-10 w-9 h-9 rounded-full bg-white/90 hover:bg-white text-slate-800 shadow-md flex items-center justify-center transition-all hover:scale-110 active:scale-95 cursor-pointer border border-slate-200"
+                    title="Next cover"
+                    aria-label="Next cover"
+                  >
+                    <ChevronRight className="w-5 h-5" />
+                  </button>
+                </>
+              )}
+
+              {allImages.length > 1 && !isCarouselPaused && !isHovered && (
+                <div className="absolute bottom-0 left-0 right-0 h-1 bg-slate-200/60 overflow-hidden">
+                  <div
+                    key={activeImageIndex}
+                    className="h-full bg-blue-600 transition-all duration-[3500ms] ease-linear w-full animate-pulse"
+                  />
+                </div>
+              )}
             </div>
 
-            <div className="flex gap-3">
-              {[product.image, product.hoverImage || product.image].map((img, i) => (
-                <button
-                  key={i}
-                  type="button"
-                  onClick={() => setActiveImg(img)}
-                  className={`w-16 h-16 rounded-lg border-2 p-1 bg-slate-50 overflow-hidden relative ${
-                    activeImg === img ? 'border-blue-600' : 'border-slate-200'
-                  }`}
-                >
-                  <Image
-                    src={img || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=80&q=80'}
-                    alt=""
-                    width={64}
-                    height={64}
-                    className="w-full h-full object-contain"
-                    unoptimized={imageNeedsUnoptimized(img || '')}
-                  />
-                </button>
-              ))}
-            </div>
+            {allImages.length > 1 && (
+              <div className="w-full mt-2">
+                <div className="flex items-center justify-between text-xs font-bold text-slate-700 px-1 mb-1.5">
+                  <span className="flex items-center gap-1.5 text-[#001B3A]">
+                    <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Included in Box Set (Tap to view each cover):</span>
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-semibold">{allImages.length} Covers</span>
+                </div>
+                <div className="w-full flex items-center justify-center gap-2 flex-wrap max-w-full py-1">
+                  {allImages.map((img, i) => {
+                    const coverMeta = getGalleryCoverMeta(product, i, allImages.length, comboSubjects);
+                    return (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => {
+                          setActiveImageIndex(i);
+                          setIsCarouselPaused(true);
+                        }}
+                        className={`group relative w-13 h-17 sm:w-16 sm:h-20 rounded-xl border-2 p-1 bg-white overflow-hidden transition-all duration-200 cursor-pointer ${
+                          activeImageIndex === i
+                            ? 'border-blue-600 ring-2 ring-blue-500/30 scale-105 shadow-md'
+                            : 'border-slate-200 hover:border-slate-400 opacity-80 hover:opacity-100'
+                        }`}
+                        title={coverMeta.title}
+                      >
+                        <Image
+                          src={img}
+                          alt={coverMeta.title}
+                          width={64}
+                          height={80}
+                          className="w-full h-full object-contain"
+                          unoptimized={imageNeedsUnoptimized(img)}
+                        />
+                        <span
+                          className={`absolute bottom-0.5 right-0.5 text-[8px] font-black px-1 py-0.2 rounded shadow-2xs uppercase tracking-tight ${
+                            activeImageIndex === i ? 'bg-blue-600 text-white' : 'bg-slate-900/85 text-white'
+                          }`}
+                        >
+                          {coverMeta.badge}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Product Info */}
@@ -992,13 +1187,81 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
                   <Sparkles className="w-5 h-5 text-amber-600 animate-pulse" />
                   <span>🚀 COMING SOON — PRE-ORDERS OPENING SHORTLY</span>
                 </div>
-              ) : isProductOutOfStock || isCurrentMediumSoldOut ? (
-                <button
-                  disabled
-                  className="w-full bg-slate-200 text-slate-500 font-extrabold text-sm py-3.5 px-6 rounded-xl uppercase tracking-wider cursor-not-allowed"
-                >
-                  {isCurrentMediumSoldOut ? `${selectedMedium.replace(' Medium', '')} SOLD OUT` : 'OUT OF STOCK'}
-                </button>
+              ) : isCurrentMediumSoldOut ? (
+                <div className="rounded-2xl border-2 border-amber-300 bg-amber-50/70 p-4 space-y-3">
+                  <div className="flex items-start gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center shrink-0 text-amber-800 font-black text-sm">
+                      ⚠️
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-black text-amber-950">
+                        {selectedMedium} is Currently Out of Stock
+                      </h4>
+                      <p className="text-xs text-amber-900/80 mt-0.5 leading-relaxed">
+                        Good news! The {selectedMedium === 'Tamil Medium' ? 'English Medium' : 'Tamil Medium'} edition of this guide is in stock and ready to ship.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedMedium(selectedMedium === 'Tamil Medium' ? 'English Medium' : 'Tamil Medium')}
+                      className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs py-3 px-4 rounded-xl shadow-xs transition-all cursor-pointer flex items-center justify-center gap-2"
+                    >
+                      <CheckCircle className="w-4 h-4 text-emerald-300" />
+                      <span>Switch to {selectedMedium === 'Tamil Medium' ? 'English Medium' : 'Tamil Medium'}</span>
+                    </button>
+                    <a
+                      href={`https://wa.me/919486017820?text=${encodeURIComponent(`Hi Blessing Power Guide! Please notify me when ${product.title} (${selectedMedium}) is back in stock.`)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="py-3 px-4 bg-white border border-amber-300 hover:bg-amber-100/50 text-amber-900 font-extrabold text-xs rounded-xl shadow-2xs transition-all flex items-center justify-center gap-1.5"
+                    >
+                      <span>Notify Me for {selectedMedium.replace(' Medium', '')}</span>
+                    </a>
+                  </div>
+                </div>
+              ) : isProductOutOfStock ? (
+                <div className="rounded-2xl border-2 border-slate-300 bg-gradient-to-br from-slate-50 via-white to-amber-50/40 p-5 space-y-4 shadow-xs">
+                  <div className="flex items-start gap-3.5">
+                    <div className="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0 text-slate-700 text-lg">
+                      📦
+                    </div>
+                    <div className="flex-1">
+                      <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-slate-200 text-slate-700 mb-1">
+                        Currently Out of Stock
+                      </div>
+                      <h4 className="text-base font-black text-slate-900 leading-tight">
+                        Next Print Batch in Progress / மறுபதிப்பு விரைவில்
+                      </h4>
+                      <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                        Copies for this guide were quickly snapped up by students across Tamil Nadu. Our Sivakasi printing unit is actively preparing the next reprint batch.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row gap-2.5 pt-1">
+                    <a
+                      href={`https://wa.me/919486017820?text=${encodeURIComponent(`Hi Blessing Power Guide! Please notify me when ${product.title} (Class ${product.cls}) is back in stock.`)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1 py-3 px-4 bg-[#25D366] hover:bg-[#20bd5a] text-white font-extrabold text-xs sm:text-sm rounded-xl shadow-sm flex items-center justify-center gap-2 transition-all cursor-pointer"
+                    >
+                      <svg className="w-4 h-4 fill-current shrink-0" viewBox="0 0 24 24">
+                        <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/>
+                      </svg>
+                      <span>Notify Me on WhatsApp When In Stock</span>
+                    </a>
+
+                    <Link
+                      href="/search"
+                      className="py-3 px-4 bg-white border border-slate-300 hover:border-slate-400 text-slate-800 font-extrabold text-xs sm:text-sm rounded-xl shadow-2xs flex items-center justify-center gap-1.5 transition-all text-center"
+                    >
+                      <span>Explore Other Guides</span>
+                      <ChevronRight className="w-4 h-4 text-slate-400" />
+                    </Link>
+                  </div>
+                </div>
               ) : (
                 <>
                   <div className="flex gap-3">
@@ -1283,14 +1546,48 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
               <Sparkles className="w-4 h-4 text-amber-600 animate-pulse" />
               <span>🚀 COMING SOON</span>
             </div>
-          ) : isProductOutOfStock || isCurrentMediumSoldOut ? (
-            <button
-              type="button"
-              disabled
-              className="flex-1 bg-slate-200 text-slate-500 font-extrabold text-xs py-3.5 rounded-xl uppercase tracking-wider cursor-not-allowed min-h-11"
-            >
-              {isCurrentMediumSoldOut ? `${selectedMedium.replace(' Medium', '')} Sold Out` : 'OUT OF STOCK'}
-            </button>
+          ) : isCurrentMediumSoldOut ? (
+            <div className="flex items-center gap-1.5 flex-1 min-w-0">
+              <button
+                type="button"
+                onClick={() => setSelectedMedium(selectedMedium === 'Tamil Medium' ? 'English Medium' : 'Tamil Medium')}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-[11px] py-3 px-2 rounded-xl uppercase tracking-wider flex items-center justify-center gap-1 min-h-11 cursor-pointer"
+              >
+                <span>Switch to {selectedMedium === 'Tamil Medium' ? 'Eng' : 'Tamil'}</span>
+              </button>
+              <a
+                href={`https://wa.me/919486017820?text=${encodeURIComponent(`Hi Blessing Power Guide! Please notify me when ${product.title} (${selectedMedium}) is back in stock.`)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-11 h-11 bg-[#25D366] text-white rounded-xl flex items-center justify-center shrink-0 shadow-xs cursor-pointer"
+                title="Notify on WhatsApp"
+                aria-label="Notify on WhatsApp"
+              >
+                <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+                  <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/>
+                </svg>
+              </a>
+            </div>
+          ) : isProductOutOfStock ? (
+            <div className="flex items-center gap-1.5 flex-1 min-w-0">
+              <a
+                href={`https://wa.me/919486017820?text=${encodeURIComponent(`Hi Blessing Power Guide! Please notify me when ${product.title} (Class ${product.cls}) is back in stock.`)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 bg-[#25D366] hover:bg-[#20bd5a] text-white font-extrabold text-[11px] py-3 px-2 rounded-xl uppercase tracking-wider flex items-center justify-center gap-1.5 min-h-11 shadow-xs cursor-pointer"
+              >
+                <svg className="w-4 h-4 fill-current shrink-0" viewBox="0 0 24 24">
+                  <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/>
+                </svg>
+                <span>Notify In Stock</span>
+              </a>
+              <Link
+                href="/search"
+                className="py-3 px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-[11px] rounded-xl flex items-center justify-center min-h-11"
+              >
+                Other Books
+              </Link>
+            </div>
           ) : (
             <div className="flex items-center gap-1.5 flex-1 min-w-0">
               <button

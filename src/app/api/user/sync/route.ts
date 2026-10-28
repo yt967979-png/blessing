@@ -69,13 +69,16 @@ export async function POST(request: Request) {
         for (const addr of addresses.slice(0, 15)) {
           const addrId = String(addr.id || `addr-${Date.now()}`);
           await client.query(
-            `INSERT INTO addresses (id, user_id, full_name, phone, alternate_phone, address_line1, near_landmark, city, pincode, landmark)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            `INSERT INTO addresses (id, user_id, full_name, phone, alternate_phone, door_no, floor_no, address_line1, town, near_landmark, city, pincode, landmark)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
              ON CONFLICT (id) DO UPDATE SET
                full_name = EXCLUDED.full_name,
                phone = EXCLUDED.phone,
                alternate_phone = COALESCE(NULLIF(EXCLUDED.alternate_phone, ''), addresses.alternate_phone),
+               door_no = COALESCE(NULLIF(EXCLUDED.door_no, ''), addresses.door_no),
+               floor_no = COALESCE(NULLIF(EXCLUDED.floor_no, ''), addresses.floor_no),
                address_line1 = EXCLUDED.address_line1,
+               town = COALESCE(NULLIF(EXCLUDED.town, ''), addresses.town),
                near_landmark = COALESCE(NULLIF(EXCLUDED.near_landmark, ''), addresses.near_landmark),
                city = EXCLUDED.city,
                pincode = EXCLUDED.pincode,
@@ -86,8 +89,11 @@ export async function POST(request: Request) {
               addr.name || 'User',
               addr.phone || '',
               addr.alternatePhone || addr.alternate_phone || '',
+              addr.doorNo || addr.door_no || null,
+              addr.floorNo || addr.floor_no || null,
               addr.address || '',
-              addr.nearLandmark || addr.near_landmark || '',
+              addr.town || null,
+              addr.nearLandmark || addr.near_landmark || null,
               addr.city || 'Chennai',
               addr.pincode || '600012',
               addr.landmark || addr.type || 'HOME',

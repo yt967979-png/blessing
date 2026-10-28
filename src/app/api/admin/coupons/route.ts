@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { queryDb } from '@/lib/db';
 import { verifyAdminRequest, forbiddenResponse, unauthorizedResponse } from '@/lib/serverSecurity';
 import { mapAdminCoupon } from '@/lib/coupons';
+import { recordAdminAudit } from '@/lib/adminAudit';
 
 export async function GET(request: Request) {
   const auth = await verifyAdminRequest(request);
@@ -120,6 +121,18 @@ export async function POST(request: Request) {
       const { notifyCouponsChanged } = await import('@/app/api/stock/stream/route');
       void notifyCouponsChanged();
     } catch (_) {}
+
+    void recordAdminAudit(
+      {
+        actorId: auth.user?.userId || 'admin',
+        action: 'COUPON_CREATED',
+        targetType: 'coupon',
+        targetId: row?.id || cleanCode,
+        details: { code: cleanCode, discountType, discountValue, minOrderAmount },
+      },
+      request
+    );
+
     return NextResponse.json({
       success: true,
       coupon: mapAdminCoupon(row),
@@ -279,6 +292,18 @@ export async function PATCH(request: Request) {
       const { notifyCouponsChanged } = await import('@/app/api/stock/stream/route');
       void notifyCouponsChanged();
     } catch (_) {}
+
+    void recordAdminAudit(
+      {
+        actorId: auth.user?.userId || 'admin',
+        action: 'COUPON_UPDATED',
+        targetType: 'coupon',
+        targetId: id,
+        details: body,
+      },
+      request
+    );
+
     return NextResponse.json({ success: true, coupon: mapAdminCoupon(result.rows[0]) });
   } catch (error: any) {
     console.error('[admin/coupons] PATCH error:', error);
@@ -317,6 +342,18 @@ export async function DELETE(request: Request) {
       const { notifyCouponsChanged } = await import('@/app/api/stock/stream/route');
       void notifyCouponsChanged();
     } catch (_) {}
+
+    void recordAdminAudit(
+      {
+        actorId: auth.user?.userId || 'admin',
+        action: 'COUPON_DELETED',
+        targetType: 'coupon',
+        targetId: id,
+        details: { deletedId: id },
+      },
+      request
+    );
+
     return NextResponse.json({ success: true, deletedId: id });
   } catch (error: any) {
     console.error('[admin/coupons] DELETE error:', error);

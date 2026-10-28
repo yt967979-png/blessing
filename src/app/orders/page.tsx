@@ -27,6 +27,7 @@ import {
   PackageCheck,
   Sparkles,
   RefreshCw,
+  MessageCircle,
 } from 'lucide-react';
 import { customerRefundStage, isOrderCancelled, isRecordCancelled, isParcelDelivered, isDeliveryAttempted } from '@/lib/orderStatus';
 import { getSTCourierDeliveryEstimate } from '@/lib/deliveryEstimator';
@@ -1115,6 +1116,20 @@ function OrdersContent() {
                   </div>
 
                   <div className="flex flex-wrap gap-2">
+                    <a
+                      href={shopWhatsAppChatUrl(
+                        `Hi Blessing Power Guide! I have a question regarding my order #${ord.orderId || ''}.`
+                      )}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="bg-[#25D366]/10 hover:bg-[#25D366]/20 text-[#128C7E] border border-[#25D366]/30 font-extrabold text-xs px-3.5 py-2.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                      title="Ask on WhatsApp regarding this order"
+                    >
+                      <MessageCircle className="w-3.5 h-3.5 text-[#25D366] fill-[#25D366]/20" />
+                      <span>WHATSAPP</span>
+                    </a>
+
                     <a
                       href={invoiceHref(ord.orderId || ord.id)}
                       target="_blank"

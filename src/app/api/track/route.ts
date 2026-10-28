@@ -5,6 +5,7 @@ import { isOfficialAwb, syncOrderByAwb } from '@/lib/stCourier';
 import { isOrderCancelled, isAwaitingConfirmation, isParcelDelivered, isDeliveryAttempted, customerCourierHeadline } from '@/lib/orderStatus';
 import { getSTCourierDeliveryEstimate } from '@/lib/deliveryEstimator';
 import { verifyTrackingToken } from '@/lib/trackToken';
+import { formatIndianDateTime } from '@/lib/indianTime';
 
 const CUSTOMER_STEPS = [
   { key: 'Confirmed', label: 'Confirmed', short: 'Confirmed' },
@@ -181,14 +182,7 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string, tokenRaw?: stri
         remarks: r.remarks,
         city: r.hub_city,
         awb: r.awb_number,
-        time: r.created_at
-          ? new Date(r.created_at).toLocaleString('en-IN', {
-              day: 'numeric',
-              month: 'short',
-              hour: '2-digit',
-              minute: '2-digit',
-            })
-          : null,
+        time: r.created_at ? formatIndianDateTime(r.created_at) : null,
       }));
     } catch (_) {}
 
@@ -219,13 +213,13 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string, tokenRaw?: stri
     const lastUpdatedAt =
       lastScan?.time ||
       (o.delivered_at
-        ? new Date(o.delivered_at).toLocaleString('en-IN')
+        ? formatIndianDateTime(o.delivered_at)
         : o.shipped_at
-          ? new Date(o.shipped_at).toLocaleString('en-IN')
+          ? formatIndianDateTime(o.shipped_at)
           : o.packed_at
-            ? new Date(o.packed_at).toLocaleString('en-IN')
+            ? formatIndianDateTime(o.packed_at)
             : o.ordered_at
-              ? new Date(o.ordered_at).toLocaleString('en-IN')
+              ? formatIndianDateTime(o.ordered_at)
               : null);
 
     // Dynamic Delivery Estimator

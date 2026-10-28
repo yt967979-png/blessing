@@ -3,6 +3,7 @@ import { queryDb } from '@/lib/db';
 import { forbiddenResponse, verifyAdminRequest, verifySuperAdminRequest } from '@/lib/serverSecurity';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import { getActiveHoldsSummary, releaseStockHolds } from '@/lib/stockHold';
+import { formatIndianDateTime } from '@/lib/indianTime';
 
 /** Admin: list customers + low-stock books + active stock holds */
 export async function GET(request: NextRequest) {
@@ -71,13 +72,7 @@ export async function GET(request: NextRequest) {
         status: u.status || 'active',
         orderCount: Number(u.order_count || 0),
         totalSpent: Number(u.total_spent || 0),
-        createdAt: u.created_at
-          ? new Date(u.created_at).toLocaleDateString('en-IN', {
-              day: 'numeric',
-              month: 'short',
-              year: 'numeric',
-            })
-          : '—',
+        createdAt: u.created_at ? formatIndianDateTime(u.created_at) : '—',
       }))
     );
   } catch (err: any) {

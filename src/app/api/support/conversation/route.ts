@@ -499,14 +499,19 @@ export async function POST(req: NextRequest) {
         [conv.id]
       );
 
-      const sysMsgId = `msg_${Date.now()}_sys`;
+      // AI-First Response: Blessing AI acknowledges customer and confirms staff alert
+      const aiMsgId = `msg_${Date.now()}_ai`;
+      const namePart = customerName && customerName !== 'Student/Parent' && customerName !== 'Customer' ? customerName.split(' ')[0] : 'there';
+      const aiText = `Hi ${namePart}! 👋 I'm Blessing AI, your support assistant. I have recorded your request to connect with our support desk and notified our staff.\n\nWhile an agent joins our chat, how can I help you right now? You can ask me anything about our 10th standard guides, syllabus, minimum order rules, or track a parcel!`;
+      const initialSuggestions = ['📚 10th Class Guides & Prices', '📦 Minimum Order & Delivery Fee', '🚚 Where is my order right now?'];
+
       await queryDb(
-        `INSERT INTO support_messages (id, conversation_id, sender_type, sender_name, text)
-         VALUES ($1, $2, 'SYSTEM', 'System', $3)`,
-        [sysMsgId, conv.id, '⏳ Connecting you to our support team... Please wait while an agent joins.']
+        `INSERT INTO support_messages (id, conversation_id, sender_type, sender_name, text, metadata)
+         VALUES ($1, $2, 'AI', 'Blessing AI Assistant', $3, $4)`,
+        [aiMsgId, conv.id, aiText, JSON.stringify({ suggestions: initialSuggestions })]
       );
 
-      // Alert all online admins
+      // Alert all online admins on dashboard and Telegram
       await notifySupportEvent({
         type: 'SUPPORT_REQUESTED',
         conversationId: conv.id,
@@ -517,12 +522,18 @@ export async function POST(req: NextRequest) {
         timestamp: new Date().toISOString(),
       });
 
-      const sysMsg = {
-        id: sysMsgId,
+      const { sendTelegramMessage } = await import('@/lib/cofounder/telegram');
+      void sendTelegramMessage(
+        `🔔 *Blessing Power Guide — Support Escalation*\n👤 Customer: *${namePart}* (${customerPhone || 'Guest'})\n📋 Chat: #${conv.id}\n_Status: Waiting for Admin in Support Dashboard_`
+      );
+
+      const aiMsg = {
+        id: aiMsgId,
         conversation_id: conv.id,
-        sender_type: 'SYSTEM' as const,
-        sender_name: 'System',
-        text: '⏳ Connecting you to our support team... Please wait while an agent joins.',
+        sender_type: 'AI' as const,
+        sender_name: 'Blessing AI Assistant',
+        text: aiText,
+        suggestions: initialSuggestions,
         created_at: new Date().toISOString(),
       };
 
@@ -535,7 +546,7 @@ export async function POST(req: NextRequest) {
           customer_name: customerName,
           customer_phone: customerPhone,
         },
-        systemMessage: sysMsg,
+        aiMessage: aiMsg,
         status: 'WAITING_ADMIN',
       });
       if (isNew) {
@@ -618,8 +629,8 @@ export async function POST(req: NextRequest) {
       timestamp: new Date().toISOString(),
     });
 
-    // If conversation is in ACTIVE state (human assigned) or WAITING_ADMIN, do NOT run bot; notify assigned admin
-    if (conv.status === 'ACTIVE' || conv.status === 'WAITING_ADMIN') {
+    // If conversation is in ACTIVE state with an assigned admin, do NOT run bot; notify assigned admin
+    if (conv.status === 'ACTIVE' && conv.assigned_admin_id) {
       const res = NextResponse.json({
         success: true,
         conversationId: conv.id,
@@ -633,57 +644,67 @@ export async function POST(req: NextRequest) {
       return res;
     }
 
-    // ── BOT MODE: Execute RAG Engine
-    const ragResult = await generateSupportRagAnswer(text, {
-      phone: customerPhone || conv.customer_phone || undefined,
-      customerId: customerId || undefined,
-      userName: customerName || conv.customer_name || undefined,
-      email: customerEmail || undefined,
-      sessionOrder: linkedOrderId || conv.order_id || undefined,
+    // ── BOT MODE: Execute AI-First Engine (Groq + Verified Knowledge + Live Orders + Maintenance Context)
+    const { processCustomerMessageWithAi } = await import('@/lib/supportAiEngine');
+    const aiResult = await processCustomerMessageWithAi({
+      conversationId: conv.id,
+      customerMessage: text,
+      customerName: customerName || conv.customer_name || undefined,
+      customerPhone: customerPhone || conv.customer_phone || undefined,
+      customerId: customerId || conv.customer_id || undefined,
+      linkedOrderId: linkedOrderId || conv.order_id || undefined,
     });
 
-    if (ragResult.linkedOrderId && !conv.order_id) {
-      await queryDb(`UPDATE support_conversations SET order_id = $1 WHERE id = $2`, [ragResult.linkedOrderId, conv.id]);
+    if (aiResult.linkedOrderId && !conv.order_id) {
+      await queryDb(`UPDATE support_conversations SET order_id = $1 WHERE id = $2`, [aiResult.linkedOrderId, conv.id]);
     }
 
-    const aiMsgId = `msg_${Date.now() + 50}_ai`;
-    const aiMetadata = {
-      suggestions: ragResult.suggestions,
-      linkedOrderData: ragResult.linkedOrderData,
-      cardType: ragResult.cardType,
-      cardData: ragResult.cardData,
-    };
-    await queryDb(
-      `INSERT INTO support_messages (id, conversation_id, sender_type, sender_name, text, metadata)
-       VALUES ($1, $2, 'AI', 'Blessing AI Assistant', $3, $4)`,
-      [aiMsgId, conv.id, ragResult.answer, JSON.stringify(aiMetadata)]
+    // Atomic race-condition check: if an administrator accepted the conversation while AI was generating, suppress the AI message
+    const takeoverCheck = await queryDb(
+      `SELECT status, assigned_admin_id FROM support_conversations WHERE id = $1 LIMIT 1`,
+      [conv.id]
     );
+    const freshConv = takeoverCheck.rows[0];
+    const isHumanClaimed = Boolean(freshConv && freshConv.status === 'ACTIVE' && freshConv.assigned_admin_id);
 
-    await notifySupportEvent({
-      type: 'NEW_MESSAGE',
-      conversationId: conv.id,
-      senderType: 'AI',
-      senderName: 'Blessing AI Assistant',
-      text: ragResult.answer,
-      message: {
-        id: aiMsgId,
-        conversation_id: conv.id,
-        sender_type: 'AI',
-        sender_name: 'Blessing AI Assistant',
-        text: ragResult.answer,
-        suggestions: ragResult.suggestions,
-        linkedOrderData: ragResult.linkedOrderData,
-        cardType: ragResult.cardType,
-        cardData: ragResult.cardData,
-        created_at: new Date().toISOString(),
-      },
-      status: conv.status,
-      data: aiMetadata,
-      timestamp: new Date().toISOString(),
-    });
+    const aiMsgId = `msg_${Date.now() + 50}_ai`;
+    const finalAnswer = aiResult.answer;
 
-    // If RAG detected need for human escalation
-    if (ragResult.shouldEscalate) {
+    if (!isHumanClaimed) {
+      const aiMetadata = {
+        suggestions: aiResult.suggestions,
+        linkedOrderId: aiResult.linkedOrderId,
+      };
+
+      await queryDb(
+        `INSERT INTO support_messages (id, conversation_id, sender_type, sender_name, text, metadata)
+         VALUES ($1, $2, 'AI', 'Blessing AI Assistant', $3, $4)`,
+        [aiMsgId, conv.id, finalAnswer, JSON.stringify(aiMetadata)]
+      );
+
+      await notifySupportEvent({
+        type: 'NEW_MESSAGE',
+        conversationId: conv.id,
+        senderType: 'AI',
+        senderName: 'Blessing AI Assistant',
+        text: finalAnswer,
+        message: {
+          id: aiMsgId,
+          conversation_id: conv.id,
+          sender_type: 'AI',
+          sender_name: 'Blessing AI Assistant',
+          text: finalAnswer,
+          suggestions: aiResult.suggestions,
+          created_at: new Date().toISOString(),
+        },
+        status: conv.status,
+        data: aiMetadata,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    // If AI detected need for human escalation
+    if (aiResult.shouldEscalate && !isHumanClaimed) {
       await queryDb(`UPDATE support_conversations SET status = 'WAITING_ADMIN' WHERE id = $1`, [conv.id]);
       await notifySupportEvent({
         type: 'SUPPORT_REQUESTED',
@@ -696,7 +717,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const finalStatus = ragResult.shouldEscalate ? 'WAITING_ADMIN' : conv.status || 'BOT';
+    const finalStatus = isHumanClaimed ? 'ACTIVE' : (aiResult.shouldEscalate ? 'WAITING_ADMIN' : conv.status || 'BOT');
     const res = NextResponse.json({
       success: true,
       conversationId: conv.id,
@@ -705,22 +726,24 @@ export async function POST(req: NextRequest) {
         status: finalStatus,
         customer_name: customerName,
         customer_phone: customerPhone,
-        order_id: ragResult.linkedOrderId || conv.order_id || null,
+        order_id: aiResult.linkedOrderId || conv.order_id || null,
       },
-      reply: ragResult.answer,
-      suggestions: ragResult.suggestions || [],
-      aiMessage: {
-        id: aiMsgId,
-        conversation_id: conv.id,
-        sender_type: 'AI' as const,
-        sender_name: 'Blessing AI Assistant',
-        text: ragResult.answer,
-        suggestions: ragResult.suggestions || [],
-        linkedOrderData: ragResult.linkedOrderData || null,
-        cardType: ragResult.cardType || null,
-        cardData: ragResult.cardData || null,
-        created_at: new Date().toISOString(),
-      },
+      reply: finalAnswer,
+      suggestions: aiResult.suggestions || [],
+      aiMessage: !isHumanClaimed
+        ? {
+            id: aiMsgId,
+            conversation_id: conv.id,
+            sender_type: 'AI' as const,
+            sender_name: 'Blessing AI Assistant',
+            text: finalAnswer,
+            suggestions: aiResult.suggestions || [],
+            linkedOrderData: null,
+            cardType: null,
+            cardData: null,
+            created_at: new Date().toISOString(),
+          }
+        : null,
       status: finalStatus,
     });
 

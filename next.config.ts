@@ -9,6 +9,10 @@ const nextConfig: NextConfig = {
     root: path.resolve(__dirname),
   },
 
+  generateBuildId: async () => {
+    return `bpg-v2-${Date.now()}`;
+  },
+
   experimental: {
     optimizePackageImports: ["lucide-react", "framer-motion"],
   },

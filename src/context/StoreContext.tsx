@@ -25,6 +25,7 @@ export interface Product {
   badgeColor: string;
   image: string;
   hoverImage?: string;
+  images?: string[];
   description: string;
   features: string[];
   inStock: boolean;

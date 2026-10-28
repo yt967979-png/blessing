@@ -8,7 +8,8 @@ import { FloatingActions } from '@/components/layout/FloatingActions';
 import { ScrollRestore } from '@/components/layout/ScrollRestore';
 import { Modals } from '@/components/modals/Modals';
 import { BlessingChatWidget } from '@/components/chat/BlessingChatWidget';
-import { NetworkResilienceIndicator } from '@/components/ui/NetworkResilienceIndicator';
+import { NetworkOfflineBanner } from '@/components/ui/NetworkOfflineBanner';
+import { FestiveThemeOverlay } from '@/components/layout/FestiveThemeOverlay';
 
 /** Shared storefront chrome — mount once from root layout */
 export function ClientChrome({ children }: { children: React.ReactNode }) {
@@ -54,7 +55,8 @@ export function ClientChrome({ children }: { children: React.ReactNode }) {
   }, []);
   return (
     <>
-      <NetworkResilienceIndicator />
+      <FestiveThemeOverlay />
+      <NetworkOfflineBanner />
       <ScrollRestore />
       {children}
       <Toast />

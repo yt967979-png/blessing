@@ -282,6 +282,11 @@ export default function AdminUsersTab({
                     <td className="py-3 px-3">
                       <p className="font-semibold text-gray-900">{c.name}</p>
                       <p className="text-[10px] text-gray-400">{c.email}</p>
+                      {c.createdAt && c.createdAt !== '—' && (
+                        <p className="text-[10px] text-emerald-700 font-mono mt-0.5">
+                          Joined: {c.createdAt}
+                        </p>
+                      )}
                     </td>
                     <td className="py-3 px-3 text-gray-600 whitespace-nowrap">{c.phone}</td>
                     <td className="py-3 px-3">

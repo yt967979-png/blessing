@@ -38,6 +38,7 @@ import {
   Sparkles,
   Trash2,
 } from 'lucide-react';
+import { formatIndianDateTime } from '@/lib/indianTime';
 
 interface MonitorPayload {
   ok: boolean;
@@ -1394,8 +1395,8 @@ export default function OpsPage() {
               </div>
 
               <div>
-                <span className="text-[11px] font-bold text-slate-400 uppercase block">Timestamp</span>
-                <p className="text-slate-300">{new Date(selectedError.timestamp).toLocaleString('en-IN')}</p>
+                <span className="text-[11px] font-bold text-slate-400 uppercase block">Timestamp (IST)</span>
+                <p className="text-slate-300 font-mono text-xs">{formatIndianDateTime(selectedError.timestamp, true)}</p>
               </div>
 
               <div>

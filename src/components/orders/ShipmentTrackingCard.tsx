@@ -12,6 +12,7 @@ import {
   AlertCircle,
   Copy,
   Check,
+  MessageCircle,
 } from 'lucide-react';
 import {
   classifyCourierActivity,
@@ -20,6 +21,7 @@ import {
   isParcelDelivered,
   isRtoStatus,
 } from '@/lib/orderStatus';
+import { formatIndianDateTime } from '@/lib/indianTime';
 
 export type TrackingScan = {
   activity?: string;
@@ -34,13 +36,7 @@ function formatScanTime(raw: string | undefined): string {
   if (!raw) return '';
   const d = new Date(raw);
   if (!Number.isNaN(d.getTime())) {
-    return d.toLocaleString('en-IN', {
-      day: '2-digit',
-      month: 'short',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true,
-    });
+    return formatIndianDateTime(d);
   }
   return String(raw);
 }
@@ -311,14 +307,23 @@ export function ShipmentTrackingCard({
                   href={stUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className={`inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-[#001B3A] hover:bg-[#002B5B] text-white text-[11px] font-extrabold uppercase tracking-wide touch-manipulation min-h-11 ${
-                    onRefresh && !delivered && !rto ? '' : 'sm:col-span-2'
-                  }`}
+                  className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-[#001B3A] hover:bg-[#002B5B] text-white text-[11px] font-extrabold uppercase tracking-wide touch-manipulation min-h-11"
                 >
                   Track on ST Courier website
                   <ExternalLink className="w-3.5 h-3.5 text-amber-400" />
                 </a>
               )}
+              <a
+                href={`https://wa.me/?text=${encodeURIComponent(
+                  `Tracking my Blessing Power Guide order #${orderId}:\nST Courier AWB: ${awbText}\nOfficial ST Courier Tracking: ${stUrl || `https://stcourier.com/track/shipment?docket=${awbText}`}\nLive Website Tracking: https://blessingpowerguide.in/track?orderId=${encodeURIComponent(orderId)}`
+                )}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-[#25D366]/10 hover:bg-[#25D366]/20 text-[#128C7E] border border-[#25D366]/30 text-[11px] font-extrabold uppercase tracking-wide touch-manipulation min-h-11 cursor-pointer"
+              >
+                <MessageCircle className="w-3.5 h-3.5 text-[#25D366] fill-[#25D366]/20" />
+                <span>Share Tracking on WhatsApp</span>
+              </a>
             </div>
           )}
           {hasAwb && (

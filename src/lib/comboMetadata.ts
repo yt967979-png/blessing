@@ -35,6 +35,7 @@ export const ALL_COMBO_SUBJECT_DEFINITIONS: Record<string, ComboSubject> = {
   english: {
     name: 'English',
     shortName: 'English',
+    tamilName: 'ஆங்கிலம்',
     icon: '📙',
     tag: 'Language II',
     color: 'bg-amber-50 text-amber-800 border-amber-200',

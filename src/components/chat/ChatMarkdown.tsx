@@ -131,6 +131,52 @@ export const ChatMarkdown: React.FC<ChatMarkdownProps> = ({ content, isCustomer 
           );
         }
 
+        // Markdown image: ![alt](url)
+        const imgMatch = trimmed.match(/^!\[(.*?)\]\((.*?)\)$/);
+        if (imgMatch) {
+          const alt = imgMatch[1] || 'Damage proof photo';
+          const src = imgMatch[2];
+          return (
+            <div key={`line-${lineIndex}`} className="my-2 rounded-xl overflow-hidden border border-slate-200/80 bg-slate-900/5 max-w-xs shadow-xs">
+              <a href={src} target="_blank" rel="noopener noreferrer" className="block relative group cursor-zoom-in">
+                <img
+                  src={src}
+                  alt={alt}
+                  className="w-full max-h-56 object-cover rounded-xl transition-transform group-hover:scale-[1.02]"
+                  loading="lazy"
+                />
+                <span className="absolute bottom-1.5 right-1.5 bg-slate-950/75 hover:bg-slate-950 text-white text-[9.5px] font-bold px-2 py-0.5 rounded-md backdrop-blur-xs flex items-center gap-1 shadow-xs">
+                  🔍 View Photo
+                </span>
+              </a>
+              {alt && alt !== 'photo' && alt !== 'Damage proof photo' && (
+                <div className="text-[10px] text-slate-500 px-2 py-1 bg-white/70 truncate">{alt}</div>
+              )}
+            </div>
+          );
+        }
+
+        // Standalone image URL line
+        const standaloneImgMatch = trimmed.match(/^(https?:\/\/[^\s]+|\/uploads\/[^\s]+)\.(png|jpg|jpeg|webp)$/i);
+        if (standaloneImgMatch) {
+          const src = trimmed;
+          return (
+            <div key={`line-${lineIndex}`} className="my-2 rounded-xl overflow-hidden border border-slate-200/80 bg-slate-900/5 max-w-xs shadow-xs">
+              <a href={src} target="_blank" rel="noopener noreferrer" className="block relative group cursor-zoom-in">
+                <img
+                  src={src}
+                  alt="Uploaded photo"
+                  className="w-full max-h-56 object-cover rounded-xl transition-transform group-hover:scale-[1.02]"
+                  loading="lazy"
+                />
+                <span className="absolute bottom-1.5 right-1.5 bg-slate-950/75 hover:bg-slate-950 text-white text-[9.5px] font-bold px-2 py-0.5 rounded-md backdrop-blur-xs flex items-center gap-1 shadow-xs">
+                  🔍 View Photo
+                </span>
+              </a>
+            </div>
+          );
+        }
+
         return (
           <p key={`line-${lineIndex}`} className="text-xs">
             {parseInline(line, `p-${lineIndex}`)}

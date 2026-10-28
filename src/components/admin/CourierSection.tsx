@@ -9,9 +9,11 @@ import {
   CheckCircle2,
   Clock,
   Package,
+  MessageCircle,
 } from 'lucide-react';
 import OrderStatusStamp from './OrderStatusStamp';
 import { isRecordCancelled, fulfillmentStatus, isParcelDelivered } from '@/lib/orderStatus';
+import { buildWhatsAppAwbShareUrl } from '@/lib/whatsappTracking';
 
 interface CourierSectionProps {
   orders: any[];
@@ -175,15 +177,42 @@ export const CourierSection: React.FC<CourierSectionProps> = ({
                         <OrderStatusStamp status={fulfillmentStatus(o) || 'DISPATCHED'} />
                       </td>
                       <td className="p-3.5 text-right">
-                        <a
-                          href={trackingUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 hover:bg-blue-50 text-[#2874f0] border border-slate-200 hover:border-blue-300 rounded-lg text-xs font-bold transition-all shadow-xs"
-                        >
-                          <span>Open ST Courier</span>
-                          <ExternalLink className="w-3.5 h-3.5" />
-                        </a>
+                        <div className="inline-flex items-center justify-end gap-2">
+                          <a
+                            href={buildWhatsAppAwbShareUrl({
+                              orderNumber: o.orderId || o.id,
+                              customerName: o.customerName,
+                              customerPhone: o.customerPhone,
+                              customerAltPhone: o.customerAltPhone,
+                              trackingNumber: o.trackingNumber,
+                              courierName: o.courierName || 'ST Courier Express',
+                              items: o.items,
+                              address: o.address,
+                              city: o.city,
+                              pincode: o.pincode,
+                              state: o.state,
+                              totalAmount: o.totalAmount,
+                              paymentMethod: o.paymentMethod,
+                              paymentStatus: o.paymentStatus,
+                            })}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#25D366]/10 hover:bg-[#25D366]/20 text-[#128C7E] border border-[#25D366]/30 rounded-lg text-xs font-bold transition-all shadow-2xs hover:shadow-xs cursor-pointer"
+                            title={`Share tracking for Order #${o.orderId} via WhatsApp`}
+                          >
+                            <MessageCircle className="w-3.5 h-3.5 text-[#25D366] fill-[#25D366]/20" />
+                            <span>WhatsApp</span>
+                          </a>
+                          <a
+                            href={trackingUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 hover:bg-blue-50 text-[#2874f0] border border-slate-200 hover:border-blue-300 rounded-lg text-xs font-bold transition-all shadow-xs"
+                          >
+                            <span>Open ST Courier</span>
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </a>
+                        </div>
                       </td>
                     </tr>
                   );

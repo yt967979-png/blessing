@@ -19,7 +19,14 @@ import {
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { authHeaders } from '@/lib/clientAuth';
-import { createUserAddress, migrateLocalAddressesToDb, updateUserAddress, type SavedAddress } from '@/lib/addresses';
+import {
+  createUserAddress,
+  formatFullAddressLine,
+  migrateLocalAddressesToDb,
+  updateUserAddress,
+  checkAddressCompleteness,
+  type SavedAddress,
+} from '@/lib/addresses';
 import { pincodeDeliveryMessage } from '@/lib/pincode';
 import { isValidMobileNumber, addressHasRequiredAlternate, normalizeRequiredAlternateMobile } from '@/lib/authValidation';
 import { userNeedsProfile } from '@/lib/userProfile';
@@ -32,8 +39,57 @@ import { Footer } from '@/components/layout/Footer';
 import { SwiggyCouponsModal } from '@/components/coupons/SwiggyCouponsModal';
 import { useCouponCatalogSync } from '@/hooks/useCouponCatalogSync';
 import { IS_CHECKOUT_PAUSED, CHECKOUT_PAUSE_MESSAGE } from '@/lib/checkoutConstants';
+import { StudentShippingAddressForm, type ShippingFormData } from '@/components/checkout/StudentShippingAddressForm';
 
 type Step = 1 | 2 | 3;
+
+const initialNewAddress: ShippingFormData = {
+  type: 'HOME',
+  studentName: '',
+  parentName: '',
+  phone: '',
+  alternatePhone: '',
+  email: '',
+  whatsappNumber: '',
+  alternateEmail: '',
+  doorNo: '',
+  floorNo: 'Independent House (தனி வீடு / Ground Floor)',
+  buildingName: '',
+  streetName: '',
+  areaLocality: '',
+  townCity: '',
+  taluk: '',
+  district: 'Chennai',
+  state: 'Tamil Nadu',
+  pincode: '',
+  landmark: '',
+  deliveryInstructions: '',
+};
+
+function addressToShippingFormData(a: SavedAddress | Partial<SavedAddress>): ShippingFormData {
+  return {
+    type: a.type || 'HOME',
+    studentName: a.studentName || a.name || '',
+    parentName: a.parentName || '',
+    phone: a.phone || '',
+    alternatePhone: a.alternatePhone || '',
+    email: a.email || '',
+    whatsappNumber: a.whatsappNumber || '',
+    alternateEmail: a.alternateEmail || '',
+    doorNo: a.doorNo || '',
+    floorNo: a.floorNo || 'Independent House (தனி வீடு / Ground Floor)',
+    buildingName: a.buildingName || '',
+    streetName: a.streetName || a.address || '',
+    areaLocality: a.areaLocality || '',
+    townCity: a.townCity || a.town || a.city || '',
+    taluk: a.taluk || '',
+    district: a.district || a.city || 'Chennai',
+    state: a.state || 'Tamil Nadu',
+    pincode: a.pincode || '',
+    landmark: a.landmark || '',
+    deliveryInstructions: a.deliveryInstructions || '',
+  };
+}
 
 export default function CheckoutPage() {
   const router = useRouter();
@@ -75,16 +131,7 @@ export default function CheckoutPage() {
   const orderSubmitLock = useRef(false);
   const idempotencyKeyRef = useRef<string | null>(null);
   const pendingRazorpayOrderIdRef = useRef<string | null>(null);
-  const [newAddr, setNewAddr] = useState({
-    type: 'HOME',
-    name: '',
-    phone: '',
-    alternatePhone: '',
-    address: '',
-    landmark: '',
-    city: '',
-    pincode: '',
-  });
+  const [newAddr, setNewAddr] = useState<ShippingFormData>(initialNewAddress);
 
   const [couponInput, setCouponInput] = useState('');
   const [appliedCoupon, setAppliedCoupon] = useState<{
@@ -206,7 +253,7 @@ export default function CheckoutPage() {
   // Persist draft address on input changes
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    if (newAddr.name || newAddr.phone || newAddr.address) {
+    if (newAddr.studentName || newAddr.phone || newAddr.streetName) {
       try {
         localStorage.setItem('bpg_checkout_addr_draft', JSON.stringify(newAddr));
       } catch {}
@@ -330,8 +377,9 @@ export default function CheckoutPage() {
       }
       setNewAddr((prev) => ({
         ...prev,
-        name: prev.name || user.name || '',
+        studentName: prev.studentName || user.name || '',
         phone: prev.phone || user.phone || '',
+        email: prev.email || user.email || '',
       }));
     })();
     return () => {
@@ -339,9 +387,36 @@ export default function CheckoutPage() {
     };
   }, [user, cart.length, router, setIsAuthOpen, showToast]);
 
-  const selectedAddress =
+  const selectedAddress: SavedAddress =
     selectedAddrId === 'new'
-      ? newAddr
+      ? {
+          id: 'new',
+          type: newAddr.type || 'HOME',
+          name: newAddr.studentName || user?.name || 'Student',
+          studentName: newAddr.studentName,
+          parentName: newAddr.parentName,
+          phone: newAddr.phone,
+          alternatePhone: newAddr.alternatePhone,
+          whatsappNumber: newAddr.whatsappNumber,
+          email: newAddr.email,
+          alternateEmail: newAddr.alternateEmail,
+          doorNo: newAddr.doorNo,
+          floorNo: newAddr.floorNo,
+          buildingName: newAddr.buildingName,
+          streetName: newAddr.streetName,
+          areaLocality: newAddr.areaLocality,
+          townCity: newAddr.townCity,
+          taluk: newAddr.taluk,
+          district: newAddr.district,
+          state: newAddr.state,
+          landmark: newAddr.landmark,
+          deliveryInstructions: newAddr.deliveryInstructions,
+          address: formatFullAddressLine(newAddr),
+          town: newAddr.townCity,
+          city: newAddr.district || 'Chennai',
+          pincode: newAddr.pincode,
+          isDefault: true,
+        }
       : savedAddresses.find((a) => a.id === selectedAddrId) || savedAddresses[0];
 
   // Capture phone and synchronize abandoned cart snapshot immediately
@@ -366,7 +441,7 @@ export default function CheckoutPage() {
           },
           body: JSON.stringify({
             phone: rawPhone,
-            name: selectedAddress?.name || newAddr.name || user?.name || 'Student',
+            name: selectedAddress?.studentName || selectedAddress?.name || newAddr.studentName || user?.name || 'Student',
             cart: cart.map((c) => ({ id: c.id, title: c.title, qty: c.qty, price: c.price })),
             cleared: false,
           }),
@@ -378,25 +453,67 @@ export default function CheckoutPage() {
     user?.token,
     user?.name,
     selectedAddress?.phone,
+    selectedAddress?.studentName,
     selectedAddress?.name,
     newAddr.phone,
-    newAddr.name,
+    newAddr.studentName,
     cart,
   ]);
 
   const handleSaveInlineAddress = async () => {
     if (!user?.id) return false;
-    if (!newAddr.name || !newAddr.address || !newAddr.pincode) {
-      showToast('Fill name, address and pincode');
+    // ── Validate 14 Mandatory Fields (*) ──
+    if (!newAddr.studentName.trim()) {
+      showToast('1. Student Full Name is required *');
       return false;
     }
-    if (!isValidMobileNumber(newAddr.phone || user.phone || '')) {
-      showToast('Enter a valid 10-digit primary mobile number');
+    if (!newAddr.parentName.trim()) {
+      showToast('2. Parent / Guardian Name is required *');
       return false;
     }
-    const alt = normalizeRequiredAlternateMobile(newAddr.alternatePhone, newAddr.phone || user.phone || '');
+    if (!isValidMobileNumber(newAddr.phone)) {
+      showToast('3. Enter a valid 10-digit primary Mobile Number *');
+      return false;
+    }
+    const alt = normalizeRequiredAlternateMobile(newAddr.alternatePhone, newAddr.phone);
     if (!alt.ok) {
       showToast(alt.error);
+      return false;
+    }
+    if (!newAddr.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newAddr.email.trim())) {
+      showToast('5. Enter a valid Primary Email ID *');
+      return false;
+    }
+    if (!newAddr.doorNo.trim()) {
+      showToast('6. Door / House / Flat Number is required *');
+      return false;
+    }
+    if (!newAddr.floorNo.trim()) {
+      showToast('7. Floor Details is required (or select Independent House) *');
+      return false;
+    }
+    if (!newAddr.streetName.trim()) {
+      showToast('8. Street / Road Name is required *');
+      return false;
+    }
+    if (!newAddr.areaLocality.trim()) {
+      showToast('9. Area / Locality is required *');
+      return false;
+    }
+    if (!newAddr.townCity.trim()) {
+      showToast('10. Village / Town / City is required *');
+      return false;
+    }
+    if (!newAddr.district.trim()) {
+      showToast('11. District is required *');
+      return false;
+    }
+    if (!newAddr.state.trim()) {
+      showToast('12. State is required *');
+      return false;
+    }
+    if (!newAddr.pincode || String(newAddr.pincode).length !== 6) {
+      showToast('13. Enter a valid 6-digit PIN Code *');
       return false;
     }
     const pinCheck = pincodeDeliveryMessage(String(newAddr.pincode));
@@ -404,24 +521,56 @@ export default function CheckoutPage() {
       showToast(pinCheck.message);
       return false;
     }
+    if (!newAddr.landmark.trim()) {
+      showToast('14. Nearby Landmark is required *');
+      return false;
+    }
+
     setSavingAddress(true);
     try {
-      const result = await createUserAddress(user, {
-        type: newAddr.type,
-        name: newAddr.name,
-        phone: newAddr.phone,
-        alternatePhone: alt.value,
-        address: newAddr.address,
+      const fullAddr = formatFullAddressLine({
+        doorNo: newAddr.doorNo,
+        floorNo: newAddr.floorNo,
+        buildingName: newAddr.buildingName,
+        streetName: newAddr.streetName,
+        areaLocality: newAddr.areaLocality,
+        townCity: newAddr.townCity,
+        taluk: newAddr.taluk,
         landmark: newAddr.landmark,
-        city: newAddr.city || 'Chennai',
+      });
+
+      const result = await createUserAddress(user, {
+        type: newAddr.type || 'HOME',
+        studentName: newAddr.studentName.trim(),
+        parentName: newAddr.parentName.trim(),
+        name: newAddr.studentName.trim(),
+        phone: newAddr.phone.trim(),
+        alternatePhone: alt.value,
+        whatsappNumber: (newAddr.whatsappNumber || '').trim(),
+        email: newAddr.email.trim(),
+        alternateEmail: (newAddr.alternateEmail || '').trim(),
+        doorNo: newAddr.doorNo.trim(),
+        floorNo: newAddr.floorNo.trim(),
+        buildingName: (newAddr.buildingName || '').trim(),
+        streetName: newAddr.streetName.trim(),
+        areaLocality: newAddr.areaLocality.trim(),
+        townCity: newAddr.townCity.trim(),
+        taluk: (newAddr.taluk || '').trim(),
+        district: newAddr.district.trim(),
+        state: newAddr.state.trim() || 'Tamil Nadu',
+        address: fullAddr,
+        town: newAddr.townCity.trim(),
+        landmark: newAddr.landmark.trim(),
+        city: newAddr.district.trim() || 'Chennai',
         pincode: String(newAddr.pincode),
+        deliveryInstructions: (newAddr.deliveryInstructions || '').trim(),
         isDefault: true,
       });
       if (result.ok) {
         setSavedAddresses((prev) => [result.address, ...prev.map((a) => ({ ...a, isDefault: false }))]);
         setSelectedAddrId(result.address.id);
         setEditDraft(null);
-        showToast('Address saved');
+        showToast('✓ Address saved successfully');
         return true;
       }
       showToast(result.error);
@@ -433,41 +582,116 @@ export default function CheckoutPage() {
 
   const handleUpdateSavedAddress = async () => {
     if (!user?.id || !editDraft?.id) return false;
-    if (!editDraft.name || !editDraft.address || !editDraft.pincode) {
-      showToast('Fill name, address and pincode');
+    const draftData = addressToShippingFormData(editDraft);
+
+    // ── Validate 14 Mandatory Fields (*) ──
+    if (!draftData.studentName.trim()) {
+      showToast('1. Student Full Name is required *');
       return false;
     }
-    if (!isValidMobileNumber(editDraft.phone || user.phone || '')) {
-      showToast('Enter a valid 10-digit primary mobile number');
+    if (!draftData.parentName.trim()) {
+      showToast('2. Parent / Guardian Name is required *');
       return false;
     }
-    const alt = normalizeRequiredAlternateMobile(editDraft.alternatePhone || '', editDraft.phone || user.phone || '');
+    if (!isValidMobileNumber(draftData.phone)) {
+      showToast('3. Enter a valid 10-digit primary Mobile Number *');
+      return false;
+    }
+    const alt = normalizeRequiredAlternateMobile(draftData.alternatePhone, draftData.phone);
     if (!alt.ok) {
       showToast(alt.error);
       return false;
     }
-    const pinCheck = pincodeDeliveryMessage(String(editDraft.pincode));
+    if (!draftData.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(draftData.email.trim())) {
+      showToast('5. Enter a valid Primary Email ID *');
+      return false;
+    }
+    if (!draftData.doorNo.trim()) {
+      showToast('6. Door / House / Flat Number is required *');
+      return false;
+    }
+    if (!draftData.floorNo.trim()) {
+      showToast('7. Floor Details is required (or select Independent House) *');
+      return false;
+    }
+    if (!draftData.streetName.trim()) {
+      showToast('8. Street / Road Name is required *');
+      return false;
+    }
+    if (!draftData.areaLocality.trim()) {
+      showToast('9. Area / Locality is required *');
+      return false;
+    }
+    if (!draftData.townCity.trim()) {
+      showToast('10. Village / Town / City is required *');
+      return false;
+    }
+    if (!draftData.district.trim()) {
+      showToast('11. District is required *');
+      return false;
+    }
+    if (!draftData.state.trim()) {
+      showToast('12. State is required *');
+      return false;
+    }
+    if (!draftData.pincode || String(draftData.pincode).length !== 6) {
+      showToast('13. Enter a valid 6-digit PIN Code *');
+      return false;
+    }
+    const pinCheck = pincodeDeliveryMessage(String(draftData.pincode));
     if (!pinCheck.ok) {
       showToast(pinCheck.message);
       return false;
     }
+    if (!draftData.landmark.trim()) {
+      showToast('14. Nearby Landmark is required *');
+      return false;
+    }
+
     setSavingAddress(true);
     try {
+      const fullAddr = formatFullAddressLine({
+        doorNo: draftData.doorNo,
+        floorNo: draftData.floorNo,
+        buildingName: draftData.buildingName,
+        streetName: draftData.streetName,
+        areaLocality: draftData.areaLocality,
+        townCity: draftData.townCity,
+        taluk: draftData.taluk,
+        landmark: draftData.landmark,
+      });
+
       const result = await updateUserAddress(user, editDraft.id, {
-        type: editDraft.type,
-        name: editDraft.name,
-        phone: editDraft.phone,
+        type: draftData.type || 'HOME',
+        studentName: draftData.studentName.trim(),
+        parentName: draftData.parentName.trim(),
+        name: draftData.studentName.trim(),
+        phone: draftData.phone.trim(),
         alternatePhone: alt.value,
-        address: editDraft.address,
-        landmark: editDraft.landmark,
-        city: editDraft.city || 'Chennai',
-        pincode: String(editDraft.pincode),
+        whatsappNumber: (draftData.whatsappNumber || '').trim(),
+        email: draftData.email.trim(),
+        alternateEmail: (draftData.alternateEmail || '').trim(),
+        doorNo: draftData.doorNo.trim(),
+        floorNo: draftData.floorNo.trim(),
+        buildingName: (draftData.buildingName || '').trim(),
+        streetName: draftData.streetName.trim(),
+        areaLocality: draftData.areaLocality.trim(),
+        townCity: draftData.townCity.trim(),
+        taluk: (draftData.taluk || '').trim(),
+        district: draftData.district.trim(),
+        state: draftData.state.trim() || 'Tamil Nadu',
+        address: fullAddr,
+        town: draftData.townCity.trim(),
+        landmark: draftData.landmark.trim(),
+        city: draftData.district.trim() || 'Chennai',
+        pincode: String(draftData.pincode),
+        deliveryInstructions: (draftData.deliveryInstructions || '').trim(),
       });
       if (result.ok) {
         setSavedAddresses((prev) => prev.map((a) => (a.id === result.address.id ? result.address : a)));
         setSelectedAddrId(result.address.id);
         setEditDraft(null);
-        showToast('Address updated');
+        showToast('✓ Address updated');
         return true;
       }
       showToast(result.error);
@@ -491,14 +715,15 @@ export default function CheckoutPage() {
         showToast('Select a delivery address to continue.');
         return;
       }
-      const pinCheck = pincodeDeliveryMessage(String(chosen.pincode || ''));
-      if (!pinCheck.ok) {
-        showToast(pinCheck.message);
+      const completeness = checkAddressCompleteness(chosen);
+      if (!completeness.isComplete) {
+        showToast(`⚠️ Please complete new address format before placing order: ${completeness.missingFields.slice(0, 2).join(', ')}`);
         setEditDraft({ ...chosen });
         return;
       }
-      if (!addressHasRequiredAlternate(chosen)) {
-        showToast('Add a different 10-digit alternate mobile on this address before paying.');
+      const pinCheck = pincodeDeliveryMessage(String(chosen.pincode || ''));
+      if (!pinCheck.ok) {
+        showToast(pinCheck.message);
         setEditDraft({ ...chosen });
         return;
       }
@@ -562,8 +787,9 @@ export default function CheckoutPage() {
       release();
       return;
     }
-    if (!addressHasRequiredAlternate(selectedAddress)) {
-      showToast('Add a valid alternate mobile number on the delivery address.');
+    const completeness = checkAddressCompleteness(selectedAddress);
+    if (!completeness.isComplete) {
+      showToast(`⚠️ Incomplete address! Please complete: ${completeness.missingFields.slice(0, 2).join(', ')}`);
       if ('id' in selectedAddress && selectedAddress.id) {
         setEditDraft({ ...selectedAddress });
       }
@@ -942,255 +1168,278 @@ export default function CheckoutPage() {
             <div className="space-y-4 text-xs">
               <h2 className="font-heading font-black text-lg text-[#001B3A]">Shipping Address</h2>
               {savedAddresses.length > 0 && (
-                <div className="space-y-2">
+                <div className="space-y-3">
+                  <p className="font-bold text-slate-700 text-xs">Choose Saved Address or Add New:</p>
                   {savedAddresses.map((a) => (
                     <label
                       key={a.id}
-                      className={`block p-3 border-2 rounded-xl cursor-pointer ${
-                        selectedAddrId === a.id ? 'border-blue-600 bg-blue-50/50' : 'border-slate-200'
+                      className={`block p-4 border-2 rounded-2xl cursor-pointer transition-all ${
+                        selectedAddrId === a.id
+                          ? 'border-blue-600 bg-blue-50/40 shadow-xs'
+                          : 'border-slate-200 hover:border-slate-300'
                       }`}
                     >
-                      <input
-                        type="radio"
-                        name="addr"
-                        checked={selectedAddrId === a.id}
-                        onChange={() => {
-                          setSelectedAddrId(a.id);
-                          setEditDraft(addressHasRequiredAlternate(a) ? null : { ...a });
-                        }}
-                        className="sr-only"
-                      />
-                      <span className="font-bold text-slate-900">{a.name}</span> · {a.phone}
-                      {a.alternatePhone ? (
-                        <span className="text-slate-500"> · alt {a.alternatePhone}</span>
-                      ) : (
-                        <span className="text-amber-700 font-bold"> · add alternate number</span>
-                      )}
-                      <p className="text-slate-600 text-[11px] mt-0.5">
-                        {a.address}, {a.city} — {a.pincode}
-                      </p>
-                      {selectedAddrId === a.id ? (
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-start gap-2.5">
+                          <input
+                            type="radio"
+                            name="addr"
+                            checked={selectedAddrId === a.id}
+                            onChange={() => {
+                              setSelectedAddrId(a.id);
+                              setEditDraft(checkAddressCompleteness(a).isComplete ? null : { ...a });
+                            }}
+                            className="mt-0.5 text-blue-600 focus:ring-blue-500"
+                          />
+                          <div className="space-y-1">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="font-extrabold text-slate-900 text-sm">
+                                {a.studentName || a.name}
+                              </span>
+                              {a.parentName && (
+                                <span className="text-[11px] text-slate-500 font-medium">
+                                  (Parent: {a.parentName})
+                                </span>
+                              )}
+                              <span className="text-[9.5px] uppercase font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600">
+                                {a.type || 'HOME'}
+                              </span>
+                            </div>
+
+                            <div className="text-[11px] text-slate-600 space-y-0.5">
+                              <p>
+                                <span className="font-semibold text-slate-700">Mobile:</span> {a.phone}
+                                {a.alternatePhone ? (
+                                  <span> · <span className="font-semibold text-slate-700">Alt:</span> {a.alternatePhone}</span>
+                                ) : (
+                                  <span className="text-red-600 font-bold"> · missing alternate mobile *</span>
+                                )}
+                                {a.whatsappNumber && (
+                                  <span> · <span className="text-emerald-700 font-semibold">WA:</span> {a.whatsappNumber}</span>
+                                )}
+                              </p>
+                              {a.email && (
+                                <p className="text-slate-500 text-[10.5px]">
+                                  Email: {a.email}
+                                </p>
+                              )}
+                              <p className="text-slate-800 font-medium leading-relaxed">
+                                {a.address || [a.doorNo, a.floorNo, a.streetName, a.areaLocality, a.townCity].filter(Boolean).join(', ')}
+                              </p>
+                              <p className="text-slate-700 font-bold">
+                                {a.district || a.city} — {a.pincode} ({a.state || 'Tamil Nadu'})
+                              </p>
+                              {a.landmark && (
+                                <p className="text-blue-800 text-[10.5px] font-semibold">
+                                  📍 Landmark: {a.landmark}
+                                </p>
+                              )}
+                            </div>
+
+                            {!checkAddressCompleteness(a).isComplete && (
+                              <div className="mt-2.5 p-2.5 bg-amber-50 border border-amber-300 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                <div className="flex items-start gap-2">
+                                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                                  <div>
+                                    <p className="font-extrabold text-amber-950 text-[11px]">
+                                      ⚠️ Old Format Address — 14 Mandatory Fields Required
+                                    </p>
+                                    <p className="text-[10px] text-amber-800 leading-tight">
+                                      Missing: <span className="font-bold">{checkAddressCompleteness(a).missingFields.slice(0, 3).join(', ')}{checkAddressCompleteness(a).missingFields.length > 3 ? ` + ${checkAddressCompleteness(a).missingFields.length - 3} more` : ''}</span>
+                                    </p>
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    setSelectedAddrId(a.id);
+                                    setEditDraft({ ...a });
+                                  }}
+                                  className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-black text-[10px] uppercase shrink-0 transition-colors shadow-2xs self-start sm:self-auto cursor-pointer"
+                                >
+                                  Fill New Format ✏️
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
                         <button
                           type="button"
                           onClick={(e) => {
                             e.preventDefault();
+                            setSelectedAddrId(a.id);
                             setEditDraft({ ...a });
                           }}
-                          className="mt-1.5 text-[11px] font-extrabold text-blue-700 hover:underline"
+                          className="text-xs font-extrabold text-blue-600 hover:text-blue-800 hover:underline shrink-0 p-1"
                         >
-                          Edit this address
+                          Edit
                         </button>
-                      ) : null}
+                      </div>
                     </label>
                   ))}
+
                   <label
-                    className={`block p-3 border-2 rounded-xl cursor-pointer ${
-                      selectedAddrId === 'new' ? 'border-blue-600 bg-blue-50/50' : 'border-slate-200'
+                    className={`block p-3.5 border-2 rounded-2xl cursor-pointer transition-all ${
+                      selectedAddrId === 'new'
+                        ? 'border-blue-600 bg-blue-50/50 shadow-xs'
+                        : 'border-slate-200 hover:border-slate-300'
                     }`}
                   >
-                    <input
-                      type="radio"
-                      name="addr"
-                      checked={selectedAddrId === 'new'}
-                      onChange={() => {
-                        setSelectedAddrId('new');
-                        setEditDraft(null);
-                      }}
-                      className="sr-only"
-                    />
-                    <span className="font-bold text-blue-600 flex items-center gap-1">
-                      <Plus className="w-3.5 h-3.5" /> Add a new address
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="addr"
+                        checked={selectedAddrId === 'new'}
+                        onChange={() => {
+                          setSelectedAddrId('new');
+                          setEditDraft(null);
+                        }}
+                        className="text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="font-extrabold text-blue-700 flex items-center gap-1.5 text-xs">
+                        <Plus className="w-4 h-4" /> Add a new student shipping address (14 Mandatory + 5 Optional)
+                      </span>
+                    </div>
                   </label>
                 </div>
               )}
 
+              {/* Edit Mode for an existing saved address */}
               {editDraft && selectedAddrId !== 'new' && (
-                <div className="space-y-3 pt-2 border-t border-slate-100">
-                  <p className="font-extrabold text-slate-800">Update this address</p>
-                  <p className="text-[11px] text-amber-800">
-                    ST Courier needs a second mobile that is different from the primary number.
-                  </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block font-bold text-slate-700 mb-1">Full Name *</label>
-                      <input
-                        value={editDraft.name}
-                        onChange={(e) => setEditDraft({ ...editDraft, name: e.target.value })}
-                        className="w-full px-3 py-3 min-h-12 border border-slate-300 rounded-xl bg-white outline-none focus:border-blue-600 text-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="block font-bold text-slate-700 mb-1">Mobile Phone *</label>
-                      <input
-                        maxLength={10}
-                        value={editDraft.phone}
-                        onChange={(e) => setEditDraft({ ...editDraft, phone: e.target.value.replace(/\D/g, '') })}
-                        className="w-full px-3 py-3 min-h-12 border border-slate-300 rounded-xl bg-white outline-none focus:border-blue-600 text-sm"
-                      />
-                    </div>
-                    <div className="sm:col-span-2">
-                      <label className="block font-bold text-slate-700 mb-1">Alternate Mobile *</label>
-                      <input
-                        maxLength={10}
-                        value={editDraft.alternatePhone || ''}
-                        onChange={(e) =>
-                          setEditDraft({ ...editDraft, alternatePhone: e.target.value.replace(/\D/g, '') })
-                        }
-                        className="w-full px-3 py-3 min-h-12 border border-slate-300 rounded-xl bg-white outline-none focus:border-blue-600 text-sm"
-                        placeholder="Different 10-digit number for ST Courier"
-                      />
-                    </div>
+                <div className="pt-2 border-t border-slate-200 space-y-3">
+                  <div className="flex items-center justify-between pb-1">
+                    <p className="font-extrabold text-slate-800 text-sm">
+                      Update Address Details
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setEditDraft(null)}
+                      className="text-xs text-slate-500 hover:text-slate-800 font-bold"
+                    >
+                      Cancel Edit
+                    </button>
                   </div>
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Address *</label>
-                    <input
-                      value={editDraft.address}
-                      onChange={(e) => setEditDraft({ ...editDraft, address: e.target.value })}
-                      className="w-full px-3 py-3 min-h-12 border border-slate-300 rounded-xl bg-white outline-none focus:border-blue-600 text-sm"
-                    />
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block font-bold text-slate-700 mb-1">City / District *</label>
-                      <input
-                        value={editDraft.city}
-                        onChange={(e) => setEditDraft({ ...editDraft, city: e.target.value })}
-                        className="w-full px-3 py-3 min-h-12 border border-slate-300 rounded-xl bg-white outline-none focus:border-blue-600 text-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="block font-bold text-slate-700 mb-1">Pincode *</label>
-                      <input
-                        maxLength={6}
-                        value={editDraft.pincode}
-                        onChange={(e) =>
-                          setEditDraft({ ...editDraft, pincode: e.target.value.replace(/\D/g, '') })
-                        }
-                        className="w-full px-3 py-3 min-h-12 border border-slate-300 rounded-xl bg-white outline-none focus:border-blue-600 text-sm"
-                      />
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    disabled={savingAddress}
-                    onClick={() => void handleUpdateSavedAddress()}
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold min-h-12 py-3 rounded-lg disabled:opacity-60 transition-all touch-manipulation"
-                  >
-                    {savingAddress ? 'Saving…' : 'Save address changes'}
-                  </button>
+                  <StudentShippingAddressForm
+                    data={addressToShippingFormData(editDraft)}
+                    onChange={(updated) =>
+                      setEditDraft((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              ...updated,
+                              name: updated.studentName,
+                              address: formatFullAddressLine(updated),
+                              city: updated.district || updated.townCity,
+                              town: updated.townCity,
+                            }
+                          : null
+                      )
+                    }
+                    onSubmit={() => void handleUpdateSavedAddress()}
+                    submitButtonText="Save Address Changes"
+                    isLoading={savingAddress}
+                    onCancel={() => setEditDraft(null)}
+                  />
                 </div>
               )}
 
+              {/* Form for new address */}
               {(selectedAddrId === 'new' || savedAddresses.length === 0) && (
-                <div className="space-y-3 pt-2">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block font-bold text-slate-700 mb-1">Full Name *</label>
-                      <input
-                        value={newAddr.name}
-                        onChange={(e) => setNewAddr({ ...newAddr, name: e.target.value })}
-                        className="w-full px-3 py-3 min-h-12 border border-slate-300 rounded-xl bg-white outline-none focus:border-blue-600 text-sm"
-                        placeholder="Recipient name"
-                      />
-                    </div>
-                    <div>
-                      <label className="block font-bold text-slate-700 mb-1">Mobile Phone *</label>
-                      <input
-                        maxLength={10}
-                        value={newAddr.phone}
-                        onChange={(e) => setNewAddr({ ...newAddr, phone: e.target.value.replace(/\D/g, '') })}
-                        className="w-full px-3 py-3 min-h-12 border border-slate-300 rounded-xl bg-white outline-none focus:border-blue-600 text-sm"
-                        placeholder="10-digit mobile"
-                      />
-                    </div>
-                    <div className="sm:col-span-2">
-                      <label className="block font-bold text-slate-700 mb-1">Alternate Mobile *</label>
-                      <input
-                        maxLength={10}
-                        value={newAddr.alternatePhone}
-                        onChange={(e) => setNewAddr({ ...newAddr, alternatePhone: e.target.value.replace(/\D/g, '') })}
-                        className="w-full px-3 py-3 min-h-12 border border-slate-300 rounded-xl bg-white outline-none focus:border-blue-600 text-sm"
-                        placeholder="Different 10-digit number for ST Courier"
-                      />
-                      <p className="text-[10px] text-slate-500 mt-1">
-                        Required. Courier calls this if the first number does not answer. Must be a different mobile.
-                      </p>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Address *</label>
-                    <input
-                      value={newAddr.address}
-                      onChange={(e) => setNewAddr({ ...newAddr, address: e.target.value })}
-                      className="w-full px-3 py-3 min-h-12 border border-slate-300 rounded-xl bg-white outline-none focus:border-blue-600 text-sm"
-                      placeholder="Door no., Street name, Area"
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Near Landmark <span className="font-normal text-slate-400">(optional)</span></label>
-                    <input
-                      value={newAddr.landmark}
-                      onChange={(e) => setNewAddr({ ...newAddr, landmark: e.target.value })}
-                      className="w-full px-3 py-3 min-h-12 border border-slate-300 rounded-xl bg-white outline-none focus:border-blue-600 text-sm"
-                      placeholder="e.g. Near SBI Bank, Opposite Bus Stop"
-                    />
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block font-bold text-slate-700 mb-1">City / District *</label>
-                      <input
-                        value={newAddr.city}
-                        onChange={(e) => setNewAddr({ ...newAddr, city: e.target.value })}
-                        className="w-full px-3 py-3 min-h-12 border border-slate-300 rounded-xl bg-white outline-none focus:border-blue-600 text-sm"
-                        placeholder="City"
-                      />
-                    </div>
-                    <div>
-                      <label className="block font-bold text-slate-700 mb-1">Pincode *</label>
-                      <input
-                        maxLength={6}
-                        value={newAddr.pincode}
-                        onChange={(e) => setNewAddr({ ...newAddr, pincode: e.target.value.replace(/\D/g, '') })}
-                        className="w-full px-3 py-3 min-h-12 border border-slate-300 rounded-xl bg-white outline-none focus:border-blue-600 text-sm"
-                        placeholder="6-digit pincode"
-                      />
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    disabled={savingAddress}
-                    onClick={() => void handleSaveInlineAddress()}
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold min-h-12 py-3 rounded-lg disabled:opacity-60 transition-all touch-manipulation"
-                  >
-                    {savingAddress ? 'Saving Address…' : 'Save Address'}
-                  </button>
+                <div className="pt-2">
+                  <StudentShippingAddressForm
+                    data={newAddr}
+                    onChange={setNewAddr}
+                    onSubmit={() => void handleSaveInlineAddress()}
+                    submitButtonText="Save Address"
+                    isLoading={savingAddress}
+                  />
                 </div>
               )}
 
-              <button
-                type="button"
-                disabled={!isMoqSatisfied(cart)}
-                onClick={() => void goToReview()}
-                className="hidden sm:flex w-full items-center justify-center bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-[#001B3A] font-extrabold text-sm py-3.5 rounded-xl uppercase tracking-wider disabled:opacity-50 transition-all min-h-12 touch-manipulation"
-              >
-                Deliver Here →
-              </button>
+              {/* Proceed button when a saved address is selected and valid */}
+              {selectedAddrId !== 'new' && !editDraft && savedAddresses.length > 0 && (() => {
+                const currentAddr = savedAddresses.find((x) => x.id === selectedAddrId);
+                const currentCompleteness = checkAddressCompleteness(currentAddr);
+
+                if (!currentCompleteness.isComplete) {
+                  return (
+                    <div className="space-y-2 pt-2">
+                      <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl text-amber-900 text-xs flex items-center gap-2.5">
+                        <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                        <div>
+                          <p className="font-extrabold text-amber-950">Action Required: Old Format Address</p>
+                          <p className="text-[11px] text-amber-800">
+                            You cannot place an order until all 14 mandatory fields are completed ({currentCompleteness.missingFields.slice(0, 3).join(', ')}).
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (currentAddr) setEditDraft({ ...currentAddr });
+                        }}
+                        className="w-full flex items-center justify-center bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-sm py-3.5 rounded-xl uppercase tracking-wider transition-all min-h-12 touch-manipulation cursor-pointer shadow-md gap-2"
+                      >
+                        <span>Fill 14 Mandatory Fields to Order ✏️</span>
+                      </button>
+                    </div>
+                  );
+                }
+
+                return (
+                  <button
+                    type="button"
+                    disabled={!isMoqSatisfied(cart)}
+                    onClick={() => void goToReview()}
+                    className="hidden sm:flex w-full items-center justify-center bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-[#001B3A] font-extrabold text-sm py-3.5 rounded-xl uppercase tracking-wider disabled:opacity-50 transition-all min-h-12 touch-manipulation cursor-pointer shadow-md"
+                  >
+                    Deliver Here →
+                  </button>
+                );
+              })()}
             </div>
           )}
 
           {step === 2 && (
             <div className="space-y-4 text-xs">
+              {!checkAddressCompleteness(selectedAddress).isComplete && (
+                <div className="p-3.5 bg-red-50 border border-red-300 rounded-xl text-red-900 text-xs flex items-start justify-between gap-3 shadow-xs">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-extrabold text-red-950">⚠️ Incomplete Address (Old Format)</p>
+                      <p className="text-[11px] text-red-800">
+                        Orders cannot be placed with old address format. Missing: {checkAddressCompleteness(selectedAddress).missingFields.join(', ')}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (selectedAddress) setEditDraft({ ...selectedAddress });
+                      setStep(1);
+                    }}
+                    className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg font-black text-xs shrink-0 cursor-pointer shadow-2xs"
+                  >
+                    Complete Address Now ✏️
+                  </button>
+                </div>
+              )}
               <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 flex items-center justify-between">
                 <div>
                   <p className="font-bold text-slate-800 flex items-center gap-1">
                     <MapPin className="w-3.5 h-3.5 text-blue-600" /> Deliver to
                   </p>
-                  <p className="text-slate-600 mt-0.5">
-                    {selectedAddress?.name} · {selectedAddress?.phone}
+                  <p className="text-slate-600 mt-1 leading-relaxed">
+                    <strong className="text-slate-900">{selectedAddress?.studentName || selectedAddress?.name}</strong>
+                    {selectedAddress?.parentName ? ` (Parent: ${selectedAddress.parentName})` : ''} · <span className="font-semibold text-slate-800">{selectedAddress?.phone}</span>
                     {selectedAddress?.alternatePhone ? ` · alt ${selectedAddress.alternatePhone}` : ''}
+                    {selectedAddress?.whatsappNumber ? ` · WA: ${selectedAddress.whatsappNumber}` : ''}
                     <br />
-                    {selectedAddress?.address}, {selectedAddress?.city} — {selectedAddress?.pincode}
+                    {selectedAddress?.address || [selectedAddress?.doorNo, selectedAddress?.floorNo, selectedAddress?.streetName, selectedAddress?.areaLocality, selectedAddress?.townCity].filter(Boolean).join(', ')}, {selectedAddress?.district || selectedAddress?.city} — {selectedAddress?.pincode} ({selectedAddress?.state || 'Tamil Nadu'})
+                    {selectedAddress?.landmark && <span className="block text-blue-700 font-bold pt-0.5">📍 Landmark: {selectedAddress.landmark}</span>}
                   </p>
                 </div>
                 <button type="button" onClick={() => setStep(1)} className="text-blue-600 font-bold hover:underline">
@@ -1618,16 +1867,24 @@ export default function CheckoutPage() {
 
       {/* Mobile sticky primary CTA — anchored to screen bottom */}
       <div className="fixed inset-x-0 bottom-0 z-40 sm:hidden border-t border-slate-200 bg-white/95 backdrop-blur-md p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-2xl">
-        {step === 1 && (
-          <button
-            type="button"
-            disabled={!isMoqSatisfied(cart)}
-            onClick={() => void goToReview()}
-            className="w-full bg-gradient-to-r from-amber-400 to-amber-500 disabled:opacity-50 text-[#001B3A] font-extrabold text-xs py-3.5 rounded-xl uppercase tracking-wider min-h-12 touch-manipulation"
-          >
-            Deliver Here →
-          </button>
-        )}
+        {step === 1 && (() => {
+          const currentAddr = savedAddresses.find((x) => x.id === selectedAddrId);
+          const isInc = selectedAddrId !== 'new' && currentAddr && !checkAddressCompleteness(currentAddr).isComplete;
+          return (
+            <button
+              type="button"
+              disabled={!isMoqSatisfied(cart)}
+              onClick={() => void goToReview()}
+              className={`w-full font-extrabold text-xs py-3.5 rounded-xl uppercase tracking-wider min-h-12 touch-manipulation ${
+                isInc
+                  ? 'bg-amber-500 text-white shadow-md'
+                  : 'bg-gradient-to-r from-amber-400 to-amber-500 disabled:opacity-50 text-[#001B3A]'
+              }`}
+            >
+              {isInc ? 'Fill New Format (14 Fields) ⚠️' : 'Deliver Here →'}
+            </button>
+          );
+        })()}
 
         {step === 2 && (
           <button

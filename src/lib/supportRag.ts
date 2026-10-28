@@ -879,7 +879,7 @@ export async function generateSupportRagAnswer(
     };
   }
 
-  // ── 33. Tamil / Tanglish Prompts Support ─────────────────────────────────────
+  // ── 33. Comprehensive Tamil & Tanglish Prompts Support ────────────────────────
   if (
     q.includes('velai') ||
     q.includes('vilai') ||
@@ -889,13 +889,141 @@ export async function generateSupportRagAnswer(
     q.includes('free delivery irukka') ||
     q.includes('enga irukku shop') ||
     q.includes('order epdi poduradhu') ||
-    q.includes('evvalo naalaagum')
+    q.includes('evvalo naalaagum') ||
+    q.includes('innum varala') ||
+    q.includes('varala') ||
+    q.includes('enga iruku') ||
+    q.includes('eppa varum') ||
+    q.includes('eppo delivery') ||
+    q.includes('delivery eppo') ||
+    q.includes('tamil medium iruka') ||
+    q.includes('english medium iruka') ||
+    q.includes('book kizhinjirukku') ||
+    q.includes('attai damage') ||
+    q.includes('address mathanum') ||
+    q.includes('phone number mathanum') ||
+    q.includes('cod iruka') ||
+    q.includes('admin kooda pesanum') ||
+    q.includes('staff kooda pesanum')
   ) {
+    // Tanglish: Where is my order / not yet arrived
+    if (q.includes('innum varala') || q.includes('varala') || q.includes('enga iruku') || q.includes('eppo varum') || q.includes('eppa varum') || q.includes('delivery eppo')) {
+      if (accountOrders.length > 0) {
+        const latest = accountOrders[0];
+        const ordCode = latest.order_number || latest.id;
+        const ordStatus = fulfillmentStatus(latest);
+        const awbText = latest.awb_number ? ` (ST Courier AWB: **${latest.awb_number}**)` : '';
+        return {
+          answer: `வணக்கம்! 🙏 உங்கள் ஆர்டர் **#${ordCode}** பற்றிய விவரங்கள்:\n\n• **தற்போதைய நிலை**: **${ordStatus.toUpperCase()}**${awbText}\n• **டெலிவரி**: ST Courier வழியாக உங்கள் முகவரிக்கு வந்து சேரும்.\n\nநேரடி டிராக்கிங் பார்க்க கீழே உள்ள பட்டனை கிளிக் செய்யவும்:`,
+          suggestions: [`🚚 Track Order #${ordCode}`, '👨‍💼 Talk to Admin', '📞 Call Office (+91 94860 17820)'],
+          shouldEscalate: false,
+          linkedOrderId: ordCode,
+          cardType: 'order',
+          linkedOrderData: {
+            orderId: ordCode,
+            status: ordStatus,
+            totalAmount: Number(latest.total_amount || 0),
+            trackingNumber: latest.awb_number,
+            courierName: latest.courier_name || 'ST Courier Express',
+            city: latest.city,
+            pincode: latest.pincode,
+            trackingUrl: latest.tracking_url || `/track?orderId=${encodeURIComponent(ordCode)}`,
+          },
+        };
+      }
+      return {
+        answer: `வணக்கம்! 🙏 உங்கள் புத்தகம் எங்கே உள்ளது என்பதை உடனடியாக சரிபார்க்க, உங்கள் **Order Number (#BPG-...)** அல்லது ஆர்டர் செய்த போது கொடுத்த **10-இலக்க மொபைல் எண்ணை** இங்கே அனுப்பவும். உடனடியாக ST Courier டிராக்கிங் விவரங்களை தருகிறோம்!`,
+        suggestions: ['🚚 Track My Order', '👨‍💼 Talk to Admin', '💬 WhatsApp Helpline'],
+        shouldEscalate: false,
+      };
+    }
+
+    // Tanglish: Medium availability
+    if (q.includes('tamil medium') || q.includes('english medium')) {
+      return {
+        answer: `வணக்கம்! 🙏 ஆம், எங்கள் **10-ஆம் வகுப்பு சமச்சீர் கல்வி வழிகாட்டிகள் தமிழ் வழி (Tamil Medium) மற்றும் ஆங்கில வழி (English Medium)** இரண்டிலும் கிடைக்கின்றன.\n\n• 10th Maths, Science, Social Science, Tamil & English அனைத்து பாடங்களுக்கும் தனித்தனி மற்றும் 5-இன்-1 காம்போ பாக்ஸ் செட் உள்ளன.\n• 5 அல்லது அதற்கு மேற்பட்ட புத்தகங்களுக்கு **100% இலவச டோர் டெலிவரி**!`,
+        suggestions: ['📚 Browse 10th Guides', '🎁 10th Combo Box Set', '👨‍💼 Talk to Admin'],
+        shouldEscalate: false,
+      };
+    }
+
+    // Tanglish: Damaged or misprinted book
+    if (q.includes('kizhinjirukku') || q.includes('damage') || q.includes('misprint')) {
+      return {
+        answer: `வணக்கம்! 🙏 புத்தகத்தில் ஏதேனும் அச்சுப் பிழை அல்லது கூரியர் போக்குவரத்தில் சேதம் ஏற்பட்டிருந்தால் கவலைப்பட வேண்டாம்! **100% இலவச மாற்றுப் புத்தகம் (Free Replacement)** உடனே அனுப்பப்படும்.\n\nசேதமடைந்த பக்கத்தின் புகைப்படத்தை இங்கே அப்லோட் செய்யவும் அல்லது WhatsApp எண் **+91 94860 17820**-க்கு அனுப்பவும். புதிய புத்தகம் உடனடியாக ST Courier மூலம் இலவசமாக அனுப்பி வைக்கப்படும்.`,
+        suggestions: ['👨‍💼 Talk to Admin', '💬 WhatsApp Support (+91 94860 17820)', '📞 Call Office'],
+        shouldEscalate: false,
+      };
+    }
+
+    // General Tanglish Overview
     return {
       answer: `வணக்கம்! 🙏 **Blessing Power Guide** பற்றிய முக்கிய விவரங்கள்:\n\n• 📚 **10-ஆம் வகுப்பு சமச்சீர் கல்வி வழிகாட்டிகள்**: தமிழ், ஆங்கிலம், கணிதம், அறிவியல், சமூக அறிவியல்.\n• 🚚 **டெலிவரி விவரங்கள்**: 5 அல்லது அதற்கு மேற்பட்ட புத்தகங்கள் ஆர்டர் செய்தால் **முழுக்க முழுக்க இலவச டோர் டெலிவரி (Free Delivery)**!\n• ⏱️ **வந்து சேரும் காலம்**: ST Courier வழியாக 2 முதல் 3 நாட்களுக்குள் உங்கள் வீட்டிற்கே வந்து சேரும்.\n• 💳 **பணம் செலுத்துதல்**: Razorpay (GPay, PhonePe, Paytm, UPI, Card).\n• 🏢 **முகவரி**: Trust Square, அயனாவரம், சென்னை - 600012.\n• 📞 **உதவிக்கு**: +91 94860 17820 / +91 63829 63350.`,
       suggestions: ['📚 10th Full Set (இலவச டெலிவரி)', '🚚 Track Order', '👨‍💼 Talk to Admin', '📞 Call Office'],
       shouldEscalate: false,
     };
+  }
+
+  // ── 33b. Dynamic Groq AI Inference for Open-Ended Queries ─────────────────
+  const groqKey = process.env.GROQ_API_KEY;
+  if (groqKey && q.length > 5) {
+    try {
+      const orderContextStr = accountOrders.length > 0
+        ? `Customer has recent order #${accountOrders[0].order_number || accountOrders[0].id} (Status: ${fulfillmentStatus(accountOrders[0])}, ST Courier: ${accountOrders[0].awb_number || 'Pending'})`
+        : 'Customer has not placed any recent orders yet';
+
+      const prompt = `Customer Question: "${userPrompt}"
+Customer Name: ${userAccountName || 'Customer'}
+Customer Account Context: ${orderContextStr}
+
+Blessing Power Guide Facts:
+1. Minimum Order Quantity (MOQ): 4 individual books OR 1 Combo Pack. (Any 1 Combo Pack automatically satisfies MOQ and gets 100% Free Doorstep Delivery across Tamil Nadu via ST Courier).
+2. Shipping: 100% Free Doorstep Delivery on 5+ books or any Combo Box Set. A flat ₹150 courier charge applies only on orders of exactly 4 individual books.
+3. Delivery Speed: ST Courier Express from Chennai packaging hub. Delivery time: 24–48 hours for Chennai & suburbs, 2–3 business days across other Tamil Nadu districts.
+4. "Coming Soon" / Booking: Guide books marked "Coming Soon" are undergoing our faculty board's 2026 Samacheer Kalvi syllabus verification or active print run at Chennai press; pre-orders opening shortly.
+5. Mediums: All Class 10 guides available in both Tamil Medium & English Medium.
+6. Prices: Class 10 5-in-1 Combo Box Set (Tamil Medium & English Medium) is ₹1,300 (MRP ₹1,650) with 100% Free Doorstep Delivery via ST Courier. Individual guides are priced by subject.
+7. Payments: 100% prepaid online via Razorpay (UPI, GPay, PhonePe, Cards, NetBanking). COD is not supported.
+8. Free Replacement Guarantee: 100% Free Replacement copy dispatched via ST Courier for any misprinted, missing page, or transit-damaged copies.
+9. Contact: Trust Square, Ayanavaram, Chennai. Helpline: +91 94860 17820.
+
+Instruction:
+Answer the customer's question directly, politely, and factually in 2-4 sentences using our verified store facts. Format with crisp markdown bullet points if helpful. Do NOT give vague generic greetings; address their exact question immediately.`;
+
+      const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${groqKey.trim()}`,
+        },
+        body: JSON.stringify({
+          model: process.env.GROQ_MODEL || 'openai/gpt-oss-120b',
+          messages: [
+            {
+              role: 'system',
+              content: 'You are the Blessing Power Guide Customer Support AI Assistant helping students and parents.',
+            },
+            { role: 'user', content: prompt },
+          ],
+          temperature: 0.2,
+          max_tokens: 1200,
+        }),
+      });
+
+      if (groqRes.ok) {
+        const groqData = await groqRes.json();
+        const aiAnswer = groqData.choices?.[0]?.message?.content?.trim();
+        if (aiAnswer) {
+          return {
+            answer: aiAnswer,
+            suggestions: ['🚚 Track My Order', '📚 10th Guides & Prices', '📦 Minimum Order & Delivery', '👨‍💼 Talk to Admin'],
+            shouldEscalate: false,
+          };
+        }
+      }
+    } catch (e) {
+      console.warn('[supportRag] Groq call warning:', e);
+    }
   }
 
   // ── 34. Strict Verified Fallback (No Guessing or Unverified Answers) ───────
@@ -930,3 +1058,5 @@ export async function generateSupportRagAnswer(
     shouldEscalate: false,
   };
 }
+
+export { type AdminCopilotContext, generateAdminCopilotDraft } from './supportCopilot';

@@ -29,6 +29,7 @@ import {
   Radio,
   ExternalLink,
 } from 'lucide-react';
+import { formatIndianDateTime } from '@/lib/indianTime';
 
 interface SystemHealthSectionProps {
   systemHealth: {
@@ -1079,8 +1080,8 @@ export const SystemHealthSection: React.FC<SystemHealthSectionProps> = ({
               </div>
 
               <div>
-                <span className="text-[11px] font-bold text-slate-400 uppercase block">Timestamp</span>
-                <p className="text-slate-700">{new Date(selectedError.timestamp).toLocaleString('en-IN')}</p>
+                <span className="text-[11px] font-bold text-slate-400 uppercase block">Timestamp (IST)</span>
+                <p className="text-slate-700 font-mono text-xs">{formatIndianDateTime(selectedError.timestamp, true)}</p>
               </div>
 
               <div>

@@ -5,6 +5,7 @@ import { OFFICE_COMPANY_NAME } from '@/lib/officeLocation';
 import { generateQrSvg } from '@/lib/qrCode';
 import { isOrderCancelled } from '@/lib/orderStatus';
 import { publicSiteOrigin } from '@/lib/publicSiteUrl';
+import { formatIndianDate } from '@/lib/indianTime';
 
 export function getFinancialYearString(date: Date = new Date()): string {
   const month = date.getMonth(); // 0 = Jan, 3 = Apr
@@ -134,9 +135,7 @@ export interface InvoiceData {
  * Uses official Blessing Power Guide logo, official handwritten signatory stamp, and precise 1-A4-sheet fit.
  */
 export async function generateTaxInvoiceHtml(orderData: InvoiceData): Promise<string> {
-  const dateStr = orderData.createdAt
-    ? new Date(orderData.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-    : new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  const dateStr = formatIndianDate(orderData.createdAt || new Date());
 
   const invoiceNumber = formatGstInvoiceNumber(orderData.orderId, orderData.createdAt, orderData.invoiceNumber);
   const itemsList = orderData.items && orderData.items.length > 0
@@ -160,12 +159,6 @@ export async function generateTaxInvoiceHtml(orderData: InvoiceData): Promise<st
   const itemsSubtotal = itemsList.reduce((sum, it) => sum + (Number(it.price || it.subtotal || 0) * (it.qty || 1)), 0);
   const discountAmount = Number(orderData.discount || 0);
   const shippingCharge = orderData.shippingCharge !== undefined ? orderData.shippingCharge : Math.max(0, totalAmount - itemsSubtotal + discountAmount);
-
-  const hasAwb = Boolean(
-    orderData.trackingNumber &&
-    !String(orderData.trackingNumber).startsWith('SHP-') &&
-    !String(orderData.trackingNumber).includes('Pending')
-  );
 
   const transactionId = orderData.paymentId || (orderData.orderId ? `TXN_${orderData.orderId.replace(/[^a-zA-Z0-9]/g, '')}` : 'TXN_ONLINE');
 
@@ -897,12 +890,12 @@ export async function generateTaxInvoiceHtml(orderData: InvoiceData): Promise<st
               <span class="info-val">${esc(orderData.courierName || 'ST Courier Express')}</span>
             </div>
             <div class="info-row">
-              <span class="info-label">Tracking ID:</span>
-              <span class="info-val" style="font-family:monospace;color:#0044aa;">${esc(orderData.trackingNumber || 'Pending AWB Assignment')}</span>
+              <span class="info-label">Dispatch Mode:</span>
+              <span class="info-val">Surface Express Doorstep Delivery</span>
             </div>
             <div class="info-row">
-              <span class="info-label">Current Status:</span>
-              <span class="badge-blue">${hasAwb ? 'Dispatched' : 'Pending AWB Assignment'}</span>
+              <span class="info-label">Shipment Manifest:</span>
+              <span class="badge-blue">Official Book Order Manifest</span>
             </div>
           </div>
         </div>

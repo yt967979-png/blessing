@@ -5,6 +5,7 @@ import { getAuthenticatedUser, unauthorizedResponse, applyRateLimitAsync, client
 import { isValidMobileNumber, normalizeMobileDigits } from '@/lib/authValidation';
 import { isBookInStock } from '@/lib/stock';
 import { isComboItem } from '@/lib/deliveryRules';
+import { recordAdminAudit } from '@/lib/adminAudit';
 
 function setSessionCookie(response: NextResponse, token: string, role: string | undefined, deviceId: string) {
   applySessionCookies(response, { token, deviceId, role });
@@ -50,6 +51,17 @@ export async function POST(request: Request) {
       [cleanName, cleanPhone, session.userId]
     );
     const user = updated.rows[0];
+    void recordAdminAudit(
+      {
+        actorId: user.id,
+        actorEmail: user.email || undefined,
+        action: 'USER_PROFILE_UPDATED',
+        targetType: 'user',
+        targetId: user.id,
+        details: { name: cleanName, phone: cleanPhone },
+      },
+      request
+    );
     const role = user.role || 'customer';
     const deviceId = getDeviceIdFromRequest(request) || createDeviceId();
     const token = createSessionToken(user.id, role, deviceId);

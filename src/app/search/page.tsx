@@ -315,22 +315,83 @@ function SearchContent() {
             {productsLoading && products.length === 0 ? (
               <ProductCardSkeletonGrid count={8} />
             ) : filteredProducts.length === 0 ? (
-              <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center space-y-4">
-                <div className="w-14 h-14 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto border border-blue-100">
-                  <BookOpen className="w-7 h-7" />
+              <div className="space-y-8">
+                <div className="bg-white rounded-3xl border border-slate-200 p-8 sm:p-12 text-center space-y-5 shadow-2xs">
+                  <div className="w-16 h-16 bg-blue-50 text-[#0044AA] rounded-2xl flex items-center justify-center mx-auto border border-blue-200/80 shadow-inner">
+                    <BookOpen className="w-8 h-8" />
+                  </div>
+                  <div>
+                    <h3 className="font-heading font-black text-slate-900 text-lg sm:text-xl">
+                      No Matching Guide Books Found
+                    </h3>
+                    <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1 leading-relaxed">
+                      We couldn&apos;t find any books matching your exact search. Try selecting a popular topic or reset your filters.
+                    </p>
+                  </div>
+
+                  {/* Popular quick chips */}
+                  <div className="flex flex-wrap items-center justify-center gap-2 max-w-md mx-auto pt-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSearchTerm('');
+                        setSelectedClass('all');
+                        setSelectedCategory('all');
+                      }}
+                      className="text-[11px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                    >
+                      📚 All Guides
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSearchTerm('Combo');
+                        setSelectedClass('all');
+                        setSelectedCategory('combo');
+                      }}
+                      className="text-[11px] font-bold bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-900 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                    >
+                      🎁 10th Combo Pack
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSearchTerm('');
+                        setSelectedClass('10th');
+                        setSelectedCategory('all');
+                      }}
+                      className="text-[11px] font-bold bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-800 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                    >
+                      Class 10 (SSLC)
+                    </button>
+                  </div>
+
+                  <div>
+                    <button
+                      onClick={resetFilters}
+                      className="px-6 py-2.5 bg-[#001B3A] hover:bg-blue-900 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer"
+                    >
+                      Reset All Filters
+                    </button>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-bold text-slate-900 text-base">No Matching Guide Books Found</h3>
-                  <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1">
-                    Try adjusting your search keywords, clearing standard filters, or resetting the price range slider.
-                  </p>
-                </div>
-                <button
-                  onClick={resetFilters}
-                  className="px-4 py-2 bg-[#2874f0] text-white font-semibold text-xs rounded-xl shadow-xs hover:bg-blue-600 transition-colors cursor-pointer"
-                >
-                  Reset All Filters
-                </button>
+
+                {/* Popular Books Fallback Shelf */}
+                {products && products.length > 0 && (
+                  <div>
+                    <h4 className="font-heading font-black text-sm text-slate-900 mb-3">
+                      Recommended Tamil Nadu State Board Guides
+                    </h4>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 sm:gap-4">
+                      {products
+                        .filter((p) => p.inStock !== false)
+                        .slice(0, 4)
+                        .map((product) => (
+                          <ProductCard key={product.id} product={product} />
+                        ))}
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 sm:gap-4">

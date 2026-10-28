@@ -4,6 +4,7 @@ import { generateQrSvg } from '@/lib/qrCode';
 import { generateTrackingToken } from '@/lib/trackToken';
 import { isRecordCancelled } from '@/lib/orderStatus';
 import { publicSiteOrigin } from '@/lib/publicSiteUrl';
+import { formatIndianDate } from '@/lib/indianTime';
 
 export type ShippingLabelSize = 'thermal4x6' | 'a4' | 'a5';
 
@@ -43,7 +44,6 @@ function esc(s: string): string {
  */
 export function generateSingleThermalLabelHtml(o: ShippingLabelOrder, qrSvg: string = ''): string {
   const isCancelled = isRecordCancelled(o);
-  const hasAwb = Boolean(o.trackingNumber && !String(o.trackingNumber).startsWith('SHP-') && !String(o.trackingNumber).includes('Pending'));
   const barcodeText = String(o.orderId || 'BPG-00000');
   const barcodeSvg = generateCode128Svg(barcodeText, { height: 46, barWidth: 2, showText: true });
 
@@ -51,9 +51,7 @@ export function generateSingleThermalLabelHtml(o: ShippingLabelOrder, qrSvg: str
   const totalItems = (o.items || []).reduce((s, i) => s + (i.qty || 1), 0);
   const estWeightGrams = totalItems * 400; // ~400g per school guide book
 
-  const orderDate = o.createdAt
-    ? new Date(o.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
-    : new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  const orderDate = formatIndianDate(o.createdAt || new Date());
 
   const itemsLine = (o.items || [])
     .map((it) => `${esc(it.title || 'Guide Book')} × ${it.qty || 1}${it.price ? ` [₹${it.price}]` : ''}`)
@@ -96,8 +94,8 @@ export function generateSingleThermalLabelHtml(o: ShippingLabelOrder, qrSvg: str
 
     <div class="awb-barcode-section">
       <div class="awb-header">
-        <div class="awb-lbl">ORDER &amp; BILL REFERENCE BARCODE</div>
-        <div class="awb-status">${hasAwb ? `ST COURIER AWB: ${esc(o.trackingNumber || '')}` : 'DISPATCH MANIFEST'}</div>
+        <div class="awb-lbl">ORDER &amp; SHIPMENT REFERENCE BARCODE</div>
+        <div class="awb-status">ST COURIER DISPATCH MANIFEST</div>
       </div>
       <div class="barcode-container">
         ${barcodeSvg}

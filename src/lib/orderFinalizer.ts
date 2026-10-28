@@ -350,6 +350,24 @@ export async function finalizeOrderFromPayment(opts: FinalizeOrderOptions): Prom
           [`cart-${newUid}`, newUid]
         );
 
+        try {
+          const { recordAdminAudit } = await import('@/lib/adminAudit');
+          void recordAdminAudit({
+            actorId: newUid,
+            actorEmail: customerEmail,
+            action: 'USER_CREATED',
+            targetType: 'user',
+            targetId: newUid,
+            details: {
+              name: customerName,
+              email: customerEmail,
+              phone: cleanPhone || null,
+              role: 'customer',
+              authMethod: 'checkout_auto',
+            },
+          });
+        } catch (_) {}
+
         resolvedUserId = newUid;
       }
     }
@@ -621,6 +639,25 @@ export async function finalizeOrderFromPayment(opts: FinalizeOrderOptions): Prom
       };
       broadcastOrderChange(orderEvent);
       await notifyOrderChanged(orderEvent);
+
+      const { recordAdminAudit } = await import('@/lib/adminAudit');
+      void recordAdminAudit({
+        actorId: String(userId || customerEmail || 'guest'),
+        actorEmail: customerEmail || undefined,
+        action: 'ORDER_PLACED',
+        targetType: 'order',
+        targetId: orderNumber,
+        details: {
+          orderId,
+          orderNumber,
+          amount: totalAmount,
+          itemCount: itemsToInsert.length,
+          paymentId: rzpPayId || null,
+          source: opts.source,
+          customerName: shippingAddressObj?.name || null,
+          customerPhone: shippingAddressObj?.phone || null,
+        },
+      });
     } catch (_) {}
 
     // 10b. REAL-TIME RACK STOCK BROADCAST (Live inventory decrease across all browsers & admin rack)

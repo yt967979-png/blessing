@@ -18,9 +18,12 @@ import {
   ArrowRight,
   Maximize2,
   RefreshCw,
+  Camera,
+  MessageCircle,
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { authHeaders } from '@/lib/clientAuth';
+import { shopWhatsAppChatUrl } from '@/lib/shopContact';
 import { ChatMarkdown } from './ChatMarkdown';
 import { ChatInteractiveCard } from './ChatInteractiveCard';
 import { ChatSuggestionButtons } from './ChatSuggestionButtons';
@@ -64,6 +67,7 @@ export const BlessingChatWidget: React.FC = () => {
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
   const [rating, setRating] = useState(5);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -73,6 +77,9 @@ export const BlessingChatWidget: React.FC = () => {
 
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastTypingPingRef = useRef<number>(0);
   const prevPathnameRef = useRef(pathname);
   const isOpenRef = useRef(isOpen);
   isOpenRef.current = isOpen;
@@ -82,8 +89,7 @@ export const BlessingChatWidget: React.FC = () => {
   const isStorefront =
     !pathname?.startsWith('/admin') &&
     pathname !== '/help' &&
-    pathname !== '/support' &&
-    !pathname?.startsWith('/checkout');
+    pathname !== '/support';
 
   // Auto-close chat widget window when user navigates to another page
   // (Window minimizes to not block the new page, but session and conversation history are preserved)
@@ -93,6 +99,9 @@ export const BlessingChatWidget: React.FC = () => {
       setIsOpen(false);
     }
   }, [pathname]);
+
+  const isNearBottomRef = useRef(true);
+  const wasOpenRef = useRef(isOpen);
 
   // Auto-scroll to latest message inside chat widget only
   const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
@@ -105,11 +114,31 @@ export const BlessingChatWidget: React.FC = () => {
     }
   };
 
+  const handleChatScroll = () => {
+    const el = chatContainerRef.current;
+    if (!el) return;
+    const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    isNearBottomRef.current = distanceToBottom < 100;
+  };
+
   useEffect(() => {
-    if (isOpen) {
-      scrollToBottom('auto');
-      setUnreadCount(0);
+    if (typeof window !== 'undefined') {
+      if (isOpen) {
+        window.dispatchEvent(new CustomEvent('bpg:chat-opened'));
+      } else {
+        window.dispatchEvent(new CustomEvent('bpg:chat-closed'));
+      }
     }
+    if (isOpen) {
+      setUnreadCount(0);
+      const justOpened = !wasOpenRef.current;
+      const lastMsgIsCustomer = messages.length > 0 && messages[messages.length - 1].sender_type === 'CUSTOMER';
+      if (justOpened || isNearBottomRef.current || lastMsgIsCustomer) {
+        scrollToBottom(justOpened ? 'auto' : 'smooth');
+        isNearBottomRef.current = true;
+      }
+    }
+    wasOpenRef.current = isOpen;
   }, [isOpen, messages]);
 
   // Load conversation & messages
@@ -149,6 +178,13 @@ export const BlessingChatWidget: React.FC = () => {
     }
   }, [isStorefront, loadConversation]);
 
+  // Support 1-tap open from MobileBottomNav or other components
+  useEffect(() => {
+    const handleExternalOpen = () => setIsOpen(true);
+    window.addEventListener('bpg:open-chat', handleExternalOpen);
+    return () => window.removeEventListener('bpg:open-chat', handleExternalOpen);
+  }, []);
+
   // Connect SSE for real-time messages & updates only when widget is open (preserves browser HTTP connections)
   useEffect(() => {
     if (!isStorefront || !conversation?.id || !isOpen) return;
@@ -184,6 +220,9 @@ export const BlessingChatWidget: React.FC = () => {
           if (!isOpenRef.current && newMsg.sender_type !== 'CUSTOMER') {
             setUnreadCount((c) => c + 1);
           }
+          if (newMsg.sender_type === 'ADMIN' || newMsg.sender_type === 'AI') {
+            setIsTyping(false);
+          }
         } else if (data.type === 'CHAT_CLAIMED') {
           setConversation((prev) =>
             prev ? { ...prev, status: 'ACTIVE', assigned_admin_name: data.assignedAdminName } : null
@@ -192,7 +231,8 @@ export const BlessingChatWidget: React.FC = () => {
           setConversation((prev) => (prev ? { ...prev, status: 'RESOLVED' } : null));
         } else if (data.type === 'TYPING' && data.senderType === 'ADMIN') {
           setIsTyping(true);
-          setTimeout(() => setIsTyping(false), 3000);
+          if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+          typingTimeoutRef.current = setTimeout(() => setIsTyping(false), 3500);
         }
       } catch (_) {}
     };
@@ -231,10 +271,77 @@ export const BlessingChatWidget: React.FC = () => {
 
     return () => {
       if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
       es.close();
       eventSourceRef.current = null;
     };
   }, [isStorefront, conversation?.id, isOpen, user?.token]);
+
+  // Customer real-time typing dispatcher
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setInputText(val);
+
+    if (!conversation?.id) return;
+    const now = Date.now();
+    if (now - lastTypingPingRef.current > 2500) {
+      lastTypingPingRef.current = now;
+      fetch('/api/support/message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders(user) },
+        body: JSON.stringify({
+          conversationId: conversation.id,
+          typing: true,
+          isTyping: true,
+        }),
+      }).catch(() => {});
+    }
+  };
+
+  // Image & damage proof photo upload handler
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file (JPEG, PNG, or WebP).');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Photo size exceeds 5MB limit. Please upload a smaller image.');
+      return;
+    }
+
+    setIsUploadingPhoto(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('folder', 'support');
+
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        headers: authHeaders(user),
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(err.error || 'Failed to upload photo');
+        return;
+      }
+
+      const data = await res.json();
+      if (data.url) {
+        await handleSendMessage(`![Defect / Damage Photo](${data.url})`);
+      }
+    } catch (_) {
+      alert('Network error uploading photo. Please try again.');
+    } finally {
+      setIsUploadingPhoto(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
 
   // Send message handler
   const handleSendMessage = async (textToSend?: string) => {
@@ -475,11 +582,7 @@ export const BlessingChatWidget: React.FC = () => {
       {/* ─── Floating Chat Trigger Button ──────────────────────────────────── */}
       {!isOpen && (
         <div
-          className={`fixed ${
-            isPDP
-              ? 'bottom-[calc(8.5rem+env(safe-area-inset-bottom))]'
-              : 'bottom-[calc(4.5rem+env(safe-area-inset-bottom))]'
-          } left-3 sm:bottom-6 sm:left-6 z-40`}
+          className="fixed bottom-6 left-6 z-40 hidden md:block"
         >
           <button
             type="button"
@@ -519,11 +622,11 @@ export const BlessingChatWidget: React.FC = () => {
           {/* Mobile Backdrop overlay (tap to minimize) */}
           <div
             onClick={handleMinimize}
-            className="fixed inset-0 bg-slate-950/40 backdrop-blur-[2px] z-50 sm:hidden transition-opacity"
+            className="fixed inset-0 bg-slate-950/40 backdrop-blur-[2px] z-[75] sm:hidden transition-opacity"
             aria-hidden="true"
           />
 
-          <div className="fixed inset-x-0 bottom-0 top-10 sm:top-auto sm:right-auto sm:bottom-6 sm:left-6 sm:w-[420px] sm:h-[640px] sm:max-h-[calc(100vh-2.5rem)] z-50 flex flex-col bg-white rounded-t-[28px] sm:rounded-3xl shadow-[0_25px_70px_-15px_rgba(0,27,58,0.4)] border border-slate-200/80 overflow-hidden transition-all duration-300">
+          <div className="fixed inset-x-0 bottom-0 top-10 sm:top-auto sm:right-auto sm:bottom-6 sm:left-6 sm:w-[420px] sm:h-[640px] sm:max-h-[calc(100vh-2.5rem)] z-[80] flex flex-col bg-white rounded-t-[28px] sm:rounded-3xl shadow-[0_25px_70px_-15px_rgba(0,27,58,0.4)] border border-slate-200/80 overflow-hidden transition-all duration-300">
             {/* Header */}
             <div className="bg-gradient-to-r from-[#001b3a] via-[#002855] to-[#001b3a] text-white p-3 sm:p-4 pt-[max(0.75rem,env(safe-area-inset-top))] flex flex-col border-b border-white/10 shrink-0">
               {/* Mobile pull handle */}
@@ -610,6 +713,7 @@ export const BlessingChatWidget: React.FC = () => {
             {/* Messages Stream */}
             <div
               ref={chatContainerRef}
+              onScroll={handleChatScroll}
               className="flex-1 overflow-y-auto p-3.5 sm:p-4 space-y-3 bg-slate-50/60 text-xs custom-scrollbar"
             >
               {/* Warm Welcome Greeting Card */}
@@ -689,8 +793,45 @@ export const BlessingChatWidget: React.FC = () => {
                       <span className="text-[9.5px] text-slate-400 block">Direct help</span>
                     </div>
                   </button>
+
+                  {/* 5. WhatsApp Helpline Direct Button */}
+                  <a
+                    href={shopWhatsAppChatUrl('Hello Blessing Power Guide, I would like assistance regarding 10th standard guides and orders.')}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="col-span-2 flex items-center justify-center gap-1.5 p-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-800 transition-all font-bold text-[11px] cursor-pointer shadow-2xs"
+                  >
+                    <MessageCircle className="w-3.5 h-3.5 text-emerald-600 fill-emerald-600/20" />
+                    <span>WhatsApp Helpline (+91 94860 17820) ↗</span>
+                  </a>
                 </div>
               </div>
+
+              {/* ─── Seamless WhatsApp Fallback Bridge when waiting for admin ─── */}
+              {conversation?.status === 'WAITING_ADMIN' && (
+                <div className="bg-emerald-50 border border-emerald-200/90 rounded-2xl p-3 text-xs space-y-2 shadow-xs animate-fade-slide-up">
+                  <div className="flex items-center gap-1.5 text-emerald-900 font-extrabold text-[11px]">
+                    <MessageCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>Connecting you to Staff... Don&apos;t want to wait?</span>
+                  </div>
+                  <p className="text-[10.5px] text-emerald-700 leading-snug">
+                    Take this conversation directly to official WhatsApp so you never miss a reply.
+                  </p>
+                  <a
+                    href={shopWhatsAppChatUrl(
+                      `Hi Blessing Power Guide, my support ticket is #${conversation.id.slice(0, 8)}. I need help regarding: ${
+                        [...messages].reverse().find((m) => m.sender_type === 'CUSTOMER')?.text || 'my order inquiry'
+                      }`
+                    )}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-extrabold text-xs rounded-xl flex items-center justify-center gap-2 shadow-xs transition-all"
+                  >
+                    <MessageCircle className="w-3.5 h-3.5 fill-white" />
+                    <span>Continue on WhatsApp ↗</span>
+                  </a>
+                </div>
+              )}
 
               {/* Render conversation messages */}
               {messages.map((msg, index) => {
@@ -764,13 +905,17 @@ export const BlessingChatWidget: React.FC = () => {
                 );
               })}
 
-              {/* Typing indicator */}
+              {/* Real-time Typing indicator with pulsing dots */}
               {isTyping && (
-                <div className="flex items-center gap-1.5 text-slate-400 text-[11px] font-bold p-1 animate-pulse">
-                  <span className="w-2 h-2 rounded-full bg-slate-400 animate-bounce"></span>
-                  <span className="w-2 h-2 rounded-full bg-slate-400 animate-bounce [animation-delay:0.2s]"></span>
-                  <span className="w-2 h-2 rounded-full bg-slate-400 animate-bounce [animation-delay:0.4s]"></span>
-                  <span className="ml-1 text-[10px]">Staff is typing...</span>
+                <div className="flex items-center gap-2 bg-white border border-slate-200/90 rounded-2xl px-3 py-2 text-slate-600 text-[11px] font-bold shadow-2xs max-w-[220px] animate-fade-slide-up">
+                  <span className="flex gap-1 items-center">
+                    <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-bounce" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-bounce [animation-delay:0.2s]" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-bounce [animation-delay:0.4s]" />
+                  </span>
+                  <span className="text-[10.5px] text-slate-600">
+                    {conversation?.assigned_admin_name || 'Support Agent'} is typing...
+                  </span>
                 </div>
               )}
 
@@ -899,8 +1044,29 @@ export const BlessingChatWidget: React.FC = () => {
             )}
 
             {/* Input Footer */}
-            <div className="p-2.5 sm:p-3 bg-white border-t border-slate-200 flex items-center gap-2 shrink-0 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-              <div className="flex-1 flex items-center bg-slate-100/90 hover:bg-slate-100 focus-within:bg-white focus-within:ring-2 focus-within:ring-[#2874f0]/30 border border-slate-200 rounded-full pl-3.5 pr-1.5 py-1 transition-all">
+            <div className="p-2.5 sm:p-3 bg-white border-t border-slate-200 flex items-center gap-2 shrink-0 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-[0_-4px_16px_rgba(0,0,0,0.08)] relative z-30">
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handlePhotoUpload}
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={loading || isUploadingPhoto}
+                className="p-2 text-slate-500 hover:text-[#1a5dc7] hover:bg-blue-50 active:scale-95 rounded-full transition-all cursor-pointer shrink-0 disabled:opacity-40"
+                title="Attach photo of misprinted page or parcel damage"
+              >
+                {isUploadingPhoto ? (
+                  <RefreshCw className="w-4 h-4 animate-spin text-[#1a5dc7]" />
+                ) : (
+                  <Camera className="w-4 h-4" />
+                )}
+              </button>
+
+              <div className="flex-1 flex items-center bg-slate-100/90 hover:bg-slate-100 focus-within:bg-white focus-within:ring-2 focus-within:ring-[#2874f0]/30 border border-slate-200 rounded-full pl-3 pr-1.5 py-1 transition-all">
                 <input
                   type="text"
                   placeholder={
@@ -909,7 +1075,7 @@ export const BlessingChatWidget: React.FC = () => {
                       : 'Ask question or type order #...'
                   }
                   value={inputText}
-                  onChange={(e) => setInputText(e.target.value)}
+                  onChange={handleInputChange}
                   onFocus={() => {
                     setTimeout(() => scrollToBottom('smooth'), 200);
                   }}

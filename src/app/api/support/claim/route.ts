@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
            updated_at = NOW()
        WHERE id = $3 
          AND (
-           status = 'WAITING_ADMIN' 
+           status = 'WAITING_ADMIN' OR status = 'BOT' 
            OR (status = 'ACTIVE' AND COALESCE(last_admin_activity_at, accepted_at) < NOW() - INTERVAL '10 minutes' AND assigned_admin_id != $1)
          )
        RETURNING *`,

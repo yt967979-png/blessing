@@ -3,6 +3,7 @@ import { queryDb } from '@/lib/db';
 import { applyRateLimitAsync } from '@/lib/serverSecurity';
 import { createSessionToken, hashPassword, applySessionCookies, createDeviceId } from '@/lib/auth';
 import { isValidMobileNumber, normalizeMobileDigits } from '@/lib/authValidation';
+import { recordAdminAudit } from '@/lib/adminAudit';
 
 export async function POST(request: Request) {
   try {
@@ -54,6 +55,24 @@ export async function POST(request: Request) {
       `INSERT INTO users (id, name, email, phone, role, password_hash, profile_completed, created_at)
        VALUES ($1, $2, $3, $4, 'customer', $5, true, NOW())`,
       [userId, name, email, cleanPhone, passwordHash]
+    );
+
+    void recordAdminAudit(
+      {
+        actorId: userId,
+        actorEmail: email || undefined,
+        action: 'USER_REGISTERED',
+        targetType: 'user',
+        targetId: userId,
+        details: {
+          name,
+          phone: cleanPhone,
+          email: email || null,
+          role: 'customer',
+          authMethod: 'phone_password',
+        },
+      },
+      request
     );
 
     const deviceId = createDeviceId();

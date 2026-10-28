@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { notFound } from 'next/navigation';
 import ProductDetailClient from './ProductDetailClient';
 import { queryDb } from '@/lib/db';
 import { isBookInStock } from '@/lib/stock';
@@ -63,6 +64,7 @@ async function getBookMeta(slug: string) {
               b.subject,
               b.language,
               b.combo_subjects,
+              b.images,
               CASE
                 WHEN b.cover_image IS NULL OR b.cover_image = '' THEN NULL
                 WHEN b.cover_image LIKE 'data:%' THEN NULL
@@ -119,11 +121,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://blessingpowerguide.in';
 
   if (!book) {
-    return {
-      title: 'Book Not Found | Blessing Power Guide',
-      description: 'This guide book was not found in our catalog.',
-      robots: { index: false, follow: false },
-    };
+    notFound();
   }
 
   const cls = book.class_standard ? `Class ${book.class_standard}` : '';
@@ -210,6 +208,23 @@ function mapBookToClientProduct(book: any) {
     }
   }
 
+  let galleryImages: string[] = [];
+  if (book.images) {
+    if (Array.isArray(book.images)) {
+      galleryImages = book.images.map((x: any) => String(x || '').trim()).filter((x: string) => x && !x.startsWith('data:') && x.length <= 2048);
+    } else if (typeof book.images === 'string') {
+      try {
+        const parsed = JSON.parse(book.images);
+        if (Array.isArray(parsed)) {
+          galleryImages = parsed.map((x: any) => String(x || '').trim()).filter((x: string) => x && !x.startsWith('data:') && x.length <= 2048);
+        }
+      } catch {}
+    }
+  }
+  if (galleryImages.length === 0 && safeImg) {
+    galleryImages = [safeImg];
+  }
+
   const isComingSoon = Boolean(book.is_coming_soon || book.status === 'coming_soon');
 
   return {
@@ -236,7 +251,8 @@ function mapBookToClientProduct(book: any) {
         : 'bg-blue-600'
       : 'bg-blue-600',
     image: safeImg,
-    hoverImage: safeImg,
+    hoverImage: galleryImages[1] || safeImg,
+    images: galleryImages,
     description: book.description || `Complete ${book.class_standard || '10th'} Standard guide book for exam success.`,
     samplePdfUrl: book.sample_pdf_url || null,
     comboSubjects: comboSubjects || undefined,
@@ -253,6 +269,9 @@ function mapBookToClientProduct(book: any) {
 export default async function ProductPage({ params }: Props) {
   const { slug } = await params;
   const book = await getBookMeta(slug);
+  if (!book) {
+    notFound();
+  }
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://blessingpowerguide.in';
 
   const price = Number(book?.discount_price || book?.price || 0);

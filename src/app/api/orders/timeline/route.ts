@@ -7,6 +7,7 @@ import {
   unauthorizedResponse,
 } from '@/lib/serverSecurity';
 import { blocksShippingActions, isOrderCancelled, canTransitionOrderStatus } from '@/lib/orderStatus';
+import { recordAdminAudit } from '@/lib/adminAudit';
 
 // Stage metadata - mirrors ST Courier's real logistics stages
 const STAGE_META: Record<string, { emoji: string; label: string; desc: string }> = {
@@ -150,6 +151,23 @@ export async function POST(request: Request) {
         }
       } catch (_) {}
     }
+
+    void recordAdminAudit(
+      {
+        actorId: auth.user?.userId || 'admin',
+        action: 'ORDER_TIMELINE_ADDED',
+        targetType: 'order',
+        targetId: order.order_number || orderId,
+        details: {
+          status,
+          statusLabel,
+          hubCity: hubCity || null,
+          remarks: remarks || null,
+          awbNumber: awbNumber || null,
+        },
+      },
+      request
+    );
 
     return NextResponse.json({ success: true, eventId, status, statusLabel });
   } catch (err: any) {

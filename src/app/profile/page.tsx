@@ -18,14 +18,23 @@ import {
   Plus,
   Trash2,
   AlertCircle,
+  AlertTriangle,
   ShoppingBag,
   Download,
   X,
   TicketPercent,
+  MessageCircle,
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { isValidMobileNumber, normalizeRequiredAlternateMobile } from '@/lib/authValidation';
-import { createUserAddress, deleteUserAddress, migrateLocalAddressesToDb, updateUserAddress } from '@/lib/addresses';
+import {
+  createUserAddress,
+  deleteUserAddress,
+  formatFullAddressLine,
+  migrateLocalAddressesToDb,
+  updateUserAddress,
+  checkAddressCompleteness,
+} from '@/lib/addresses';
 import { authHeaders } from '@/lib/clientAuth';
 import { useOrderLiveSync } from '@/hooks/useOrderLiveSync';
 import { Header } from '@/components/layout/Header';
@@ -33,6 +42,56 @@ import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
 import { Footer } from '@/components/layout/Footer';
 import { ProfileCouponsSection } from '@/components/profile/ProfileCouponsSection';
 import { isRecordCancelled } from '@/lib/orderStatus';
+import { StudentShippingAddressForm, type ShippingFormData } from '@/components/checkout/StudentShippingAddressForm';
+import { pincodeDeliveryMessage } from '@/lib/pincode';
+
+const initialNewAddress: ShippingFormData = {
+  type: 'HOME',
+  studentName: '',
+  parentName: '',
+  phone: '',
+  alternatePhone: '',
+  email: '',
+  whatsappNumber: '',
+  alternateEmail: '',
+  doorNo: '',
+  floorNo: 'Independent House (தனி வீடு / Ground Floor)',
+  buildingName: '',
+  streetName: '',
+  areaLocality: '',
+  townCity: '',
+  taluk: '',
+  district: 'Chennai',
+  state: 'Tamil Nadu',
+  pincode: '',
+  landmark: '',
+  deliveryInstructions: '',
+};
+
+function addressToShippingFormData(a: any): ShippingFormData {
+  return {
+    type: a?.type || 'HOME',
+    studentName: a?.studentName || a?.name || '',
+    parentName: a?.parentName || '',
+    phone: a?.phone || '',
+    alternatePhone: a?.alternatePhone || '',
+    email: a?.email || a?.primaryEmail || '',
+    whatsappNumber: a?.whatsappNumber || '',
+    alternateEmail: a?.alternateEmail || '',
+    doorNo: a?.doorNo || '',
+    floorNo: a?.floorNo || 'Independent House (தனி வீடு / Ground Floor)',
+    buildingName: a?.buildingName || '',
+    streetName: a?.streetName || a?.address || '',
+    areaLocality: a?.areaLocality || '',
+    townCity: a?.townCity || a?.town || a?.city || '',
+    taluk: a?.taluk || '',
+    district: a?.district || a?.city || 'Chennai',
+    state: a?.state || 'Tamil Nadu',
+    pincode: String(a?.pincode || ''),
+    landmark: a?.landmark || '',
+    deliveryInstructions: a?.deliveryInstructions || '',
+  };
+}
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -153,109 +212,261 @@ export default function ProfilePage() {
 
   const [showAddAddrForm, setShowAddAddrForm] = useState(false);
   const [editingAddrId, setEditingAddrId] = useState<string | null>(null);
-  const [newAddrType, setNewAddrType] = useState('HOME');
-  const [newAddrName, setNewAddrName] = useState('');
-  const [newAddrPhone, setNewAddrPhone] = useState('');
-  const [newAddrAltPhone, setNewAddrAltPhone] = useState('');
-  const [newAddrText, setNewAddrText] = useState('');
-  const [newAddrLandmark, setNewAddrLandmark] = useState('');
-  const [newAddrCity, setNewAddrCity] = useState('');
-  const [newAddrPincode, setNewAddrPincode] = useState('');
+  const [addrFormData, setAddrFormData] = useState<ShippingFormData>(initialNewAddress);
+  const [addressSaving, setAddressSaving] = useState(false);
 
-  const handleAddAddress = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user?.id) return;
-    if (!newAddrText.trim() || String(newAddrPincode).length !== 6) {
-      showToast('⚠️ Enter full address and 6-digit pincode');
-      return;
-    }
-    if (!isValidMobileNumber(newAddrPhone || user.phone || '')) {
-      showToast('Enter a valid 10-digit primary mobile number');
-      return;
-    }
-    const alt = normalizeRequiredAlternateMobile(newAddrAltPhone, newAddrPhone || user.phone || '');
-    if (!alt.ok) {
-      showToast(alt.error);
-      return;
-    }
-    const created = await createUserAddress(user, {
-      type: newAddrType,
-      name: newAddrName || user.name || 'Customer',
-      phone: newAddrPhone || user.phone || '',
-      alternatePhone: alt.value,
-      address: newAddrText,
-      landmark: newAddrLandmark || '',
-      city: newAddrCity || 'Chennai',
-      pincode: newAddrPincode,
-      isDefault: addresses.length === 0,
-    });
-    if (!created.ok) {
-      showToast(created.error);
-      return;
-    }
-    setAddresses((prev) => [created.address, ...prev]);
-    setShowAddAddrForm(false);
+  const startAddAddress = () => {
     setEditingAddrId(null);
-    setNewAddrText('');
-    setNewAddrLandmark('');
-    setNewAddrPincode('');
-    setNewAddrCity('');
-    setNewAddrAltPhone('');
-    showToast('✓ Address saved to your account');
-  };
-
-  const startEditAddress = (addr: (typeof addresses)[number]) => {
+    setAddrFormData({
+      ...initialNewAddress,
+      studentName: user?.name || '',
+      phone: user?.phone || '',
+      email: user?.email || '',
+    });
     setShowAddAddrForm(true);
-    setEditingAddrId(String(addr.id));
-    setNewAddrType(String(addr.type || 'HOME'));
-    setNewAddrName(addr.name || '');
-    setNewAddrPhone(addr.phone || '');
-    setNewAddrAltPhone(addr.alternatePhone || '');
-    setNewAddrText(addr.address || '');
-    setNewAddrLandmark(addr.landmark || '');
-    setNewAddrCity(addr.city || '');
-    setNewAddrPincode(String(addr.pincode || ''));
   };
 
-  const handleUpdateAddress = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user?.id || !editingAddrId) return;
-    if (!newAddrText.trim() || String(newAddrPincode).length !== 6) {
-      showToast('⚠️ Enter full address and 6-digit pincode');
+  const startEditAddress = (addr: any) => {
+    setEditingAddrId(String(addr.id));
+    setAddrFormData(addressToShippingFormData(addr));
+    setShowAddAddrForm(true);
+  };
+
+  const handleAddAddress = async () => {
+    if (!user?.id) return;
+    // 14 Mandatory Fields
+    if (!addrFormData.studentName.trim()) {
+      showToast('1. Student Full Name is required *');
       return;
     }
-    if (!isValidMobileNumber(newAddrPhone || user.phone || '')) {
-      showToast('Enter a valid 10-digit primary mobile number');
+    if (!addrFormData.parentName.trim()) {
+      showToast('2. Parent / Guardian Name is required *');
       return;
     }
-    const alt = normalizeRequiredAlternateMobile(newAddrAltPhone, newAddrPhone || user.phone || '');
+    if (!isValidMobileNumber(addrFormData.phone)) {
+      showToast('3. Enter a valid 10-digit primary Mobile Number *');
+      return;
+    }
+    const alt = normalizeRequiredAlternateMobile(addrFormData.alternatePhone, addrFormData.phone);
     if (!alt.ok) {
       showToast(alt.error);
       return;
     }
-    const updated = await updateUserAddress(user, editingAddrId, {
-      type: newAddrType,
-      name: newAddrName || user.name || 'Customer',
-      phone: newAddrPhone || user.phone || '',
-      alternatePhone: alt.value,
-      address: newAddrText,
-      landmark: newAddrLandmark || '',
-      city: newAddrCity || 'Chennai',
-      pincode: newAddrPincode,
-    });
-    if (!updated.ok) {
-      showToast(updated.error);
+    if (!addrFormData.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addrFormData.email.trim())) {
+      showToast('5. Enter a valid Primary Email ID *');
       return;
     }
-    setAddresses((prev) => prev.map((a) => (String(a.id) === editingAddrId ? updated.address : a)));
-    setShowAddAddrForm(false);
-    setEditingAddrId(null);
-    setNewAddrText('');
-    setNewAddrLandmark('');
-    setNewAddrPincode('');
-    setNewAddrCity('');
-    setNewAddrAltPhone('');
-    showToast('✓ Address updated');
+    if (!addrFormData.doorNo.trim()) {
+      showToast('6. Door / House / Flat Number is required *');
+      return;
+    }
+    if (!addrFormData.floorNo.trim()) {
+      showToast('7. Floor Details is required (or select Independent House) *');
+      return;
+    }
+    if (!addrFormData.streetName.trim()) {
+      showToast('8. Street / Road Name is required *');
+      return;
+    }
+    if (!addrFormData.areaLocality.trim()) {
+      showToast('9. Area / Locality is required *');
+      return;
+    }
+    if (!addrFormData.townCity.trim()) {
+      showToast('10. Village / Town / City is required *');
+      return;
+    }
+    if (!addrFormData.district.trim()) {
+      showToast('11. District is required *');
+      return;
+    }
+    if (!addrFormData.state.trim()) {
+      showToast('12. State is required *');
+      return;
+    }
+    if (!addrFormData.pincode || String(addrFormData.pincode).length !== 6) {
+      showToast('13. Enter a valid 6-digit PIN Code *');
+      return;
+    }
+    const pinCheck = pincodeDeliveryMessage(String(addrFormData.pincode));
+    if (!pinCheck.ok) {
+      showToast(pinCheck.message);
+      return;
+    }
+    if (!addrFormData.landmark.trim()) {
+      showToast('14. Nearby Landmark is required *');
+      return;
+    }
+
+    setAddressSaving(true);
+    try {
+      const fullAddress = formatFullAddressLine({
+        doorNo: addrFormData.doorNo,
+        floorNo: addrFormData.floorNo,
+        buildingName: addrFormData.buildingName,
+        streetName: addrFormData.streetName,
+        areaLocality: addrFormData.areaLocality,
+        townCity: addrFormData.townCity,
+        taluk: addrFormData.taluk,
+        landmark: addrFormData.landmark,
+      });
+
+      const created = await createUserAddress(user, {
+        type: addrFormData.type || 'HOME',
+        studentName: addrFormData.studentName.trim(),
+        parentName: addrFormData.parentName.trim(),
+        name: addrFormData.studentName.trim(),
+        phone: addrFormData.phone.trim(),
+        alternatePhone: alt.value,
+        whatsappNumber: (addrFormData.whatsappNumber || '').trim(),
+        email: addrFormData.email.trim(),
+        alternateEmail: (addrFormData.alternateEmail || '').trim(),
+        doorNo: addrFormData.doorNo.trim(),
+        floorNo: addrFormData.floorNo.trim(),
+        buildingName: (addrFormData.buildingName || '').trim(),
+        streetName: addrFormData.streetName.trim(),
+        areaLocality: addrFormData.areaLocality.trim(),
+        townCity: addrFormData.townCity.trim(),
+        taluk: (addrFormData.taluk || '').trim(),
+        district: addrFormData.district.trim(),
+        state: addrFormData.state.trim() || 'Tamil Nadu',
+        address: fullAddress,
+        town: addrFormData.townCity.trim(),
+        landmark: addrFormData.landmark.trim(),
+        city: addrFormData.district.trim() || 'Chennai',
+        pincode: String(addrFormData.pincode),
+        deliveryInstructions: (addrFormData.deliveryInstructions || '').trim(),
+        isDefault: addresses.length === 0,
+      });
+      if (!created.ok) {
+        showToast(created.error);
+        return;
+      }
+      setAddresses((prev) => [created.address, ...prev]);
+      setShowAddAddrForm(false);
+      setEditingAddrId(null);
+      showToast('✓ Address saved to your account');
+    } finally {
+      setAddressSaving(false);
+    }
+  };
+
+  const handleUpdateAddress = async () => {
+    if (!user?.id || !editingAddrId) return;
+    // 14 Mandatory Fields
+    if (!addrFormData.studentName.trim()) {
+      showToast('1. Student Full Name is required *');
+      return;
+    }
+    if (!addrFormData.parentName.trim()) {
+      showToast('2. Parent / Guardian Name is required *');
+      return;
+    }
+    if (!isValidMobileNumber(addrFormData.phone)) {
+      showToast('3. Enter a valid 10-digit primary Mobile Number *');
+      return;
+    }
+    const alt = normalizeRequiredAlternateMobile(addrFormData.alternatePhone, addrFormData.phone);
+    if (!alt.ok) {
+      showToast(alt.error);
+      return;
+    }
+    if (!addrFormData.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addrFormData.email.trim())) {
+      showToast('5. Enter a valid Primary Email ID *');
+      return;
+    }
+    if (!addrFormData.doorNo.trim()) {
+      showToast('6. Door / House / Flat Number is required *');
+      return;
+    }
+    if (!addrFormData.floorNo.trim()) {
+      showToast('7. Floor Details is required (or select Independent House) *');
+      return;
+    }
+    if (!addrFormData.streetName.trim()) {
+      showToast('8. Street / Road Name is required *');
+      return;
+    }
+    if (!addrFormData.areaLocality.trim()) {
+      showToast('9. Area / Locality is required *');
+      return;
+    }
+    if (!addrFormData.townCity.trim()) {
+      showToast('10. Village / Town / City is required *');
+      return;
+    }
+    if (!addrFormData.district.trim()) {
+      showToast('11. District is required *');
+      return;
+    }
+    if (!addrFormData.state.trim()) {
+      showToast('12. State is required *');
+      return;
+    }
+    if (!addrFormData.pincode || String(addrFormData.pincode).length !== 6) {
+      showToast('13. Enter a valid 6-digit PIN Code *');
+      return;
+    }
+    const pinCheck = pincodeDeliveryMessage(String(addrFormData.pincode));
+    if (!pinCheck.ok) {
+      showToast(pinCheck.message);
+      return;
+    }
+    if (!addrFormData.landmark.trim()) {
+      showToast('14. Nearby Landmark is required *');
+      return;
+    }
+
+    setAddressSaving(true);
+    try {
+      const fullAddress = formatFullAddressLine({
+        doorNo: addrFormData.doorNo,
+        floorNo: addrFormData.floorNo,
+        buildingName: addrFormData.buildingName,
+        streetName: addrFormData.streetName,
+        areaLocality: addrFormData.areaLocality,
+        townCity: addrFormData.townCity,
+        taluk: addrFormData.taluk,
+        landmark: addrFormData.landmark,
+      });
+
+      const updated = await updateUserAddress(user, editingAddrId, {
+        type: addrFormData.type || 'HOME',
+        studentName: addrFormData.studentName.trim(),
+        parentName: addrFormData.parentName.trim(),
+        name: addrFormData.studentName.trim(),
+        phone: addrFormData.phone.trim(),
+        alternatePhone: alt.value,
+        whatsappNumber: (addrFormData.whatsappNumber || '').trim(),
+        email: addrFormData.email.trim(),
+        alternateEmail: (addrFormData.alternateEmail || '').trim(),
+        doorNo: addrFormData.doorNo.trim(),
+        floorNo: addrFormData.floorNo.trim(),
+        buildingName: (addrFormData.buildingName || '').trim(),
+        streetName: addrFormData.streetName.trim(),
+        areaLocality: addrFormData.areaLocality.trim(),
+        townCity: addrFormData.townCity.trim(),
+        taluk: (addrFormData.taluk || '').trim(),
+        district: addrFormData.district.trim(),
+        state: addrFormData.state.trim() || 'Tamil Nadu',
+        address: fullAddress,
+        town: addrFormData.townCity.trim(),
+        landmark: addrFormData.landmark.trim(),
+        city: addrFormData.district.trim() || 'Chennai',
+        pincode: String(addrFormData.pincode),
+        deliveryInstructions: (addrFormData.deliveryInstructions || '').trim(),
+      });
+      if (!updated.ok) {
+        showToast(updated.error);
+        return;
+      }
+      setAddresses((prev) => prev.map((a) => (String(a.id) === editingAddrId ? updated.address : a)));
+      setShowAddAddrForm(false);
+      setEditingAddrId(null);
+      showToast('✓ Address updated');
+    } finally {
+      setAddressSaving(false);
+    }
   };
 
   const handleDeleteAddress = async (id: string | number) => {
@@ -741,7 +952,20 @@ export default function ProfilePage() {
                               </div>
                             </div>
 
-                            <div className="flex items-center gap-2 w-full sm:w-auto">
+                            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                              <a
+                                href={`https://wa.me/919486017820?text=${encodeURIComponent(
+                                  `Hello Blessing Power Guide, I would like to check details for my Order #${o.orderId}${o.trackingNumber ? ` (ST Courier AWB: ${o.trackingNumber})` : ''}.`
+                                )}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="bg-[#25D366]/10 hover:bg-[#25D366]/20 text-[#128C7E] border border-[#25D366]/30 font-extrabold text-xs px-3 py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5 flex-1 sm:flex-none cursor-pointer"
+                                title="Contact support on WhatsApp regarding this order"
+                              >
+                                <MessageCircle className="w-3.5 h-3.5 text-[#25D366] fill-[#25D366]/20" />
+                                <span>WHATSAPP</span>
+                              </a>
+
                               <a
                                 href={`/api/orders/${o.orderId}/invoice`}
                                 target="_blank"
@@ -804,8 +1028,7 @@ export default function ProfilePage() {
                         setShowAddAddrForm(false);
                         setEditingAddrId(null);
                       } else {
-                        setEditingAddrId(null);
-                        setShowAddAddrForm(true);
+                        startAddAddress();
                       }
                     }}
                     className="bg-blue-600 hover:bg-[#001B3A] text-white font-extrabold text-xs px-4 py-2 rounded-xl flex items-center gap-1 shadow-xs transition-colors"
@@ -816,119 +1039,35 @@ export default function ProfilePage() {
                 </div>
 
                 {showAddAddrForm && (
-                  <form
-                    onSubmit={editingAddrId ? handleUpdateAddress : handleAddAddress}
-                    className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-4 text-xs"
-                  >
-                    <div className="flex gap-3">
-                      {['HOME', 'WORK', 'OTHER'].map((type) => (
-                        <button
-                          key={type}
-                          type="button"
-                          onClick={() => setNewAddrType(type)}
-                          className={`px-3 py-1.5 rounded-lg font-bold border transition-colors ${
-                            newAddrType === type
-                              ? 'bg-blue-600 text-white border-blue-600'
-                              : 'bg-white text-slate-700 border-slate-200'
-                          }`}
-                        >
-                          {type}
-                        </button>
-                      ))}
+                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 sm:p-6 space-y-4">
+                    <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                      <h3 className="font-extrabold text-slate-800 text-sm">
+                        {editingAddrId ? 'Update Shipping Address Details' : 'Add New Student Shipping Address'}
+                      </h3>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowAddAddrForm(false);
+                          setEditingAddrId(null);
+                        }}
+                        className="text-xs text-slate-500 hover:text-slate-800 font-bold"
+                      >
+                        Cancel
+                      </button>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block font-bold text-slate-700 mb-1">Receiver Name *</label>
-                        <input
-                          type="text"
-                          placeholder="Full name"
-                          value={newAddrName}
-                          onChange={(e) => setNewAddrName(e.target.value)}
-                          className="w-full px-3 py-3 min-h-12 bg-white border border-slate-300 rounded-xl outline-none focus:border-blue-600 text-sm"
-                        />
-                      </div>
-                      <div>
-                        <label className="block font-bold text-slate-700 mb-1">Primary Phone *</label>
-                        <input
-                          type="tel"
-                          placeholder="10-digit mobile"
-                          maxLength={10}
-                          value={newAddrPhone}
-                          onChange={(e) => setNewAddrPhone(e.target.value.replace(/\D/g, ''))}
-                          className="w-full px-3 py-3 min-h-12 bg-white border border-slate-300 rounded-xl outline-none focus:border-blue-600 text-sm"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block font-bold text-slate-700 mb-1">Alternate Phone *</label>
-                      <input
-                        type="tel"
-                        required
-                        placeholder="Different 10-digit mobile for ST Courier"
-                        maxLength={10}
-                        value={newAddrAltPhone}
-                        onChange={(e) => setNewAddrAltPhone(e.target.value.replace(/\D/g, ''))}
-                        className="w-full px-3 py-3 min-h-12 bg-white border border-slate-300 rounded-xl outline-none focus:border-blue-600 text-sm"
-                      />
-                      <p className="text-[10px] text-slate-500 mt-1">Required. Must not be the same as the primary number.</p>
-                    </div>
-
-                    <div>
-                      <label className="block font-bold text-slate-700 mb-1">Door No, Street &amp; Area *</label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="e.g. 12/4, Gandhi Nagar, 2nd Street"
-                        value={newAddrText}
-                        onChange={(e) => setNewAddrText(e.target.value)}
-                        className="w-full px-3 py-3 min-h-12 bg-white border border-slate-300 rounded-xl outline-none focus:border-blue-600 text-sm"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block font-bold text-slate-700 mb-1">Near Landmark <span className="font-normal text-slate-400">(optional)</span></label>
-                      <input
-                        type="text"
-                        placeholder="e.g. Near SBI Bank, Opposite Bus Stop"
-                        value={newAddrLandmark}
-                        onChange={(e) => setNewAddrLandmark(e.target.value)}
-                        className="w-full px-3 py-3 min-h-12 bg-white border border-slate-300 rounded-xl outline-none focus:border-blue-600 text-sm"
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block font-bold text-slate-700 mb-1">City / District *</label>
-                        <input
-                          type="text"
-                          placeholder="e.g. Chennai"
-                          value={newAddrCity}
-                          onChange={(e) => setNewAddrCity(e.target.value)}
-                          className="w-full px-3 py-3 min-h-12 bg-white border border-slate-300 rounded-xl outline-none focus:border-blue-600 text-sm"
-                        />
-                      </div>
-                      <div>
-                        <label className="block font-bold text-slate-700 mb-1">Pincode *</label>
-                        <input
-                          type="text"
-                          placeholder="6-digit pincode"
-                          maxLength={6}
-                          value={newAddrPincode}
-                          onChange={(e) => setNewAddrPincode(e.target.value.replace(/\D/g, ''))}
-                          className="w-full px-3 py-3 min-h-12 bg-white border border-slate-300 rounded-xl outline-none focus:border-blue-600 text-sm"
-                        />
-                      </div>
-                    </div>
-
-                    <button
-                      type="submit"
-                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs px-5 py-3 min-h-12 rounded-xl uppercase tracking-wider transition-colors touch-manipulation"
-                    >
-                      {editingAddrId ? 'SAVE CHANGES' : 'SAVE ADDRESS'}
-                    </button>
-                  </form>
+                    <StudentShippingAddressForm
+                      data={addrFormData}
+                      onChange={setAddrFormData}
+                      onSubmit={() => void (editingAddrId ? handleUpdateAddress() : handleAddAddress())}
+                      submitButtonText={editingAddrId ? 'SAVE CHANGES' : 'SAVE ADDRESS'}
+                      isLoading={addressSaving}
+                      onCancel={() => {
+                        setShowAddAddrForm(false);
+                        setEditingAddrId(null);
+                      }}
+                    />
+                  </div>
                 )}
 
                 {addresses.length === 0 ? (
@@ -937,8 +1076,8 @@ export default function ProfilePage() {
                     <p className="text-xs font-bold text-slate-700">No delivery addresses saved yet</p>
                     <p className="text-[11px] text-slate-500 mt-0.5 mb-4">Click + ADD ADDRESS to save your shipping address for fast 1-click checkout.</p>
                     <button
-                      onClick={() => setShowAddAddrForm(true)}
-                      className="bg-blue-600 hover:bg-[#001B3A] text-white font-extrabold text-xs px-5 py-2.5 rounded-xl uppercase tracking-wider shadow-sm transition-colors"
+                      onClick={startAddAddress}
+                      className="bg-blue-600 hover:bg-[#001B3A] text-white font-extrabold text-xs px-5 py-2.5 rounded-xl uppercase tracking-wider shadow-sm transition-colors cursor-pointer"
                     >
                       + ADD YOUR FIRST ADDRESS
                     </button>
@@ -950,22 +1089,82 @@ export default function ProfilePage() {
                         key={addr.id}
                         className="border border-blue-200 bg-blue-50/40 rounded-2xl p-5 text-xs space-y-2 relative"
                       >
-                        <div className="flex justify-between items-center gap-2">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="bg-blue-600 text-white text-[10px] font-black px-2 py-0.5 rounded uppercase">
-                              {addr.type}
-                            </span>
-                            {addr.isDefault && (
-                              <span className="bg-emerald-100 text-emerald-700 text-[10px] font-black px-2 py-0.5 rounded uppercase">
-                                Default
+                        <div className="flex justify-between items-start gap-3">
+                          <div className="space-y-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="bg-blue-600 text-white text-[10px] font-black px-2 py-0.5 rounded uppercase">
+                                {addr.type || 'HOME'}
                               </span>
-                            )}
-                            <span className="font-extrabold text-slate-900">{addr.name}</span>
-                            <span className="text-slate-500">• {addr.phone}</span>
-                            {addr.alternatePhone ? (
-                              <span className="text-slate-400">· alt {addr.alternatePhone}</span>
-                            ) : (
-                              <span className="text-amber-700 font-extrabold">· add alternate number</span>
+                              {addr.isDefault && (
+                                <span className="bg-emerald-100 text-emerald-700 text-[10px] font-black px-2 py-0.5 rounded uppercase">
+                                  Default
+                                </span>
+                              )}
+                              <span className="font-extrabold text-slate-900 text-sm">
+                                {addr.studentName || addr.name}
+                              </span>
+                              {addr.parentName && (
+                                <span className="text-[11px] text-slate-500 font-medium">
+                                  (Parent: {addr.parentName})
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="text-[11px] text-slate-600 space-y-0.5">
+                              <p>
+                                <span className="font-semibold text-slate-700">Mobile:</span> {addr.phone}
+                                {addr.alternatePhone ? (
+                                  <span> · <span className="font-semibold text-slate-700">Alt:</span> {addr.alternatePhone}</span>
+                                ) : (
+                                  <span className="text-red-600 font-bold"> · missing alternate mobile *</span>
+                                )}
+                                {addr.whatsappNumber && (
+                                  <span> · <span className="text-emerald-700 font-semibold">WA:</span> {addr.whatsappNumber}</span>
+                                )}
+                              </p>
+
+                              {addr.email && (
+                                <p className="text-slate-500 text-[10.5px]">
+                                  Email: {addr.email}
+                                </p>
+                              )}
+
+                              <p className="text-slate-800 font-medium leading-relaxed">
+                                {addr.address || [addr.doorNo, addr.floorNo, addr.streetName, addr.areaLocality, addr.townCity].filter(Boolean).join(', ')}
+                              </p>
+
+                              <p className="text-slate-700 font-bold">
+                                {addr.district || addr.city} — {addr.pincode} ({addr.state || 'Tamil Nadu'})
+                              </p>
+
+                              {addr.landmark && (
+                                <p className="text-blue-800 text-[10.5px] font-semibold">
+                                  📍 Landmark: {addr.landmark}
+                                </p>
+                              )}
+                            </div>
+
+                            {!checkAddressCompleteness(addr).isComplete && (
+                              <div className="mt-2 p-2 bg-amber-50 border border-amber-300 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                <div className="flex items-start gap-1.5">
+                                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                                  <div>
+                                    <p className="font-extrabold text-amber-950 text-[11px]">
+                                      ⚠️ Incomplete Old Format Address
+                                    </p>
+                                    <p className="text-[10px] text-amber-800 leading-tight">
+                                      Missing: <span className="font-bold">{checkAddressCompleteness(addr).missingFields.join(', ')}</span>. You must complete these to place book orders.
+                                    </p>
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => startEditAddress(addr)}
+                                  className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-black text-[10px] uppercase shrink-0 transition-colors shadow-2xs self-start sm:self-auto cursor-pointer"
+                                >
+                                  Complete Address ✏️
+                                </button>
+                              </div>
                             )}
                           </div>
 
@@ -989,14 +1188,12 @@ export default function ProfilePage() {
                             <button
                               onClick={() => handleDeleteAddress(addr.id)}
                               className="text-red-500 hover:text-red-700"
+                              title="Delete address"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
                           </div>
                         </div>
-                        <p className="text-slate-700 leading-relaxed font-medium">
-                          {addr.address}{addr.landmark ? `, ${addr.landmark}` : ''}, {addr.city} — {addr.pincode}
-                        </p>
                       </div>
                     ))}
                   </div>

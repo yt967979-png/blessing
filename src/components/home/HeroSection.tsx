@@ -4,12 +4,13 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import {
-  FileCheck,
-  BookOpen,
-  FileText,
-  ArrowRight,
   Award,
+  BookOpen,
+  ArrowRight,
   Book,
+  FileCheck,
+  FileText,
+  Truck,
   Gift,
   Sparkles,
 } from 'lucide-react';
@@ -17,22 +18,19 @@ import { useStore, Product } from '@/context/StoreContext';
 import { BrandLogo } from '@/components/ui/BrandLogo';
 import { imageNeedsUnoptimized } from '@/lib/productImage';
 import { useCouponCatalogSync } from '@/hooks/useCouponCatalogSync';
+import { StorefrontContextPayload } from '@/lib/cofounder/themeEngine';
 
 function HeroShowcase({
-  size,
+  size = 'lg',
   book,
   showBook,
 }: {
-  size: 'sm' | 'lg';
+  size?: 'sm' | 'lg';
   book: Product | null;
   showBook: boolean;
 }) {
   const canFlip = Boolean(book?.image);
-
-  const box =
-    size === 'lg'
-      ? 'h-[13.5rem] w-[13.5rem] md:h-72 md:w-72'
-      : 'h-[7.5rem] w-[7.5rem]';
+  const box = size === 'lg' ? 'w-64 h-64 md:w-80 md:h-80' : 'w-28 h-28';
   const logoSize = size === 'lg' ? 280 : 120;
   const logoClass =
     size === 'lg'
@@ -40,7 +38,7 @@ function HeroShowcase({
       : 'w-[6.5rem] h-[6.5rem] rounded-full shadow-lg';
 
   return (
-    <div className={`hero-showcase ${box} group cursor-pointer`}>
+    <div className={`hero-showcase ${box}`}>
       <div className={`hero-showcase-inner ${box} ${showBook && canFlip ? 'is-book' : ''}`}>
         <div className="hero-showcase-face hero-showcase-logo flex items-center justify-center rounded-full bg-slate-950 p-1 md:p-2 shadow-2xl border border-amber-400/30 overflow-hidden">
           <BrandLogo size={logoSize} priority className={logoClass} />
@@ -48,16 +46,15 @@ function HeroShowcase({
         {book?.image ? (
           <Link
             href={`/products/${book.slug}`}
-            className="hero-showcase-face hero-showcase-book flex flex-col items-center justify-center rounded-[28%] bg-white p-3 md:p-4 shadow-xl border border-white/30 overflow-hidden relative group"
-            aria-label={book.title}
+            className="hero-showcase-face hero-showcase-book rounded-full bg-slate-950 p-3 md:p-4 shadow-2xl border border-amber-400/40 relative overflow-hidden flex items-center justify-center group"
           >
             <Image
               src={book.image}
-              alt={`${book.title} guide book`}
-              width={size === 'lg' ? 280 : 120}
-              height={size === 'lg' ? 280 : 120}
-              priority={size === 'lg'}
-              className="h-full w-full object-contain transition-transform duration-300 group-hover:scale-105"
+              alt={book.title || 'Guidebook cover'}
+              fill
+              className="object-contain p-2 group-hover:scale-105 transition-transform duration-300"
+              sizes="(max-width: 768px) 112px, 320px"
+              priority
               unoptimized={imageNeedsUnoptimized(book.image)}
             />
             {size === 'lg' && (
@@ -75,6 +72,27 @@ function HeroShowcase({
 export const HeroSection = () => {
   const { setSelectedClass, setSelectedCategory, products } = useStore();
   const [heroTitle, setHeroTitle] = useState('');
+  const [context, setContext] = useState<StorefrontContextPayload | null>(null);
+
+  // Active storefront context (theme & announcements)
+  useEffect(() => {
+    let isMounted = true;
+    const fetchContext = async () => {
+      try {
+        const res = await fetch('/api/cofounder/storefront-context', {
+          headers: { 'Cache-Control': 'no-cache' },
+        });
+        if (res.ok && isMounted) {
+          const data: StorefrontContextPayload = await res.json();
+          setContext(data);
+        }
+      } catch (_) {}
+    };
+    fetchContext();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Collect all available products that have a valid cover image
   const booksWithCovers = useMemo(() => {
@@ -85,7 +103,7 @@ export const HeroSection = () => {
   const [activeBook, setActiveBook] = useState<Product | null>(null);
   const [showBook, setShowBook] = useState(false);
 
-  // Initialize active book randomly as soon as catalog products load
+  // Initialize active book as soon as catalog products load
   useEffect(() => {
     if (booksWithCovers.length > 0 && !activeBook) {
       const initial = booksWithCovers[Math.floor(Math.random() * booksWithCovers.length)];
@@ -105,17 +123,12 @@ export const HeroSection = () => {
     let switchTimeout: NodeJS.Timeout;
 
     const runFlipCycle = () => {
-      // 1. Flip to reveal the current book cover
       setShowBook(true);
 
-      // 2. Stay on book cover for 3.6 seconds
       flipTimeout = setTimeout(() => {
         if (!isMounted) return;
-        // 3. Flip back to the golden BPG logo
         setShowBook(false);
 
-        // 4. After 900ms (when 180° flip completes and book face is completely hidden),
-        // randomly pick the next book from all available books (never repeat same book consecutively if > 1)
         switchTimeout = setTimeout(() => {
           if (!isMounted) return;
           setActiveBook((prev) => {
@@ -125,7 +138,6 @@ export const HeroSection = () => {
             return next;
           });
 
-          // 5. Rest on the golden logo for 2.0 seconds, then flip to the newly selected book
           flipTimeout = setTimeout(() => {
             if (!isMounted) return;
             runFlipCycle();
@@ -134,7 +146,6 @@ export const HeroSection = () => {
       }, 3600);
     };
 
-    // Initial flip starts 2 seconds after page load
     const initialTimer = setTimeout(() => {
       runFlipCycle();
     }, 2000);
@@ -167,6 +178,9 @@ export const HeroSection = () => {
     document.getElementById('products')?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  const themeId = context?.theme?.id || 'default';
+  const isFestive = themeId !== 'default';
+
   const features = [
     { icon: FileCheck, label: 'Exam Papers' },
     { icon: BookOpen, label: 'Class Notes' },
@@ -174,18 +188,27 @@ export const HeroSection = () => {
   ];
 
   return (
-    <section className="relative bg-gradient-to-br from-[#020B19] via-[#001E42] to-[#003478] text-white overflow-hidden py-8 md:py-16">
+    <section
+      className={`relative ${
+        isFestive
+          ? 'bg-gradient-to-br from-[#020b18] via-[#09152b] to-[#1c1206]'
+          : 'bg-gradient-to-br from-[#020B19] via-[#001E42] to-[#003478]'
+      } text-white overflow-hidden py-8 md:py-16 transition-colors duration-700`}
+    >
       <div className="absolute -top-40 -right-40 w-[500px] h-[500px] bg-amber-400/20 rounded-full blur-[120px] pointer-events-none" />
       <div className="absolute -bottom-40 -left-40 w-[500px] h-[500px] bg-blue-500/25 rounded-full blur-[120px] pointer-events-none" />
 
       <div className="max-w-7xl mx-auto px-4 relative z-10">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
           <div className="lg:col-span-7 text-center lg:text-left">
+            
+            {/* Top Badge */}
             <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/10 border border-amber-400/40 text-amber-300 text-xs font-extrabold tracking-wide mb-4">
               <Award className="w-4 h-4 text-amber-400 shrink-0" />
               <span>TAMIL NADU STATE BOARD GUIDES</span>
             </div>
 
+            {/* Display Headline */}
             <h1 className="font-heading font-black tracking-tight mb-4">
               <span className="block text-xs sm:text-lg text-slate-300 font-extrabold tracking-widest uppercase mb-1">
                 Score high marks with
@@ -195,10 +218,12 @@ export const HeroSection = () => {
               </span>
             </h1>
 
+            {/* Description */}
             <p className="text-slate-300 text-sm sm:text-base max-w-xl mx-auto lg:mx-0 mb-5 font-medium leading-relaxed">
-              Quality guides for 6th to 12th standard students. Pay online with Razorpay. Delivery via ST Courier.
+              Quality guides for 6th to 12th standard students. Pay online with Razorpay. Free delivery on 5-in-1 combo guides via ST Courier.
             </p>
 
+            {/* Hero Offer Banner (Only when configured in DB) */}
             {heroTitle ? (
               <button
                 type="button"
@@ -216,7 +241,7 @@ export const HeroSection = () => {
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-400/15 border border-amber-300/40 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.18em] text-amber-300">
-                      Limited offer
+                      Featured Offer
                     </span>
                     <span className="mt-1.5 block font-heading text-[17px] sm:text-xl font-black leading-snug text-white drop-shadow-[0_1px_0_rgba(0,0,0,0.35)]">
                       {heroTitle}
@@ -230,10 +255,12 @@ export const HeroSection = () => {
               </button>
             ) : null}
 
+            {/* Mobile Circle Flip Animation */}
             <div className="sm:hidden flex justify-center mb-5">
               <HeroShowcase size="sm" book={activeBook} showBook={showBook} />
             </div>
 
+            {/* Feature Pills */}
             <div className="grid grid-cols-3 gap-2.5 mb-6 max-w-md mx-auto lg:mx-0">
               {features.map((feat) => (
                 <div
@@ -248,6 +275,7 @@ export const HeroSection = () => {
               ))}
             </div>
 
+            {/* Quick Class Shortcut Pills */}
             <div className="flex flex-wrap items-center justify-center lg:justify-start gap-2 mb-6">
               <span className="text-xs text-slate-300 font-bold mr-1">Quick Class:</span>
               {[
@@ -264,17 +292,19 @@ export const HeroSection = () => {
                     setSelectedCategory(pill.cat);
                     scrollToProducts();
                   }}
-                  className="px-3 py-1 rounded-lg bg-white/10 hover:bg-amber-400 hover:text-[#001B3A] border border-white/20 text-xs font-bold text-slate-100 touch-manipulation"
+                  className="px-3 py-1 rounded-lg bg-white/10 hover:bg-amber-400 hover:text-[#001B3A] border border-white/20 text-xs font-bold text-slate-100 touch-manipulation cursor-pointer"
                 >
                   {pill.label}
                 </button>
               ))}
             </div>
+
+            {/* Primary Action Buttons */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center lg:justify-start gap-3">
               <button
                 type="button"
                 onClick={scrollToProducts}
-                className="inline-flex items-center justify-center gap-2 bg-amber-400 text-[#001226] font-black text-sm px-7 py-3.5 rounded-xl uppercase tracking-wider touch-manipulation min-h-12"
+                className="inline-flex items-center justify-center gap-2 bg-amber-400 text-[#001226] font-black text-sm px-7 py-3.5 rounded-xl uppercase tracking-wider touch-manipulation min-h-12 cursor-pointer hover:bg-amber-300 active:scale-95 transition-all shadow-lg"
               >
                 <span>Shop Guides</span>
                 <ArrowRight className="w-4 h-4" />
@@ -286,7 +316,7 @@ export const HeroSection = () => {
                   setSelectedClass('all');
                   scrollToProducts();
                 }}
-                className="inline-flex items-center justify-center gap-2 bg-white/10 border border-white/25 text-white font-extrabold text-sm px-7 py-3.5 rounded-xl uppercase tracking-wider touch-manipulation min-h-12"
+                className="inline-flex items-center justify-center gap-2 bg-white/10 border border-white/25 text-white font-extrabold text-sm px-7 py-3.5 rounded-xl uppercase tracking-wider touch-manipulation min-h-12 cursor-pointer hover:bg-white/20 active:scale-95 transition-all"
               >
                 <Book className="w-4 h-4 text-amber-400" />
                 <span>Browse All</span>
@@ -294,10 +324,12 @@ export const HeroSection = () => {
             </div>
           </div>
 
+          {/* Desktop/Tablet 3D Circle Flip Animation */}
           <div className="hidden sm:flex lg:col-span-5 relative justify-center items-center">
             <div className="absolute w-72 h-72 bg-amber-400/20 rounded-full blur-2xl pointer-events-none" />
             <HeroShowcase size="lg" book={activeBook} showBook={showBook} />
           </div>
+
         </div>
       </div>
     </section>

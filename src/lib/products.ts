@@ -16,6 +16,7 @@ export interface Product {
   badgeColor: string;
   image: string;
   hoverImage?: string;
+  images?: string[];
   description: string;
   features: string[];
   inStock: boolean;
@@ -35,6 +36,8 @@ export interface Product {
   isTrending?: boolean;
   isComingSoon?: boolean;
   is_coming_soon?: boolean;
+  availabilityReason?: string | null;
+  availability_reason?: string | null;
 }
 
 // Initial products array - starts empty until products are fetched dynamically from DB or added via Admin Portal

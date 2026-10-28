@@ -147,7 +147,26 @@ function mapCatalogRows(rows: any[]) {
       }
     }
     extractedClass = extractedClass.toLowerCase();
-    const safeImg = safeCatalogImage(d.cover_image);
+    let safeImg = safeCatalogImage(d.cover_image);
+
+    let imagesArr: string[] = [];
+    if (d.images) {
+      if (Array.isArray(d.images)) {
+        imagesArr = d.images.map((x: any) => safeCatalogImage(x)).filter((x: string) => x && x !== PLACEHOLDER_COVER);
+      } else if (typeof d.images === 'string') {
+        try {
+          const parsed = JSON.parse(d.images);
+          if (Array.isArray(parsed)) {
+            imagesArr = parsed.map((x: any) => safeCatalogImage(x)).filter((x: string) => x && x !== PLACEHOLDER_COVER);
+          }
+        } catch {}
+      }
+    }
+    if (imagesArr.length === 0 && safeImg && safeImg !== PLACEHOLDER_COVER) {
+      imagesArr = [safeImg];
+    } else if (imagesArr.length > 0 && (!safeImg || safeImg === PLACEHOLDER_COVER)) {
+      safeImg = imagesArr[0];
+    }
 
     let comboSubjects: string[] | undefined = undefined;
     if (d.combo_subjects) {
@@ -181,7 +200,8 @@ function mapCatalogRows(rows: any[]) {
           : 'bg-blue-600'
         : 'bg-blue-600',
       image: safeImg,
-      hoverImage: safeImg,
+      hoverImage: imagesArr[1] || safeImg,
+      images: imagesArr.length > 0 ? imagesArr : [safeImg],
       samplePdfUrl: d.sample_pdf_url || null,
       comboSubjects: comboSubjects || undefined,
       description: d.description || `Complete ${extractedClass} Standard guide book for exam success.`,
@@ -196,6 +216,8 @@ function mapCatalogRows(rows: any[]) {
       status: d.status || (Boolean(d.is_coming_soon || d.status === 'coming_soon') ? 'coming_soon' : 'published'),
       isComingSoon: Boolean(d.is_coming_soon || d.status === 'coming_soon'),
       is_coming_soon: Boolean(d.is_coming_soon || d.status === 'coming_soon'),
+      availabilityReason: d.availability_reason || null,
+      availability_reason: d.availability_reason || null,
       language: d.language || 'Both',
     };
   });
@@ -211,6 +233,7 @@ async function ensureBooksColumns() {
     await queryDb(`ALTER TABLE books ADD COLUMN IF NOT EXISTS stock_tamil INT DEFAULT NULL;`);
     await queryDb(`ALTER TABLE books ADD COLUMN IF NOT EXISTS stock_english INT DEFAULT NULL;`);
     await queryDb(`ALTER TABLE books ADD COLUMN IF NOT EXISTS is_coming_soon BOOLEAN DEFAULT false;`);
+    await queryDb(`ALTER TABLE books ADD COLUMN IF NOT EXISTS images JSONB DEFAULT '[]'::jsonb;`);
     await queryDb(`ALTER TABLE stock_holds ADD COLUMN IF NOT EXISTS medium VARCHAR(50);`);
     await queryDb(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS medium VARCHAR(50);`);
   } catch {}
@@ -304,9 +327,9 @@ export async function GET(request: Request) {
       await ensureBooksColumns();
       const { where, params } = buildFilters();
       const sql = `
-        SELECT b.id, b.slug, b.title, b.subject, b.price, b.discount_price, b.stock, b.stock_tamil, b.stock_english, b.status, b.is_coming_soon,
+        SELECT b.id, b.slug, b.title, b.subject, b.price, b.discount_price, b.stock, b.stock_tamil, b.stock_english, b.status, b.is_coming_soon, b.availability_reason,
                b.badge, b.description, b.category_id, b.created_at, b.sample_pdf_url,
-               b.combo_subjects, b.language,
+               b.combo_subjects, b.language, b.images,
                CASE
                  WHEN b.cover_image IS NULL OR b.cover_image = '' THEN NULL
                  WHEN b.cover_image LIKE 'data:%' THEN NULL
@@ -328,9 +351,10 @@ export async function GET(request: Request) {
     const loadFallback = async () => {
       const { where, params } = buildFilters();
       const sql = `
-        SELECT b.id, b.slug, b.title, b.subject, b.price, b.discount_price, b.stock, NULL::int AS stock_tamil, NULL::int AS stock_english, b.status, COALESCE(b.is_coming_soon, false) AS is_coming_soon,
+        SELECT b.id, b.slug, b.title, b.subject, b.price, b.discount_price, b.stock, NULL::int AS stock_tamil, NULL::int AS stock_english, b.status, COALESCE(b.is_coming_soon, false) AS is_coming_soon, b.availability_reason,
                b.badge, b.description, b.category_id, b.created_at, b.sample_pdf_url,
                '[]'::jsonb AS combo_subjects, COALESCE(b.language, 'Both') AS language,
+               '[]'::jsonb AS images,
                NULL::text AS cover_image,
                0::int as review_count,
                0::numeric as avg_rating
@@ -403,7 +427,7 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { title, cls, category, price, mrp, badge, image, description, stock, stockTamil, stock_tamil, stockEnglish, stock_english, subject, status, samplePdfUrl, sample_pdf_url, comboSubjects, combo_subjects, language, medium, isComingSoon, is_coming_soon } = body;
+    const { title, cls, category, price, mrp, badge, image, images, description, stock, stockTamil, stock_tamil, stockEnglish, stock_english, subject, status, samplePdfUrl, sample_pdf_url, comboSubjects, combo_subjects, language, medium, isComingSoon, is_coming_soon } = body;
 
     if (!title || price === undefined || price === null || price === '') {
       return NextResponse.json({ error: 'Title and price are required' }, { status: 400 });
@@ -475,6 +499,20 @@ export async function POST(request: Request) {
     });
     const categoryId = isCombo ? 'cat-combos' : `cat-${cls || '10th'}`;
 
+    let finalImagesArr: string[] = [];
+    if (Array.isArray(images)) {
+      finalImagesArr = images.map((x) => String(x || '').trim()).filter((x) => x && !x.startsWith('data:') && x.length <= 2048);
+    } else if (typeof images === 'string' && images.trim()) {
+      try {
+        const p = JSON.parse(images);
+        if (Array.isArray(p)) {
+          finalImagesArr = p.map((x) => String(x || '').trim()).filter((x) => x && !x.startsWith('data:') && x.length <= 2048);
+        }
+      } catch {
+        finalImagesArr = [images.trim()].filter((x) => !x.startsWith('data:') && x.length <= 2048);
+      }
+    }
+
     const finalImgRaw = String(image || '').trim();
     if (finalImgRaw.startsWith('data:')) {
       return NextResponse.json(
@@ -482,7 +520,13 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    const finalImg = finalImgRaw || PLACEHOLDER_COVER;
+    let finalImg = finalImgRaw || (finalImagesArr.length > 0 ? finalImagesArr[0] : PLACEHOLDER_COVER);
+    if (finalImagesArr.length === 0 && finalImg && finalImg !== PLACEHOLDER_COVER) {
+      finalImagesArr = [finalImg];
+    } else if (finalImagesArr.length > 0 && (!finalImg || finalImg === PLACEHOLDER_COVER)) {
+      finalImg = finalImagesArr[0];
+    }
+
     const finalDesc = description || `Complete ${cls || '10th'} Standard ${title} guide.`;
     const finalBadge = String(badge || '').trim().slice(0, 100);
 
@@ -502,8 +546,8 @@ export async function POST(request: Request) {
     await ensureBooksColumns();
 
     const sql = `
-      INSERT INTO books (id, title, slug, category_id, subject, price, discount_price, cover_image, description, status, featured, badge, stock, sample_pdf_url, combo_subjects, language, stock_tamil, stock_english, is_coming_soon)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, TRUE, $11, $12, $13, $14::jsonb, $15, $16, $17, $18)
+      INSERT INTO books (id, title, slug, category_id, subject, price, discount_price, cover_image, description, status, featured, badge, stock, sample_pdf_url, combo_subjects, language, stock_tamil, stock_english, is_coming_soon, images)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, TRUE, $11, $12, $13, $14::jsonb, $15, $16, $17, $18, $19::jsonb)
       RETURNING *
     `;
     const res = await queryDb(sql, [
@@ -525,6 +569,7 @@ export async function POST(request: Request) {
       finalStockTamil,
       finalStockEnglish,
       finalIsComingSoon,
+      JSON.stringify(finalImagesArr),
     ]);
     await invalidateProductsCache();
     void recordAdminAudit(
@@ -564,7 +609,7 @@ export async function PATCH(request: Request) {
   if (!auth.isAdmin) return forbiddenResponse(auth.error);
 
   try {
-    const { id, title, cls, category, category_id, subject, price, mrp, inStock, stock, stockTamil, stock_tamil, stockEnglish, stock_english, description, image, badge, hasDiscount, samplePdfUrl, sample_pdf_url, comboSubjects, combo_subjects, language, medium, isComingSoon, is_coming_soon, status } = await request.json().catch(() => ({}));
+    const { id, title, cls, category, category_id, subject, price, mrp, inStock, stock, stockTamil, stock_tamil, stockEnglish, stock_english, description, image, images, badge, hasDiscount, samplePdfUrl, sample_pdf_url, comboSubjects, combo_subjects, language, medium, isComingSoon, is_coming_soon, status } = await request.json().catch(() => ({}));
     if (!id) return NextResponse.json({ error: 'Product id is required' }, { status: 400 });
 
     const fields: string[] = [];
@@ -720,6 +765,30 @@ export async function PATCH(request: Request) {
       fields.push(`cover_image = $${idx++}`);
       values.push(img || PLACEHOLDER_COVER);
     }
+    if (images !== undefined) {
+      await ensureBooksColumns();
+      let normImages: string[] = [];
+      if (Array.isArray(images)) {
+        normImages = images.map((x: any) => String(x || '').trim()).filter((x) => x && !x.startsWith('data:') && x.length <= 2048);
+      } else if (typeof images === 'string') {
+        try {
+          const p = JSON.parse(images);
+          if (Array.isArray(p)) {
+            normImages = p.map((x: any) => String(x || '').trim()).filter((x) => x && !x.startsWith('data:') && x.length <= 2048);
+          }
+        } catch {
+          if (images.trim() && !images.startsWith('data:') && images.length <= 2048) {
+            normImages = [images.trim()];
+          }
+        }
+      }
+      fields.push(`images = $${idx++}`);
+      values.push(JSON.stringify(normImages));
+      if (normImages.length > 0 && image === undefined) {
+        fields.push(`cover_image = $${idx++}`);
+        values.push(normImages[0]);
+      }
+    }
     if (samplePdfUrl !== undefined || sample_pdf_url !== undefined) {
       const pdf = String(samplePdfUrl || sample_pdf_url || '').trim() || null;
       fields.push(`sample_pdf_url = $${idx++}`);
@@ -730,7 +799,7 @@ export async function PATCH(request: Request) {
       await ensureBooksColumns();
       const raw = comboSubjects !== undefined ? comboSubjects : combo_subjects;
       const arr = isSingleSubject ? [] : (Array.isArray(raw) ? raw : []);
-      fields.push(`combo_subjects = $${idx++}::jsonb`);
+      fields.push(`combo_subjects = $${idx++}`);
       values.push(JSON.stringify(arr));
     }
 
@@ -772,7 +841,12 @@ export async function PATCH(request: Request) {
     if (setCols.size > 0) {
       const cols = [...setCols.keys()];
       const params = [...setCols.values(), id];
-      const assignments = cols.map((c, i) => `${c} = $${i + 1}`);
+      const assignments = cols.map((c, i) => {
+        if (c === 'combo_subjects' || c === 'images') {
+          return `${c} = $${i + 1}::jsonb`;
+        }
+        return `${c} = $${i + 1}`;
+      });
       assignments.push('updated_at = NOW()');
       await queryDb(
         `UPDATE books SET ${assignments.join(', ')} WHERE id = $${params.length}`,

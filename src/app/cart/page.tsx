@@ -19,6 +19,7 @@ import {
   AlertTriangle,
   Sparkles,
   CheckCircle2,
+  BookOpen,
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { pincodeDeliveryMessage } from '@/lib/pincode';
@@ -167,26 +168,90 @@ export default function CartPage() {
         </h1>
 
         {cart.length === 0 && savedForLater.length === 0 ? (
-          <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center text-slate-500 max-w-lg mx-auto shadow-xs">
-            <ShoppingBag className="w-16 h-16 mx-auto mb-4 opacity-20 text-[#001B3A]" />
-            <h3 className="font-heading font-bold text-lg text-slate-800 mb-1">Your cart is empty</h3>
-            <p className="text-xs mb-2 text-slate-500">Login, then add guide books for classes 6th–12th.</p>
-            <div className="flex flex-col sm:flex-row gap-2 justify-center mt-6">
-              {!user && (
-                <button
-                  onClick={() => setIsAuthOpen(true)}
-                  className="inline-block bg-amber-400 text-[#001B3A] font-bold text-xs px-6 py-3.5 rounded-xl shadow-md hover:bg-amber-500 transition-colors uppercase tracking-wider min-h-12"
+          <div className="space-y-10">
+            <div className="bg-white border border-slate-200 rounded-3xl p-8 sm:p-12 text-center text-slate-500 max-w-xl mx-auto shadow-sm">
+              <div className="w-20 h-20 rounded-3xl bg-blue-50 border border-blue-200 text-[#0044AA] flex items-center justify-center mx-auto mb-5 shadow-inner">
+                <ShoppingBag className="w-10 h-10" />
+              </div>
+              <h2 className="font-heading font-black text-xl sm:text-2xl text-[#001B3A] mb-2">
+                Your Cart Is Waiting for Something Special
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-600 max-w-md mx-auto mb-6 leading-relaxed">
+                Discover our official Tamil Nadu State Board (Samacheer Kalvi) exam preparation guides and find the perfect books for your studies.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-3 justify-center max-w-sm mx-auto">
+                <Link
+                  href="/search"
+                  className="flex-1 bg-[#001B3A] hover:bg-blue-900 active:scale-98 text-white font-bold text-xs px-6 py-3.5 rounded-xl shadow-md transition-all uppercase tracking-wider min-h-12 flex items-center justify-center gap-2"
                 >
-                  LOGIN
-                </button>
-              )}
-              <Link
-                href="/search"
-                className="inline-flex items-center justify-center bg-[#001B3A] text-white font-bold text-xs px-6 py-3.5 rounded-xl shadow-md hover:bg-blue-600 transition-colors uppercase tracking-wider min-h-12"
-              >
-                BROWSE GUIDES
-              </Link>
+                  <BookOpen className="w-4 h-4" />
+                  Explore Books
+                </Link>
+                <Link
+                  href="/"
+                  className="flex-1 bg-amber-400 hover:bg-amber-500 active:scale-98 text-[#001B3A] font-extrabold text-xs px-6 py-3.5 rounded-xl shadow-md transition-all uppercase tracking-wider min-h-12 flex items-center justify-center border border-amber-300"
+                >
+                  Continue Shopping
+                </Link>
+              </div>
             </div>
+
+            {/* Recommended Guides for Empty Cart */}
+            {products && products.length > 0 && (
+              <div className="max-w-5xl mx-auto">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-amber-500" />
+                    <h3 className="font-heading font-black text-base text-slate-900">
+                      Popular 10th Standard Guides
+                    </h3>
+                  </div>
+                  <Link href="/search?class=10th" className="text-xs font-bold text-blue-600 hover:underline">
+                    View all 10th guides →
+                  </Link>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+                  {products
+                    .filter((p: any) => p.inStock !== false)
+                    .slice(0, 4)
+                    .map((item: any) => (
+                      <div
+                        key={item.id}
+                        className="bg-white border border-slate-200 rounded-2xl p-3 flex flex-col justify-between shadow-2xs hover:shadow-md transition-shadow"
+                      >
+                        <div>
+                          <div className="w-full h-36 bg-slate-50 rounded-xl mb-2.5 flex items-center justify-center p-2 overflow-hidden">
+                            <Image
+                              src={item.image || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80'}
+                              alt={item.title}
+                              width={120}
+                              height={140}
+                              className="max-h-full max-w-full object-contain"
+                              unoptimized={imageNeedsUnoptimized(item.image || '')}
+                            />
+                          </div>
+                          <h4 className="font-bold text-xs text-slate-900 line-clamp-2 leading-snug mb-1">
+                            {item.title}
+                          </h4>
+                          <span className="text-[11px] font-black text-[#001B3A] block mb-2">
+                            ₹{item.price || item.discountPrice}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            addToCart(item, 1);
+                            showToast(`Added ${item.title} to cart`);
+                          }}
+                          className="w-full py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-[11px] rounded-lg transition-colors cursor-pointer"
+                        >
+                          + Add to Cart
+                        </button>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">

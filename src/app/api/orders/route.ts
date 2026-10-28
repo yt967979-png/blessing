@@ -19,6 +19,7 @@ import { confirmStockHolds, recordConfirmedSale, shrinkConfirmedHold, releaseSto
 import { isValidMobileNumber, normalizeRequiredAlternateMobile } from '@/lib/authValidation';
 import { recordSystemError } from '@/lib/errorMonitor';
 import { isCheckoutPausedAsync } from '@/lib/checkoutControl';
+import { formatIndianDateTime } from '@/lib/indianTime';
 
 /**
  * Money-safety net: payment is captured by Razorpay client-side BEFORE this
@@ -140,16 +141,10 @@ function mapOrderRow(o: any) {
     courierName: o.courier_name || 'ST Courier Express',
     orderSource: o.order_source || (o.user_id && String(o.user_id).startsWith('wa-') ? 'whatsapp' : 'website'),
     items: Array.isArray(o.items) ? o.items : [],
-    packedAt: o.packed_at ? new Date(o.packed_at).toLocaleString('en-IN') : null,
-    shippedAt: o.shipped_at ? new Date(o.shipped_at).toLocaleString('en-IN') : null,
-    deliveredAt: o.delivered_at ? new Date(o.delivered_at).toLocaleString('en-IN') : null,
-    createdAt: new Date(o.ordered_at || Date.now()).toLocaleDateString('en-IN', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    }),
+    packedAt: o.packed_at ? formatIndianDateTime(o.packed_at) : null,
+    shippedAt: o.shipped_at ? formatIndianDateTime(o.shipped_at) : null,
+    deliveredAt: o.delivered_at ? formatIndianDateTime(o.delivered_at) : null,
+    createdAt: formatIndianDateTime(o.ordered_at || Date.now()),
   };
 }
 
@@ -440,13 +435,31 @@ export async function POST(request: Request) {
     const internalShipmentId = `SHP-${ymd}-${Math.floor(100000 + Math.random() * 900000)}`;
     const initialStatus = 'Confirmed';
 
+    const rawShippingAddr = typeof body.shippingAddress === 'object' && body.shippingAddress ? body.shippingAddress : {};
     const shippingAddressObj = JSON.stringify({
       name: customerName,
+      studentName: body.studentName || rawShippingAddr.studentName || customerName,
+      parentName: body.parentName || rawShippingAddr.parentName || '',
       phone: customerPhone,
       alternatePhone: altPhone.value,
-      address: address || '',
+      whatsappNumber: body.whatsappNumber || rawShippingAddr.whatsappNumber || '',
+      email: body.email || body.primaryEmail || rawShippingAddr.email || '',
+      alternateEmail: body.alternateEmail || rawShippingAddr.alternateEmail || '',
+      doorNo: body.doorNo || rawShippingAddr.doorNo || '',
+      floorNo: body.floorNo || rawShippingAddr.floorNo || '',
+      buildingName: body.buildingName || rawShippingAddr.buildingName || '',
+      streetName: body.streetName || rawShippingAddr.streetName || '',
+      areaLocality: body.areaLocality || rawShippingAddr.areaLocality || '',
+      townCity: body.townCity || rawShippingAddr.townCity || '',
+      taluk: body.taluk || rawShippingAddr.taluk || '',
+      district: body.district || rawShippingAddr.district || city || 'Chennai',
+      state: body.state || rawShippingAddr.state || 'Tamil Nadu',
+      address: address || rawShippingAddr.address || '',
       city: city || 'Chennai',
       pincode: pinDigits,
+      landmark: body.landmark || rawShippingAddr.landmark || '',
+      deliveryInstructions: body.deliveryInstructions || rawShippingAddr.deliveryInstructions || '',
+      ...rawShippingAddr,
     });
 
     const { generateNextGstInvoiceNumber } = await import('@/lib/invoiceGenerator');
@@ -675,6 +688,28 @@ export async function POST(request: Request) {
       amount: totalAmount,
       details: { itemsCount: verifiedItems.length, paymentMethod },
     });
+
+    try {
+      const { recordAdminAudit } = await import('@/lib/adminAudit');
+      void recordAdminAudit(
+        {
+          actorId: String(userId || customerPhone || 'customer'),
+          action: 'ORDER_PLACED',
+          targetType: 'order',
+          targetId: orderNumber,
+          details: {
+            orderId: id,
+            orderNumber,
+            amount: totalAmount,
+            itemsCount: verifiedItems.length,
+            paymentMethod,
+            customerName,
+            customerPhone,
+          },
+        },
+        request
+      );
+    } catch (_) {}
     // Order confirm may have adjusted stock beyond the hold (excess return /
     // fail-safe shortfall decrement above) — push a fresh snapshot for every
     // purchased book so shoppers browsing right now see it instantly.
@@ -880,6 +915,25 @@ export async function PATCH(request: NextRequest) {
       actor: 'admin',
       details: { awbNumber: awbNumber || null },
     });
+
+    try {
+      const { recordAdminAudit } = await import('@/lib/adminAudit');
+      void recordAdminAudit(
+        {
+          actorId: auth.user?.userId || 'admin',
+          action: 'ORDER_STATUS_UPDATED',
+          targetType: 'order',
+          targetId: existing.rows[0].order_number || orderId,
+          details: {
+            fromStatus: currentStatus,
+            toStatus: newStatus,
+            awbNumber: awbNumber || null,
+            trackingUrl,
+          },
+        },
+        request
+      );
+    } catch (_) {}
 
     return NextResponse.json({ success: true, orderId, status: newStatus, awbNumber, trackingUrl });
   } catch (err: any) {

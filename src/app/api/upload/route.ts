@@ -54,8 +54,11 @@ export async function POST(request: Request) {
     }
 
     const isReviewUpload = folder === 'reviews' || folder.startsWith('reviews/');
+    const isSupportUpload = folder === 'support' || folder.startsWith('support/');
     if (isReviewUpload) {
       if (!session) return unauthorizedResponse('Login required to upload review photos.');
+    } else if (isSupportUpload) {
+      // Support attachments allowed for customers with rate limit
     } else if (!session || !admin?.isAdmin) {
       return unauthorizedResponse('Admin login required to upload catalog images.');
     }
@@ -66,10 +69,10 @@ export async function POST(request: Request) {
     }
 
     const claimedPdf = file.type === 'application/pdf' || lowerName.endsWith('.pdf');
-    const maxBytes = claimedPdf ? 25 * 1024 * 1024 : isReviewUpload ? 5 * 1024 * 1024 : 10 * 1024 * 1024;
+    const maxBytes = claimedPdf ? 25 * 1024 * 1024 : (isReviewUpload || isSupportUpload) ? 5 * 1024 * 1024 : 10 * 1024 * 1024;
     if (file.size > maxBytes) {
       return NextResponse.json(
-        { error: claimedPdf ? 'PDF too large (max 25MB).' : 'Image too large (max 10MB).' },
+        { error: claimedPdf ? 'PDF too large (max 25MB).' : 'Image too large (max 5MB for support/reviews).' },
         { status: 400 }
       );
     }

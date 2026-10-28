@@ -211,9 +211,12 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
   const [editTitle, setEditTitle] = useState<string>('');
   const [editBadge, setEditBadge] = useState<string>('');
   const [editImage, setEditImage] = useState<string>('');
+  const [editImages, setEditImages] = useState<string[]>([]);
   const [editMedium, setEditMedium] = useState<string>('Both');
   const [editImageUploading, setEditImageUploading] = useState<boolean>(false);
+  const [editMainCoverUploading, setEditMainCoverUploading] = useState<boolean>(false);
   const editImageInputRef = useRef<HTMLInputElement>(null);
+  const editMainCoverInputRef = useRef<HTMLInputElement>(null);
   const [editComboSubjects, setEditComboSubjects] = useState<string[]>([]);
   const [editCustomComboSubjectInput, setEditCustomComboSubjectInput] = useState('');
   const [editComingSoon, setEditComingSoon] = useState<boolean>(false);
@@ -242,6 +245,7 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
   const [lowStockThreshold, setLowStockThreshold] = useState<number>(5);
   const [newBadge, setNewBadge] = useState('Popular');
   const [newImage, setNewImage] = useState('');
+  const [newImages, setNewImages] = useState<string[]>([]);
   const [hsnCode, setHsnCode] = useState('4901');
   const [showAdvanced, setShowAdvanced] = useState(false);
 
@@ -371,7 +375,16 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
     setEditingId(p.id);
     setEditTitle(p.title || '');
     setEditBadge(p.badge || '');
-    setEditImage(p.image || '');
+    const initialImgs = Array.isArray(p.images) && p.images.length > 0
+      ? p.images
+      : (p.image ? [p.image] : []);
+    const mainCover = p.image || initialImgs[0] || '';
+    setEditImage(mainCover);
+    let subjectImgs = [...initialImgs];
+    if (subjectImgs.length > 1 && subjectImgs[0] === mainCover) {
+      subjectImgs = subjectImgs.slice(1);
+    }
+    setEditImages(subjectImgs);
     setEditPrice(p.price);
     setEditMrp(p.mrp || p.price);
     const normMed = normalizeProductMedium(p.language);
@@ -509,7 +522,11 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
     }
 
     setNewBadge(product.badge || '');
-    setNewImage(product.image || '');
+    const dupImgs = Array.isArray(product.images) && product.images.length > 0
+      ? product.images
+      : (product.image ? [product.image] : []);
+    setNewImages(dupImgs);
+    setNewImage(dupImgs[0] || product.image || '');
     setNewComingSoon(Boolean(product.isComingSoon || product.is_coming_soon || product.status === 'coming_soon'));
     setPublishStatus(product.status === 'draft' ? 'draft' : 'published');
     setShowAdvanced(false);
@@ -518,21 +535,21 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
     onShowToast(`📋 Duplicating "${product.title}" — switch medium or details as needed!`);
   };
 
-  const handleEditDeviceImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleEditMainCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     if (file.size > 10 * 1024 * 1024) {
-      onShowToast('❌ File too large. Max allowed is 10MB.');
+      onShowToast(`❌ "${file.name}" too large (max 10MB).`);
       return;
     }
 
-    setEditImageUploading(true);
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('folder', 'blessing_power_guides');
-
+    setEditMainCoverUploading(true);
     try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('folder', 'blessing_power_guides');
+
       const res = await fetch('/api/upload', {
         method: 'POST',
         headers: authFormHeaders(user),
@@ -540,16 +557,60 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
       });
 
       const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Image upload failed');
+      if (res.ok && data.url) {
+        setEditImage(data.url);
+        onShowToast('✅ Main book cover updated! Remember to click checkmark to save.');
+      } else {
+        onShowToast(`❌ Upload failed: ${data.error || 'Server error'}`);
+      }
+    } catch (err: any) {
+      onShowToast(`❌ Upload failed: ${err.message}`);
+    } finally {
+      setEditMainCoverUploading(false);
+      if (editMainCoverInputRef.current) editMainCoverInputRef.current.value = '';
+    }
+  };
+
+  const handleEditDeviceImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    setEditImageUploading(true);
+    try {
+      const uploadedUrls: string[] = [];
+      for (const file of files) {
+        if (file.size > 10 * 1024 * 1024) {
+          onShowToast(`❌ "${file.name}" too large (max 10MB). Skipped.`);
+          continue;
+        }
+
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('folder', 'blessing_power_guides');
+
+        const res = await fetch('/api/upload', {
+          method: 'POST',
+          headers: authFormHeaders(user),
+          body: formData,
+        });
+
+        const data = await res.json();
+        if (res.ok && data.url) {
+          uploadedUrls.push(data.url);
+        } else {
+          onShowToast(`❌ Failed to upload ${file.name}`);
+        }
       }
 
-      setEditImage(data.url);
-      onShowToast('✅ Cover image updated');
+      if (uploadedUrls.length > 0) {
+        setEditImages((prev) => [...prev, ...uploadedUrls]);
+        onShowToast(`✅ ${uploadedUrls.length} subject guide cover(s) added!`);
+      }
     } catch (err: any) {
       onShowToast(`❌ Upload failed: ${err.message}`);
     } finally {
       setEditImageUploading(false);
+      if (editImageInputRef.current) editImageInputRef.current.value = '';
     }
   };
 
@@ -597,11 +658,15 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
       cleanComboSubjects.forEach((s) => addCustomSubject(s));
     }
 
+    const mainImg = editImage.trim() || (editImages.length > 0 ? editImages[0] : undefined);
+    const finalEditImgs = editImages.length > 0 ? editImages : (mainImg ? [mainImg] : []);
+
     try {
       await onUpdateProduct(id, {
         title: editTitle.trim(),
         badge: editBadge.trim(),
-        image: editImage.trim() || undefined,
+        image: mainImg,
+        images: finalEditImgs,
         cls: editCls,
         subject: finalSubjectToSave,
         language: editMedium,
@@ -685,37 +750,50 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
   };
 
   const handleDeviceImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (file.size > 10 * 1024 * 1024) {
-      onShowToast('❌ File too large. Max allowed is 10MB.');
-      return;
-    }
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
 
     setImageUploading(true);
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('folder', 'blessing_power_guides');
-
     try {
-      const res = await fetch('/api/upload', {
-        method: 'POST',
-        headers: authFormHeaders(user),
-        body: formData,
-      });
+      const uploadedUrls: string[] = [];
+      for (const file of files) {
+        if (file.size > 10 * 1024 * 1024) {
+          onShowToast(`❌ "${file.name}" too large (max 10MB). Skipped.`);
+          continue;
+        }
 
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Image upload failed');
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('folder', 'blessing_power_guides');
+
+        const res = await fetch('/api/upload', {
+          method: 'POST',
+          headers: authFormHeaders(user),
+          body: formData,
+        });
+
+        const data = await res.json();
+        if (res.ok && data.url) {
+          uploadedUrls.push(data.url);
+        } else {
+          onShowToast(`❌ Failed to upload ${file.name}`);
+        }
       }
 
-      setNewImage(data.url);
-      onShowToast('✅ Cover image uploaded successfully');
+      if (uploadedUrls.length > 0) {
+        setNewImages((prev) => {
+          const next = [...prev, ...uploadedUrls];
+          if (!newImage) setNewImage(next[0]);
+          return next;
+        });
+        if (!newImage) setNewImage(uploadedUrls[0]);
+        onShowToast(`✅ ${uploadedUrls.length} cover image(s) uploaded successfully`);
+      }
     } catch (err: any) {
       onShowToast(`❌ Upload failed: ${err.message}`);
     } finally {
       setImageUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
@@ -757,6 +835,9 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
         selectedComboSubjects.forEach((s) => addCustomSubject(s));
       }
 
+      const finalImagesList = newImages.length > 0 ? newImages : (newImage.trim() ? [newImage.trim()] : []);
+      const mainCoverImg = finalImagesList[0] || newImage.trim() || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80';
+
       const payload = {
         title: newTitle.trim(),
         cls: newCls,
@@ -778,7 +859,8 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
         description: isCombo
           ? `Complete ${newCls} Standard All-in-One Combo Guide Pack (${selectedComboSubjects.join(', ')}). Covers full Tamil Nadu State Board syllabus with solved question papers.`
           : `Complete ${newCls} Standard ${resolvedSubject} guide covering Tamil Nadu Samacheer Kalvi syllabus with question banks and answers.`,
-        image: newImage.trim() || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80',
+        image: mainCoverImg,
+        images: finalImagesList,
       };
 
       const creator = onAddNewProduct || onCreateProduct;
@@ -825,6 +907,7 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
       setNewStockTamil('25');
       setNewStockEnglish('25');
       setNewImage('');
+      setNewImages([]);
       setNewMedium('Both');
       setNewBadge('Popular');
       setSelectedComboSubjects(['Tamil', 'English', 'Mathematics', 'Science', 'Social Science']);
@@ -998,19 +1081,25 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                         <div className="flex items-start gap-3">
                           <div className="relative group shrink-0">
                             <img
-                              src={isEditing && editImage ? editImage : p.image}
+                              src={(isEditing ? (editImage || editImages[0]) : p.image) || (Array.isArray(p.images) && p.images[0]) || ''}
                               alt={p.title}
-                              className={`w-12 h-12 object-contain bg-slate-50 border border-slate-200 rounded-lg p-0.5 transition-all ${isOOS ? 'grayscale opacity-60' : ''}`}
+                              className={`w-12 h-14 object-contain bg-slate-50 border border-slate-200 rounded-lg p-0.5 transition-all ${isOOS ? 'grayscale opacity-60' : ''}`}
                             />
+                            {((isEditing ? editImages.length : (p.images?.length || 0)) > 0) && (
+                              <span className="absolute -bottom-1 -right-1 bg-purple-600 text-white text-[8px] font-black px-1.5 py-0.5 rounded-full shadow-xs" title="Subject Guides Inside">
+                                📚 {isEditing ? editImages.length : (p.images?.length || 0)}
+                              </span>
+                            )}
                             {isEditing && (
                               <button
                                 type="button"
-                                disabled={editImageUploading}
-                                onClick={() => editImageInputRef.current?.click()}
-                                className="absolute inset-0 bg-slate-900/60 text-white rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-[9px] font-bold"
-                                title="Change cover image"
+                                disabled={editMainCoverUploading}
+                                onClick={() => editMainCoverInputRef.current?.click()}
+                                className="absolute inset-0 bg-slate-900/70 text-white rounded-lg flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-[8px] font-bold p-0.5 text-center"
+                                title="Change Main Book Cover (What shoppers see first)"
                               >
-                                {editImageUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                                {editMainCoverUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                                <span>Main</span>
                               </button>
                             )}
                           </div>
@@ -1047,8 +1136,27 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                                     <option value="English">📗 English Medium Only</option>
                                   </select>
                                   <input
+                                    ref={editMainCoverInputRef}
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={handleEditMainCoverUpload}
+                                    className="hidden"
+                                  />
+                                  <button
+                                    type="button"
+                                    disabled={editMainCoverUploading}
+                                    onClick={() => editMainCoverInputRef.current?.click()}
+                                    className="text-[10px] text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 px-2 py-0.5 rounded font-bold cursor-pointer flex items-center gap-1 shadow-2xs"
+                                    title="Change the Main Display Cover (Combo Box Set cover seen by shoppers)"
+                                  >
+                                    <Upload className="w-2.5 h-2.5 text-emerald-600" />
+                                    <span>{editMainCoverUploading ? 'Uploading...' : '1. Main Cover'}</span>
+                                  </button>
+
+                                  <input
                                     ref={editImageInputRef}
                                     type="file"
+                                    multiple
                                     accept="image/*"
                                     onChange={handleEditDeviceImageUpload}
                                     className="hidden"
@@ -1057,12 +1165,49 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                                     type="button"
                                     disabled={editImageUploading}
                                     onClick={() => editImageInputRef.current?.click()}
-                                    className="text-[10px] text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2 py-0.5 rounded font-bold cursor-pointer flex items-center gap-1"
+                                    className="text-[10px] text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-300 px-2 py-0.5 rounded font-bold cursor-pointer flex items-center gap-1 shadow-2xs"
+                                    title="Add individual subject guide covers (Tamil, English, Maths, Science, Social)"
                                   >
-                                    <ImageIcon className="w-2.5 h-2.5" />
-                                    <span>{editImageUploading ? 'Uploading...' : 'Change Cover'}</span>
+                                    <ImageIcon className="w-2.5 h-2.5 text-blue-600" />
+                                    <span>{editImageUploading ? 'Uploading...' : `2. Subject Guides (${editImages.length})`}</span>
                                   </button>
                                 </div>
+                                {editImages.length > 0 && (
+                                  <div className="flex items-center gap-1.5 flex-wrap pt-1 bg-slate-50/90 p-1.5 rounded-lg border border-slate-200">
+                                    <div className="w-full flex items-center justify-between text-[9px] font-bold text-slate-600 mb-0.5">
+                                      <span>Inside Subject Guides ({editImages.length} guides):</span>
+                                      <span className="text-[8.5px] text-slate-400 font-semibold">Tapped inside book details</span>
+                                    </div>
+                                    {editImages.map((imgUrl, imgIdx) => {
+                                      const COMBO_LABELS = ['Tamil', 'English', 'Maths', 'Science', 'Social'];
+                                      const lbl = COMBO_LABELS[imgIdx] || `Guide #${imgIdx + 1}`;
+                                      return (
+                                        <div key={imgIdx} className="relative group/cover shrink-0 text-center">
+                                          <span className="text-[7.5px] font-extrabold text-blue-700 bg-blue-100 px-1 py-0.2 rounded-t block -mb-0.5">
+                                            {lbl}
+                                          </span>
+                                          <img
+                                            src={imgUrl}
+                                            alt=""
+                                            className="w-7 h-9 object-contain rounded-b border border-slate-200 p-0.5 bg-white shadow-2xs"
+                                            title={`${lbl} Guide Cover`}
+                                          />
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              const next = editImages.filter((_, i) => i !== imgIdx);
+                                              setEditImages(next);
+                                            }}
+                                            className="absolute -top-1 -right-1 bg-red-600 text-white text-[8px] font-bold w-3.5 h-3.5 rounded-full flex items-center justify-center opacity-0 group-hover/cover:opacity-100 transition-opacity cursor-pointer shadow-xs"
+                                            title="Remove guide cover"
+                                          >
+                                            ×
+                                          </button>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
                               </div>
                             ) : (
                               <>
@@ -2507,50 +2652,103 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                 </label>
               </div>
 
-              {/* SECTION 3: BOOK COVER IMAGE UPLOAD */}
+              {/* SECTION 3: BOOK COVER IMAGE UPLOAD (MULTI-COVER SUPPORT) */}
               <div className="space-y-3 bg-slate-50/50 p-4 rounded-2xl border border-slate-200">
-                <div className="font-bold text-[11px] text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                  <ImageIcon className="w-3.5 h-3.5 text-[#2874f0]" />
-                  <span>3. Book Cover Photo (Device Gallery Upload)</span>
+                <div className="flex items-center justify-between">
+                  <div className="font-bold text-[11px] text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <ImageIcon className="w-3.5 h-3.5 text-[#2874f0]" />
+                    <span>3. Book Cover Photos (Upload Multiple for Combos / Guides)</span>
+                  </div>
+                  {newImages.length > 0 && (
+                    <span className="text-[10px] font-bold bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">
+                      {newImages.length} {newImages.length === 1 ? 'Cover' : 'Covers'} Ready
+                    </span>
+                  )}
                 </div>
 
                 <input
                   ref={fileInputRef}
                   type="file"
+                  multiple
                   accept="image/jpeg,image/png,image/webp,image/gif"
                   onChange={handleDeviceImageUpload}
                   className="hidden"
                 />
 
-                {newImage ? (
-                  <div className="flex items-center gap-4 p-3 bg-white border border-blue-200 rounded-2xl shadow-2xs">
-                    <img
-                      src={newImage}
-                      alt="Cover Preview"
-                      className="w-16 h-20 object-contain bg-slate-50 rounded-xl border border-slate-200 p-1 shadow-xs"
-                    />
-                    <div className="flex-1 space-y-1">
-                      <div className="flex items-center gap-1.5 text-emerald-700 font-bold text-xs">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                        <span>Cover Photo Ready</span>
-                      </div>
-                      <p className="text-[11px] text-slate-400 truncate max-w-[240px]">{newImage}</p>
+                {newImages.length > 0 ? (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+                      {newImages.map((imgUrl, idx) => (
+                        <div
+                          key={idx}
+                          className={`relative bg-white border rounded-xl p-2 flex flex-col items-center gap-1.5 group transition-all ${
+                            idx === 0
+                              ? 'border-emerald-400 ring-2 ring-emerald-500/20 shadow-xs'
+                              : 'border-slate-200 hover:border-slate-400'
+                          }`}
+                        >
+                          <img
+                            src={imgUrl}
+                            alt={`Cover ${idx + 1}`}
+                            className="w-full h-24 object-contain bg-slate-50 rounded-lg border border-slate-100 p-1"
+                          />
+                          <div className="w-full flex items-center justify-between gap-1 text-[10px]">
+                            {idx === 0 ? (
+                              <span className="bg-emerald-600 text-white font-extrabold px-1.5 py-0.5 rounded text-[9px]">
+                                ⭐ Main
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const next = [...newImages];
+                                  const [picked] = next.splice(idx, 1);
+                                  next.unshift(picked);
+                                  setNewImages(next);
+                                  setNewImage(picked);
+                                }}
+                                className="text-[9px] font-bold text-blue-600 hover:underline cursor-pointer"
+                                title="Make this the primary storefront cover"
+                              >
+                                Set Main
+                              </button>
+                            )}
+                            <span className="text-slate-400 font-bold text-[9px]">#{idx + 1}</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const next = newImages.filter((_, i) => i !== idx);
+                                setNewImages(next);
+                                setNewImage(next[0] || '');
+                              }}
+                              className="text-slate-400 hover:text-red-600 p-0.5 rounded cursor-pointer"
+                              title="Remove this cover"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="flex items-center justify-between gap-3 pt-1">
                       <button
                         type="button"
+                        disabled={imageUploading}
                         onClick={() => fileInputRef.current?.click()}
-                        className="text-xs text-[#2874f0] font-bold hover:underline cursor-pointer block"
+                        className="px-3 py-1.5 bg-white border border-blue-300 hover:bg-blue-50 text-blue-700 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors shadow-2xs"
                       >
-                        Change Photo
+                        {imageUploading ? (
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Plus className="w-3.5 h-3.5" />
+                        )}
+                        <span>+ Add More Covers</span>
                       </button>
+                      <p className="text-[11px] text-slate-500 font-medium">
+                        ✨ 1st cover is shown on catalog cards. All covers cycle automatically on the product page.
+                      </p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setNewImage('')}
-                      className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg cursor-pointer"
-                      title="Remove image"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
                   </div>
                 ) : (
                   <div
@@ -2569,18 +2767,16 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                         </div>
                         <div>
                           <span className="font-bold text-slate-800 text-xs block">
-                            Tap to upload book cover photo
+                            Tap to upload book covers (Select 1 or multiple covers)
                           </span>
                           <span className="text-[11px] text-slate-400">
-                            PNG, JPG, WebP up to 10MB (Free 25GB Storage)
+                            Upload single book cover or all 5 covers for combo sets (PNG, JPG, WebP up to 10MB)
                           </span>
                         </div>
                       </>
                     )}
                   </div>
                 )}
-
-
               </div>
 
               {/* LIVE STOREFRONT PREVIEW CARD */}

@@ -783,7 +783,7 @@ export async function handleIncomingWhatsAppMessage(
 
     return sendWhatsAppText(
       fromPhone,
-      `🏠 *STEP 3 OF 3: DELIVERY ADDRESS*\n\nPlease reply with your complete *Doorstep Delivery Address & 6-digit Pincode*:\n\n👉 *Example:*\n*Door No. 12, Anna Salai, T. Nagar, Chennai - 600017*\n\n*(100% Free Doorstep Delivery across Tamil Nadu via ST Courier Express)* 🚚`
+      `🏠 *STEP 3 OF 3: DELIVERY ADDRESS*\n\nPlease reply with your complete *Doorstep Delivery Address & 6-digit Pincode*:\n\n👉 *Example:*\n*Door No. 12, 1st Floor, Anna Salai, Melmaruvathur Town, Chennai - 600017*\n\n*(100% Free Doorstep Delivery across Tamil Nadu via ST Courier Express)* 🚚`
     );
   }
 

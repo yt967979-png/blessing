@@ -219,31 +219,44 @@ export async function GET(req: NextRequest) {
     );
 
     const currentAdminId = String(check.user.userId);
+    const limitParam = parseInt(req.nextUrl.searchParams.get('limit') || '150', 10);
+    const resolvedLimit = Math.min(500, Math.max(50, isNaN(limitParam) ? 150 : limitParam));
 
-    const activeRes = await queryDb(
-      `SELECT * FROM support_conversations 
-       WHERE status = 'ACTIVE' 
-         AND assigned_admin_id = $1
-       ORDER BY last_message_at DESC LIMIT 50`,
-      [currentAdminId]
-    );
+    const [activeRes, resolvedRes, countsRes, statsRes] = await Promise.all([
+      queryDb(
+        `SELECT * FROM support_conversations 
+         WHERE status = 'ACTIVE' 
+           AND assigned_admin_id = $1
+         ORDER BY last_message_at DESC LIMIT 50`,
+        [currentAdminId]
+      ),
+      queryDb(
+        `SELECT c.*, f.rating, f.tags as feedback_tags, f.comment as feedback_comment 
+         FROM support_conversations c
+         LEFT JOIN support_feedback f ON f.conversation_id = c.id
+         WHERE c.status = 'RESOLVED' 
+         ORDER BY c.resolved_at DESC LIMIT $1`,
+        [resolvedLimit]
+      ),
+      queryDb(
+        `SELECT 
+           COUNT(*) FILTER (WHERE status = 'WAITING_ADMIN') as waiting_count,
+           COUNT(*) FILTER (WHERE status = 'ACTIVE' AND assigned_admin_id = $1) as active_count,
+           COUNT(*) FILTER (WHERE status = 'RESOLVED') as resolved_count,
+           COUNT(*) as total_count
+         FROM support_conversations`,
+        [currentAdminId]
+      ),
+      queryDb(
+        `SELECT 
+           COUNT(*) as total_feedback,
+           COALESCE(ROUND(AVG(rating), 1), 5.0) as avg_rating,
+           COUNT(*) FILTER (WHERE rating = 5) as five_star_count
+         FROM support_feedback`
+      ),
+    ]);
 
-    const resolvedRes = await queryDb(
-      `SELECT c.*, f.rating, f.tags as feedback_tags, f.comment as feedback_comment 
-       FROM support_conversations c
-       LEFT JOIN support_feedback f ON f.conversation_id = c.id
-       WHERE c.status = 'RESOLVED' 
-       ORDER BY c.resolved_at DESC LIMIT 50`
-    );
-
-    const statsRes = await queryDb(
-      `SELECT 
-         COUNT(*) as total_feedback,
-         COALESCE(ROUND(AVG(rating), 1), 5.0) as avg_rating,
-         COUNT(*) FILTER (WHERE rating = 5) as five_star_count
-       FROM support_feedback`
-    );
-
+    const counts = countsRes.rows[0];
     const stats = statsRes.rows[0];
 
     return NextResponse.json({
@@ -251,8 +264,10 @@ export async function GET(req: NextRequest) {
       active: activeRes.rows,
       resolved: resolvedRes.rows,
       stats: {
-        waitingCount: waitingRes.rowCount,
-        activeCount: activeRes.rowCount,
+        waitingCount: parseInt(counts?.waiting_count || '0', 10),
+        activeCount: parseInt(counts?.active_count || '0', 10),
+        resolvedCount: parseInt(counts?.resolved_count || '0', 10),
+        totalCount: parseInt(counts?.total_count || '0', 10),
         totalFeedback: parseInt(stats?.total_feedback || '0', 10),
         avgRating: Number(stats?.avg_rating || 5.0),
         fiveStarCount: parseInt(stats?.five_star_count || '0', 10),
