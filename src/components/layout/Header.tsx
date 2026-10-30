@@ -317,7 +317,7 @@ export const Header = () => {
           </Link>
         </div>
       )}
-    <header className="sticky top-0 z-40 bg-white border-b border-slate-200 shadow-sm mobile-no-blur md:bg-white/95 md:backdrop-blur-md">
+    <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/90 shadow-[0_2px_12px_rgba(0,27,58,0.04)]">
       <div className="max-w-7xl mx-auto px-3 sm:px-4 py-2 sm:py-3 flex items-center justify-between gap-2 sm:gap-6">
         <Link
           href="/"
@@ -340,11 +340,11 @@ export const Header = () => {
 
         {/* Desktop search */}
         <div className="flex-1 max-w-xl hidden sm:block relative">
-          <div className="flex border-2 border-slate-200 rounded-xl overflow-hidden focus-within:border-blue-600 bg-white">
+          <div className="flex border border-slate-200/90 rounded-2xl overflow-hidden focus-within:border-[#0044AA] focus-within:ring-2 focus-within:ring-[#0044AA]/10 bg-white shadow-2xs transition-all">
             <select
               value={selectedClass}
               onChange={(e) => setSelectedClass(e.target.value)}
-              className="bg-slate-50 border-r border-slate-200 text-xs font-bold text-slate-700 px-3 py-2 outline-none cursor-pointer"
+              className="bg-slate-50/90 border-r border-slate-200/80 text-xs font-black text-slate-800 px-3.5 py-2.5 outline-none cursor-pointer hover:bg-slate-100 transition-colors"
             >
               <option value="all">All Classes</option>
               {['6th', '7th', '8th', '9th', '10th', '11th', '12th'].map((c) => (
@@ -355,7 +355,7 @@ export const Header = () => {
             </select>
             <input
               type="text"
-              placeholder="Search guides, subjects…"
+              placeholder="Search guides, subjects, combo packs…"
               value={localQuery}
               onChange={(e) => onQueryChange(e.target.value)}
               onFocus={() => setShowSearchDropdown(true)}
@@ -365,7 +365,7 @@ export const Header = () => {
             <button
               type="button"
               onClick={goSearch}
-              className="bg-blue-600 hover:bg-[#001B3A] text-white px-4 flex items-center justify-center"
+              className="bg-[#0044AA] hover:bg-[#001B3A] text-white px-5 flex items-center justify-center transition-colors cursor-pointer"
               aria-label="Search"
             >
               <Search className="w-4 h-4" />
@@ -513,11 +513,11 @@ export const Header = () => {
       {/* Mobile search — single clean bar */}
       <div className="px-3 pb-2.5 sm:hidden">
         <div className="relative">
-          <div className="flex border border-slate-200 rounded-xl overflow-hidden bg-slate-50 focus-within:border-blue-600 focus-within:bg-white">
+          <div className="flex border border-slate-200/90 rounded-2xl overflow-hidden bg-slate-50/90 focus-within:border-[#0044AA] focus-within:ring-2 focus-within:ring-[#0044AA]/10 focus-within:bg-white shadow-2xs transition-all">
             <input
               type="search"
               enterKeyHint="search"
-              placeholder="Search 10th, 12th guides…"
+              placeholder="Search 10th, 12th guides, combo packs…"
               value={localQuery}
               onChange={(e) => onQueryChange(e.target.value)}
               onKeyDown={(e) => {
@@ -525,12 +525,12 @@ export const Header = () => {
               }}
               onFocus={() => setShowSearchDropdown(true)}
               onBlur={() => setTimeout(() => setShowSearchDropdown(false), 280)}
-              className="w-full pl-3 pr-2 py-2.5 text-base outline-none bg-transparent min-h-[44px]"
+              className="w-full pl-3.5 pr-2 py-2 text-sm text-slate-800 placeholder:text-slate-400 outline-none bg-transparent min-h-[44px]"
             />
             <button
               type="button"
               onClick={goSearch}
-              className="bg-blue-600 text-white px-3.5 flex items-center justify-center touch-manipulation"
+              className="bg-[#0044AA] hover:bg-[#001B3A] text-white px-4 flex items-center justify-center touch-manipulation cursor-pointer transition-colors"
               aria-label="Search"
             >
               <Search className="w-4 h-4" />

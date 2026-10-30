@@ -138,7 +138,7 @@ export const ClassPicker = () => {
                   CLASS_COLORS[cls]
                 } ${
                   isSelected
-                    ? 'ring-2 ring-blue-600 shadow-lg font-bold border-blue-500 bg-white scale-[1.03]'
+                    ? 'ring-2 ring-[#0044AA] shadow-md font-bold border-[#0044AA] bg-white scale-[1.03]'
                     : 'bg-white shadow-xs border-slate-200/80 hover:border-blue-300'
                 }`}
               >
@@ -344,7 +344,7 @@ export const ClassPicker = () => {
 
                   <Link
                     href={`/products/${targetSlug}`}
-                    className="w-full mt-3 px-5 py-3 rounded-xl bg-[#001B3A] hover:bg-blue-900 text-white font-extrabold text-xs shadow-md transition-all hover:scale-102 flex items-center justify-center gap-1.5 uppercase tracking-wider cursor-pointer"
+                    className="w-full mt-3 px-5 py-3.5 rounded-xl bg-gradient-to-r from-amber-400 via-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-[#001B3A] font-black text-xs shadow-md transition-all active:scale-95 flex items-center justify-center gap-1.5 uppercase tracking-wider cursor-pointer min-h-12"
                   >
                     <span>Order {subjectGuideCards.length > 1 ? `${subjectGuideCards.length}-in-1 ` : ''}Set</span>
                     <ArrowRight className="w-3.5 h-3.5" />

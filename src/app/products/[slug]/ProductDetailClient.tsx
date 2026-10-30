@@ -1461,30 +1461,17 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
 
       {/* Mobile Sticky Bottom Action Bar ("Buy Now") — Flipkart / Amazon standard */}
       <div
-        className="fixed inset-x-0 bottom-0 z-50 sm:hidden bg-white/98 backdrop-blur-md border-t border-slate-200 shadow-[0_-6px_25px_rgba(0,27,58,0.12)] p-2.5 pb-[max(0.65rem,env(safe-area-inset-bottom))] transition-all duration-300"
+        className="fixed inset-x-0 bottom-0 z-50 sm:hidden bg-white/98 backdrop-blur-md border-t border-slate-200 shadow-[0_-6px_25px_rgba(0,27,58,0.12)] p-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] transition-all duration-300"
       >
         <div className="flex items-center gap-2 max-w-lg mx-auto">
           {/* Quick Wishlist */}
           <button
             type="button"
             onClick={() => toggleWishlist(product.id)}
-            className="w-11 h-11 rounded-xl border border-slate-200/90 text-slate-700 bg-slate-50 flex items-center justify-center shrink-0 touch-manipulation active:scale-95 transition-transform"
+            className="w-10 h-10 rounded-xl border border-slate-200 text-slate-700 bg-slate-50 flex items-center justify-center shrink-0 touch-manipulation active:scale-95 transition-transform"
             aria-label="Wishlist"
           >
             <Heart className={`w-4 h-4 transition-colors ${isWishlisted ? 'text-red-500 fill-red-500' : 'text-slate-400'}`} />
-          </button>
-
-          {/* Quick WhatsApp Share */}
-          <button
-            type="button"
-            onClick={shareViaWhatsApp}
-            className="w-11 h-11 rounded-xl border border-emerald-200 text-[#25D366] bg-emerald-50 flex items-center justify-center shrink-0 touch-manipulation active:scale-95 transition-transform"
-            aria-label="Share on WhatsApp"
-            title="Share on WhatsApp"
-          >
-            <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
-              <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/>
-            </svg>
           </button>
 
           {/* Price & Savings Telemetry */}
@@ -1521,8 +1508,7 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
                   className={`px-1.5 py-0.5 rounded text-[8.5px] font-black transition-all ${
                     isTamilSoldOut
                       ? 'bg-slate-200 text-slate-400 line-through cursor-not-allowed opacity-60'
-                      : selectedMedium === 'Tamil Medium'
-                      ? 'bg-blue-600 text-white shadow-xs'
+                      : selectedMedium === 'Tamil Medium' ? 'bg-[#0044AA] text-white shadow-xs'
                       : 'text-slate-600'
                   }`}
                   title={isTamilSoldOut ? 'Tamil Medium Sold Out' : 'Tamil Medium'}
@@ -1536,8 +1522,7 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
                   className={`px-1.5 py-0.5 rounded text-[8.5px] font-black transition-all ${
                     isEnglishSoldOut
                       ? 'bg-slate-200 text-slate-400 line-through cursor-not-allowed opacity-60'
-                      : selectedMedium === 'English Medium'
-                      ? 'bg-blue-600 text-white shadow-xs'
+                      : selectedMedium === 'English Medium' ? 'bg-[#0044AA] text-white shadow-xs'
                       : 'text-slate-600'
                   }`}
                   title={isEnglishSoldOut ? 'English Medium Sold Out' : 'English Medium'}
@@ -1623,7 +1608,7 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
               <button
                 type="button"
                 onClick={tryBuyNow}
-                className="flex-[1.2] bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 active:from-amber-500 active:to-amber-700 text-[#001B3A] font-black text-xs py-3 px-2.5 rounded-xl uppercase tracking-wider touch-manipulation shadow-md shadow-amber-500/20 active:scale-95 transition-all flex items-center justify-center gap-1 cursor-pointer min-h-11"
+                className="flex-[1.25] bg-gradient-to-r from-amber-400 via-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 active:brightness-95 text-[#001B3A] font-black text-xs py-3 px-2.5 rounded-xl uppercase tracking-wider touch-manipulation shadow-md shadow-amber-500/20 active:scale-95 transition-all flex items-center justify-center gap-1 cursor-pointer min-h-11"
               >
                 <Zap className="w-3.5 h-3.5 fill-[#001B3A] text-[#001B3A]" />
                 <span>BUY NOW</span>

@@ -102,8 +102,8 @@ export const MobileBottomNav = () => {
 
   return (
     <nav
-      className="md:hidden fixed bottom-0 inset-x-0 z-[55] border-t border-slate-200 bg-white shadow-[0_-4px_20px_rgba(0,27,58,0.08)] mobile-no-blur"
-      style={{ paddingBottom: 'max(6px, env(safe-area-inset-bottom))' }}
+      className="md:hidden fixed bottom-0 inset-x-0 z-[55] border-t border-slate-200/90 bg-white/95 backdrop-blur-xl shadow-[0_-4px_24px_rgba(0,27,58,0.08)] mobile-no-blur"
+      style={{ paddingBottom: 'max(8px, env(safe-area-inset-bottom))' }}
       aria-label="Mobile navigation"
       onPointerEnter={prefetchShopRoutes}
     >
@@ -114,13 +114,13 @@ export const MobileBottomNav = () => {
             <>
               <span
                 className={`relative flex items-center justify-center w-9 h-9 rounded-xl ${
-                  item.active ? 'bg-[#2874f0] text-white' : 'text-slate-500'
+                  item.active ? 'bg-[#001B3A] text-amber-400 shadow-md shadow-[#001B3A]/25 scale-[1.05]' : 'text-slate-500'
                 }`}
               >
                 <Icon className="w-5 h-5" strokeWidth={item.active ? 2.5 : 2} />
                 {item.badge != null && item.badge > 0 && (
                   <span
-                    className={`absolute -top-1 -right-1 bg-red-500 text-white font-black text-[9px] min-w-[16px] h-[16px] rounded-full flex items-center justify-center px-0.5 border-2 border-white ${
+                    className={`absolute -top-1 -right-1 bg-red-600 text-white font-black text-[9.5px] min-w-[17px] h-[17px] rounded-full shadow-xs flex items-center justify-center px-0.5 border-2 border-white ${
                       cartBump ? 'cart-badge-bump' : ''
                     }`}
                   >
@@ -130,7 +130,7 @@ export const MobileBottomNav = () => {
               </span>
               <span
                 className={`text-[10px] leading-none mt-0.5 font-bold ${
-                  item.active ? 'text-[#2874f0]' : 'text-slate-500'
+                  item.active ? 'text-[#001B3A] font-extrabold' : 'text-slate-500'
                 }`}
               >
                 {item.label}

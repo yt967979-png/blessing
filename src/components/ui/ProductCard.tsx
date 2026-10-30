@@ -101,7 +101,7 @@ export const ProductCard = React.memo(function ProductCard({ product }: { produc
 
   return (
     <article
-      className={`product-card-shell group border rounded-2xl p-3 sm:p-4 flex flex-col relative h-full shadow-sm transition-all duration-300 ${
+      className={`product-card-shell group border rounded-2xl p-2.5 sm:p-4 flex flex-col relative h-full shadow-sm transition-all duration-300 ${
         isComingSoon
           ? 'bg-amber-50/15 border-amber-200/90 hover:shadow-xl hover:border-amber-300 hover:-translate-y-1'
           : isOutOfStock
@@ -209,25 +209,39 @@ export const ProductCard = React.memo(function ProductCard({ product }: { produc
       {/* Visual What's Inside This Combo showcase pills */}
       {isCombo && comboSubjects.length > 0 && (
         <div className="mb-2 p-1.5 sm:p-2 rounded-xl bg-gradient-to-r from-blue-50/90 via-indigo-50/80 to-purple-50/60 border border-blue-200/70 shadow-2xs">
-          <div className="flex items-center justify-between text-[9px] font-black uppercase tracking-wider text-blue-950 mb-1">
-            <span className="flex items-center gap-1">
-              <span>🎁 Inside ({comboSubjects.length} Books Set):</span>
+          {/* Mobile view: single clean line to keep uniform card height */}
+          <div className="flex sm:hidden items-center justify-between gap-1 text-[9.5px] font-black">
+            <span className="flex items-center gap-1 text-blue-950 truncate">
+              <span>🎁</span>
+              <span className="truncate">{comboSubjects.length}-in-1 Box Set</span>
             </span>
-            <span className="text-[8px] font-extrabold text-emerald-800 bg-emerald-100/90 px-1.5 py-0.2 rounded shadow-2xs">
-              ALL INCLUDED
+            <span className="text-[8.5px] font-extrabold text-emerald-800 bg-emerald-100/90 px-1.5 py-0.5 rounded shadow-2xs shrink-0">
+              ALL {comboSubjects.length} BOOKS
             </span>
           </div>
-          <div className="flex flex-wrap gap-1">
-            {comboSubjects.map((sub) => (
-              <span
-                key={sub.name}
-                className="inline-flex items-center gap-0.5 text-[9px] font-extrabold px-1.5 py-0.5 rounded-md bg-white border border-blue-200/80 text-slate-800 shadow-2xs whitespace-nowrap transition-transform hover:scale-105"
-                title={`${sub.name}: ${sub.description}`}
-              >
-                <span className="text-[10px] leading-none">{sub.icon}</span>
-                <span>{sub.shortName}</span>
+
+          {/* Desktop view: full subjects pills */}
+          <div className="hidden sm:block">
+            <div className="flex items-center justify-between text-[9px] font-black uppercase tracking-wider text-blue-950 mb-1">
+              <span className="flex items-center gap-1">
+                <span>🎁 Inside ({comboSubjects.length} Books Set):</span>
               </span>
-            ))}
+              <span className="text-[8px] font-extrabold text-emerald-800 bg-emerald-100/90 px-1.5 py-0.2 rounded shadow-2xs">
+                ALL INCLUDED
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {comboSubjects.map((sub) => (
+                <span
+                  key={sub.name}
+                  className="inline-flex items-center gap-0.5 text-[9px] font-extrabold px-1.5 py-0.5 rounded-md bg-white border border-blue-200/80 text-slate-800 shadow-2xs whitespace-nowrap transition-transform hover:scale-105"
+                  title={`${sub.name}: ${sub.description}`}
+                >
+                  <span className="text-[10px] leading-none">{sub.icon}</span>
+                  <span>{sub.shortName}</span>
+                </span>
+              ))}
+            </div>
           </div>
         </div>
       )}
@@ -245,13 +259,13 @@ export const ProductCard = React.memo(function ProductCard({ product }: { produc
         </span>
       </div>
 
-      <div className="flex items-baseline gap-1 mt-auto mb-1.5 flex-wrap">
-        <span className={`font-black text-sm sm:text-base ${isOutOfStock ? 'text-slate-500' : 'text-[#001226]'}`}>₹{product.price}</span>
+      <div className="flex items-baseline gap-1.5 mt-auto mb-1.5 flex-wrap">
+        <span className={`font-black text-base sm:text-lg tracking-tight ${isOutOfStock ? 'text-slate-500' : 'text-[#001226]'}`}>₹{product.price}</span>
         {product.mrp > product.price && (
-          <span className="text-[10px] sm:text-[11px] text-slate-400 line-through font-bold">₹{product.mrp}</span>
+          <span className="text-[11px] sm:text-xs text-slate-400 line-through font-bold">₹{product.mrp}</span>
         )}
         {product.mrp > product.price && product.discount > 0 && (
-          <span className="text-[9px] sm:text-[10px] font-black text-emerald-600">{product.discount}% OFF</span>
+          <span className="text-[9.5px] sm:text-[10px] font-black text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-1.5 py-0.5 rounded-md">{product.discount}% OFF</span>
         )}
       </div>
 
@@ -276,8 +290,7 @@ export const ProductCard = React.memo(function ProductCard({ product }: { produc
             className={`flex-1 py-1 px-1 rounded-lg text-[10px] font-black transition-all text-center ${
               isTamilSoldOut
                 ? 'bg-slate-200/80 text-slate-400 cursor-not-allowed line-through opacity-70'
-                : selectedMedium === 'Tamil Medium'
-                ? 'bg-blue-600 text-white shadow-xs cursor-pointer'
+                : selectedMedium === 'Tamil Medium' ? 'bg-[#0044AA] text-white shadow-xs cursor-pointer'
                 : 'text-slate-600 hover:text-slate-900 cursor-pointer'
             }`}
             title={isTamilSoldOut ? 'Tamil Medium is sold out' : 'Tamil Medium'}
@@ -295,8 +308,7 @@ export const ProductCard = React.memo(function ProductCard({ product }: { produc
             className={`flex-1 py-1 px-1 rounded-lg text-[10px] font-black transition-all text-center ${
               isEnglishSoldOut
                 ? 'bg-slate-200/80 text-slate-400 cursor-not-allowed line-through opacity-70'
-                : selectedMedium === 'English Medium'
-                ? 'bg-blue-600 text-white shadow-xs cursor-pointer'
+                : selectedMedium === 'English Medium' ? 'bg-[#0044AA] text-white shadow-xs cursor-pointer'
                 : 'text-slate-600 hover:text-slate-900 cursor-pointer'
             }`}
             title={isEnglishSoldOut ? 'English Medium is sold out' : 'English Medium'}
@@ -379,7 +391,7 @@ export const ProductCard = React.memo(function ProductCard({ product }: { produc
               setIsCheckoutOpen(true);
               router.push('/checkout');
             }}
-            className="bg-amber-400 hover:bg-amber-500 active:bg-amber-600 disabled:bg-slate-200 disabled:text-slate-500 text-[#001B3A] font-extrabold text-[11px] sm:text-xs py-2.5 rounded-xl uppercase touch-manipulation disabled:cursor-not-allowed min-h-11 shadow-sm hover:shadow-md transition-all flex items-center justify-center cursor-pointer"
+            className="bg-gradient-to-r from-amber-400 via-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 active:brightness-95 disabled:bg-slate-200 disabled:text-slate-500 text-[#001B3A] font-black text-[11px] sm:text-xs py-2.5 rounded-xl uppercase touch-manipulation disabled:cursor-not-allowed min-h-11 shadow-sm hover:shadow-md transition-all flex items-center justify-center cursor-pointer"
           >
             {isOutOfStock ? 'N/A' : 'BUY'}
           </button>
