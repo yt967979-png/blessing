@@ -125,18 +125,24 @@ export const AnnouncementBar: React.FC = () => {
               {/* Severity Pill Badge */}
               <span
                 className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider shrink-0 ${
-                  announcement.severity === 'CRITICAL'
+                  announcement.type === 'MAINTENANCE' || announcement.severity === 'CRITICAL'
                     ? 'bg-red-500/25 text-red-300 border border-red-500/40'
+                    : announcement.type === 'PROMOTION'
+                    ? 'bg-amber-500/25 text-amber-200 border border-amber-500/40'
                     : announcement.severity === 'WARNING'
                     ? 'bg-amber-500/25 text-amber-200 border border-amber-500/40'
                     : 'bg-sky-500/25 text-sky-200 border border-sky-500/40'
                 }`}
               >
-                {announcement.severity === 'CRITICAL'
+                {announcement.type === 'MAINTENANCE'
+                  ? 'MAINTENANCE'
+                  : announcement.severity === 'CRITICAL'
                   ? 'CRITICAL ALERT'
+                  : announcement.type === 'PROMOTION'
+                  ? 'SPECIAL OFFER'
                   : announcement.severity === 'WARNING'
-                  ? 'STORE ALERT'
-                  : 'MAINTENANCE'}
+                  ? 'STORE UPDATE'
+                  : 'NOTICE'}
               </span>
 
               {/* Message Content */}
