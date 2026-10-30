@@ -1065,12 +1065,20 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
                   </p>
                   {pincodeOk && (
                     <div className="flex flex-wrap gap-2 text-[11px]">
-                      <span className="text-emerald-700 font-extrabold flex items-center gap-1 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/60">
-                        <Truck className="w-3 h-3" /> FREE Delivery on 5+ Books
-                      </span>
-                      <span className="text-blue-700 font-bold bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200/60">
-                        Min. Order: 4 Books
-                      </span>
+                      {isCombo ? (
+                        <span className="text-emerald-700 font-extrabold flex items-center gap-1 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/60">
+                          <Truck className="w-3 h-3" /> 100% FREE Doorstep Delivery
+                        </span>
+                      ) : (
+                        <>
+                          <span className="text-emerald-700 font-extrabold flex items-center gap-1 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/60">
+                            <Truck className="w-3 h-3" /> FREE Delivery on 5+ Books
+                          </span>
+                          <span className="text-blue-700 font-bold bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200/60">
+                            Min. Order: 4 Books
+                          </span>
+                        </>
+                      )}
                       <span className="text-amber-800 font-bold bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200/60">
                         100% Secure Online Payment
                       </span>
@@ -1310,7 +1318,7 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
               </svg>
               <span>Share Book with Classmates on WhatsApp</span>
             </button>
-            {minOrderMsg && !isComingSoon && product.inStock !== false && (
+            {!isCombo && minOrderMsg && !isComingSoon && product.inStock !== false && (
               <p className="mt-3 text-[11px] text-amber-800 font-medium bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
                 {minOrderMsg} Same title can be added multiple times.
               </p>
@@ -1432,8 +1440,8 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
           </section>
         )}
 
-        {/* Same Standard Frequently Bought Together Bundle */}
-        <FrequentlyBoughtTogether currentProduct={product} />
+        {/* Same Standard Frequently Bought Together Bundle — only for individual guides */}
+        {!isCombo && <FrequentlyBoughtTogether currentProduct={product} />}
 
 
         {/* Recommended Products */}

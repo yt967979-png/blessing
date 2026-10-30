@@ -20,13 +20,11 @@ import {
   ShoppingBag,
   ShieldCheck,
   HelpCircle,
-  Bot,
 } from 'lucide-react';
 import { BrandLogo } from '@/components/ui/BrandLogo';
 
 export type AdminTab =
   | 'overview'
-  | 'cofounder'
   | 'orders'
   | 'abandoned'
   | 'support'
@@ -40,7 +38,6 @@ export type AdminTab =
 
 export const ADMIN_TAB_KEYS: AdminTab[] = [
   'overview',
-  'cofounder',
   'orders',
   'abandoned',
   'support',
@@ -80,14 +77,6 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
       label: 'Storefront Overview',
       subtitle: 'Quick metrics & alerts',
       icon: LayoutDashboard,
-    },
-    {
-      key: 'cofounder' as AdminTab,
-      label: '👑 AI Co-Founder',
-      subtitle: 'Executive intelligence & autonomous ops',
-      icon: Bot,
-      badge: 'Live',
-      badgeColor: 'bg-indigo-600 text-white font-mono text-[10px]',
     },
     {
       key: 'orders' as AdminTab,
@@ -207,6 +196,25 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
 
         {/* Navigation List */}
         <div className="flex-1 overflow-y-auto p-3 space-y-1.5 custom-scrollbar">
+          {/* Quick Dispatch Scanner Shortcut */}
+          <Link
+            href="/admin/scan"
+            className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl bg-gradient-to-r from-blue-950/60 to-indigo-950/60 border border-blue-500/40 text-blue-200 hover:from-blue-900/60 hover:to-indigo-900/60 transition-all text-xs font-bold shadow-xs cursor-pointer mb-2 group"
+            title="Open Fullscreen Dispatch Camera Scanner"
+          >
+            <div className="flex items-center gap-2.5">
+              <div className="w-6 h-6 rounded-lg bg-blue-500/30 flex items-center justify-center text-amber-300 text-xs font-black">
+                ⚡
+              </div>
+              <span className="font-black text-white group-hover:text-amber-300 transition-colors">
+                Quick Dispatch
+              </span>
+            </div>
+            <span className="text-[9px] bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 font-black px-1.5 py-0.5 rounded-md shadow-xs">
+              CAMERA
+            </span>
+          </Link>
+
           <p className="px-3 text-[10px] font-bold tracking-widest text-slate-400 mb-2 uppercase">
             Store Management
           </p>

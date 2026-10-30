@@ -41,7 +41,7 @@ import { Header } from '@/components/layout/Header';
 import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
 import { Footer } from '@/components/layout/Footer';
 import { ProfileCouponsSection } from '@/components/profile/ProfileCouponsSection';
-import { isRecordCancelled } from '@/lib/orderStatus';
+import { isRecordCancelled, isParcelDelivered, isDeliveryAttempted } from '@/lib/orderStatus';
 import { StudentShippingAddressForm, type ShippingFormData } from '@/components/checkout/StudentShippingAddressForm';
 import { pincodeDeliveryMessage } from '@/lib/pincode';
 
@@ -861,15 +861,34 @@ export default function ProfilePage() {
                         'Out for Delivery',
                         'Delivered',
                       ];
-                      const activeIdx = allSteps.findIndex((s) => s.toLowerCase() === currentStatus.toLowerCase());
-                      const stepIdx = cancelled
-                        ? -1
-                        : activeIdx >= 0
-                          ? activeIdx
-                          : String(currentStatus).toLowerCase().includes('order placed') ||
-                              String(currentStatus).toLowerCase().includes('payment')
-                            ? 0
-                            : 0;
+                      const hasAwb = Boolean(o.trackingNumber && !String(o.trackingNumber).startsWith('SHP-'));
+                      const sLow = String(currentStatus || '').toLowerCase();
+                      let stepIdx = 0;
+                      if (cancelled) {
+                        stepIdx = -1;
+                      } else if (isParcelDelivered(sLow)) {
+                        stepIdx = 6;
+                      } else if (isDeliveryAttempted(sLow) || sLow.includes('out for delivery')) {
+                        stepIdx = 5;
+                      } else if (sLow.includes('in transit')) {
+                        stepIdx = 4;
+                      } else if (
+                        sLow.includes('dispatched') ||
+                        sLow.includes('dispatch') ||
+                        sLow.includes('shipped') ||
+                        sLow.includes('handed to st courier') ||
+                        sLow.includes('handed') ||
+                        hasAwb
+                      ) {
+                        stepIdx = 3;
+                      } else if (sLow.includes('packed')) {
+                        stepIdx = 2;
+                      } else if (sLow.includes('preparing') || sLow.includes('prepar')) {
+                        stepIdx = 1;
+                      } else {
+                        const directMatch = allSteps.findIndex((s) => s.toLowerCase() === sLow);
+                        stepIdx = directMatch >= 0 ? directMatch : 0;
+                      }
 
                       return (
                         <div

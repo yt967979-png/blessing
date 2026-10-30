@@ -27,7 +27,6 @@ import AnalyticsSection from '@/components/admin/AnalyticsSection';
 import { LiveSupportSection } from '@/components/admin/LiveSupportSection';
 import AbandonedCartsSection from '@/components/admin/AbandonedCartsSection';
 import AdminAuditTab from '@/components/admin/AdminAuditTab';
-import CoFounderSection from '@/components/admin/CoFounderSection';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface OrderItem { title: string; qty: number; price?: number; subtotal?: number; }
@@ -583,16 +582,17 @@ function AdminPageInner() {
         headers: { 'Content-Type': 'application/json', ...authHeaders(user) },
         body: JSON.stringify({
           orderId,
+          awbNumber: cleanAwb,
           trackingNumber: cleanAwb,
-          courierName: 'ST Courier',
-          trackingUrl: `https://stcourier.com/track/view?docket=${encodeURIComponent(cleanAwb)}`,
-          status: 'DISPATCHED',
+          courierName: 'ST Courier Express',
+          trackingUrl: `https://stcourier.com/track/shipment?docket=${encodeURIComponent(cleanAwb)}`,
+          status: 'Dispatched',
         }),
       });
       const data = await res.json();
       if (res.ok) {
-        showToast(`🚚 ST Courier AWB ${cleanAwb} assigned`);
-        broadcastOrderSignal({ orderId, awb: cleanAwb, status: 'DISPATCHED' });
+        showToast(`🚚 ST Courier AWB ${cleanAwb} assigned & dispatched`);
+        broadcastOrderSignal({ orderId, awb: cleanAwb, status: 'Dispatched' });
         loadLiveOrders();
       } else {
         showToast(`❌ ${data.error || 'Failed to assign AWB'}`);
@@ -782,14 +782,6 @@ function AdminPageInner() {
               activeStockHolds={activeStockHolds}
               onNavigate={(tab) => setActiveTab(tab)}
               onReleaseHold={handleReleaseHold}
-            />
-          )}
-
-          {/* SECTION: AI CO-FOUNDER */}
-          {activeTab === 'cofounder' && (
-            <CoFounderSection
-              user={user}
-              onShowToast={showToast}
             />
           )}
 

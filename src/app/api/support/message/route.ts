@@ -60,6 +60,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Conversation not found' }, { status: 404 });
     }
 
+    // Strictly block messages on ended/resolved conversations
+    if (conv.status === 'RESOLVED') {
+      return NextResponse.json(
+        { error: 'This chat session has ended and is closed. No further messages can be sent.' },
+        { status: 403 }
+      );
+    }
+
     // ── IDOR & RBAC Check
     const sessionToken = req.cookies.get('bpg_support_session')?.value;
     const isOwner = (user?.userId && conv.customer_id === String(user.userId)) ||
@@ -68,34 +76,44 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized to post messages to this conversation' }, { status: 403 });
     }
 
-    // If an unassigned conversation is replied to by an admin, auto-claim it for that admin
-    if (isAdmin && !conv.assigned_admin_id) {
-      const adminName = user?.role === 'super_admin' ? 'Super Admin' : 'Support Admin';
-      await queryDb(
-        `UPDATE support_conversations 
-         SET assigned_admin_id = $1, assigned_admin_name = $2, status = 'ACTIVE', updated_at = NOW() 
-         WHERE id = $3`,
-        [String(user?.userId), adminName, conversationId]
-      );
-      conv.assigned_admin_id = String(user?.userId);
-      conv.assigned_admin_name = adminName;
-      conv.status = 'ACTIVE';
-    }
+    const rawUserId = String(user?.userId || '');
+    const deviceId = (req.headers.get('x-device-id') || req.cookies.get('bpg_device')?.value || '').trim();
+    const actorAdminId = isAdmin ? (deviceId ? `${rawUserId}::${deviceId}` : rawUserId) : '';
+    const assignedId = String(conv.assigned_admin_id || '');
+    const isAssignedToThisAdmin = !assignedId || assignedId === actorAdminId || (!assignedId.includes('::') && assignedId === rawUserId);
 
-    // If a regular admin is posting to an ACTIVE conversation assigned to someone else, block them (super_admin can always reply)
-    if (
-      isAdmin &&
-      user?.role !== 'super_admin' &&
-      conv.status === 'ACTIVE' &&
-      conv.assigned_admin_id &&
-      conv.assigned_admin_id !== String(user?.userId)
-    ) {
+    // Strictly enforce one-admin-at-a-time: if another admin/session already claimed this chat, block any other admin
+    if (isAdmin && conv.status === 'ACTIVE' && assignedId && !isAssignedToThisAdmin) {
       return NextResponse.json(
         {
-          error: `This conversation is assigned to ${conv.assigned_admin_name || 'another staff member'}. Only the assigned admin can reply.`,
+          error: `This conversation is already accepted and handled by ${conv.assigned_admin_name || 'another admin'}. Only one admin can chat at a time.`,
         },
         { status: 403 }
       );
+    }
+
+    // If an unassigned conversation is replied to by an admin, auto-claim it atomically for that admin
+    if (isAdmin && !conv.assigned_admin_id) {
+      const isMobileApp = req.headers.get('x-client-platform') === 'android-app';
+      const uRes = await queryDb(`SELECT name, email FROM users WHERE id = $1 LIMIT 1`, [rawUserId]);
+      const baseName = uRes.rows[0]?.name || uRes.rows[0]?.email?.split('@')[0] || (user?.role === 'super_admin' ? 'Super Admin' : 'Support Admin');
+      const adminName = `${baseName} (${isMobileApp ? 'Mobile App' : 'Web'})`;
+      const claimRes = await queryDb(
+        `UPDATE support_conversations 
+         SET assigned_admin_id = $1, assigned_admin_name = $2, status = 'ACTIVE', accepted_at = COALESCE(accepted_at, NOW()), last_admin_activity_at = NOW(), updated_at = NOW() 
+         WHERE id = $3 AND (assigned_admin_id IS NULL OR assigned_admin_id = $1)
+         RETURNING *`,
+        [actorAdminId, adminName, conversationId]
+      );
+      if (claimRes.rowCount === 0) {
+        return NextResponse.json(
+          { error: 'This conversation was just accepted by another admin.' },
+          { status: 409 }
+        );
+      }
+      conv.assigned_admin_id = actorAdminId;
+      conv.assigned_admin_name = adminName;
+      conv.status = 'ACTIVE';
     }
 
     const clientMessageId = body.clientMessageId ? String(body.clientMessageId).trim() : null;

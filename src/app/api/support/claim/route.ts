@@ -25,9 +25,13 @@ export async function POST(req: NextRequest) {
     }
 
     const adminUser = check.user;
-    const adminId = String(adminUser.userId);
-    const uRes = await queryDb(`SELECT name, email FROM users WHERE id = $1 LIMIT 1`, [adminId]);
-    const adminName = uRes.rows[0]?.name || uRes.rows[0]?.email?.split('@')[0] || 'Support Staff';
+    const rawUserId = String(adminUser.userId);
+    const deviceId = (req.headers.get('x-device-id') || req.cookies.get('bpg_device')?.value || '').trim();
+    const adminId = deviceId ? `${rawUserId}::${deviceId}` : rawUserId;
+    const isMobileApp = req.headers.get('x-client-platform') === 'android-app';
+    const uRes = await queryDb(`SELECT name, email FROM users WHERE id = $1 LIMIT 1`, [rawUserId]);
+    const baseName = uRes.rows[0]?.name || uRes.rows[0]?.email?.split('@')[0] || 'Support Staff';
+    const adminName = `${baseName} (${isMobileApp ? 'Mobile App' : 'Web'})`;
 
     // ── ATOMIC COMPARE-AND-SWAP (CAS) QUERY
     // Only transitions status if it is currently 'WAITING_ADMIN' OR idle active (>10 mins without admin message)

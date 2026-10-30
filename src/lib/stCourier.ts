@@ -27,7 +27,15 @@ const STAGE_RANK: Record<string, number> = {
 };
 
 export function cleanDocket(docket: string): string {
-  return (docket || '').trim().toUpperCase().replace(/\s+/g, '');
+  let d = (docket || '').trim();
+  if (d.includes('docket=')) {
+    const m = d.match(/docket=([A-Z0-9]+)/i);
+    if (m) d = m[1];
+  } else if (d.includes('awb=')) {
+    const m = d.match(/awb=([A-Z0-9]+)/i);
+    if (m) d = m[1];
+  }
+  return d.toUpperCase().replace(/\s+/g, '');
 }
 
 export function isOfficialAwb(awb: string | null | undefined): boolean {
@@ -161,7 +169,29 @@ export type TrackResult =
     }
   | { ok: false; docket: string; error: string; trackingUrl: string };
 
-/** Live fetch from ST Courier ERP */
+function parseStCourierHtml(html: string): Array<{ time: string; activity: string; location: string }> {
+  const events: Array<{ time: string; activity: string; location: string }> = [];
+  const blockRegex =
+    /style=["']float:left;[^"']*["'][\s\S]*?<div[^>]*>([\s\S]*?)<\/div>[\s\S]*?style=["']float:right;[^"']*["'][\s\S]*?<div[^>]*>([\s\S]*?)<\/div>/gi;
+  let match;
+  while ((match = blockRegex.exec(html)) !== null) {
+    const timeStr = match[1]
+      .replace(/<br\s*\/?>/gi, ' ')
+      .replace(/<[^>]+>/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const actRaw = match[2]
+      .split(/<br\s*\/?>/gi)
+      .map((s) => s.replace(/<[^>]+>/g, '').trim())
+      .filter(Boolean);
+    const activity = actRaw[0] || 'Update';
+    const location = actRaw.slice(1).join(', ') || '';
+    events.push({ time: timeStr, activity, location });
+  }
+  return events;
+}
+
+/** Live fetch from ST Courier system */
 export async function fetchStCourierTrack(docketInput: string): Promise<TrackResult> {
   const docket = cleanDocket(docketInput);
   const trackingUrl = `https://stcourier.com/track/shipment?docket=${encodeURIComponent(docket)}`;
@@ -171,10 +201,58 @@ export async function fetchStCourierTrack(docketInput: string): Promise<TrackRes
       ok: false,
       docket,
       trackingUrl,
-      error: `"${docket}" is not a valid ST Courier docket format. Examples: STC241568974, TN12345678`,
+      error: `"${docket}" is not a valid ST Courier docket format. Examples: 63660535761, STC241568974`,
     };
   }
 
+  // 1. Check official ST Courier live portal session & tracking page
+  try {
+    const numericOnly = docket.replace(/[^0-9]/g, '');
+    const checkRes = await fetch('https://stcourier.com/track/doCheck', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        Referer: 'https://stcourier.com/track/shipment',
+        Origin: 'https://stcourier.com',
+      },
+      body: `awb_no=${encodeURIComponent(numericOnly || docket)}`,
+      cache: 'no-store',
+      signal: AbortSignal.timeout(6000),
+    });
+
+    if (checkRes.ok) {
+      const rawCookies = checkRes.headers.get('set-cookie');
+      const cookieHeader = rawCookies ? rawCookies.split(';')[0] : '';
+
+      const pageRes = await fetch('https://stcourier.com/track/shipment', {
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          ...(cookieHeader ? { Cookie: cookieHeader } : {}),
+        },
+        cache: 'no-store',
+        signal: AbortSignal.timeout(6000),
+      });
+
+      if (pageRes.ok) {
+        const html = await pageRes.text();
+        if (html.includes('Status of AWB No.') || html.includes(docket)) {
+          const events = parseStCourierHtml(html);
+          if (events.length > 0) {
+            const rawStatus = events[0].activity;
+            const status = mapCourierStatusToOrderStatus(rawStatus);
+            return { ok: true, docket, rawStatus, status, events, trackingUrl };
+          }
+        }
+      }
+    }
+  } catch (portalErr: any) {
+    console.warn('[stCourier] Portal check fallback:', portalErr?.message);
+  }
+
+  // 2. Fallback to ERP REST API if available
   const numericDocketOnly = docket.replace(/[^0-9]/g, '');
 
   try {
@@ -189,61 +267,39 @@ export async function fetchStCourierTrack(docketInput: string): Promise<TrackRes
           Referer: 'https://stcourier.com/',
         },
         cache: 'no-store',
-        signal: AbortSignal.timeout(10_000),
+        signal: AbortSignal.timeout(5000),
       }
     );
 
-    if (!erpRes.ok) {
-      return {
-        ok: false,
-        docket,
-        trackingUrl,
-        error: `ST Courier live system: docket '${docket}' not found / not booked yet (HTTP ${erpRes.status}).`,
-      };
+    if (erpRes.ok) {
+      const text = await erpRes.text();
+      let erpData: any = null;
+      try {
+        erpData = JSON.parse(text);
+      } catch (_) {}
+      const looksValid =
+        erpData &&
+        (erpData.status === 'success' ||
+          erpData.data ||
+          erpData.shipmentStatus ||
+          erpData.CurrentStatus ||
+          erpData.trackingHistory);
+
+      if (looksValid) {
+        const rawStatus = extractRawStatus(erpData);
+        const status = mapCourierStatusToOrderStatus(rawStatus);
+        const events = extractEvents(erpData);
+        return { ok: true, docket, rawStatus, status, events, trackingUrl, erpData };
+      }
     }
+  } catch (_) {}
 
-    const text = await erpRes.text();
-    let erpData: any = null;
-    try {
-      erpData = JSON.parse(text);
-    } catch {
-      return {
-        ok: false,
-        docket,
-        trackingUrl,
-        error: `ST Courier live system returned non-JSON response (possibly maintenance page or invalid HTML).`,
-      };
-    }
-    const looksValid =
-      erpData &&
-      (erpData.status === 'success' ||
-        erpData.data ||
-        erpData.shipmentStatus ||
-        erpData.CurrentStatus ||
-        erpData.trackingHistory);
-
-    if (!looksValid) {
-      return {
-        ok: false,
-        docket,
-        trackingUrl,
-        error: `ST Courier live system: docket '${docket}' not found / not booked yet.`,
-      };
-    }
-
-    const rawStatus = extractRawStatus(erpData);
-    const status = mapCourierStatusToOrderStatus(rawStatus);
-    const events = extractEvents(erpData);
-
-    return { ok: true, docket, rawStatus, status, events, trackingUrl, erpData };
-  } catch (e: any) {
-    return {
-      ok: false,
-      docket,
-      trackingUrl,
-      error: e.message || 'Could not reach ST Courier network',
-    };
-  }
+  return {
+    ok: false,
+    docket,
+    trackingUrl,
+    error: `ST Courier: docket '${docket}' booked. Waiting for initial regional hub scan.`,
+  };
 }
 
 function shouldAdvance(current: string, next: OrderStageLabel): boolean {

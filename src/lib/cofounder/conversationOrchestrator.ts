@@ -356,10 +356,70 @@ How can I help you today? You can update book stock, create promotional coupons,
   }
 
 
-  // D. Autonomous Storefront Launch & Impressive Decoration Mandate
+  // D1. Explicit Book Launch & Inventory Stock Mandate (e.g. "launch books at today 6 pm both at 100 stock")
+  const isBookLaunchCommand =
+    (lower.includes('launch') &&
+      (lower.includes('book') ||
+        lower.includes('guide') ||
+        lower.includes('combo') ||
+        lower.includes('stock') ||
+        lower.includes('both') ||
+        lower.includes('edition'))) ||
+    ((lower.includes('both') || lower.includes('all') || lower.includes('combo')) &&
+      lower.includes('stock') &&
+      (lower.includes('set') || lower.includes('at') || lower.includes('make') || lower.includes('launch') || lower.includes('change') || lower.includes('put')));
+
+  if (isBookLaunchCommand) {
+    const { executeLaunchBooks } = await import('./businessControls');
+
+    // Extract target
+    let target = 'both';
+    if (lower.includes('tamil') && !lower.includes('english') && !lower.includes('both')) {
+      target = 'tamil';
+    } else if (lower.includes('english') && !lower.includes('tamil') && !lower.includes('both')) {
+      target = 'english';
+    } else if (lower.includes('all') && !lower.includes('both') && !lower.includes('combo')) {
+      target = 'all';
+    }
+
+    // Extract stock quantity
+    const stockMatch =
+      text.match(/(?:at|with|to|=|is)?\s*(\d+)\s*(?:stock|copies|qty|quantity)\b/i) ||
+      text.match(/(?:stock|qty|quantity)\s*(?:at|to|is|=)?\s*(\d+)\b/i) ||
+      text.match(/\b(\d+)\s*stock\b/i);
+    const stockQty = stockMatch ? parseInt(stockMatch[1], 10) : 100;
+
+    // Extract scheduled time (e.g. "today 6 pm", "6:00 pm", "tomorrow 10 am")
+    const timeMatch = text.match(/(?:at\s+)?(today\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)|\d{1,2}(?::\d{2})?\s*(?:am|pm)|today\b)/i);
+    const scheduledTime = timeMatch ? timeMatch[1].trim() : undefined;
+
+    const launchResult = await executeLaunchBooks({
+      target,
+      stock: stockQty,
+      scheduledTime,
+    });
+
+    await updateSession(session.id, {
+      active_intent: 'OPERATIONAL_UPDATE',
+      userMessage: text,
+      assistantMessage: launchResult.reportFormatted,
+      workflow_state: 'COMPLETED',
+    });
+
+    return {
+      replyText: launchResult.reportFormatted,
+      intent: 'OPERATIONAL_UPDATE',
+      workflowState: 'COMPLETED',
+    };
+  }
+
+  // D2. Autonomous Storefront Launch & Impressive Decoration Mandate (Theme & Banner only)
   const isLaunchOrDecorate =
-    (lower.includes('launch') && (lower.includes('decorate') || lower.includes('impressive') || lower.includes('ready') || lower.includes('website') || lower.includes('today') || lower.includes('storefront'))) ||
-    (lower.includes('decorate') && (lower.includes('website') || lower.includes('storefront') || lower.includes('experience')));
+    !lower.includes('book') &&
+    !lower.includes('guide') &&
+    !lower.includes('stock') &&
+    ((lower.includes('launch') && (lower.includes('decorate') || lower.includes('impressive') || lower.includes('sparkle') || lower.includes('theme'))) ||
+      (lower.includes('decorate') && (lower.includes('website') || lower.includes('storefront') || lower.includes('experience'))));
 
   if (isLaunchOrDecorate) {
     const { executeLaunchExperience } = await import('./businessControls');
@@ -496,7 +556,8 @@ How can I help you today? You can update book stock, create promotional coupons,
   if (isStockOrCatalog) {
     const { queryDb } = await import('@/lib/db');
     let subject = 'all';
-    if (lower.includes('science')) subject = 'Science';
+    if (lower.includes('both')) subject = 'both';
+    else if (lower.includes('science')) subject = 'Science';
     else if (lower.includes('maths') || lower.includes('math')) subject = 'Maths';
     else if (lower.includes('tamil')) subject = 'Tamil';
     else if (lower.includes('english')) subject = 'English';

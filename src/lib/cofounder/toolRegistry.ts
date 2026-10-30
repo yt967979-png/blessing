@@ -4,6 +4,7 @@ import {
   deactivateInstruction,
   addBusinessInstruction,
   executeLaunchExperience,
+  executeLaunchBooks,
   getProductStatusExplanation,
 } from './businessControls';
 import { createBulkOrderPaymentLink, verifyBulkProductAvailability } from './bulkOrderWorkflow';
@@ -40,6 +41,15 @@ export const businessToolRegistry = {
   },
 
   // ── 2. PRODUCT & INVENTORY CONTROLS ───────────────────────────────
+  launch_books: async (params?: {
+    target?: string;
+    stock?: number;
+    scheduledTime?: string;
+    announcement?: boolean | string;
+  }) => {
+    return await executeLaunchBooks(params);
+  },
+
   update_stock: async (params: {
     bookId: string;
     stock?: number;

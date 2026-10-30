@@ -22,12 +22,14 @@ import {
   Clock,
   Plus,
   MessageCircle,
+  ScanLine,
 } from 'lucide-react';
 import OrderStatusStamp from './OrderStatusStamp';
 import { openShippingLabelPrint } from '@/lib/shippingLabel';
 import { CreateCustomOrderModal } from './CreateCustomOrderModal';
 import { PackingPickListModal } from './PackingPickListModal';
 import { CustomerPhoneLookupModal } from './CustomerPhoneLookupModal';
+import { QuickDispatchScanner } from './QuickDispatchScanner';
 import type { Product } from '@/context/StoreContext';
 import { adminFulfillmentBucket, fulfillmentStatus, isRecordCancelled, isParcelDelivered } from '@/lib/orderStatus';
 import { formatIndianDateTime } from '@/lib/indianTime';
@@ -125,6 +127,7 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
   const [showPickListModal, setShowPickListModal] = useState(false);
   const [showCustomerLookupModal, setShowCustomerLookupModal] = useState(false);
   const [customerLookupQuery, setCustomerLookupQuery] = useState('');
+  const [showScannerModal, setShowScannerModal] = useState(false);
 
   // ── Modal state for Pre-AWB Cancel & Refund ──────────────────────────────────
   const [orderToCancel, setOrderToCancel] = useState<Order | null>(null);
@@ -379,6 +382,17 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
+            {/* 0. Fast Camera Dispatch Scanner */}
+            <button
+              type="button"
+              onClick={() => setShowScannerModal(true)}
+              className="px-3.5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-xs font-black flex items-center gap-1.5 transition-all shadow-md shadow-blue-500/20 cursor-pointer"
+              title="Quick Scan & Dispatch: Scan Order Label Barcode, then Scan ST Courier AWB Barcode"
+            >
+              <ScanLine className="w-4 h-4 text-amber-300 animate-pulse" />
+              <span>⚡ Quick Dispatch</span>
+            </button>
+
             {/* 1. Daily Packing Pick-List (Feature 1) */}
             <button
               type="button"
@@ -1136,6 +1150,16 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
           onShowToast={onShowToast}
         />
       )}
+
+      {/* ─── Quick Dispatch Scanner Modal ─────────────────────────────── */}
+      <QuickDispatchScanner
+        isOpen={showScannerModal}
+        onClose={() => setShowScannerModal(false)}
+        onOrderDispatched={() => {
+          onRefreshOrders?.();
+        }}
+        onShowToast={onShowToast}
+      />
     </div>
   );
 };

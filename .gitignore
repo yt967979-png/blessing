@@ -56,6 +56,8 @@ whatsapp_session/
 public/whatsapp_qr.png
 public/whatsapp_status.json
 
+*.apk
+
 # backups and database dumps
 backups/
 logs/
@@ -65,3 +67,5 @@ logs/
 *.env
 scripts/*
 !scripts/init-db.js
+!scripts/test-intent-logic.js
+!scripts/test-concurrency-logic.js

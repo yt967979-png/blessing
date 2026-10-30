@@ -72,14 +72,30 @@ export const COFOUNDER_TOOLS: any[] = [
   {
     type: 'function',
     function: {
+      name: 'launch_books',
+      description: 'Publishes and launches books on the storefront (marks available, not coming soon), allocates inventory stock in PostgreSQL, and handles scheduled releases (e.g. "today 6 pm", "6:00 PM"). Use when the founder says "launch books at today 6 pm both at 100 stock", "launch both books 100 stock", or similar.',
+      parameters: {
+        type: 'object',
+        properties: {
+          target: { type: 'string', enum: ['both', 'all', 'tamil', 'english'], description: 'Which books to launch: "both" for both Tamil and English 10th 5-in-1 combo guides, "all", "tamil", or "english". Default is "both".' },
+          stock: { type: 'number', description: 'Stock quantity to allocate for each title (e.g. 100)' },
+          scheduledTime: { type: 'string', description: 'Optional scheduled launch time e.g. "today 6 pm"' },
+          announcement: { type: 'boolean', description: 'Whether to post a priority launch announcement' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'update_stock',
       description: 'Updates book inventory stock level or marks books as Coming Soon or Published in PostgreSQL.',
       parameters: {
         type: 'object',
         properties: {
-          bookId: { type: 'string', description: 'Book ID, title query (e.g. "Tamil", "English"), or "all" to update every catalog book' },
+          bookId: { type: 'string', description: 'Book ID, title query (e.g. "Tamil", "English"), "both" for both combo books, or "all" to update every catalog book' },
           stock: { type: 'number', description: 'Exact physical stock quantity' },
-          isComingSoon: { type: 'boolean', description: 'Set true to mark as Coming Soon, false to make available' },
+          isComingSoon: { type: 'boolean', description: 'Set true to mark as Coming Soon, false to make available / publish' },
           reason: { type: 'string', description: 'Optional operational reason' },
         },
         required: ['bookId'],
@@ -365,12 +381,18 @@ CRITICAL OPERATIONAL RULES FOR TOOL CALLING & AUTONOMOUS ACTIONS:
     ALWAYS invoke \`repair_cofounder_pipeline\` immediately.
   - When the founder provides a reference site URL or asks to analyze design:
     ALWAYS invoke \`analyze_design_reference\` or \`execute_website_design_upgrade\`.
-• CRITICAL: AUTONOMOUS LAUNCH & DECORATION REQUESTS:
+• CRITICAL: BOOK LAUNCH & STOCK COMMANDS:
   When the founder says:
-  "Today we are going to launch. Can you fully decorate the website and make the user experience impressive?"
+  "launch books at today 6 pm both at 100 stock", "launch both books at 100 stock", "launch books at 100 stock", or mentions launching books/guides:
+  ALWAYS invoke \`launch_books\` with target: "both" (for both Tamil & English combo guides), stock: 100, scheduledTime: "today 6 pm".
+  DO NOT confuse launching books with decorating the website!
+  "launch books" = publish books + set inventory stock in PostgreSQL.
+• CRITICAL: AUTONOMOUS STOREFRONT DECORATION & FESTIVE THEMES:
+  When the founder says:
+  "Can you fully decorate the website and make the user experience impressive for launch?"
   or "Launch ku website ah super ah decorate pannu" or "Make website impressive for launch" or "Decorate website":
   DO NOT ask which theme he wants! DO NOT ask what banner text to write!
-  TAKE IMMEDIATE CO-FOUNDER OWNERSHIP OF THE LAUNCH:
+  TAKE IMMEDIATE CO-FOUNDER OWNERSHIP OF STOREFRONT DECORATION:
   Invoke \`execute_launch_experience\` immediately.
   Explain what was checked (catalog stock, checkout health), what was activated (Grand Launch Edition theme, launch banner, launch promotion), and confirm the live storefront is ready for customers.
 • For product availability questions (e.g. "Why is this product showing Coming Soon?", "Check why this product is coming soon"):
@@ -418,13 +440,13 @@ export async function executeAgentBrainTurn(
       new Set(
         [
           configuredModel,
-          'qwen/qwen3.8-27b',
-          'openai/gpt-oss-120b',
+          'llama-3.3-70b-versatile',
+          'llama-3.1-8b-instant',
         ].filter(Boolean) as string[]
       )
     );
 
-    let activeModel = candidateModels[0] || 'qwen/qwen3.8-27b';
+    let activeModel = candidateModels[0] || 'llama-3.3-70b-versatile';
     let assistantMsg: any = null;
 
     // 1. Initial LLM Call with Tool Definitions & Model Cascade
@@ -496,7 +518,9 @@ export async function executeAgentBrainTurn(
     console.log(`[AgentBrain] Executing Tool: ${fnName} with args:`, fnArgs);
     let toolResult: any = null;
 
-    if (fnName === 'create_coupon') {
+    if (fnName === 'launch_books') {
+      toolResult = await (businessToolRegistry as any).launch_books(fnArgs);
+    } else if (fnName === 'create_coupon') {
       toolResult = await businessToolRegistry.create_coupon(fnArgs);
     } else if (fnName === 'delete_coupon') {
       toolResult = await businessToolRegistry.delete_coupon(fnArgs.code);

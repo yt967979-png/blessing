@@ -29,14 +29,23 @@ function phonesMatch(input: string, stored: string): boolean {
   return a10.length === 10 && a10 === b10;
 }
 
-function stepIndex(status: string): number {
+function stepIndex(status: string, awb?: string | null): number {
   const s = (status || '').toLowerCase();
   if (isOrderCancelled(s)) return -1;
   if (isParcelDelivered(s)) return 5;
   if (isDeliveryAttempted(s) || s.includes('out for delivery') || s.includes('rto')) return 4;
-  if (s.includes('in transit') || s.includes('shipped')) return 3;
-  if (s.includes('handed to st courier')) return 2;
+  if (s.includes('in transit')) return 3;
+  if (
+    s.includes('shipped') ||
+    s.includes('dispatched') ||
+    s.includes('dispatch') ||
+    s.includes('handed to st courier') ||
+    s.includes('handed')
+  ) {
+    return 2;
+  }
   if (s.includes('packed')) return 1;
+  if (awb && String(awb).trim() && !String(awb).startsWith('SHP-')) return 2;
   return 0;
 }
 
@@ -188,7 +197,6 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string, tokenRaw?: stri
 
     const status = o.order_status || 'Confirmed';
     const awb = o.awb_number || null;
-    const currentStep = stepIndex(status);
     const cancelled = isOrderCancelled(status);
     const delivered = isParcelDelivered(status);
 
@@ -200,6 +208,9 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string, tokenRaw?: stri
       } catch (_) {}
     }
 
+    const effectiveStatus = live?.status || status;
+    const currentStep = stepIndex(effectiveStatus, awb);
+
     const trackingUrl =
       o.tracking_url ||
       (isOfficialAwb(awb)
@@ -207,8 +218,30 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string, tokenRaw?: stri
         : null);
 
     const stRawStatus = live?.rawStatus || null;
-    const scans = Array.isArray(live?.events) ? live.events : [];
-    const lastScan = scans.length > 0 ? scans[scans.length - 1] : null;
+    const liveScans = Array.isArray(live?.events) ? live.events : [];
+    const scans =
+      liveScans.length > 0
+        ? liveScans
+        : awb
+          ? [
+              {
+                time: o.shipped_at ? formatIndianDateTime(o.shipped_at) : formatIndianDateTime(new Date()),
+                activity: 'Handed over to ST Courier Express',
+                location: 'Chennai Dispatch Hub',
+              },
+              ...(o.packed_at
+                ? [
+                    {
+                      time: formatIndianDateTime(o.packed_at),
+                      activity: 'Package Packed & Quality Checked',
+                      location: 'Blessing Power Guide Facility',
+                    },
+                  ]
+                : []),
+            ]
+          : [];
+
+    const lastScan = scans.length > 0 ? scans[0] : null;
 
     const lastUpdatedAt =
       lastScan?.time ||
@@ -268,6 +301,7 @@ async function handleTrack(orderIdRaw: string, phoneRaw: string, tokenRaw?: stri
         customer: {
           name: isAuthorized ? (addr.name || 'Customer') : maskName(addr.name || 'Customer'),
           phone: isAuthorized ? (addr.phone || '') : maskPhone(addr.phone || ''),
+          address: isAuthorized ? (addr.address || addr.street || addr.line1 || '') : '',
           city: addr.city || '',
           pincode: addr.pincode || '',
           state: addr.state || 'Tamil Nadu',

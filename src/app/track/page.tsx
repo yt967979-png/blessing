@@ -17,6 +17,7 @@ import {
   FileText,
   ArrowDownToLine,
   Tag,
+  MapPin,
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
@@ -337,6 +338,44 @@ function TrackForm() {
             refreshing={loading}
             onRefresh={() => void runTrack(order.orderId, phone || user?.phone || '', { soft: true })}
           />
+
+          {/* ── Flipkart/Amazon-Style Delivery Address Card ──────────── */}
+          {order.customer && (
+            <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-sm space-y-2">
+              <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5">
+                <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold">
+                  <MapPin className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-heading font-black text-xs sm:text-sm text-[#001B3A]">
+                    Delivery Address
+                  </h3>
+                  <p className="text-[10px] text-slate-400">
+                    Recipient details for ST Courier Express delivery
+                  </p>
+                </div>
+              </div>
+
+              <div className="text-xs sm:text-sm pt-1 space-y-1">
+                <p className="font-black text-slate-900">
+                  {order.customer.name}
+                </p>
+                {order.customer.address && (
+                  <p className="text-slate-600 font-medium leading-relaxed">
+                    {order.customer.address}
+                  </p>
+                )}
+                <p className="text-slate-600 font-medium">
+                  {[order.customer.city, order.customer.state, order.customer.pincode].filter(Boolean).join(', ')}
+                </p>
+                {order.customer.phone && (
+                  <p className="text-slate-700 font-bold text-xs pt-0.5">
+                    Phone: <span className="font-mono text-[#0044AA]">{order.customer.phone}</span>
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* ── Flipkart/Amazon-Style Product, MRP & Bill Details Card ──────────── */}
           {((Array.isArray(order.items) && order.items.length > 0) || order.bill) && (

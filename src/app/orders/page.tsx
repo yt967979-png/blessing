@@ -69,15 +69,24 @@ function OrdersContent() {
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
   const [orderTab, setOrderTab] = useState<'all' | 'active' | 'delivered' | 'cancelled'>('all');
 
-  const getCurrentStepIndex = (status: string) => {
+  const getCurrentStepIndex = (status: string, awb?: string | null) => {
     const s = (status || '').toLowerCase();
     if (isOrderCancelled(status)) return -1;
     if (isParcelDelivered(status)) return 6;
     if (isDeliveryAttempted(status) || s.includes('out for delivery')) return 5;
-    if (s.includes('in transit') || s.includes('shipped')) return 4;
-    if (s.includes('handed to st courier')) return 3;
+    if (s.includes('in transit')) return 4;
+    if (
+      s.includes('shipped') ||
+      s.includes('dispatched') ||
+      s.includes('dispatch') ||
+      s.includes('handed to st courier') ||
+      s.includes('handed')
+    ) {
+      return 3;
+    }
     if (s.includes('packed')) return 2;
     if (s.includes('preparing')) return 1;
+    if (awb && String(awb).trim() && !String(awb).startsWith('SHP-')) return 3;
     // Confirmed / Payment Confirmed / Order Placed / legacy awaiting → active confirmed
     return 0;
   };
@@ -339,7 +348,12 @@ function OrdersContent() {
     }
   };
 
-  const currentStepIdx = searchedOrderData ? getCurrentStepIndex(searchedOrderData.courierStatus || searchedOrderData.status) : 0;
+  const currentStepIdx = searchedOrderData
+    ? getCurrentStepIndex(
+        searchedOrderData.courierStatus || searchedOrderData.status || searchedOrderData.orderStatus,
+        searchedOrderData.trackingNumber || searchedOrderData.awbNumber
+      )
+    : 0;
   const orderIsCancelled = searchedOrderData
     ? isRecordCancelled(searchedOrderData)
     : false;

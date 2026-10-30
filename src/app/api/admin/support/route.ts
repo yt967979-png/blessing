@@ -139,19 +139,30 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    const rawUserId = String(check.user.userId);
+    const deviceId = (req.headers.get('x-device-id') || req.cookies.get('bpg_device')?.value || '').trim();
+    const currentAdminId = deviceId ? `${rawUserId}::${deviceId}` : rawUserId;
+
     // ── 2. Message History View for Selected Conversation
     if (view === 'messages') {
       const convId = req.nextUrl.searchParams.get('conversationId');
       if (!convId) return NextResponse.json({ error: 'conversationId required' }, { status: 400 });
 
-      const mRes = await queryDb(
-        `SELECT id, conversation_id, sender_type, sender_name, sender_id, text, is_read, created_at 
-         FROM support_messages 
-         WHERE conversation_id = $1 
-         ORDER BY created_at ASC`,
-        [convId]
-      );
-      return NextResponse.json({ messages: mRes.rows });
+      const [mRes, cRes] = await Promise.all([
+        queryDb(
+          `SELECT id, conversation_id, sender_type, sender_name, sender_id, text, is_read, created_at 
+           FROM support_messages 
+           WHERE conversation_id = $1 
+           ORDER BY created_at ASC`,
+          [convId]
+        ),
+        queryDb(`SELECT * FROM support_conversations WHERE id = $1 LIMIT 1`, [convId]),
+      ]);
+      return NextResponse.json({
+        messages: mRes.rows,
+        conversation: cRes.rows[0] || null,
+        currentAdminId,
+      });
     }
 
     // ── 3. Support Queue Overview View
@@ -218,7 +229,6 @@ export async function GET(req: NextRequest) {
        ORDER BY COALESCE(NULLIF(order_id, ''), NULLIF(customer_id, ''), NULLIF(customer_phone, ''), session_token), updated_at DESC`
     );
 
-    const currentAdminId = String(check.user.userId);
     const limitParam = parseInt(req.nextUrl.searchParams.get('limit') || '150', 10);
     const resolvedLimit = Math.min(500, Math.max(50, isNaN(limitParam) ? 150 : limitParam));
 
@@ -226,9 +236,7 @@ export async function GET(req: NextRequest) {
       queryDb(
         `SELECT * FROM support_conversations 
          WHERE status = 'ACTIVE' 
-           AND assigned_admin_id = $1
-         ORDER BY last_message_at DESC LIMIT 50`,
-        [currentAdminId]
+         ORDER BY last_message_at DESC LIMIT 50`
       ),
       queryDb(
         `SELECT c.*, f.rating, f.tags as feedback_tags, f.comment as feedback_comment 
@@ -241,11 +249,10 @@ export async function GET(req: NextRequest) {
       queryDb(
         `SELECT 
            COUNT(*) FILTER (WHERE status = 'WAITING_ADMIN') as waiting_count,
-           COUNT(*) FILTER (WHERE status = 'ACTIVE' AND assigned_admin_id = $1) as active_count,
+           COUNT(*) FILTER (WHERE status = 'ACTIVE') as active_count,
            COUNT(*) FILTER (WHERE status = 'RESOLVED') as resolved_count,
            COUNT(*) as total_count
-         FROM support_conversations`,
-        [currentAdminId]
+         FROM support_conversations`
       ),
       queryDb(
         `SELECT 
@@ -260,6 +267,7 @@ export async function GET(req: NextRequest) {
     const stats = statsRes.rows[0];
 
     return NextResponse.json({
+      currentAdminId,
       waiting: waitingRes.rows,
       active: activeRes.rows,
       resolved: resolvedRes.rows,
@@ -283,7 +291,11 @@ export async function PATCH(req: NextRequest) {
     const check = await verifyAdminRequest(req);
     if (!check.isAdmin || !check.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const uRes = await queryDb(`SELECT name, email FROM users WHERE id = $1 LIMIT 1`, [check.user.userId]);
+    const rawUserId = String(check.user.userId);
+    const deviceId = (req.headers.get('x-device-id') || req.cookies.get('bpg_device')?.value || '').trim();
+    const actorAdminId = deviceId ? `${rawUserId}::${deviceId}` : rawUserId;
+
+    const uRes = await queryDb(`SELECT name, email FROM users WHERE id = $1 LIMIT 1`, [rawUserId]);
     const adminName = uRes.rows[0]?.name || uRes.rows[0]?.email?.split('@')[0] || 'Staff';
     const body = await req.json().catch(() => ({}));
     const conversationId = String(body.conversationId || '').trim();
@@ -294,7 +306,9 @@ export async function PATCH(req: NextRequest) {
     if (action === 'resolve') {
       const cRes = await queryDb(`SELECT order_id, assigned_admin_id, assigned_admin_name FROM support_conversations WHERE id = $1`, [conversationId]);
       const conv = cRes.rows[0];
-      if (conv?.assigned_admin_id && conv.assigned_admin_id !== String(check.user.userId)) {
+      const assignedId = String(conv?.assigned_admin_id || '');
+      const isAssignedOwner = !assignedId || assignedId === actorAdminId || (!assignedId.includes('::') && assignedId === rawUserId);
+      if (!isAssignedOwner) {
         return NextResponse.json(
           { error: `Only ${conv.assigned_admin_name || 'the assigned admin'} can resolve this chat.` },
           { status: 403 }

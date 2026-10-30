@@ -772,7 +772,11 @@ export async function PATCH(request: NextRequest) {
   let client: any = null;
   try {
     const body = await request.json().catch(() => ({}));
-    const { orderId, status, awbNumber } = body;
+    const { orderId, status } = body;
+    const rawAwb = body.awbNumber || body.trackingNumber || body.awb || body.docket || '';
+    const awbNumber = rawAwb ? String(rawAwb).replace(/\s+/g, '').toUpperCase() : null;
+    const courierName = String(body.courierName || 'ST Courier Express').trim();
+
     if (!orderId) {
       return NextResponse.json({ error: 'orderId is required' }, { status: 400 });
     }
@@ -780,7 +784,7 @@ export async function PATCH(request: NextRequest) {
     client = await getDbClient();
 
     const existing = await client.query(
-      `SELECT id, order_status, user_id, order_number FROM orders WHERE order_number = $1 OR id = $1 LIMIT 1`,
+      `SELECT id, order_status, user_id, order_number, awb_number FROM orders WHERE order_number = $1 OR id = $1 LIMIT 1`,
       [orderId]
     );
     if (!existing.rows.length) {
@@ -798,7 +802,7 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const newStatus = status || 'Handed to ST Courier';
+    const newStatus = status || (awbNumber ? 'Dispatched' : 'Handed to ST Courier');
     if (isOrderCancelled(newStatus)) {
       return NextResponse.json(
         { error: 'Use POST /api/orders/cancel (admin only; Razorpay refund for paid orders).' },
@@ -861,36 +865,44 @@ export async function PATCH(request: NextRequest) {
     }
 
     const isOfficial = awbNumber && (awbNumber.startsWith('STC') || !awbNumber.startsWith('SHP-'));
-    const trackingUrl = isOfficial ? `https://stcourier.com/track/shipment?docket=${awbNumber}` : 'https://stcourier.com';
+    const trackingUrl = isOfficial
+      ? `https://stcourier.com/track/shipment?docket=${encodeURIComponent(awbNumber)}`
+      : (body.trackingUrl || 'https://stcourier.com');
 
     let timestampUpdate = '';
-    if (newStatus === 'Packed') {
+    const norm = String(newStatus).toLowerCase();
+    if (norm === 'packed') {
       timestampUpdate = ', packed_at = NOW()';
-    } else if (newStatus === 'Handed to ST Courier' || newStatus === 'In Transit') {
-      timestampUpdate = ', shipped_at = NOW()';
-    } else if (newStatus === 'Delivered') {
-      timestampUpdate = ', delivered_at = NOW()';
+    } else if (norm.includes('dispatch') || norm.includes('transit') || norm.includes('handed')) {
+      timestampUpdate = ', shipped_at = COALESCE(shipped_at, NOW())';
+    } else if (norm === 'delivered') {
+      timestampUpdate = ', delivered_at = COALESCE(delivered_at, NOW())';
     }
 
     await client.query(
       `UPDATE orders 
        SET order_status = $1, 
            awb_number = COALESCE($2, awb_number), 
-           tracking_url = COALESCE($3, tracking_url), 
+           courier_name = COALESCE($3, courier_name, 'ST Courier Express'),
+           tracking_url = COALESCE($4, tracking_url), 
            updated_at = NOW() ${timestampUpdate}
-       WHERE order_number = $4 OR id = $4`,
-      [newStatus, awbNumber || null, trackingUrl, orderId]
+       WHERE order_number = $5 OR id = $5`,
+      [newStatus, awbNumber || null, courierName, trackingUrl, orderId]
     );
 
     try {
       await client.query(
-        `INSERT INTO order_timeline (id, order_id, status, remarks) 
-         VALUES ($1, $2, $3, $4)`,
+        `INSERT INTO order_timeline (id, order_id, status, remarks, awb_number, hub_city, created_at) 
+         VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
         [
           `tl-${Date.now()}`,
           existing.rows[0].id,
           newStatus,
-          `Admin updated status to [${newStatus}] with AWB: ${awbNumber || 'N/A'}`,
+          awbNumber
+            ? `Dispatched via ${courierName} (AWB: ${awbNumber})`
+            : `Admin updated status to [${newStatus}]`,
+          awbNumber || existing.rows[0].awb_number || null,
+          'Chennai Hub',
         ]
       );
     } catch (_) {}
@@ -899,7 +911,7 @@ export async function PATCH(request: NextRequest) {
       type: 'ORDER_UPDATED',
       orderId: existing.rows[0].order_number || orderId,
       status: newStatus,
-      awbNumber,
+      awbNumber: awbNumber || existing.rows[0].awb_number,
       userId: existing.rows[0].user_id ? String(existing.rows[0].user_id) : null,
       timestamp: Date.now(),
     };

@@ -14,7 +14,7 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test:routes": "node scripts/test-all-routes.js",
-    "test:logic": "node scripts/test-concurrency-logic.js",
+    "test:logic": "node scripts/test-concurrency-logic.js && node scripts/test-intent-logic.js",
     "test:regression": "node scripts/adversarial-master-runner.js",
     "test:browser": "playwright test",
     "audit:seo": "node scripts/seo-content-audit.js",

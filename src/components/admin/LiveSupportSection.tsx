@@ -137,8 +137,16 @@ export const LiveSupportSection: React.FC<LiveSupportSectionProps> = ({
     selectedConvRef.current = selectedConv;
   }, [selectedConv]);
 
+  const [serverAdminId, setServerAdminId] = useState<string>('');
   const adminName = user?.name || user?.email?.split('@')[0] || 'Admin';
-  const currentAdminId = String(user?.userId || user?.id || '');
+  const rawAdminId = String(user?.userId || user?.id || '');
+  const currentAdminId = serverAdminId || rawAdminId;
+  const isConvAssignedToMe = (conv: SupportConv | null) => {
+    if (!conv || !conv.assigned_admin_id) return true;
+    if (conv.assigned_admin_id === currentAdminId) return true;
+    if (!conv.assigned_admin_id.includes('::') && conv.assigned_admin_id === rawAdminId) return true;
+    return false;
+  };
 
   // Desktop notification permission request and document title restore on focus
   useEffect(() => {
@@ -243,6 +251,7 @@ export const LiveSupportSection: React.FC<LiveSupportSectionProps> = ({
       });
       if (res.ok) {
         const data = await res.json();
+        if (data.currentAdminId) setServerAdminId(String(data.currentAdminId));
         const hash = JSON.stringify({
           w: (data.waiting || []).map((c: any) => `${c.id}:${c.status}:${c.last_message_at}`),
           a: (data.active || []).map((c: any) => `${c.id}:${c.status}:${c.last_message_at}`),
@@ -477,7 +486,13 @@ export const LiveSupportSection: React.FC<LiveSupportSectionProps> = ({
 
       if (res.ok && data.success) {
         onShowToast(`✓ Accepted chat with ${conv.customer_name || 'Customer'}`);
-        handleSelectConversation({ ...conv, status: 'ACTIVE', assigned_admin_name: adminName });
+        handleSelectConversation({
+          ...conv,
+          ...(data.conversation || {}),
+          status: 'ACTIVE',
+          assigned_admin_id: data.conversation?.assigned_admin_id || currentAdminId,
+          assigned_admin_name: data.assignedAdminName || adminName,
+        });
         setActiveTab('active');
         loadSupportData();
       } else if (res.status === 409) {
@@ -888,7 +903,7 @@ export const LiveSupportSection: React.FC<LiveSupportSectionProps> = ({
                 </div>
 
                 {selectedConv.status === 'ACTIVE' && (
-                  (!selectedConv.assigned_admin_id || selectedConv.assigned_admin_id === currentAdminId) ? (
+                  isConvAssignedToMe(selectedConv) ? (
                     <button
                       type="button"
                       onClick={handleResolveChat}
@@ -1012,7 +1027,7 @@ export const LiveSupportSection: React.FC<LiveSupportSectionProps> = ({
               {/* Reply Input Bar */}
               <div className="p-3 bg-white border-t border-slate-200 flex items-center gap-2">
                 {(() => {
-                  const isAssignedToMe = !selectedConv.assigned_admin_id || selectedConv.assigned_admin_id === currentAdminId;
+                  const isAssignedToMe = isConvAssignedToMe(selectedConv);
                   return (
                     <>
                       <input
