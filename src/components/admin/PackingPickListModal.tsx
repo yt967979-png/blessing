@@ -61,10 +61,12 @@ export const PackingPickListModal: React.FC<PackingPickListModalProps> = ({
 
   // Aggregated book quantities for shelf pull
   const shelfSummary = useMemo(() => {
-    const map = new Map<string, { title: string; medium: string; qty: number; count: number }>();
+    const map = new Map<string, { title: string; medium: string; qty: number; orderIds: Set<string> }>();
 
     activeOrders.forEach((o) => {
       const items = Array.isArray(o.items) ? o.items : [];
+      const orderIdentifier = String(o.orderId || o.id);
+
       items.forEach((it) => {
         const title = (it.title || 'Guide Book').trim();
         let medium = (it.medium || '').trim();
@@ -84,15 +86,22 @@ export const PackingPickListModal: React.FC<PackingPickListModalProps> = ({
         const q = Number(it.qty) || 1;
 
         if (!map.has(key)) {
-          map.set(key, { title, medium, qty: 0, count: 0 });
+          map.set(key, { title, medium, qty: 0, orderIds: new Set<string>() });
         }
         const entry = map.get(key)!;
         entry.qty += q;
-        entry.count += 1;
+        entry.orderIds.add(orderIdentifier);
       });
     });
 
-    return Array.from(map.values()).sort((a, b) => b.qty - a.qty);
+    return Array.from(map.values())
+      .map((entry) => ({
+        title: entry.title,
+        medium: entry.medium,
+        qty: entry.qty,
+        count: entry.orderIds.size,
+      }))
+      .sort((a, b) => b.qty - a.qty);
   }, [activeOrders]);
 
   const totalCopiesNeeded = useMemo(() => {

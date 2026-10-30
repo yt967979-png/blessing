@@ -402,7 +402,7 @@ export async function sweepExpiredStockHolds(): Promise<number> {
                   const captured = items.find((p: any) => p.status === 'captured') || items[0];
                   if (captured?.id) payId = String(captured.id);
                 }
-              } catch (_) {}
+              } catch (_) { }
 
               const { finalizeOrderFromPayment } = await import('@/lib/orderFinalizer');
               await finalizeOrderFromPayment({
