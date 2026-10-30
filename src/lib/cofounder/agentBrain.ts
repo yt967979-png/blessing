@@ -73,13 +73,14 @@ export const COFOUNDER_TOOLS: any[] = [
     type: 'function',
     function: {
       name: 'launch_books',
-      description: 'Publishes and launches books on the storefront (marks available, not coming soon), allocates inventory stock in PostgreSQL, and handles scheduled releases (e.g. "today 6 pm", "6:00 PM"). Use when the founder says "launch books at today 6 pm both at 100 stock", "launch both books 100 stock", or similar.',
+      description: 'Publishes and launches books on the storefront (marks available, not coming soon), allocates inventory stock in PostgreSQL, and handles scheduled releases (e.g. "today 6 pm", "6:00 PM") and automatic reversion to Coming Soon (e.g. "revert to coming soon in 1 56"). Use when the founder says "launch books at today 6 pm both at 100 stock", "launch book at 1 55 and revert to coming soon at 1 56", "change the launch time to 1 52 revert in 1 53", or similar.',
       parameters: {
         type: 'object',
         properties: {
           target: { type: 'string', enum: ['both', 'all', 'tamil', 'english'], description: 'Which books to launch: "both" for both Tamil and English 10th 5-in-1 combo guides, "all", "tamil", or "english". Default is "both".' },
           stock: { type: 'number', description: 'Stock quantity to allocate for each title (e.g. 100)' },
-          scheduledTime: { type: 'string', description: 'Optional scheduled launch time e.g. "today 6 pm"' },
+          scheduledTime: { type: 'string', description: 'Optional scheduled launch time e.g. "today 6 pm", "1 55", "1 52"' },
+          revertTime: { type: 'string', description: 'Optional scheduled revert time e.g. "1 56", "1 53"' },
           announcement: { type: 'boolean', description: 'Whether to post a priority launch announcement' },
         },
       },

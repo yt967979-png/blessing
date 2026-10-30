@@ -48,6 +48,26 @@ export async function orchestrateCoFounderTurn(
   }
 
 
+  // ── 1.8. PRECISION REAL-TIME LAUNCH & REVERT SCHEDULER ─────────────────────
+  // Intercepts time-sensitive scheduling instructions (e.g. "launch book at 1 55 and revert to comming soon in 1 56",
+  // "can you chajneg the launcgh time to 1 52 revert in 1 53", "launch books at today 6 pm both at 100 stock").
+  // Prevents premature launches, enforces Coming Soon holds, manages in-memory timers and PostgreSQL tasks.
+  const { handleScheduledBookOperation } = await import('./schedulerEngine');
+  const scheduleRes = await handleScheduledBookOperation({ rawText: text, chatId });
+  if (scheduleRes.handled) {
+    await updateSession(session.id, {
+      active_intent: 'OPERATIONAL_UPDATE',
+      userMessage: text,
+      assistantMessage: scheduleRes.replyText,
+      workflow_state: 'IDLE',
+    });
+    return {
+      replyText: scheduleRes.replyText,
+      intent: 'OPERATIONAL_UPDATE',
+      workflowState: 'IDLE',
+    };
+  }
+
   // ── 2. STATEFUL SCHOOL BULK ORDER WORKFLOW (Grounded PostgreSQL pricing) ──
   const isExplicitSchoolStatement =
     lower.includes('school') ||
@@ -358,7 +378,7 @@ How can I help you today? You can update book stock, create promotional coupons,
 
   // D1. Explicit Book Launch & Inventory Stock Mandate (e.g. "launch books at today 6 pm both at 100 stock")
   const isBookLaunchCommand =
-    (lower.includes('launch') &&
+    ((lower.includes('launch') || lower.includes('lauch') || lower.includes('launcgh') || lower.includes('lunch')) &&
       (lower.includes('book') ||
         lower.includes('guide') ||
         lower.includes('combo') ||
@@ -367,7 +387,7 @@ How can I help you today? You can update book stock, create promotional coupons,
         lower.includes('edition'))) ||
     ((lower.includes('both') || lower.includes('all') || lower.includes('combo')) &&
       lower.includes('stock') &&
-      (lower.includes('set') || lower.includes('at') || lower.includes('make') || lower.includes('launch') || lower.includes('change') || lower.includes('put')));
+      (lower.includes('set') || lower.includes('at') || lower.includes('make') || lower.includes('launch') || lower.includes('lauch') || lower.includes('change') || lower.includes('put')));
 
   if (isBookLaunchCommand) {
     const { executeLaunchBooks } = await import('./businessControls');

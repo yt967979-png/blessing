@@ -45,8 +45,17 @@ export const businessToolRegistry = {
     target?: string;
     stock?: number;
     scheduledTime?: string;
+    revertTime?: string;
     announcement?: boolean | string;
   }) => {
+    if (params?.scheduledTime || params?.revertTime) {
+      const { handleScheduledBookOperation } = await import('./schedulerEngine');
+      const rawText = `launch ${params.target || 'both'} books ${params.stock || 100} stock at ${params.scheduledTime || 'now'}${params.revertTime ? ` revert at ${params.revertTime}` : ''}`;
+      const res = await handleScheduledBookOperation({ rawText });
+      if (res.handled) {
+        return { success: true, message: res.replyText };
+      }
+    }
     return await executeLaunchBooks(params);
   },
 

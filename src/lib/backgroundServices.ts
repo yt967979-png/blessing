@@ -88,7 +88,15 @@ export async function startLeaderBackgroundServices() {
     stockHoldSweepTimer = setInterval(() => void sweepHolds(), 2 * 60 * 1000);
   }
 
-  console.log('[background] leader services started (courier cron, confirm-timeout, orphan-refund, stock-hold-sweep)');
+  // Co-Founder autonomous schedule sweeper (catches and executes any due launches/reverts)
+  try {
+    const { startScheduleSweeper } = await import('@/lib/cofounder/schedulerEngine');
+    startScheduleSweeper();
+  } catch (sweeperErr: any) {
+    console.warn('[cofounder-schedule-sweeper]', sweeperErr?.message || sweeperErr);
+  }
+
+  console.log('[background] leader services started (courier cron, confirm-timeout, orphan-refund, stock-hold-sweep, cofounder-scheduler)');
 }
 
 /** Release leader-only resources when another replica takes over. */
