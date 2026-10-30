@@ -35,6 +35,29 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true, skipped: true });
     }
 
+    // Deduplicate and normalize combo quantities to 1
+    const consolidatedCart: any[] = [];
+    const seenMap = new Map<string, any>();
+    for (const it of cart) {
+      const key = `${it.id}__${it.selectedMedium || ''}`.toLowerCase();
+      const isCombo = (it.title || '').toLowerCase().includes('combo') || (it.title || '').toLowerCase().includes('5 in 1');
+      if (seenMap.has(key)) {
+        const existing = seenMap.get(key);
+        if (isCombo) {
+          existing.qty = 1;
+        } else {
+          existing.qty = (Number(existing.qty) || 1) + (Number(it.qty) || 1);
+        }
+      } else {
+        const copy = { ...it };
+        if (isCombo && (Number(copy.qty) || 1) > 1) {
+          copy.qty = 1;
+        }
+        seenMap.set(key, copy);
+        consolidatedCart.push(copy);
+      }
+    }
+
     client = await getDbClient();
     const id = `ac-${phone}`;
     await client.query(
@@ -46,7 +69,7 @@ export async function POST(request: NextRequest) {
          user_id = COALESCE(EXCLUDED.user_id, abandoned_carts.user_id),
          reminded = FALSE,
          updated_at = NOW()`,
-      [id, userId, phone, name, JSON.stringify(cart)]
+      [id, userId, phone, name, JSON.stringify(consolidatedCart)]
     );
     return NextResponse.json({ ok: true });
   } catch {

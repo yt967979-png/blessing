@@ -157,16 +157,44 @@ export function syncCartItemsWithBooks(
     }
   }
 
-  const subtotal = items.reduce(
+  // Deduplicate and consolidate items matching the same book
+  const consolidatedMap = new Map<string, SyncedCartItem>();
+  for (const item of items) {
+    const key = `${item.id}__${item.selectedMedium || ''}`.toLowerCase();
+    const isCombo = (item.title || '').toLowerCase().includes('combo') || (item.title || '').toLowerCase().includes('5 in 1');
+    if (consolidatedMap.has(key)) {
+      changed = true;
+      const existing = consolidatedMap.get(key)!;
+      // For combo packs, normalize to 1 to fix the double-set cart issue; otherwise sum qty
+      if (isCombo) {
+        existing.qty = 1;
+      } else {
+        existing.qty += item.qty;
+      }
+    } else {
+      if (isCombo && item.qty > 1) {
+        changed = true;
+        item.qty = 1;
+      }
+      consolidatedMap.set(key, item);
+    }
+  }
+
+  const finalItems = Array.from(consolidatedMap.values());
+  if (finalItems.length !== items.length) {
+    changed = true;
+  }
+
+  const subtotal = finalItems.reduce(
     (sum, it) => sum + (Number(it.price || 0) * Number(it.qty || 1)),
     0
   );
-  const totalQty = items.reduce((sum, it) => sum + Number(it.qty || 1), 0);
-  const shippingFee = deliveryFeeForCart(items);
+  const totalQty = finalItems.reduce((sum, it) => sum + Number(it.qty || 1), 0);
+  const shippingFee = deliveryFeeForCart(finalItems);
   const totalAmount = subtotal + shippingFee;
 
   return {
-    items,
+    items: finalItems,
     changed,
     subtotal,
     shippingFee,
