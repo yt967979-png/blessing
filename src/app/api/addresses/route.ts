@@ -43,12 +43,12 @@ function mapAddress(row: any) {
 async function ensureAddressColumns(db: typeof queryDb) {
   await db(`ALTER TABLE addresses ADD COLUMN IF NOT EXISTS student_name VARCHAR(150)`);
   await db(`ALTER TABLE addresses ADD COLUMN IF NOT EXISTS parent_name VARCHAR(150)`);
-  await db(`ALTER TABLE addresses ADD COLUMN IF NOT EXISTS alternate_phone VARCHAR(20)`);
-  await db(`ALTER TABLE addresses ADD COLUMN IF NOT EXISTS whatsapp_number VARCHAR(20)`);
+  await db(`ALTER TABLE addresses ADD COLUMN IF NOT EXISTS alternate_phone VARCHAR(50)`);
+  await db(`ALTER TABLE addresses ADD COLUMN IF NOT EXISTS whatsapp_number VARCHAR(50)`);
   await db(`ALTER TABLE addresses ADD COLUMN IF NOT EXISTS primary_email VARCHAR(150)`);
   await db(`ALTER TABLE addresses ADD COLUMN IF NOT EXISTS alternate_email VARCHAR(150)`);
-  await db(`ALTER TABLE addresses ADD COLUMN IF NOT EXISTS door_no VARCHAR(50)`);
-  await db(`ALTER TABLE addresses ADD COLUMN IF NOT EXISTS floor_no VARCHAR(100)`);
+  await db(`ALTER TABLE addresses ADD COLUMN IF NOT EXISTS door_no VARCHAR(255)`);
+  await db(`ALTER TABLE addresses ADD COLUMN IF NOT EXISTS floor_no VARCHAR(255)`);
   await db(`ALTER TABLE addresses ADD COLUMN IF NOT EXISTS building_name VARCHAR(150)`);
   await db(`ALTER TABLE addresses ADD COLUMN IF NOT EXISTS street_name VARCHAR(200)`);
   await db(`ALTER TABLE addresses ADD COLUMN IF NOT EXISTS area_locality VARCHAR(150)`);
@@ -58,6 +58,11 @@ async function ensureAddressColumns(db: typeof queryDb) {
   await db(`ALTER TABLE addresses ADD COLUMN IF NOT EXISTS district VARCHAR(100)`);
   await db(`ALTER TABLE addresses ADD COLUMN IF NOT EXISTS near_landmark VARCHAR(255)`);
   await db(`ALTER TABLE addresses ADD COLUMN IF NOT EXISTS delivery_instructions TEXT`);
+  // Ensure existing columns are widened to prevent value too long errors
+  await db(`ALTER TABLE addresses ALTER COLUMN door_no TYPE VARCHAR(255)`).catch(() => {});
+  await db(`ALTER TABLE addresses ALTER COLUMN floor_no TYPE VARCHAR(255)`).catch(() => {});
+  await db(`ALTER TABLE addresses ALTER COLUMN alternate_phone TYPE VARCHAR(50)`).catch(() => {});
+  await db(`ALTER TABLE addresses ALTER COLUMN whatsapp_number TYPE VARCHAR(50)`).catch(() => {});
 }
 
 async function resolveUserId(request: Request): Promise<string | null> {
@@ -109,8 +114,8 @@ export async function POST(request: Request) {
   const phoneRaw = String(body.phone || '').trim();
   const alternatePhoneRaw = String(body.alternatePhone || body.alternate_phone || '').trim();
   const email = String(body.email || body.primaryEmail || body.primary_email || '').trim().slice(0, 150);
-  const doorNo = String(body.doorNo || body.door_no || '').trim().slice(0, 50);
-  const floorNo = String(body.floorNo || body.floor_no || '').trim().slice(0, 100);
+  const doorNo = String(body.doorNo || body.door_no || '').trim().slice(0, 255);
+  const floorNo = String(body.floorNo || body.floor_no || '').trim().slice(0, 255);
   const streetName = String(body.streetName || body.address || '').trim().slice(0, 200);
   const areaLocality = String(body.areaLocality || body.area_locality || '').trim().slice(0, 150);
   const townCity = String(body.townCity || body.town || body.city || '').trim().slice(0, 150);
@@ -335,14 +340,14 @@ export async function PATCH(request: Request) {
     }
 
     // Door No
-    const newDoor = body.doorNo !== undefined ? String(body.doorNo).trim().slice(0, 50) : current.door_no;
+    const newDoor = body.doorNo !== undefined ? String(body.doorNo).trim().slice(0, 255) : current.door_no;
     if (body.doorNo !== undefined) {
       fields.push(`door_no = $${idx++}`);
       values.push(newDoor || null);
     }
 
     // Floor No
-    const newFloor = body.floorNo !== undefined ? String(body.floorNo).trim().slice(0, 100) : current.floor_no;
+    const newFloor = body.floorNo !== undefined ? String(body.floorNo).trim().slice(0, 255) : current.floor_no;
     if (body.floorNo !== undefined) {
       fields.push(`floor_no = $${idx++}`);
       values.push(newFloor || null);
