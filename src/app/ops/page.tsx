@@ -929,14 +929,14 @@ export default function OpsPage() {
                   <span className="font-mono font-bold text-slate-300">blessing@3000</span>
                   <span className="text-emerald-400 font-bold text-[11px] flex items-center gap-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                    vCPU 1 • Active
+                    Core 1 • Active
                   </span>
                 </div>
                 <div className="flex items-center justify-between p-1.5 bg-[#132238] rounded-lg">
                   <span className="font-mono font-bold text-slate-300">blessing@3001</span>
                   <span className="text-emerald-400 font-bold text-[11px] flex items-center gap-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                    vCPU 0 • Active
+                    Core 2 • Active
                   </span>
                 </div>
               </div>
