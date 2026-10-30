@@ -221,9 +221,9 @@ export async function GET(request: Request) {
     }
 
     const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1);
-    const defaultLimit = isAdminRequest ? 50 : 25;
+    const defaultLimit = isAdminRequest ? 500 : 25;
     const requestedLimit = parseInt(searchParams.get('limit') || String(defaultLimit), 10) || defaultLimit;
-    const limit = Math.min(Math.max(1, requestedLimit), isAdminRequest ? 100 : 50);
+    const limit = Math.min(Math.max(1, requestedLimit), isAdminRequest ? 1000 : 50);
     const offset = (page - 1) * limit;
 
     query += ` GROUP BY o.id ORDER BY o.ordered_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;

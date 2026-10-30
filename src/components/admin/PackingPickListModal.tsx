@@ -67,7 +67,19 @@ export const PackingPickListModal: React.FC<PackingPickListModalProps> = ({
       const items = Array.isArray(o.items) ? o.items : [];
       items.forEach((it) => {
         const title = (it.title || 'Guide Book').trim();
-        const medium = (it.medium || 'Standard').trim();
+        let medium = (it.medium || '').trim();
+
+        // Auto-detect medium if missing or generic 'Standard' so books group accurately
+        if (!medium || medium.toLowerCase() === 'standard') {
+          if (title.toLowerCase().includes('english')) {
+            medium = 'English Medium';
+          } else if (title.toLowerCase().includes('tamil')) {
+            medium = 'Tamil Medium';
+          } else {
+            medium = 'Standard';
+          }
+        }
+
         const key = `${title}__${medium}`.toLowerCase();
         const q = Number(it.qty) || 1;
 
