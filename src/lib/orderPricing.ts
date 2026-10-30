@@ -27,7 +27,7 @@ export async function priceCartItems(
 
   for (const item of parsedItems) {
     const rawQty = Math.floor(Number(item.qty || 1));
-    const itemQty = Number.isFinite(rawQty) && rawQty > 0 ? Math.min(rawQty, 999) : 1;
+    const itemQty = Number.isFinite(rawQty) && rawQty > 0 ? Math.min(rawQty, 25) : 1;
     if (!item.id) {
       return { ok: false, error: 'Invalid cart item.', status: 400 };
     }

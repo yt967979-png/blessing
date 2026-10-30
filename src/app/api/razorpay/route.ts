@@ -68,6 +68,15 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+    if (checkout.totalAmount > 50000) {
+      return NextResponse.json(
+        {
+          error:
+            'Maximum single online transaction limit is ₹50,000. For bulk school or institutional guide orders, please contact our helpline.',
+        },
+        { status: 400 }
+      );
+    }
 
     // Reserve stock the instant we're about to send the customer to Razorpay —
     // decrements books.stock now (visible everywhere: catalog, cart, other
