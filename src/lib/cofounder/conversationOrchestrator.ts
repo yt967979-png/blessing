@@ -625,7 +625,7 @@ How can I help you today? You can update book stock, create promotional coupons,
         sql += ` WHERE title ILIKE $1 OR medium ILIKE $1`;
         params.push(`%${subject}%`);
       } else if (subject === 'Combo') {
-        sql += ` WHERE is_combo = true OR title ILIKE '%combo%'`;
+        sql += ` WHERE title ILIKE '%combo%' OR category_id = 'cat-combo' OR title ILIKE '%5%1%'`;
       }
       sql += ` ORDER BY title ASC`;
       const rows = (await queryDb(sql, params).catch(() => ({ rows: [] }))).rows;

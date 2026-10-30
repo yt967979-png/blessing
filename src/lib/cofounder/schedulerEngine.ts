@@ -230,7 +230,7 @@ export async function executeBookLaunchImmediate(
   stockQty: number = 100
 ): Promise<{ success: boolean; updatedTitles: string[] }> {
   try {
-    let whereClause = `WHERE is_combo = true OR title ILIKE '%combo%' OR category_id = 'cat-combo' OR title ILIKE '%5-in-1%' OR title ILIKE '%tamil%' OR title ILIKE '%english%'`;
+    let whereClause = `WHERE title ILIKE '%combo%' OR category_id = 'cat-combo' OR title ILIKE '%5%1%' OR title ILIKE '%5-in-1%' OR title ILIKE '%tamil%' OR title ILIKE '%english%'`;
     if (target === 'tamil') {
       whereClause = `WHERE title ILIKE '%tamil%'`;
     } else if (target === 'english') {
@@ -241,7 +241,13 @@ export async function executeBookLaunchImmediate(
 
     const res = await queryDb(
       `UPDATE books 
-       SET stock = $1, is_coming_soon = false, status = 'published', availability_reason = NULL, updated_at = NOW() 
+       SET stock = $1, 
+           stock_tamil = CASE WHEN title ILIKE '%tamil%' THEN $1 ELSE stock_tamil END,
+           stock_english = CASE WHEN title ILIKE '%english%' THEN $1 ELSE stock_english END,
+           is_coming_soon = false, 
+           status = 'published', 
+           availability_reason = NULL, 
+           updated_at = NOW() 
        ${whereClause} 
        RETURNING title`,
       [stockQty]
@@ -273,7 +279,7 @@ export async function executeBookRevertImmediate(
   reason: string = 'Pending next release batch'
 ): Promise<{ success: boolean; updatedTitles: string[] }> {
   try {
-    let whereClause = `WHERE is_combo = true OR title ILIKE '%combo%' OR category_id = 'cat-combo' OR title ILIKE '%5-in-1%' OR title ILIKE '%tamil%' OR title ILIKE '%english%'`;
+    let whereClause = `WHERE title ILIKE '%combo%' OR category_id = 'cat-combo' OR title ILIKE '%5%1%' OR title ILIKE '%5-in-1%' OR title ILIKE '%tamil%' OR title ILIKE '%english%'`;
     if (target === 'tamil') {
       whereClause = `WHERE title ILIKE '%tamil%'`;
     } else if (target === 'english') {

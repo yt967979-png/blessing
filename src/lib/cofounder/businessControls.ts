@@ -277,7 +277,7 @@ export async function updateProductAvailability(
       }
 
       let res = await queryDb(
-        `UPDATE books SET ${setClause} WHERE is_combo = true OR title ILIKE '%combo%' OR category_id = 'cat-combo' OR title ILIKE '%5-in-1%' RETURNING *`,
+        `UPDATE books SET ${setClause} WHERE title ILIKE '%combo%' OR category_id = 'cat-combo' OR title ILIKE '%5%1%' OR title ILIKE '%5-in-1%' RETURNING *`,
         params
       );
 
@@ -1400,7 +1400,7 @@ export async function executeLaunchBooks(params?: {
   } else if (target === 'english') {
     selectSql += ` WHERE title ILIKE '%english%'`;
   } else if (target === 'both' || target === 'combos' || target === 'combo' || target === 'both books') {
-    selectSql += ` WHERE is_combo = true OR title ILIKE '%combo%' OR category_id = 'cat-combo' OR title ILIKE '%5-in-1%' OR title ILIKE '%tamil%' OR title ILIKE '%english%'`;
+    selectSql += ` WHERE title ILIKE '%combo%' OR category_id = 'cat-combo' OR title ILIKE '%5%1%' OR title ILIKE '%5-in-1%' OR title ILIKE '%tamil%' OR title ILIKE '%english%'`;
   }
 
   selectSql += ` ORDER BY title ASC`;
@@ -1420,7 +1420,13 @@ export async function executeLaunchBooks(params?: {
   for (const b of targetBooks) {
     const updRes = await queryDb(
       `UPDATE books 
-       SET stock = $1, is_coming_soon = false, status = 'published', availability_reason = NULL, updated_at = NOW() 
+       SET stock = $1, 
+           stock_tamil = CASE WHEN title ILIKE '%tamil%' THEN $1 ELSE stock_tamil END,
+           stock_english = CASE WHEN title ILIKE '%english%' THEN $1 ELSE stock_english END,
+           is_coming_soon = false, 
+           status = 'published', 
+           availability_reason = NULL, 
+           updated_at = NOW() 
        WHERE id = $2 
        RETURNING id, title, price, discount_price, stock, status, is_coming_soon`,
       [stockQty, b.id]
@@ -1440,6 +1446,10 @@ export async function executeLaunchBooks(params?: {
   // 3. Clear Caches so storefront is immediately in sync
   await invalidateProductsCache().catch(() => {});
   invalidateStorefrontCache();
+  try {
+    const { notifyCatalogChanged } = await import('@/app/api/stock/stream/route');
+    void notifyCatalogChanged(['all']);
+  } catch (_) {}
 
   // 4. Record task in cofounder_tasks for operational audit
   await createTask({

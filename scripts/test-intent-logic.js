@@ -244,5 +244,7 @@ console.log(`\n------------------------------------------------------`);
 console.log(`📊 RESULTS: ${passed} Passed, ${failed} Failed (${passed + failed} Total)`);
 console.log(`------------------------------------------------------`);
 
+module.exports = { parseScheduleInstruction, parseTimeInIST };
+
 if (failed > 0) process.exit(1);
 
