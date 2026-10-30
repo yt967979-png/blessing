@@ -515,8 +515,15 @@ export async function POST(request: Request) {
     for (const item of verifiedItems) {
       const itemId = `item-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       const rawMatch = Array.isArray(items) ? items.find((ri: any) => String(ri.id) === String(item.id)) : null;
-      const med = rawMatch?.selectedMedium || rawMatch?.medium || null;
+      let med = rawMatch?.selectedMedium || rawMatch?.medium || null;
       const baseTitle = String(item.title || 'Educational Guide');
+      if (!med) {
+        if (baseTitle.toLowerCase().includes('english')) {
+          med = 'English Medium';
+        } else if (baseTitle.toLowerCase().includes('tamil')) {
+          med = 'Tamil Medium';
+        }
+      }
       const titleWithMed = med && !baseTitle.includes(med) ? `${baseTitle} (${med})` : baseTitle;
 
       await client.query(

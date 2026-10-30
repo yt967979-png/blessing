@@ -210,8 +210,15 @@ export async function finalizeOrderFromPayment(opts: FinalizeOrderOptions): Prom
       itemsToInsert = cartSnapshot.map((item: any) => {
         const p = Number(item.price || 0);
         const q = Number(item.qty || 1);
-        const med = item.selectedMedium || item.medium || null;
+        let med = item.selectedMedium || item.medium || null;
         const baseTitle = String(item.title || item.book_title || 'Educational Guide');
+        if (!med) {
+          if (baseTitle.toLowerCase().includes('english')) {
+            med = 'English Medium';
+          } else if (baseTitle.toLowerCase().includes('tamil')) {
+            med = 'Tamil Medium';
+          }
+        }
         const titleWithMed = med && !baseTitle.includes(med) ? `${baseTitle} (${med})` : baseTitle;
         return {
           id: `item-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -226,7 +233,7 @@ export async function finalizeOrderFromPayment(opts: FinalizeOrderOptions): Prom
     } else {
       // FALLBACK PATH: Reconstruct from stock_holds + addresses + books
       const holdsRes = await client.query(
-        `SELECT sh.book_id, sh.qty, sh.user_id, b.title, b.price, b.discount_price
+        `SELECT sh.book_id, sh.qty, sh.user_id, b.title, b.price, b.discount_price, b.language
          FROM stock_holds sh
          LEFT JOIN books b ON b.id = sh.book_id
          WHERE sh.razorpay_order_id = $1`,
@@ -271,10 +278,16 @@ export async function finalizeOrderFromPayment(opts: FinalizeOrderOptions): Prom
         const qty = Number(row.qty || 1);
         const lineSubtotal = unitPrice * qty;
         subtotal += lineSubtotal;
+        const autoMed = (row.language && String(row.language).toLowerCase().includes('english')) || (row.title || '').toLowerCase().includes('english')
+          ? 'English Medium'
+          : (row.language && String(row.language).toLowerCase().includes('tamil')) || (row.title || '').toLowerCase().includes('tamil')
+          ? 'Tamil Medium'
+          : null;
         return {
           id: `item-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
           bookId: row.book_id,
           title: row.title || 'Educational Guide',
+          medium: autoMed,
           price: unitPrice,
           qty,
           subtotal: lineSubtotal,
