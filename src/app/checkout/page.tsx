@@ -104,6 +104,8 @@ export default function CheckoutPage() {
     shippingFee,
     cartGrandTotal,
     checkoutTotal,
+    updateQty,
+    removeFromCart,
     clearCartAfterOrder,
     setOrderSuccessData,
     showToast,
@@ -1479,9 +1481,40 @@ export default function CheckoutPage() {
                             </span>
                           )}
                         </div>
-                        <p className="text-slate-500">
-                          Qty {item.qty} · ₹{item.price * item.qty}
-                        </p>
+                        <div className="flex items-center justify-between gap-2 mt-1">
+                          <p className="text-slate-500 text-xs">
+                            Qty {item.qty} · ₹{item.price * item.qty}
+                          </p>
+                          <div className="flex items-center gap-1.5 bg-slate-100 rounded-lg p-0.5 border border-slate-200">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (item.qty > 1) {
+                                  updateQty(item.id, item.qty - 1, item.selectedMedium);
+                                } else {
+                                  removeFromCart(item.id, item.selectedMedium);
+                                }
+                              }}
+                              className="w-6 h-6 rounded flex items-center justify-center bg-white text-slate-700 hover:bg-slate-200 text-xs font-black shadow-xs cursor-pointer touch-manipulation"
+                              title="Decrease quantity"
+                              aria-label="Decrease quantity"
+                            >
+                              -
+                            </button>
+                            <span className="text-xs font-black px-1.5 min-w-[18px] text-center">
+                              {item.qty}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => updateQty(item.id, item.qty + 1, item.selectedMedium)}
+                              className="w-6 h-6 rounded flex items-center justify-center bg-white text-slate-700 hover:bg-slate-200 text-xs font-black shadow-xs cursor-pointer touch-manipulation"
+                              title="Increase quantity"
+                              aria-label="Increase quantity"
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
                         {!stockState.inStock ? (
                           <p className="text-[10px] font-bold text-red-600 mt-0.5 flex items-center gap-1">
                             <AlertTriangle className="w-3 h-3" /> Out of stock — go back to cart to remove
@@ -1599,9 +1632,40 @@ export default function CheckoutPage() {
                       />
                       <div className="flex-1 min-w-0">
                         <p className="font-bold text-slate-900 truncate">{item.title}</p>
-                        <p className="text-slate-500">
-                          Qty {item.qty} · ₹{item.price * item.qty}
-                        </p>
+                        <div className="flex items-center justify-between gap-2 mt-1">
+                          <p className="text-slate-500 text-xs">
+                            Qty {item.qty} · ₹{item.price * item.qty}
+                          </p>
+                          <div className="flex items-center gap-1.5 bg-slate-100 rounded-lg p-0.5 border border-slate-200">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (item.qty > 1) {
+                                  updateQty(item.id, item.qty - 1, item.selectedMedium);
+                                } else {
+                                  removeFromCart(item.id, item.selectedMedium);
+                                }
+                              }}
+                              className="w-6 h-6 rounded flex items-center justify-center bg-white text-slate-700 hover:bg-slate-200 text-xs font-black shadow-xs cursor-pointer touch-manipulation"
+                              title="Decrease quantity"
+                              aria-label="Decrease quantity"
+                            >
+                              -
+                            </button>
+                            <span className="text-xs font-black px-1.5 min-w-[18px] text-center">
+                              {item.qty}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => updateQty(item.id, item.qty + 1, item.selectedMedium)}
+                              className="w-6 h-6 rounded flex items-center justify-center bg-white text-slate-700 hover:bg-slate-200 text-xs font-black shadow-xs cursor-pointer touch-manipulation"
+                              title="Increase quantity"
+                              aria-label="Increase quantity"
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
                         {!stockState.inStock ? (
                           <p className="text-[10px] font-bold text-red-600 mt-0.5 flex items-center gap-1">
                             <AlertTriangle className="w-3 h-3" /> Out of stock

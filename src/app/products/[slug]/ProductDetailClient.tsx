@@ -128,7 +128,7 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
   const router = useRouter();
   const searchParams = useSearchParams();
   const queryMedium = searchParams?.get('medium');
-  const { products, productsLoading, addToCart, toggleWishlist, wishlist, user, setIsAuthOpen, setIsCheckoutOpen, cartCount, showToast } = useStore();
+  const { products, productsLoading, cart, addToCart, toggleWishlist, wishlist, user, setIsAuthOpen, setIsCheckoutOpen, cartCount, showToast } = useStore();
   const [dbProduct, setDbProduct] = useState<any>(initialProduct || null);
   const [productFetchDone, setProductFetchDone] = useState(Boolean(initialProduct));
   const [dbReviews, setDbReviews] = useState<any[]>([]);
@@ -315,7 +315,12 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
 
   const tryBuyNow = () => {
     if (!product || isComingSoon) return;
-    addToCart(product, 1, finalMedium);
+    const alreadyInCart = cart.some(
+      (c) => String(c.id) === String(product.id) && (c.selectedMedium === finalMedium || !finalMedium)
+    );
+    if (!alreadyInCart) {
+      addToCart(product, 1, finalMedium);
+    }
     if (!user) {
       setIsAuthOpen(true);
       showToast('Book added to cart! Please sign in with Google to proceed.');
@@ -327,7 +332,7 @@ export default function ProductDetailClient({ slug, initialProduct }: { slug: st
       router.push('/checkout');
       return;
     }
-    const need = booksUntilMinOrder(cartCount + 1);
+    const need = booksUntilMinOrder(cartCount + (alreadyInCart ? 0 : 1));
     if (need > 0) {
       showToast(`Added to cart. Minimum ${MIN_BOOKS_PER_ORDER} books — add ${need} more to checkout.`);
       return;

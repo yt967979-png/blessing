@@ -21,6 +21,7 @@ import {
 export const ProductCard = React.memo(function ProductCard({ product }: { product: Product }) {
   const router = useRouter();
   const {
+    cart,
     wishlist,
     toggleWishlist,
     addToCart,
@@ -370,7 +371,12 @@ export const ProductCard = React.memo(function ProductCard({ product }: { produc
             disabled={isOutOfStock || isCurrentMediumSoldOut}
             onClick={() => {
               if (isOutOfStock || isCurrentMediumSoldOut) return;
-              addToCart(product, 1, finalMedium);
+              const alreadyInCart = cart.some(
+                (c) => String(c.id) === String(product.id) && (c.selectedMedium === finalMedium || !finalMedium)
+              );
+              if (!alreadyInCart) {
+                addToCart(product, 1, finalMedium);
+              }
               if (!user) {
                 setIsAuthOpen(true);
                 showToast('Book added to cart! Please sign in with Google to proceed.');
@@ -382,7 +388,7 @@ export const ProductCard = React.memo(function ProductCard({ product }: { produc
                 router.push('/checkout');
                 return;
               }
-              const need = booksUntilMinOrder(cartCount + 1);
+              const need = booksUntilMinOrder(cartCount + (alreadyInCart ? 0 : 1));
               if (need > 0) {
                 showToast(`Added to cart. Minimum ${MIN_BOOKS_PER_ORDER} books required — add ${need} more to checkout.`);
                 setIsCartOpen(true);
