@@ -31,11 +31,23 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => ({}));
     const {
       customerName,
+      studentName,
+      parentName = '',
       customerPhone,
+      phone,
       customerAltPhone,
+      alternatePhone,
+      email = '',
+      doorNo = '',
+      floorNo = '',
+      streetName = '',
       address,
+      areaLocality = '',
       landmark,
+      near_landmark,
       city,
+      townCity,
+      district,
       state = 'Tamil Nadu',
       pincode,
       items = [],
@@ -45,8 +57,20 @@ export async function POST(request: Request) {
       adminNotes = '',
     } = body;
 
-    const cleanName = String(customerName || '').trim();
-    const cleanPhone = String(customerPhone || '').replace(/\D/g, '').slice(-10);
+    const cleanName = String(studentName || customerName || '').trim();
+    const cleanParentName = String(parentName || '').trim();
+    const cleanPhone = String(phone || customerPhone || '').replace(/\D/g, '').slice(-10);
+    const cleanEmail = String(email || '').trim();
+    const cleanDoorNo = String(doorNo || '').trim();
+    const cleanFloorNo = String(floorNo || '').trim();
+    const cleanStreetName = String(streetName || '').trim();
+    const cleanAreaLocality = String(areaLocality || '').trim();
+    const cleanCity = String(townCity || city || 'Chennai').trim();
+    const cleanDistrict = String(district || cleanCity || 'Tamil Nadu').trim();
+    const cleanState = String(state || 'Tamil Nadu').trim();
+    const cleanPincode = String(pincode || '').replace(/\D/g, '').slice(0, 6);
+    const cleanLandmark = String(landmark || near_landmark || '').trim();
+
     const payMethod = String(paymentMethod || 'WhatsApp UPI');
     if (/\bcod\b|cash on delivery/i.test(payMethod)) {
       return NextResponse.json(
@@ -56,17 +80,18 @@ export async function POST(request: Request) {
     }
 
     if (!cleanName) {
-      return NextResponse.json({ error: 'Customer name is required.' }, { status: 400 });
+      return NextResponse.json({ error: 'Customer / Student name is required.' }, { status: 400 });
     }
     if (!cleanPhone || cleanPhone.length !== 10) {
       return NextResponse.json({ error: 'Valid 10-digit primary mobile number is required.' }, { status: 400 });
     }
-    const altPhone = normalizeRequiredAlternateMobile(customerAltPhone, cleanPhone);
+    const rawAlt = alternatePhone || customerAltPhone;
+    const altPhone = normalizeRequiredAlternateMobile(rawAlt, cleanPhone);
     if (!altPhone.ok) {
       return NextResponse.json({ error: altPhone.error }, { status: 400 });
     }
-    if (!address || !pincode) {
-      return NextResponse.json({ error: 'Delivery address and pincode are required.' }, { status: 400 });
+    if ((!address && !cleanStreetName) || !cleanPincode) {
+      return NextResponse.json({ error: 'Delivery address and 6-digit pincode are required.' }, { status: 400 });
     }
     if (!Array.isArray(items) || items.length === 0) {
       return NextResponse.json({ error: 'Please select guidebooks for this order.' }, { status: 400 });
@@ -80,15 +105,9 @@ export async function POST(request: Request) {
     const bookQty = verifiedItems.reduce((s, i) => s + Number(i.qty || 0), 0);
     const hasCombo = cartHasCombo(verifiedItems);
     const effQty = effectiveBookCount(verifiedItems);
-    if (!isMoqSatisfied(verifiedItems)) {
-      return NextResponse.json(
-        {
-          error: `Minimum ${MIN_BOOKS_PER_ORDER} books required (same as website checkout). Current: ${bookQty} (or 1 Combo Pack).`,
-        },
-        { status: 400 }
-      );
-    }
-    const shippingFee = deliveryFeeForQty(effQty, hasCombo);
+    
+    // For admin-recorded custom orders: free shipping on combo pack or 5+ books, else standard delivery fee
+    const shippingFee = (hasCombo || effQty >= FREE_DELIVERY_AT_QTY) ? 0 : deliveryFeeForQty(effQty, hasCombo);
     const totalAmount = calculatedSubtotal + shippingFee;
 
     const randomSuffix = Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -96,16 +115,38 @@ export async function POST(request: Request) {
     const id = `ord-${Date.now()}-${randomSuffix}`;
     const internalShipmentId = `SHP-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${randomSuffix}`;
 
+    // Construct full delivery address line from 14-field components
+    const addressParts = [
+      cleanDoorNo,
+      cleanFloorNo,
+      cleanStreetName,
+      cleanAreaLocality,
+      cleanLandmark ? `Near ${cleanLandmark}` : '',
+      cleanCity,
+      cleanDistrict && cleanDistrict !== cleanCity ? cleanDistrict : '',
+      `${cleanState} - ${cleanPincode}`,
+    ].filter(Boolean);
+    const resolvedAddress = addressParts.length > 2 ? addressParts.join(', ') : String(address || '').trim();
+
     const shippingAddressObj = JSON.stringify({
       name: cleanName,
+      studentName: cleanName,
+      parentName: cleanParentName,
       phone: cleanPhone,
       alternatePhone: altPhone.value,
-      address: String(address).trim(),
-      landmark: String(landmark || '').trim() || null,
-      near_landmark: String(landmark || '').trim() || null,
-      city: String(city || 'Chennai').trim(),
-      state: String(state || 'Tamil Nadu').trim(),
-      pincode: String(pincode).trim(),
+      email: cleanEmail,
+      doorNo: cleanDoorNo,
+      floorNo: cleanFloorNo,
+      streetName: cleanStreetName,
+      areaLocality: cleanAreaLocality,
+      townCity: cleanCity,
+      city: cleanCity,
+      district: cleanDistrict,
+      state: cleanState,
+      pincode: cleanPincode,
+      landmark: cleanLandmark,
+      near_landmark: cleanLandmark,
+      address: resolvedAddress,
       source: 'whatsapp_custom_order',
       adminNotes: String(adminNotes || '').trim() || null,
       shippingFee,
@@ -190,34 +231,31 @@ export async function POST(request: Request) {
       .join(', ');
     const deliveryChargeLine =
       shippingFee === 0
-        ? `Delivery: FREE (${FREE_DELIVERY_AT_QTY}+ books)`
-        : `Delivery: ₹${shippingFee} (FREE from ${FREE_DELIVERY_AT_QTY} books)`;
+        ? '🚚 Delivery: FREE Doorstep Delivery via ST Courier'
+        : `🚚 Delivery: ₹${shippingFee} (ST Courier Express)`;
+
     const whatsappMessage = [
       `Dear ${cleanName},`,
       '',
-      'Thank you for your order with Blessing Power Guide.',
+      'Thank you for your order with Blessing Power Guide. 🙏',
       '',
-      `Order ID: ${orderNumber}`,
-      `Books: ${bookQty} (minimum ${MIN_BOOKS_PER_ORDER})`,
-      `Subtotal: ₹${calculatedSubtotal}`,
+      `📋 *Order ID*: #${orderNumber}`,
+      `💰 *Total Amount*: ₹${Number(totalAmount).toLocaleString('en-IN')} (Prepaid)`,
+      `💳 *Payment*: ${payMethod} (${paymentStatus})`,
       deliveryChargeLine,
-      `Amount payable: ₹${totalAmount}`,
-      `Payment: ${payMethod}`,
-      `Status: ${paymentStatus}`,
       '',
-      'Items:',
+      `📚 *Order Items*:`,
       itemsSummary,
       '',
-      'Delivery address:',
-      deliveryLine,
+      `🏠 *Delivery Address*:`,
+      resolvedAddress || deliveryLine,
       '',
-      'Track your order:',
+      `📍 *Live Order Tracking*:`,
       trackingUrl,
       '',
-      'Your order will be dispatched via ST Courier Express.',
-      '',
-      'Blessing Power Guide',
-      'Tamil Nadu State Board guides (Classes 6–12)',
+      'Our packaging hub will dispatch your parcel via ST Courier Express.',
+      '📞 *Helpline & Support*: +91 94860 17820 / +91 63829 63350',
+      'Blessing Power Guide · Chennai',
     ].join('\n');
     const whatsappUrl = `https://wa.me/91${cleanPhone}?text=${encodeURIComponent(whatsappMessage)}`;
 

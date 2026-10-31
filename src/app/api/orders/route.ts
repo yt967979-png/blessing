@@ -117,18 +117,34 @@ function mapOrderRow(o: any) {
     ? `https://stcourier.com/track/shipment?docket=${encodeURIComponent(rawAwb)}`
     : null;
 
+  const isWhatsApp =
+    o.order_source === 'whatsapp' ||
+    addrObj?.source === 'whatsapp_custom_order' ||
+    String(o.order_number || '').startsWith('BPG-WA-') ||
+    String(o.user_id || '').startsWith('wa_') ||
+    String(o.user_id || '').startsWith('wa-');
+
   return {
     id: o.id,
     orderId: o.order_number || o.id,
-    customerName: addrObj.name || o.user_id || 'Customer',
+    customerName: addrObj.studentName || addrObj.name || o.user_id || 'Customer',
     customerPhone: addrObj.phone || '',
     customerAltPhone: addrObj.alternatePhone || addrObj.alternate_phone || '',
-    address: addrObj.address || '',
-    city: addrObj.city || '',
+    address: addrObj.address || addrObj.streetName || '',
+    city: addrObj.city || addrObj.townCity || addrObj.district || '',
     pincode: addrObj.pincode || '',
     state: addrObj.state || 'Tamil Nadu',
+    landmark: addrObj.landmark || addrObj.near_landmark || '',
+    parentName: addrObj.parentName || addrObj.parent_name || '',
+    email: addrObj.email || addrObj.primary_email || '',
+    doorNo: addrObj.doorNo || addrObj.door_no || '',
+    floorNo: addrObj.floorNo || addrObj.floor_no || '',
+    streetName: addrObj.streetName || addrObj.street_name || '',
+    areaLocality: addrObj.areaLocality || addrObj.area_locality || '',
+    district: addrObj.district || addrObj.city || '',
+    shippingAddress: addrObj,
     totalAmount: Number(o.total_amount || 0),
-    paymentMethod: o.payment_method || 'Razorpay',
+    paymentMethod: o.payment_method || (isWhatsApp ? 'WhatsApp UPI' : 'Razorpay'),
     paymentStatus: o.payment_status || 'Pending',
     razorpayRefundId: o.razorpay_refund_id || null,
     courierStatus: o.order_status || 'Order Placed',
@@ -139,7 +155,7 @@ function mapOrderRow(o: any) {
     isOfficialAwb,
     trackingUrl,
     courierName: o.courier_name || 'ST Courier Express',
-    orderSource: o.order_source || (o.user_id && String(o.user_id).startsWith('wa-') ? 'whatsapp' : 'website'),
+    orderSource: isWhatsApp ? 'whatsapp' : 'website',
     items: Array.isArray(o.items) ? o.items : [],
     packedAt: o.packed_at ? formatIndianDateTime(o.packed_at) : null,
     shippedAt: o.shipped_at ? formatIndianDateTime(o.shipped_at) : null,

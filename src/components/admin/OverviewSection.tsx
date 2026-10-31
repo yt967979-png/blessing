@@ -112,6 +112,16 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
           <p className="text-xs text-slate-500 mt-1">
             <strong className="text-slate-900 font-bold">{todayOrders}</strong> paid order(s) today
           </p>
+          <div className="flex flex-wrap items-center gap-1.5 text-[10px] mt-2.5 pt-2 border-t border-slate-100">
+            <span className="font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded" title="Online Razorpay gateway payments today">
+              🌐 Razorpay: {fmt(summary.todayRazorpayRevenue || (todayRevenue - (summary.todayWhatsAppRevenue || 0)))} ({summary.todayRazorpayOrders || (todayOrders - (summary.todayWhatsAppOrders || 0))})
+            </span>
+            {Boolean(summary.todayWhatsAppOrders) && (
+              <span className="font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded" title="Manual WhatsApp phone orders today">
+                💬 WhatsApp: {fmt(summary.todayWhatsAppRevenue || 0)} ({summary.todayWhatsAppOrders || 0})
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Monthly Total */}
@@ -128,6 +138,21 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
           <p className="text-xs text-slate-500 mt-1">
             <strong className="text-slate-900 font-bold">{monthOrders}</strong> total orders this month
           </p>
+          <div className="flex flex-wrap items-center gap-1.5 text-[10px] mt-2.5 pt-2 border-t border-slate-100">
+            <span className="font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded" title="Online Razorpay gateway orders — matches Razorpay dashboard">
+              🌐 Razorpay: {fmt(summary.razorpayRevenue || 0)} ({summary.razorpayOrders || 0})
+            </span>
+            {Boolean(summary.whatsappOrders) && (
+              <span className="font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded" title="Custom WhatsApp phone orders">
+                💬 WhatsApp: {fmt(summary.whatsappRevenue || 0)} ({summary.whatsappOrders || 0})
+              </span>
+            )}
+            {Boolean(summary.cancelledOrders) && (
+              <span className="font-bold text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded" title="Cancelled orders are excluded from revenue">
+                ✕ {summary.cancelledOrders} Cancelled (Subtracted)
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Pending to Pack */}

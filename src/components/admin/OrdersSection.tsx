@@ -26,10 +26,12 @@ import {
   Plus,
   MessageCircle,
   ScanLine,
+  Pencil,
 } from 'lucide-react';
 import OrderStatusStamp from './OrderStatusStamp';
 import { openShippingLabelPrint } from '@/lib/shippingLabel';
 import { CreateCustomOrderModal } from './CreateCustomOrderModal';
+import { EditOrderAddressModal } from './EditOrderAddressModal';
 import { PackingPickListModal } from './PackingPickListModal';
 import { CustomerPhoneLookupModal } from './CustomerPhoneLookupModal';
 import { QuickDispatchScanner } from './QuickDispatchScanner';
@@ -121,6 +123,7 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
 }) => {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [channelFilter, setChannelFilter] = useState<'all' | 'razorpay' | 'whatsapp'>('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState<number | 'all'>(50);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -133,6 +136,16 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
   const [showCustomerLookupModal, setShowCustomerLookupModal] = useState(false);
   const [customerLookupQuery, setCustomerLookupQuery] = useState('');
   const [showScannerModal, setShowScannerModal] = useState(false);
+  const [orderToEdit, setOrderToEdit] = useState<Order | null>(null);
+
+  const handleOrderAddressUpdated = (updatedOrder: Order) => {
+    if (activeDrawerOrder?.id === updatedOrder.id) {
+      setActiveDrawerOrder(updatedOrder);
+    }
+    if (onRefreshOrders) {
+      onRefreshOrders();
+    }
+  };
 
   // ── Modal state for Pre-AWB Cancel & Refund ──────────────────────────────────
   const [orderToCancel, setOrderToCancel] = useState<Order | null>(null);
@@ -189,11 +202,50 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
     return res;
   }, [orders]);
 
+  // ── Channel Breakdown Stats (Razorpay vs WhatsApp vs Cancelled) ───────────
+  const channelStats = useMemo(() => {
+    let razorpayCount = 0;
+    let razorpayTotal = 0;
+    let whatsappCount = 0;
+    let whatsappTotal = 0;
+    let cancelledCount = 0;
+    let cancelledTotal = 0;
+
+    orders.forEach((o) => {
+      const isCancelled = isRecordCancelled(o);
+      const isWa = o.orderSource === 'whatsapp' || String(o.orderId || '').includes('BPG-WA-');
+      if (isCancelled) {
+        cancelledCount++;
+        cancelledTotal += Number(o.totalAmount || 0);
+      } else if (isWa) {
+        whatsappCount++;
+        whatsappTotal += Number(o.totalAmount || 0);
+      } else {
+        razorpayCount++;
+        razorpayTotal += Number(o.totalAmount || 0);
+      }
+    });
+
+    return {
+      razorpayCount,
+      razorpayTotal,
+      whatsappCount,
+      whatsappTotal,
+      cancelledCount,
+      cancelledTotal,
+    };
+  }, [orders]);
+
   // ── Filtered orders ─────────────────────────────────────────────────────────
   const filteredOrders = useMemo(() => {
     return orders.filter((o) => {
       const q = search.trim().toLowerCase();
       const bucket = adminFulfillmentBucket(o);
+      const isWa = o.orderSource === 'whatsapp' || String(o.orderId || '').includes('BPG-WA-');
+
+      // Channel filter
+      if (channelFilter === 'razorpay' && isWa) return false;
+      if (channelFilter === 'whatsapp' && !isWa) return false;
 
       // Search match
       const matchSearch =
@@ -210,12 +262,12 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
 
       return matchSearch && matchStatus;
     });
-  }, [orders, search, statusFilter]);
+  }, [orders, search, statusFilter, channelFilter]);
 
   // Reset page when filter or search changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, statusFilter, pageSize]);
+  }, [search, statusFilter, channelFilter, pageSize]);
 
   const totalPages = useMemo(() => {
     if (pageSize === 'all') return 1;
@@ -403,6 +455,60 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
               </span>
             </button>
           ))}
+        </div>
+
+        {/* Channel / Gateway Reconciliation & Filter Sub-Bar */}
+        <div className="flex flex-wrap items-center justify-between gap-2.5 pt-1 border-t border-slate-100">
+          <div className="flex flex-wrap items-center gap-1.5 text-xs font-semibold">
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mr-1">Channel:</span>
+            <button
+              type="button"
+              onClick={() => setChannelFilter('all')}
+              className={`px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${
+                channelFilter === 'all'
+                  ? 'bg-slate-900 text-white shadow-xs'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              All Channels ({channelStats.razorpayCount + channelStats.whatsappCount})
+            </button>
+            <button
+              type="button"
+              onClick={() => setChannelFilter('razorpay')}
+              className={`px-3 py-1.5 rounded-xl font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                channelFilter === 'razorpay'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
+              }`}
+              title="Filter only online payments processed through Razorpay Gateway"
+            >
+              <span>🌐 Razorpay Online</span>
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${channelFilter === 'razorpay' ? 'bg-white/20 text-white' : 'bg-blue-200 text-blue-800'}`}>
+                {channelStats.razorpayCount} (₹{channelStats.razorpayTotal.toLocaleString('en-IN')})
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setChannelFilter('whatsapp')}
+              className={`px-3 py-1.5 rounded-xl font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                channelFilter === 'whatsapp'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+              }`}
+              title="Filter only phone/direct orders created manually via WhatsApp"
+            >
+              <span>💬 WhatsApp Manual</span>
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${channelFilter === 'whatsapp' ? 'bg-white/20 text-white' : 'bg-emerald-200 text-emerald-900'}`}>
+                {channelStats.whatsappCount} (₹{channelStats.whatsappTotal.toLocaleString('en-IN')})
+              </span>
+            </button>
+          </div>
+
+          {channelStats.cancelledCount > 0 && (
+            <div className="text-[11px] font-semibold text-rose-600 bg-rose-50 border border-rose-200 px-2.5 py-1 rounded-xl flex items-center gap-1.5">
+              <span>✕ {channelStats.cancelledCount} Cancelled Order (₹{channelStats.cancelledTotal.toLocaleString('en-IN')}) excluded</span>
+            </div>
+          )}
         </div>
 
         {/* Search Bar & Multi-Select Action Bar */}
@@ -645,13 +751,13 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
                             {formatIndianDateTime(order.createdAt)}
                           </span>
                           <div className="mt-1">
-                            {order.orderSource === 'whatsapp' ? (
+                            {order.orderSource === 'whatsapp' || String(order.orderId || '').includes('BPG-WA-') ? (
                               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
                                 💬 WhatsApp
                               </span>
                             ) : (
                               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-black bg-blue-50 text-blue-700 border border-blue-200">
-                                🌐 Website
+                                🌐 Razorpay
                               </span>
                             )}
                           </div>
@@ -746,6 +852,15 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
                             </a>
                             <button
                               type="button"
+                              onClick={() => setOrderToEdit(order)}
+                              className="inline-flex items-center gap-1 px-2 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-[11px] font-bold transition-all shadow-2xs cursor-pointer"
+                              title={`Edit Address & Phone for Order #${order.orderId}`}
+                            >
+                              <Pencil className="w-3 h-3 text-amber-600" />
+                              <span>Edit</span>
+                            </button>
+                            <button
+                              type="button"
                               onClick={() => setActiveDrawerOrder(order)}
                               className="p-1.5 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors inline-block cursor-pointer"
                               title="View Order Details"
@@ -792,6 +907,15 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
                       <span className="font-mono font-bold text-xs text-slate-900">
                         #{order.orderId}
                       </span>
+                      {order.orderSource === 'whatsapp' || String(order.orderId || '').includes('BPG-WA-') ? (
+                        <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
+                          💬 WhatsApp
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-black bg-blue-50 text-blue-700 border border-blue-200">
+                          🌐 Razorpay
+                        </span>
+                      )}
                     </div>
                     <OrderStatusStamp status={stampStatus} size="sm" />
                   </div>
@@ -819,6 +943,15 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
                         <MessageCircle className="w-3.5 h-3.5 text-[#25D366] fill-[#25D366]/20" />
                         <span>Share</span>
                       </a>
+                      <button
+                        type="button"
+                        onClick={() => setOrderToEdit(order)}
+                        className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
+                        title="Edit Customer Details"
+                      >
+                        <Pencil className="w-3 h-3 text-amber-600" />
+                        <span>Edit</span>
+                      </button>
                       <button
                         type="button"
                         onClick={() => setActiveDrawerOrder(order)}
@@ -996,10 +1129,21 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
 
               {/* Customer & Shipping Address */}
               <div className="bg-white p-4 rounded-2xl border border-slate-200 space-y-2.5 shadow-xs">
-                <h4 className="font-bold text-xs text-slate-900 uppercase tracking-wider border-b border-slate-100 pb-1.5 flex items-center gap-1.5">
-                  <User className="w-3.5 h-3.5 text-[#2874f0]" />
-                  <span>Student & Shipping Address</span>
-                </h4>
+                <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
+                  <h4 className="font-bold text-xs text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                    <User className="w-3.5 h-3.5 text-[#2874f0]" />
+                    <span>Student & Shipping Address</span>
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={() => setOrderToEdit(activeDrawerOrder)}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-[10px] font-bold transition-all shadow-2xs cursor-pointer"
+                    title="Edit student name, phone number, pincode, or street address"
+                  >
+                    <Pencil className="w-3 h-3 text-amber-600" />
+                    <span>Edit Details</span>
+                  </button>
+                </div>
                 <div className="space-y-1">
                   <p className="font-bold text-slate-900">{activeDrawerOrder.customerName}</p>
                   <p className="text-slate-600 leading-relaxed">{activeDrawerOrder.address}</p>
@@ -1315,6 +1459,15 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
         onOrderDispatched={() => {
           onRefreshOrders?.();
         }}
+        onShowToast={onShowToast}
+      />
+
+      {/* ─── Edit Order Shipping Details Modal ───────────────────────────── */}
+      <EditOrderAddressModal
+        isOpen={Boolean(orderToEdit)}
+        onClose={() => setOrderToEdit(null)}
+        order={orderToEdit}
+        onOrderUpdated={handleOrderAddressUpdated}
         onShowToast={onShowToast}
       />
     </div>

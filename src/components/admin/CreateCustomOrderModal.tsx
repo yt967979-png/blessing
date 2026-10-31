@@ -6,24 +6,25 @@ import {
   Phone,
   User,
   MapPin,
-  Building,
+  Home,
   Plus,
   Trash2,
-  Check,
   Send,
   Copy,
   ExternalLink,
-  Printer,
   ShoppingBag,
   CreditCard,
   FileText,
   Loader2,
   CheckCircle2,
+  Zap,
+  Compass,
 } from 'lucide-react';
 import { useStore, type Product } from '@/context/StoreContext';
 import { authHeaders } from '@/lib/clientAuth';
-import { MIN_BOOKS_PER_ORDER, FREE_DELIVERY_AT_QTY, deliveryFeeForQty, cartHasCombo, effectiveBookCount, isMoqSatisfied, booksUntilMinOrder } from '@/lib/deliveryRules';
+import { FREE_DELIVERY_AT_QTY, deliveryFeeForQty, cartHasCombo, effectiveBookCount } from '@/lib/deliveryRules';
 import { normalizeRequiredAlternateMobile } from '@/lib/authValidation';
+import { TAMIL_NADU_DISTRICTS, FLOOR_OPTIONS } from '@/lib/addresses';
 
 interface CreateCustomOrderModalProps {
   isOpen: boolean;
@@ -42,15 +43,24 @@ export const CreateCustomOrderModal: React.FC<CreateCustomOrderModalProps> = ({
 }) => {
   const { user } = useStore();
 
-  // Form states
-  const [customerName, setCustomerName] = useState('');
+  // 14 Mandatory Fields
+  const [studentName, setStudentName] = useState('');
+  const [parentName, setParentName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerAltPhone, setCustomerAltPhone] = useState('');
-  const [address, setAddress] = useState('');
-  const [landmark, setLandmark] = useState('');
+  const [email, setEmail] = useState('');
+  const [doorNo, setDoorNo] = useState('');
+  const [floorNo, setFloorNo] = useState('Independent House (தனி வீடு / Ground Floor)');
+  const [streetName, setStreetName] = useState('');
+  const [areaLocality, setAreaLocality] = useState('');
   const [city, setCity] = useState('');
-  const [pincode, setPincode] = useState('');
+  const [district, setDistrict] = useState('Chennai');
   const [state, setState] = useState('Tamil Nadu');
+  const [pincode, setPincode] = useState('');
+  const [landmark, setLandmark] = useState('');
+  const [rawAddress, setRawAddress] = useState('');
+
+  // Payment & Notes
   const [paymentMethod, setPaymentMethod] = useState('WhatsApp UPI (GPay / PhonePe / Paytm)');
   const [paymentStatus, setPaymentStatus] = useState('Paid / Confirmed');
   const [adminNotes, setAdminNotes] = useState('');
@@ -87,6 +97,40 @@ export const CreateCustomOrderModal: React.FC<CreateCustomOrderModalProps> = ({
     });
   };
 
+  const handleAddComboPreset = (medium: 'English' | 'Tamil') => {
+    const targetTitle =
+      medium === 'English'
+        ? '10TH STD 5 IN 1 GUIDE COMBO (English Medium)'
+        : '10TH STD 5 IN 1 GUIDE COMBO (Tamil Medium)';
+
+    const prod =
+      products.find(
+        (p) =>
+          p.title.toLowerCase().includes(medium.toLowerCase()) &&
+          p.title.toLowerCase().includes('5 in 1')
+      ) ||
+      products.find((p) => p.title.toLowerCase().includes('5 in 1')) || {
+        id: `combo-${medium.toLowerCase()}`,
+        title: targetTitle,
+        price: 1300,
+      };
+
+    setSelectedItems((prev) => {
+      const exists = prev.find(
+        (item) => String(item.id) === String(prod.id) || item.title === targetTitle
+      );
+      if (exists) {
+        return prev.map((item) =>
+          String(item.id) === String(prod.id) || item.title === targetTitle
+            ? { ...item, qty: item.qty + 1 }
+            : item
+        );
+      }
+      return [...prev, { id: prod.id, title: targetTitle, price: prod.price || 1300, qty: 1 }];
+    });
+    onShowToast(`⚡ Added ${targetTitle} to order!`);
+  };
+
   const handleUpdateQty = (productId: string | number, delta: number) => {
     setSelectedItems((prev) =>
       prev
@@ -105,19 +149,20 @@ export const CreateCustomOrderModal: React.FC<CreateCustomOrderModalProps> = ({
   const hasCombo = cartHasCombo(selectedItems);
   const effQty = effectiveBookCount(selectedItems);
   const booksSubtotal = selectedItems.reduce((sum, it) => sum + it.price * it.qty, 0);
-  const shippingFee = deliveryFeeForQty(effQty, hasCombo);
+  // Free delivery for 5-in-1 combo or 5+ books
+  const shippingFee = (hasCombo || effQty >= FREE_DELIVERY_AT_QTY) ? 0 : deliveryFeeForQty(effQty, hasCombo);
   const calculatedTotal = booksSubtotal + shippingFee;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     const cleanPhone = customerPhone.replace(/\D/g, '').slice(-10);
-    if (!customerName.trim()) {
-      onShowToast('Please enter customer name');
+    if (!studentName.trim()) {
+      onShowToast('Please enter customer / student name');
       return;
     }
     if (cleanPhone.length !== 10) {
-      onShowToast('Please enter a valid 10-digit mobile number');
+      onShowToast('Please enter a valid 10-digit primary mobile number');
       return;
     }
     const alt = normalizeRequiredAlternateMobile(customerAltPhone, cleanPhone);
@@ -125,17 +170,30 @@ export const CreateCustomOrderModal: React.FC<CreateCustomOrderModalProps> = ({
       onShowToast(alt.error);
       return;
     }
-    if (!address.trim() || !pincode.trim()) {
-      onShowToast('Please provide delivery address and pincode');
+    if (pincode.replace(/\D/g, '').length !== 6) {
+      onShowToast('Please enter a valid 6-digit postal pincode');
       return;
     }
-    if (!isMoqSatisfied(selectedItems)) {
-      onShowToast(`Minimum ${MIN_BOOKS_PER_ORDER} books required (or 1 Combo Pack). Add ${booksUntilMinOrder(selectedItems)} more.`);
+    if (selectedItems.length === 0) {
+      onShowToast('Please select at least 1 book or combo pack');
       return;
     }
 
     setLoading(true);
     try {
+      const addressParts = [
+        doorNo.trim(),
+        floorNo.trim(),
+        streetName.trim(),
+        areaLocality.trim(),
+        landmark.trim() ? `Near ${landmark.trim()}` : '',
+        city.trim(),
+        district.trim() && district.trim() !== city.trim() ? district.trim() : '',
+        `${state.trim()} - ${pincode.trim()}`,
+      ].filter(Boolean);
+
+      const resolvedAddress = rawAddress.trim() || addressParts.join(', ');
+
       const res = await fetch('/api/admin/orders/custom', {
         method: 'POST',
         headers: {
@@ -143,12 +201,22 @@ export const CreateCustomOrderModal: React.FC<CreateCustomOrderModalProps> = ({
           ...authHeaders(user),
         },
         body: JSON.stringify({
-          customerName: customerName.trim(),
+          studentName: studentName.trim(),
+          customerName: studentName.trim(),
+          parentName: parentName.trim(),
           customerPhone: cleanPhone,
+          phone: cleanPhone,
           customerAltPhone: alt.value,
-          address: address.trim(),
+          alternatePhone: alt.value,
+          email: email.trim(),
+          doorNo: doorNo.trim(),
+          floorNo: floorNo.trim(),
+          streetName: streetName.trim(),
+          areaLocality: areaLocality.trim(),
+          address: resolvedAddress,
           landmark: landmark.trim(),
           city: city.trim(),
+          district: district.trim(),
           state: state.trim(),
           pincode: pincode.trim(),
           items: selectedItems,
@@ -162,7 +230,7 @@ export const CreateCustomOrderModal: React.FC<CreateCustomOrderModalProps> = ({
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || 'Failed to create custom order');
+        throw new Error(data.error || 'Failed to create WhatsApp custom order');
       }
 
       setCreatedOrderResult({
@@ -189,13 +257,20 @@ export const CreateCustomOrderModal: React.FC<CreateCustomOrderModalProps> = ({
 
   const handleResetAndClose = () => {
     setCreatedOrderResult(null);
-    setCustomerName('');
+    setStudentName('');
+    setParentName('');
     setCustomerPhone('');
     setCustomerAltPhone('');
-    setAddress('');
-    setLandmark('');
+    setEmail('');
+    setDoorNo('');
+    setFloorNo('Independent House (தனி வீடு / Ground Floor)');
+    setStreetName('');
+    setAreaLocality('');
     setCity('');
+    setDistrict('Chennai');
     setPincode('');
+    setLandmark('');
+    setRawAddress('');
     setSelectedItems([]);
     setAdminNotes('');
     onClose();
@@ -212,12 +287,12 @@ export const CreateCustomOrderModal: React.FC<CreateCustomOrderModalProps> = ({
             </div>
             <div>
               <h2 className="font-heading font-black text-base sm:text-lg leading-tight">
-                {createdOrderResult ? 'Order Created Successfully!' : 'Create Custom / WhatsApp Order'}
+                {createdOrderResult ? 'Order Created Successfully!' : 'Create WhatsApp / Phone Order'}
               </h2>
               <p className="text-[11px] text-amber-300 font-medium">
                 {createdOrderResult
-                  ? 'Send the order confirmation and tracking link to the customer'
-                  : 'Record a phone or WhatsApp order and issue tracking'}
+                  ? 'Send order confirmation and tracking link to customer via WhatsApp'
+                  : 'Record a phone order with full 14-field courier shipping details'}
               </p>
             </div>
           </div>
@@ -243,7 +318,7 @@ export const CreateCustomOrderModal: React.FC<CreateCustomOrderModalProps> = ({
                 Order #{createdOrderResult.orderNumber}
               </h3>
               <p className="text-xs text-slate-500">
-                Total Amount: <strong className="text-slate-800 font-bold">₹{createdOrderResult.totalAmount}</strong> · Status: Confirmed
+                Total Amount: <strong className="text-slate-800 font-bold">₹{createdOrderResult.totalAmount.toLocaleString('en-IN')}</strong> · Status: Confirmed
               </p>
             </div>
 
@@ -254,7 +329,7 @@ export const CreateCustomOrderModal: React.FC<CreateCustomOrderModalProps> = ({
                 <span>Customer Notification Dispatch</span>
               </div>
               <p className="text-xs text-emerald-800 leading-relaxed">
-                Opens WhatsApp with a professional order confirmation and tracking link for this customer.
+                Opens WhatsApp with a clean order confirmation, books breakdown, and live ST Courier tracking link (no minimum order mentions).
               </p>
               <div className="flex flex-col sm:flex-row gap-2 pt-1">
                 <a
@@ -303,29 +378,45 @@ export const CreateCustomOrderModal: React.FC<CreateCustomOrderModalProps> = ({
           </div>
         ) : (
           /* FORM SCREEN */
-          <form onSubmit={handleSubmit} className="p-5 sm:p-6 space-y-5 text-xs max-h-[75vh] overflow-y-auto">
-            {/* 1. Customer Details */}
+          <form onSubmit={handleSubmit} className="p-5 sm:p-6 space-y-4 text-xs max-h-[75vh] overflow-y-auto">
+            {/* 1. Customer & 14-Field Shipping Details */}
             <div className="space-y-3 bg-slate-50/70 p-4 rounded-2xl border border-slate-200">
-              <div className="font-bold text-[11px] text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                <User className="w-3.5 h-3.5 text-blue-600" />
-                <span>1. Customer Details</span>
+              <div className="font-bold text-[11px] text-slate-800 uppercase tracking-wider flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <User className="w-3.5 h-3.5 text-blue-600" />
+                  <span>1. Student Contact & Address (14 Format)</span>
+                </div>
+                <span className="text-[10px] bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded-full">
+                  14 Mandatory *
+                </span>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Customer Full Name *</label>
+                  <label className="block font-bold text-slate-700 mb-1">Student Full Name *</label>
                   <input
                     type="text"
                     required
                     placeholder="e.g. S. Murugan / Priya"
-                    value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
+                    value={studentName}
+                    onChange={(e) => setStudentName(e.target.value)}
                     className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-600 font-medium"
                   />
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">WhatsApp / Phone Number (10 Digits) *</label>
+                  <label className="block font-bold text-slate-700 mb-1">Parent / Guardian Name</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. K. Selvam (Father)"
+                    value={parentName}
+                    onChange={(e) => setParentName(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-600 font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Primary Mobile (10 Digits) *</label>
                   <input
                     type="tel"
                     required
@@ -338,7 +429,7 @@ export const CreateCustomOrderModal: React.FC<CreateCustomOrderModalProps> = ({
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Alternate Phone *</label>
+                  <label className="block font-bold text-slate-700 mb-1">Alternate Mobile *</label>
                   <input
                     type="tel"
                     required
@@ -351,37 +442,57 @@ export const CreateCustomOrderModal: React.FC<CreateCustomOrderModalProps> = ({
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">City / Town *</label>
+                  <label className="block font-bold text-slate-700 mb-1">Door / Flat / House No *</label>
                   <input
                     type="text"
-                    required
-                    placeholder="e.g. Chennai, Coimbatore, Madurai"
-                    value={city}
-                    onChange={(e) => setCity(e.target.value)}
+                    placeholder="e.g. 14/2, Plot 45"
+                    value={doorNo}
+                    onChange={(e) => setDoorNo(e.target.value)}
                     className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-600 font-medium"
                   />
                 </div>
-              </div>
 
-              {/* Delivery Address */}
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Street Address, Door No., Area *</label>
-                <textarea
-                  required
-                  rows={2}
-                  placeholder="e.g. No 14/2, Gandhi Road, Near Market"
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-600 font-medium resize-none"
-                />
-              </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Floor Details</label>
+                  <select
+                    value={floorNo}
+                    onChange={(e) => setFloorNo(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-600 font-medium cursor-pointer"
+                  >
+                    {FLOOR_OPTIONS.map((f) => (
+                      <option key={f} value={f}>
+                        {f}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-              {/* Landmark & Pincode */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Street / Road Name *</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Gandhi Street, Nehru Road"
+                    value={streetName}
+                    onChange={(e) => setStreetName(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-600 font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Area / Locality *</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Anna Nagar, KK Nagar"
+                    value={areaLocality}
+                    onChange={(e) => setAreaLocality(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-600 font-medium"
+                  />
+                </div>
+
                 <div>
                   <label className="block font-bold text-slate-700 mb-1 flex items-center gap-1 text-blue-700">
-                    <MapPin className="w-3.5 h-3.5" />
-                    <span>Near Landmark (Important for Courier Delivery)</span>
+                    <Compass className="w-3.5 h-3.5" />
+                    <span>Nearby Landmark (Delivery Executive Guide) *</span>
                   </label>
                   <input
                     type="text"
@@ -393,33 +504,105 @@ export const CreateCustomOrderModal: React.FC<CreateCustomOrderModalProps> = ({
                 </div>
 
                 <div>
+                  <label className="block font-bold text-slate-700 mb-1">Village / Town / City *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Madurai, Coimbatore"
+                    value={city}
+                    onChange={(e) => setCity(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-600 font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Tamil Nadu District *</label>
+                  <select
+                    value={district}
+                    onChange={(e) => setDistrict(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-600 font-medium cursor-pointer"
+                  >
+                    {TAMIL_NADU_DISTRICTS.map((d) => (
+                      <option key={d} value={d}>
+                        {d}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
                   <label className="block font-bold text-slate-700 mb-1">Postal Pincode (6 Digits) *</label>
                   <input
                     type="text"
                     required
                     maxLength={6}
-                    placeholder="e.g. 632301"
+                    placeholder="e.g. 625020"
                     value={pincode}
                     onChange={(e) => setPincode(e.target.value.replace(/\D/g, ''))}
                     className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-600 font-medium font-mono"
                   />
                 </div>
               </div>
+
+              {/* Quick Full Address Paste */}
+              <div className="pt-2 border-t border-slate-200">
+                <label className="block font-bold text-slate-600 mb-1">
+                  Or Paste Full WhatsApp Address Message:
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="e.g. Murugan, No 14 Gandhi St, Anna Nagar, Madurai 625020"
+                  value={rawAddress}
+                  onChange={(e) => setRawAddress(e.target.value)}
+                  className="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-600 font-medium resize-none text-[11px]"
+                />
+              </div>
             </div>
 
-            {/* 2. Select Guidebooks */}
+            {/* 2. Select Guidebooks (5 in 1 Combo 1-Click Buttons) */}
             <div className="space-y-3 bg-slate-50/70 p-4 rounded-2xl border border-slate-200">
               <div className="font-bold text-[11px] text-slate-800 uppercase tracking-wider flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
                   <ShoppingBag className="w-3.5 h-3.5 text-blue-600" />
-                  <span>2. Select Books</span>
+                  <span>2. Select Books (1-Click 5 in 1 Combo)</span>
                 </div>
                 <span className="text-[10px] text-slate-500 font-normal">
-                  {selectedItems.length} book(s) selected
+                  {selectedItems.length} book item(s) selected
                 </span>
               </div>
 
-              {/* Book Selector Dropdown */}
+              {/* ⚡ 1-Click Quick Add Combo Presets */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleAddComboPreset('English')}
+                  className="px-3 py-2.5 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-xl text-xs font-bold text-blue-900 flex items-center justify-between transition-all cursor-pointer shadow-2xs group"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-400 group-hover:scale-110 transition-transform" />
+                    <span>10th 5 in 1 Combo (English)</span>
+                  </div>
+                  <span className="bg-blue-600 text-white text-[10px] px-2 py-0.5 rounded-full font-black">
+                    + ₹1,300
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleAddComboPreset('Tamil')}
+                  className="px-3 py-2.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl text-xs font-bold text-emerald-900 flex items-center justify-between transition-all cursor-pointer shadow-2xs group"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-400 group-hover:scale-110 transition-transform" />
+                    <span>10th 5 in 1 Combo (Tamil)</span>
+                  </div>
+                  <span className="bg-emerald-600 text-white text-[10px] px-2 py-0.5 rounded-full font-black">
+                    + ₹1,300
+                  </span>
+                </button>
+              </div>
+
+              {/* Or Pick Any Guidebook Dropdown */}
               <select
                 onChange={(e) => {
                   if (e.target.value) {
@@ -431,7 +614,7 @@ export const CreateCustomOrderModal: React.FC<CreateCustomOrderModalProps> = ({
                 defaultValue=""
               >
                 <option value="" disabled>
-                  + Click to pick a guidebook to add to this order...
+                  + Or pick individual guidebooks from catalog...
                 </option>
                 {products.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -488,28 +671,20 @@ export const CreateCustomOrderModal: React.FC<CreateCustomOrderModalProps> = ({
 
                   <div className="space-y-1.5 p-3 bg-blue-50 border border-blue-200 rounded-xl">
                     <div className="flex justify-between text-blue-950">
-                      <span>Books ({bookQty})</span>
-                      <span className="font-bold">₹{booksSubtotal}</span>
+                      <span>Books Subtotal ({bookQty})</span>
+                      <span className="font-bold">₹{booksSubtotal.toLocaleString('en-IN')}</span>
                     </div>
                     <div className="flex justify-between text-blue-950">
-                      <span>
-                        Delivery
-                        {shippingFee === 0
-                          ? ` (FREE at ${FREE_DELIVERY_AT_QTY}+ books)`
-                          : ` (FREE from ${FREE_DELIVERY_AT_QTY} books)`}
-                      </span>
+                      <span>Delivery</span>
                       <span className={`font-bold ${shippingFee === 0 ? 'text-emerald-700' : ''}`}>
-                        {shippingFee === 0 ? 'FREE' : `₹${shippingFee}`}
+                        {shippingFee === 0 ? 'FREE Doorstep Delivery' : `₹${shippingFee}`}
                       </span>
                     </div>
-                    {!isMoqSatisfied(selectedItems) ? (
-                      <p className="text-[11px] font-semibold text-amber-800">
-                        Minimum {MIN_BOOKS_PER_ORDER} books. Add {MIN_BOOKS_PER_ORDER - bookQty} more (or 1 Combo Pack).
-                      </p>
-                    ) : null}
                     <div className="flex justify-between items-center pt-1 border-t border-blue-200">
-                      <span className="font-bold text-blue-950">Amount payable</span>
-                      <span className="font-black text-base text-[#001B3A]">₹{calculatedTotal}</span>
+                      <span className="font-bold text-blue-950">Amount Payable</span>
+                      <span className="font-black text-base text-[#001B3A]">
+                        ₹{calculatedTotal.toLocaleString('en-IN')}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -520,41 +695,48 @@ export const CreateCustomOrderModal: React.FC<CreateCustomOrderModalProps> = ({
             <div className="space-y-3 bg-slate-50/70 p-4 rounded-2xl border border-slate-200">
               <div className="font-bold text-[11px] text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
                 <CreditCard className="w-3.5 h-3.5 text-blue-600" />
-                <span>3. Payment &amp; Order Status</span>
+                <span>3. Payment & Admin Notes</span>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Payment Method *</label>
+                  <label className="block font-bold text-slate-700 mb-1">Payment Method</label>
                   <select
                     value={paymentMethod}
                     onChange={(e) => setPaymentMethod(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-600 font-medium"
+                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-600 font-medium cursor-pointer"
                   >
-                    <option value="WhatsApp UPI (GPay / PhonePe / Paytm)">WhatsApp UPI (GPay / PhonePe / Paytm)</option>
-                    <option value="Direct Bank Transfer (IMPS / NEFT)">Direct Bank Transfer (IMPS / NEFT)</option>
-                    <option value="Store Direct Counter Pickup">Store Direct Counter Pickup</option>
+                    <option value="WhatsApp UPI (GPay / PhonePe / Paytm)">
+                      WhatsApp UPI (GPay / PhonePe / Paytm)
+                    </option>
+                    <option value="Direct Bank Transfer (IMPS / NEFT)">
+                      Direct Bank Transfer (IMPS / NEFT)
+                    </option>
+                    <option value="Direct Store Payment">Direct Store Payment</option>
                   </select>
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Payment Status *</label>
+                  <label className="block font-bold text-slate-700 mb-1">Payment Status</label>
                   <select
                     value={paymentStatus}
                     onChange={(e) => setPaymentStatus(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-600 font-medium"
+                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-600 font-medium cursor-pointer"
                   >
                     <option value="Paid / Confirmed">Paid / Confirmed</option>
-                    <option value="Pending">Pending</option>
+                    <option value="Pending Verification">Pending Verification</option>
                   </select>
                 </div>
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Admin Notes / Transaction Ref (Optional)</label>
+                <label className="block font-bold text-slate-700 mb-1 flex items-center gap-1">
+                  <FileText className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Internal Admin Notes (Optional)</span>
+                </label>
                 <input
                   type="text"
-                  placeholder="e.g. UTR: 324156987412 or WhatsApp chat agreed pricing"
+                  placeholder="e.g. Parent requested urgent dispatch before Monday"
                   value={adminNotes}
                   onChange={(e) => setAdminNotes(e.target.value)}
                   className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-600 font-medium"
@@ -563,18 +745,19 @@ export const CreateCustomOrderModal: React.FC<CreateCustomOrderModalProps> = ({
             </div>
 
             {/* Actions */}
-            <div className="flex items-center justify-end gap-3 pt-2">
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-200">
               <button
                 type="button"
                 onClick={handleResetAndClose}
-                className="px-4 py-2.5 border border-slate-200 rounded-xl text-slate-700 font-bold hover:bg-slate-50 transition-colors"
+                disabled={loading}
+                className="px-4 py-2.5 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-100 font-bold text-xs transition-colors cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                disabled={loading || !isMoqSatisfied(selectedItems)}
-                className="px-6 py-2.5 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 disabled:opacity-50 text-white font-extrabold rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer"
+                disabled={loading || selectedItems.length === 0}
+                className="px-6 py-2.5 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white rounded-xl font-bold text-xs shadow-md transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
               >
                 {loading ? (
                   <>
@@ -583,8 +766,8 @@ export const CreateCustomOrderModal: React.FC<CreateCustomOrderModalProps> = ({
                   </>
                 ) : (
                   <>
-                    <Check className="w-4 h-4" />
-                    <span>Create &amp; Get WhatsApp Link</span>
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Confirm & Create WhatsApp Order</span>
                   </>
                 )}
               </button>

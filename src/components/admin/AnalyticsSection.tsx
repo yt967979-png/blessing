@@ -27,6 +27,16 @@ export interface AnalyticsSummary {
   todayRevenue: number;
   monthOrders?: number;
   monthRevenue?: number;
+  razorpayOrders?: number;
+  razorpayRevenue?: number;
+  whatsappOrders?: number;
+  whatsappRevenue?: number;
+  todayRazorpayOrders?: number;
+  todayRazorpayRevenue?: number;
+  todayWhatsAppOrders?: number;
+  todayWhatsAppRevenue?: number;
+  cancelledOrders?: number;
+  cancelledRevenue?: number;
 }
 
 export interface DailyPoint {
@@ -116,6 +126,16 @@ export default function AnalyticsSection({
     todayRevenue: 0,
     monthOrders: 0,
     monthRevenue: 0,
+    razorpayOrders: 0,
+    razorpayRevenue: 0,
+    whatsappOrders: 0,
+    whatsappRevenue: 0,
+    todayRazorpayOrders: 0,
+    todayRazorpayRevenue: 0,
+    todayWhatsAppOrders: 0,
+    todayWhatsAppRevenue: 0,
+    cancelledOrders: 0,
+    cancelledRevenue: 0,
   };
 
   const daily = analytics?.daily || [];
@@ -218,6 +238,21 @@ export default function AnalyticsSection({
             </span>
             <span>avg per order</span>
           </div>
+          <div className="flex flex-wrap items-center gap-1.5 text-[10px] mt-2.5 pt-2 border-t border-slate-100">
+            <span className="font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded" title="Online Razorpay gateway payments — matches Razorpay dashboard">
+              🌐 Razorpay: {fmt(summary.razorpayRevenue || 0)}
+            </span>
+            {Boolean(summary.whatsappRevenue) && (
+              <span className="font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded" title="Manual WhatsApp phone orders">
+                💬 WhatsApp: {fmt(summary.whatsappRevenue || 0)}
+              </span>
+            )}
+            {Boolean(summary.cancelledOrders) && (
+              <span className="font-bold text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded" title="Cancelled orders subtracted from revenue">
+                ✕ {summary.cancelledOrders} Cancelled (Minus)
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Total Orders & Conversion */}
@@ -237,6 +272,16 @@ export default function AnalyticsSection({
             </span>
             <span>{summary.paidOrders} confirmed orders</span>
           </div>
+          <div className="flex flex-wrap items-center gap-1.5 text-[10px] mt-2.5 pt-2 border-t border-slate-100">
+            <span className="font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded">
+              🌐 {summary.razorpayOrders || 0} Online
+            </span>
+            {Boolean(summary.whatsappOrders) && (
+              <span className="font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
+                💬 {summary.whatsappOrders || 0} WhatsApp
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Today's Sales Velocity */}
@@ -253,6 +298,16 @@ export default function AnalyticsSection({
           <p className="text-xs text-slate-500 mt-1">
             <strong className="text-slate-900 font-bold">{summary.todayOrders}</strong> paid order(s) placed today
           </p>
+          <div className="flex flex-wrap items-center gap-1.5 text-[10px] mt-2.5 pt-2 border-t border-slate-100">
+            <span className="font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded">
+              🌐 {summary.todayRazorpayOrders || 0} Online ({fmt(summary.todayRazorpayRevenue || 0)})
+            </span>
+            {Boolean(summary.todayWhatsAppOrders) && (
+              <span className="font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
+                💬 {summary.todayWhatsAppOrders || 0} WhatsApp ({fmt(summary.todayWhatsAppRevenue || 0)})
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Current Month */}
