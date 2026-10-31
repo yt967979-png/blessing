@@ -3,10 +3,7 @@
 import React, { useState } from 'react';
 import {
   X,
-  Phone,
   User,
-  MapPin,
-  Home,
   Plus,
   Trash2,
   Send,
@@ -18,13 +15,37 @@ import {
   Loader2,
   CheckCircle2,
   Zap,
-  Compass,
 } from 'lucide-react';
 import { useStore, type Product } from '@/context/StoreContext';
 import { authHeaders } from '@/lib/clientAuth';
 import { FREE_DELIVERY_AT_QTY, deliveryFeeForQty, cartHasCombo, effectiveBookCount } from '@/lib/deliveryRules';
 import { normalizeRequiredAlternateMobile } from '@/lib/authValidation';
-import { TAMIL_NADU_DISTRICTS, FLOOR_OPTIONS } from '@/lib/addresses';
+import {
+  StudentShippingAddressForm,
+  type ShippingFormData,
+} from '@/components/checkout/StudentShippingAddressForm';
+
+const EMPTY_SHIPPING: ShippingFormData = {
+  studentName: '',
+  parentName: '',
+  phone: '',
+  alternatePhone: '',
+  email: '',
+  whatsappNumber: '',
+  alternateEmail: '',
+  doorNo: '',
+  buildingName: '',
+  floorNo: 'Independent House (தனி வீடு / Ground Floor)',
+  streetName: '',
+  areaLocality: '',
+  townCity: '',
+  taluk: '',
+  district: 'Chennai',
+  state: 'Tamil Nadu',
+  pincode: '',
+  landmark: '',
+  deliveryInstructions: '',
+};
 
 interface CreateCustomOrderModalProps {
   isOpen: boolean;
@@ -43,21 +64,8 @@ export const CreateCustomOrderModal: React.FC<CreateCustomOrderModalProps> = ({
 }) => {
   const { user } = useStore();
 
-  // 14 Mandatory Fields
-  const [studentName, setStudentName] = useState('');
-  const [parentName, setParentName] = useState('');
-  const [customerPhone, setCustomerPhone] = useState('');
-  const [customerAltPhone, setCustomerAltPhone] = useState('');
-  const [email, setEmail] = useState('');
-  const [doorNo, setDoorNo] = useState('');
-  const [floorNo, setFloorNo] = useState('Independent House (தனி வீடு / Ground Floor)');
-  const [streetName, setStreetName] = useState('');
-  const [areaLocality, setAreaLocality] = useState('');
-  const [city, setCity] = useState('');
-  const [district, setDistrict] = useState('Chennai');
-  const [state, setState] = useState('Tamil Nadu');
-  const [pincode, setPincode] = useState('');
-  const [landmark, setLandmark] = useState('');
+  // Full storefront address form (14 mandatory + 5 optional fields)
+  const [shippingData, setShippingData] = useState<ShippingFormData>(EMPTY_SHIPPING);
   const [rawAddress, setRawAddress] = useState('');
 
   // Payment & Notes
@@ -173,44 +181,33 @@ export const CreateCustomOrderModal: React.FC<CreateCustomOrderModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const cleanPhone = customerPhone.replace(/\D/g, '').slice(-10);
-    if (!studentName.trim()) {
-      onShowToast('Please enter customer / student name');
-      return;
-    }
-    if (cleanPhone.length !== 10) {
-      onShowToast('Please enter a valid 10-digit primary mobile number');
-      return;
-    }
-    const alt = normalizeRequiredAlternateMobile(customerAltPhone, cleanPhone);
-    if (!alt.ok) {
-      onShowToast(alt.error);
-      return;
-    }
-    if (pincode.replace(/\D/g, '').length !== 6) {
-      onShowToast('Please enter a valid 6-digit postal pincode');
-      return;
-    }
-    if (selectedItems.length === 0) {
-      onShowToast('Please select at least 1 book or combo pack');
-      return;
-    }
+    const f = shippingData;
+    const cleanPhone = f.phone.replace(/\D/g, '').slice(-10);
+    const cleanPincode = f.pincode.replace(/\D/g, '').slice(0, 6);
+    const cleanWhatsApp = (f.whatsappNumber || '').replace(/\D/g, '').slice(-10);
+
+    if (!f.studentName.trim()) return onShowToast('Please enter student full name');
+    if (cleanPhone.length !== 10) return onShowToast('Please enter a valid 10-digit primary mobile number');
+    const alt = normalizeRequiredAlternateMobile(f.alternatePhone, cleanPhone);
+    if (!alt.ok) return onShowToast(alt.error);
+    if (cleanWhatsApp && cleanWhatsApp.length !== 10) return onShowToast('WhatsApp number must be 10 digits');
+
+    const requiredAddress: Array<[string, string]> = [
+      [f.doorNo, 'Door / House / Flat Number'],
+      [f.floorNo, 'Floor Details'],
+      [f.streetName, 'Street / Road Name'],
+      [f.areaLocality, 'Area / Locality'],
+      [f.townCity, 'Village / Town / City'],
+      [f.landmark, 'Nearby Landmark'],
+      [f.district, 'District'],
+    ];
+    const missing = requiredAddress.find(([v]) => !String(v || '').trim());
+    if (missing && !rawAddress.trim()) return onShowToast(`Please fill ${missing[1]}`);
+    if (cleanPincode.length !== 6) return onShowToast('Please enter a valid 6-digit PIN code');
+    if (selectedItems.length === 0) return onShowToast('Please select at least 1 book or combo pack');
 
     setLoading(true);
     try {
-      const addressParts = [
-        doorNo.trim(),
-        floorNo.trim(),
-        streetName.trim(),
-        areaLocality.trim(),
-        landmark.trim() ? `Near ${landmark.trim()}` : '',
-        city.trim(),
-        district.trim() && district.trim() !== city.trim() ? district.trim() : '',
-        `${state.trim()} - ${pincode.trim()}`,
-      ].filter(Boolean);
-
-      const resolvedAddress = rawAddress.trim() || addressParts.join(', ');
-
       const res = await fetch('/api/admin/orders/custom', {
         method: 'POST',
         headers: {
@@ -218,24 +215,31 @@ export const CreateCustomOrderModal: React.FC<CreateCustomOrderModalProps> = ({
           ...authHeaders(user),
         },
         body: JSON.stringify({
-          studentName: studentName.trim(),
-          customerName: studentName.trim(),
-          parentName: parentName.trim(),
+          studentName: f.studentName.trim(),
+          customerName: f.studentName.trim(),
+          parentName: f.parentName.trim(),
           customerPhone: cleanPhone,
           phone: cleanPhone,
           customerAltPhone: alt.value,
           alternatePhone: alt.value,
-          email: email.trim(),
-          doorNo: doorNo.trim(),
-          floorNo: floorNo.trim(),
-          streetName: streetName.trim(),
-          areaLocality: areaLocality.trim(),
-          address: resolvedAddress,
-          landmark: landmark.trim(),
-          city: city.trim(),
-          district: district.trim(),
-          state: state.trim(),
-          pincode: pincode.trim(),
+          email: f.email.trim(),
+          whatsappNumber: cleanWhatsApp,
+          alternateEmail: (f.alternateEmail || '').trim(),
+          doorNo: f.doorNo.trim(),
+          buildingName: (f.buildingName || '').trim(),
+          floorNo: f.floorNo.trim(),
+          streetName: f.streetName.trim(),
+          areaLocality: f.areaLocality.trim(),
+          // Empty → server builds the courier label line from the structured fields
+          address: rawAddress.trim(),
+          landmark: f.landmark.trim(),
+          townCity: f.townCity.trim(),
+          city: f.townCity.trim(),
+          taluk: (f.taluk || '').trim(),
+          district: f.district.trim(),
+          state: f.state.trim() || 'Tamil Nadu',
+          pincode: cleanPincode,
+          deliveryInstructions: (f.deliveryInstructions || '').trim(),
           items: selectedItems,
           totalAmount: calculatedTotal,
           paymentMethod,
@@ -274,19 +278,7 @@ export const CreateCustomOrderModal: React.FC<CreateCustomOrderModalProps> = ({
 
   const handleResetAndClose = () => {
     setCreatedOrderResult(null);
-    setStudentName('');
-    setParentName('');
-    setCustomerPhone('');
-    setCustomerAltPhone('');
-    setEmail('');
-    setDoorNo('');
-    setFloorNo('Independent House (தனி வீடு / Ground Floor)');
-    setStreetName('');
-    setAreaLocality('');
-    setCity('');
-    setDistrict('Chennai');
-    setPincode('');
-    setLandmark('');
+    setShippingData(EMPTY_SHIPPING);
     setRawAddress('');
     setSelectedItems([]);
     setAdminNotes('');
@@ -295,7 +287,7 @@ export const CreateCustomOrderModal: React.FC<CreateCustomOrderModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full my-8 overflow-hidden border border-slate-200">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full my-8 overflow-hidden border border-slate-200">
         {/* Header */}
         <div className="flex items-center justify-between p-4 sm:p-5 border-b border-slate-100 bg-gradient-to-r from-[#001B3A] to-[#002B5B] text-white">
           <div className="flex items-center gap-2.5">
@@ -396,182 +388,30 @@ export const CreateCustomOrderModal: React.FC<CreateCustomOrderModalProps> = ({
         ) : (
           /* FORM SCREEN */
           <form onSubmit={handleSubmit} className="p-5 sm:p-6 space-y-4 text-xs max-h-[75vh] overflow-y-auto">
-            {/* 1. Customer & 14-Field Shipping Details */}
-            <div className="space-y-3 bg-slate-50/70 p-4 rounded-2xl border border-slate-200">
-              <div className="font-bold text-[11px] text-slate-800 uppercase tracking-wider flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <User className="w-3.5 h-3.5 text-blue-600" />
-                  <span>1. Student Contact & Address (14 Format)</span>
-                </div>
-                <span className="text-[10px] bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded-full">
-                  14 Mandatory *
-                </span>
+            {/* 1. Customer & Full Storefront Shipping Address (14 mandatory + 5 optional) */}
+            <div className="space-y-3">
+              <div className="font-bold text-[11px] text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                <User className="w-3.5 h-3.5 text-blue-600" />
+                <span>1. Student Contact &amp; Full Delivery Address</span>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Student Full Name *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. S. Murugan / Priya"
-                    value={studentName}
-                    onChange={(e) => setStudentName(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-600 font-medium"
-                  />
-                </div>
+              <StudentShippingAddressForm data={shippingData} onChange={setShippingData} />
 
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Parent / Guardian Name</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. K. Selvam (Father)"
-                    value={parentName}
-                    onChange={(e) => setParentName(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-600 font-medium"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Primary Mobile (10 Digits) *</label>
-                  <input
-                    type="tel"
-                    required
-                    maxLength={10}
-                    placeholder="e.g. 9876543210"
-                    value={customerPhone}
-                    onChange={(e) => setCustomerPhone(e.target.value.replace(/\D/g, ''))}
-                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-600 font-medium font-mono"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Alternate Mobile *</label>
-                  <input
-                    type="tel"
-                    required
-                    maxLength={10}
-                    placeholder="Different 10-digit number"
-                    value={customerAltPhone}
-                    onChange={(e) => setCustomerAltPhone(e.target.value.replace(/\D/g, ''))}
-                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-600 font-medium font-mono"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Door / Flat / House No *</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. 14/2, Plot 45"
-                    value={doorNo}
-                    onChange={(e) => setDoorNo(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-600 font-medium"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Floor Details</label>
-                  <select
-                    value={floorNo}
-                    onChange={(e) => setFloorNo(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-600 font-medium cursor-pointer"
-                  >
-                    {FLOOR_OPTIONS.map((f) => (
-                      <option key={f} value={f}>
-                        {f}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Street / Road Name *</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Gandhi Street, Nehru Road"
-                    value={streetName}
-                    onChange={(e) => setStreetName(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-600 font-medium"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Area / Locality *</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Anna Nagar, KK Nagar"
-                    value={areaLocality}
-                    onChange={(e) => setAreaLocality(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-600 font-medium"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1 flex items-center gap-1 text-blue-700">
-                    <Compass className="w-3.5 h-3.5" />
-                    <span>Nearby Landmark (Delivery Executive Guide) *</span>
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Opposite Bus Stop, Near SBI ATM"
-                    value={landmark}
-                    onChange={(e) => setLandmark(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-white border border-blue-200 rounded-xl outline-none focus:border-blue-600 font-medium"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Village / Town / City *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Madurai, Coimbatore"
-                    value={city}
-                    onChange={(e) => setCity(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-600 font-medium"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Tamil Nadu District *</label>
-                  <select
-                    value={district}
-                    onChange={(e) => setDistrict(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-600 font-medium cursor-pointer"
-                  >
-                    {TAMIL_NADU_DISTRICTS.map((d) => (
-                      <option key={d} value={d}>
-                        {d}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Postal Pincode (6 Digits) *</label>
-                  <input
-                    type="text"
-                    required
-                    maxLength={6}
-                    placeholder="e.g. 625020"
-                    value={pincode}
-                    onChange={(e) => setPincode(e.target.value.replace(/\D/g, ''))}
-                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-600 font-medium font-mono"
-                  />
-                </div>
-              </div>
-
-              {/* Quick Full Address Paste */}
-              <div className="pt-2 border-t border-slate-200">
-                <label className="block font-bold text-slate-600 mb-1">
-                  Or Paste Full WhatsApp Address Message:
+              {/* Optional courier label override (e.g. pasted WhatsApp address) */}
+              <div className="bg-white p-4 rounded-2xl border border-slate-200">
+                <label htmlFor="wa-raw-address" className="block font-bold text-slate-700 mb-1">
+                  Custom courier label address{' '}
+                  <span className="font-normal text-slate-400 text-[10.5px]">
+                    (optional — leave empty to auto-build from the fields above)
+                  </span>
                 </label>
                 <textarea
+                  id="wa-raw-address"
                   rows={2}
-                  placeholder="e.g. Murugan, No 14 Gandhi St, Anna Nagar, Madurai 625020"
+                  placeholder="Paste the customer's WhatsApp address only if the label must print exactly as typed"
                   value={rawAddress}
                   onChange={(e) => setRawAddress(e.target.value)}
-                  className="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-600 font-medium resize-none text-[11px]"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 resize-none text-[11px]"
                 />
               </div>
             </div>

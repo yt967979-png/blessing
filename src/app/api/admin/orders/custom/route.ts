@@ -38,7 +38,10 @@ export async function POST(request: Request) {
       customerAltPhone,
       alternatePhone,
       email = '',
+      whatsappNumber = '',
+      alternateEmail = '',
       doorNo = '',
+      buildingName = '',
       floorNo = '',
       streetName = '',
       address,
@@ -47,9 +50,11 @@ export async function POST(request: Request) {
       near_landmark,
       city,
       townCity,
+      taluk = '',
       district,
       state = 'Tamil Nadu',
       pincode,
+      deliveryInstructions = '',
       items = [],
       paymentMethod = 'WhatsApp UPI',
       paymentStatus = 'Paid / Confirmed',
@@ -61,15 +66,20 @@ export async function POST(request: Request) {
     const cleanParentName = String(parentName || '').trim();
     const cleanPhone = String(phone || customerPhone || '').replace(/\D/g, '').slice(-10);
     const cleanEmail = String(email || '').trim();
+    const cleanWhatsAppNumber = String(whatsappNumber || '').replace(/\D/g, '').slice(-10);
+    const cleanAlternateEmail = String(alternateEmail || '').trim();
     const cleanDoorNo = String(doorNo || '').trim();
+    const cleanBuildingName = String(buildingName || '').trim();
     const cleanFloorNo = String(floorNo || '').trim();
     const cleanStreetName = String(streetName || '').trim();
     const cleanAreaLocality = String(areaLocality || '').trim();
     const cleanCity = String(townCity || city || 'Chennai').trim();
+    const cleanTaluk = String(taluk || '').trim();
     const cleanDistrict = String(district || cleanCity || 'Tamil Nadu').trim();
     const cleanState = String(state || 'Tamil Nadu').trim();
     const cleanPincode = String(pincode || '').replace(/\D/g, '').slice(0, 6);
     const cleanLandmark = String(landmark || near_landmark || '').trim();
+    const cleanDeliveryInstructions = String(deliveryInstructions || '').trim();
 
     const payMethod = String(paymentMethod || 'WhatsApp UPI');
     if (/\bcod\b|cash on delivery/i.test(payMethod)) {
@@ -118,15 +128,19 @@ export async function POST(request: Request) {
     // Construct full delivery address line from 14-field components
     const addressParts = [
       cleanDoorNo,
+      cleanBuildingName,
       cleanFloorNo,
       cleanStreetName,
       cleanAreaLocality,
       cleanLandmark ? `Near ${cleanLandmark}` : '',
       cleanCity,
+      cleanTaluk,
       cleanDistrict && cleanDistrict !== cleanCity ? cleanDistrict : '',
       `${cleanState} - ${cleanPincode}`,
     ].filter(Boolean);
-    const resolvedAddress = addressParts.length > 2 ? addressParts.join(', ') : String(address || '').trim();
+    const explicitAddress = String(address || '').trim();
+    const resolvedAddress =
+      explicitAddress.length > 5 ? explicitAddress : addressParts.length > 2 ? addressParts.join(', ') : explicitAddress;
 
     const shippingAddressObj = JSON.stringify({
       name: cleanName,
@@ -135,13 +149,18 @@ export async function POST(request: Request) {
       phone: cleanPhone,
       alternatePhone: altPhone.value,
       email: cleanEmail,
+      whatsappNumber: cleanWhatsAppNumber,
+      alternateEmail: cleanAlternateEmail,
       doorNo: cleanDoorNo,
+      buildingName: cleanBuildingName,
       floorNo: cleanFloorNo,
       streetName: cleanStreetName,
       areaLocality: cleanAreaLocality,
       townCity: cleanCity,
       city: cleanCity,
+      taluk: cleanTaluk,
       district: cleanDistrict,
+      deliveryInstructions: cleanDeliveryInstructions,
       state: cleanState,
       pincode: cleanPincode,
       landmark: cleanLandmark,

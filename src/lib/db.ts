@@ -430,7 +430,9 @@ function startPoolHeartbeat(activePool: Pool) {
         lastPoolPingAt = Date.now();
         heartbeatFailures = 0;
       } finally {
-        client.release();
+        try {
+          client.release();
+        } catch (_) {}
       }
     } catch (err: any) {
       heartbeatFailures++;
@@ -701,8 +703,16 @@ export async function resolveDbConnectionConfig() {
 function wrapPoolClient(client: any) {
   client._released = false;
 
+  // Clear any existing watchdog timer
+  if (client._leakTimer) {
+    clearTimeout(client._leakTimer);
+    client._leakTimer = null;
+  }
+
+  // Capture the fresh release callback assigned by pg-pool for this checkout
+  const currentPoolRelease = client.release;
+
   // Watchdog timer: automatically release client back to pool if caller fails to release within 30 seconds
-  if (client._leakTimer) clearTimeout(client._leakTimer);
   client._leakTimer = setTimeout(() => {
     if (!client._released) {
       console.warn('[db] auto-releasing unreturned client lease after 30s');
@@ -715,10 +725,7 @@ function wrapPoolClient(client: any) {
     client._leakTimer.unref();
   }
 
-  if (client._hasSafeRelease) return client;
-  client._hasSafeRelease = true;
-  const originalRelease = client.release.bind(client);
-  const safeRelease = (err?: Error | boolean) => {
+  client.release = function safeRelease(err?: Error | boolean) {
     if (client._leakTimer) {
       clearTimeout(client._leakTimer);
       client._leakTimer = null;
@@ -726,12 +733,17 @@ function wrapPoolClient(client: any) {
     if (client._released) return;
     client._released = true;
     try {
-      originalRelease(err);
-    } catch (_) {
-      /* already returned to pool */
+      if (typeof currentPoolRelease === 'function') {
+        currentPoolRelease.call(client, err);
+      }
+    } catch (e: any) {
+      // Never throw if already released — prevent uncaughtException crash
+      if (!String(e?.message || e).includes('already been released')) {
+        console.warn('[db] client.release error:', e?.message || e);
+      }
     }
   };
-  client.release = safeRelease;
+
   // NOTE: Never overwrite client.end! pg-pool relies on the real client.end to close idle TCP sockets.
   return client;
 }
@@ -754,7 +766,9 @@ async function ensureSchemaReady(activePool: Pool) {
         schemaInitPromise = null;
         throw e;
       } finally {
-        initClient.release();
+        try {
+          initClient.release();
+        } catch (_) {}
       }
     })();
   }

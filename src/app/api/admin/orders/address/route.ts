@@ -67,15 +67,23 @@ export async function PATCH(request: Request) {
     const state = String(body.state || currentAddr.state || 'Tamil Nadu').trim();
     const pincode = String(body.pincode || currentAddr.pincode || '').replace(/\D/g, '').slice(0, 6);
     const landmark = String(body.landmark !== undefined ? body.landmark : (currentAddr.landmark || currentAddr.near_landmark || '')).trim();
+    const pick = (key: string) => String(body[key] !== undefined ? body[key] : (currentAddr[key] || '')).trim();
+    const whatsappNumber = pick('whatsappNumber').replace(/\D/g, '').slice(-10);
+    const alternateEmail = pick('alternateEmail');
+    const buildingName = pick('buildingName');
+    const taluk = pick('taluk');
+    const deliveryInstructions = pick('deliveryInstructions');
 
     // Construct full address line
     const addressParts = [
       doorNo,
+      buildingName,
       floorNo,
       streetName,
       areaLocality,
       landmark ? `Near ${landmark}` : '',
       city,
+      taluk,
       district && district !== city ? district : '',
       `${state} - ${pincode}`,
     ].filter(Boolean);
@@ -92,13 +100,18 @@ export async function PATCH(request: Request) {
       phone,
       alternatePhone,
       email,
+      whatsappNumber,
+      alternateEmail,
       doorNo,
+      buildingName,
       floorNo,
       streetName,
       areaLocality,
       townCity: city,
       city,
+      taluk,
       district,
+      deliveryInstructions,
       state,
       pincode,
       landmark,
