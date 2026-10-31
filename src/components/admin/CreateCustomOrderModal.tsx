@@ -82,8 +82,25 @@ export const CreateCustomOrderModal: React.FC<CreateCustomOrderModalProps> = ({
 
   if (!isOpen) return null;
 
+  // Filter out any books that are "Coming Soon", draft, or archived
+  const availableProducts = products.filter((p) => {
+    const isSoon = Boolean(
+      p.isComingSoon ||
+      p.is_coming_soon ||
+      p.status === 'coming_soon' ||
+      p.status === 'draft' ||
+      p.status === 'archived' ||
+      String(p.badge || '').toLowerCase().includes('coming soon')
+    );
+    return !isSoon;
+  });
+
+  const hasTamilCombo = availableProducts.some(
+    (p) => p.title.toLowerCase().includes('tamil') && p.title.toLowerCase().includes('5 in 1')
+  );
+
   const handleAddItem = (productId: string | number) => {
-    const prod = products.find((p) => String(p.id) === String(productId));
+    const prod = availableProducts.find((p) => String(p.id) === String(productId));
     if (!prod) return;
 
     setSelectedItems((prev) => {
@@ -104,12 +121,12 @@ export const CreateCustomOrderModal: React.FC<CreateCustomOrderModalProps> = ({
         : '10TH STD 5 IN 1 GUIDE COMBO (Tamil Medium)';
 
     const prod =
-      products.find(
+      availableProducts.find(
         (p) =>
           p.title.toLowerCase().includes(medium.toLowerCase()) &&
           p.title.toLowerCase().includes('5 in 1')
       ) ||
-      products.find((p) => p.title.toLowerCase().includes('5 in 1')) || {
+      availableProducts.find((p) => p.title.toLowerCase().includes('5 in 1')) || {
         id: `combo-${medium.toLowerCase()}`,
         title: targetTitle,
         price: 1300,
@@ -571,38 +588,40 @@ export const CreateCustomOrderModal: React.FC<CreateCustomOrderModalProps> = ({
                 </span>
               </div>
 
-              {/* ⚡ 1-Click Quick Add Combo Presets */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {/* ⚡ 1-Click Quick Add Combo Presets (Only Active Available Combos) */}
+              <div className={hasTamilCombo ? "grid grid-cols-1 sm:grid-cols-2 gap-2" : "flex flex-col gap-1.5"}>
                 <button
                   type="button"
                   onClick={() => handleAddComboPreset('English')}
-                  className="px-3 py-2.5 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-xl text-xs font-bold text-blue-900 flex items-center justify-between transition-all cursor-pointer shadow-2xs group"
+                  className="w-full px-3.5 py-3 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-xl text-xs font-bold text-blue-900 flex items-center justify-between transition-all cursor-pointer shadow-2xs group"
                 >
-                  <div className="flex items-center gap-1.5">
-                    <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-400 group-hover:scale-110 transition-transform" />
-                    <span>10th 5 in 1 Combo (English)</span>
+                  <div className="flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-amber-500 fill-amber-400 group-hover:scale-110 transition-transform" />
+                    <span>⚡ 1-Click Add: 10th Std 5 in 1 Combo (English Medium)</span>
                   </div>
-                  <span className="bg-blue-600 text-white text-[10px] px-2 py-0.5 rounded-full font-black">
-                    + ₹1,300
+                  <span className="bg-blue-600 text-white text-[11px] px-2.5 py-0.5 rounded-full font-black">
+                    + ₹1,300 (In Stock)
                   </span>
                 </button>
 
-                <button
-                  type="button"
-                  onClick={() => handleAddComboPreset('Tamil')}
-                  className="px-3 py-2.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl text-xs font-bold text-emerald-900 flex items-center justify-between transition-all cursor-pointer shadow-2xs group"
-                >
-                  <div className="flex items-center gap-1.5">
-                    <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-400 group-hover:scale-110 transition-transform" />
-                    <span>10th 5 in 1 Combo (Tamil)</span>
-                  </div>
-                  <span className="bg-emerald-600 text-white text-[10px] px-2 py-0.5 rounded-full font-black">
-                    + ₹1,300
-                  </span>
-                </button>
+                {hasTamilCombo && (
+                  <button
+                    type="button"
+                    onClick={() => handleAddComboPreset('Tamil')}
+                    className="w-full px-3.5 py-3 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl text-xs font-bold text-emerald-900 flex items-center justify-between transition-all cursor-pointer shadow-2xs group"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Zap className="w-4 h-4 text-amber-500 fill-amber-400 group-hover:scale-110 transition-transform" />
+                      <span>⚡ 1-Click Add: 10th Std 5 in 1 Combo (Tamil Medium)</span>
+                    </div>
+                    <span className="bg-emerald-600 text-white text-[11px] px-2.5 py-0.5 rounded-full font-black">
+                      + ₹1,300 (In Stock)
+                    </span>
+                  </button>
+                )}
               </div>
 
-              {/* Or Pick Any Guidebook Dropdown */}
+              {/* Or Pick Any Guidebook Dropdown (Filtered to exclude Coming Soon) */}
               <select
                 onChange={(e) => {
                   if (e.target.value) {
@@ -614,9 +633,9 @@ export const CreateCustomOrderModal: React.FC<CreateCustomOrderModalProps> = ({
                 defaultValue=""
               >
                 <option value="" disabled>
-                  + Or pick individual guidebooks from catalog...
+                  + Or pick individual published guidebooks from catalog...
                 </option>
-                {products.map((p) => (
+                {availableProducts.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.cls ? `[${p.cls}] ` : ''}{p.title} — ₹{p.price}
                   </option>
