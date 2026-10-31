@@ -97,17 +97,17 @@ export async function GET(request: Request) {
           COALESCE(SUM(total_amount) FILTER (WHERE ${ACTIVE}), 0)::numeric              AS total_revenue,
           COALESCE(AVG(total_amount) FILTER (WHERE ${ACTIVE}), 0)::numeric              AS avg_order_value,
           COUNT(*) FILTER (WHERE ${ACTIVE} AND (payment_status ILIKE '%confirm%' OR payment_status ILIKE '%paid%'))::int AS paid_orders,
-          COUNT(*) FILTER (WHERE ${ACTIVE} AND (ordered_at AT TIME ZONE 'Asia/Kolkata')::date = (NOW() AT TIME ZONE 'Asia/Kolkata')::date)::int AS today_orders,
-          COALESCE(SUM(total_amount) FILTER (WHERE ${ACTIVE} AND (ordered_at AT TIME ZONE 'Asia/Kolkata')::date = (NOW() AT TIME ZONE 'Asia/Kolkata')::date), 0)::numeric AS today_revenue,
-          COUNT(*) FILTER (WHERE ${ACTIVE} AND DATE_TRUNC('month', ordered_at AT TIME ZONE 'Asia/Kolkata') = DATE_TRUNC('month', NOW() AT TIME ZONE 'Asia/Kolkata'))::int AS month_orders,
-          COALESCE(SUM(total_amount) FILTER (WHERE ${ACTIVE} AND DATE_TRUNC('month', ordered_at AT TIME ZONE 'Asia/Kolkata') = DATE_TRUNC('month', NOW() AT TIME ZONE 'Asia/Kolkata')), 0)::numeric AS month_revenue
+          COUNT(*) FILTER (WHERE ${ACTIVE} AND (ordered_at + INTERVAL '5 hours 30 minutes')::date = (NOW() AT TIME ZONE 'Asia/Kolkata')::date)::int AS today_orders,
+          COALESCE(SUM(total_amount) FILTER (WHERE ${ACTIVE} AND (ordered_at + INTERVAL '5 hours 30 minutes')::date = (NOW() AT TIME ZONE 'Asia/Kolkata')::date), 0)::numeric AS today_revenue,
+          COUNT(*) FILTER (WHERE ${ACTIVE} AND DATE_TRUNC('month', ordered_at + INTERVAL '5 hours 30 minutes') = DATE_TRUNC('month', NOW() AT TIME ZONE 'Asia/Kolkata'))::int AS month_orders,
+          COALESCE(SUM(total_amount) FILTER (WHERE ${ACTIVE} AND DATE_TRUNC('month', ordered_at + INTERVAL '5 hours 30 minutes') = DATE_TRUNC('month', NOW() AT TIME ZONE 'Asia/Kolkata')), 0)::numeric AS month_revenue
         FROM orders
       `);
 
         const dailyRes = await client.query(
           `
         SELECT
-          DATE(ordered_at AT TIME ZONE 'Asia/Kolkata') AS day,
+          TO_CHAR(ordered_at + INTERVAL '5 hours 30 minutes', 'YYYY-MM-DD') AS day,
           COUNT(*)::int                                AS orders,
           COALESCE(SUM(total_amount), 0)::numeric      AS revenue
         FROM orders
@@ -167,7 +167,7 @@ export async function GET(request: Request) {
 
         const hourlyRes = await client.query(`
         SELECT
-          EXTRACT(HOUR FROM ordered_at AT TIME ZONE 'Asia/Kolkata')::int AS hour,
+          EXTRACT(HOUR FROM (ordered_at + INTERVAL '5 hours 30 minutes'))::int AS hour,
           COUNT(*)::int AS orders
         FROM orders
         WHERE ordered_at >= NOW() - INTERVAL '7 days'
@@ -178,14 +178,14 @@ export async function GET(request: Request) {
 
         const momRes = await client.query(`
         SELECT
-          TO_CHAR(DATE_TRUNC('month', ordered_at AT TIME ZONE 'Asia/Kolkata'), 'Mon YYYY') AS month,
+          TO_CHAR(DATE_TRUNC('month', ordered_at + INTERVAL '5 hours 30 minutes'), 'Mon YYYY') AS month,
           COUNT(*)::int                               AS orders,
           COALESCE(SUM(total_amount), 0)::numeric     AS revenue
         FROM orders
         WHERE ordered_at >= NOW() - INTERVAL '6 months'
           AND ${ACTIVE}
-        GROUP BY DATE_TRUNC('month', ordered_at AT TIME ZONE 'Asia/Kolkata')
-        ORDER BY DATE_TRUNC('month', ordered_at AT TIME ZONE 'Asia/Kolkata') ASC
+        GROUP BY DATE_TRUNC('month', ordered_at + INTERVAL '5 hours 30 minutes')
+        ORDER BY DATE_TRUNC('month', ordered_at + INTERVAL '5 hours 30 minutes') ASC
       `);
 
         const summary = summaryRes.rows[0] || {};

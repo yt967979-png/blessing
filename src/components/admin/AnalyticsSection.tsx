@@ -90,6 +90,12 @@ interface AnalyticsSectionProps {
 
 const fmt = (n: number) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
 
+const formatDayLabel = (dayStr: string, opts?: Intl.DateTimeFormatOptions) => {
+  if (!dayStr) return '';
+  const iso = dayStr.includes('T') ? dayStr : `${dayStr}T12:00:00+05:30`;
+  return new Date(iso).toLocaleDateString('en-IN', opts || { day: 'numeric', month: 'short' });
+};
+
 export default function AnalyticsSection({
   analytics,
   analyticsLoading,
@@ -282,7 +288,7 @@ export default function AnalyticsSection({
             {peakDay && peakDay.revenue > 0 && (
               <span className="hidden md:inline-flex items-center gap-1 text-[11px] font-bold bg-amber-50 border border-amber-200 text-amber-800 px-2.5 py-1 rounded-lg">
                 <span>Peak: {fmt(peakDay.revenue)}</span>
-                <span className="text-amber-500">({new Date(peakDay.day).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })})</span>
+                <span className="text-amber-500">({formatDayLabel(peakDay.day, { day: 'numeric', month: 'short' })})</span>
               </span>
             )}
 
@@ -315,7 +321,7 @@ export default function AnalyticsSection({
           {hoveredPoint ? (
             <div className="text-xs font-bold text-slate-900 flex items-center gap-2 bg-blue-50 px-3 py-1 rounded-lg border border-blue-200">
               <Calendar className="w-3.5 h-3.5 text-blue-600" />
-              <span>{new Date(hoveredPoint.day).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}:</span>
+              <span>{formatDayLabel(hoveredPoint.day, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}:</span>
               <span className="text-[#2874f0]">{fmt(hoveredPoint.revenue)}</span>
               <span className="text-slate-500">({hoveredPoint.orders} orders)</span>
             </div>
@@ -398,7 +404,7 @@ export default function AnalyticsSection({
                             fill="#64748b"
                             fontWeight="600"
                           >
-                            {new Date(d.day).toLocaleDateString('en-IN', {
+                            {formatDayLabel(d.day, {
                               day: 'numeric',
                               month: 'short',
                             })}

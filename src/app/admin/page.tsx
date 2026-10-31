@@ -669,10 +669,10 @@ function AdminPageInner() {
       showToast('No orders to export');
       return;
     }
-    const headers = ['Order ID', 'Date', 'Customer Name', 'Phone', 'City', 'Pincode', 'Amount (INR)', 'Payment Method', 'Payment Status', 'Courier Status', 'ST Courier AWB'];
+    const headers = ['Order ID', 'Date & Time (IST)', 'Customer Name', 'Phone', 'City', 'Pincode', 'Amount (INR)', 'Payment Method', 'Payment Status', 'Courier Status', 'ST Courier AWB'];
     const rows = orders.map((o) => [
       `"${o.orderId}"`,
-      `"${new Date(o.createdAt).toLocaleDateString('en-IN')}"`,
+      `"${o.createdAt || ''}"`,
       `"${o.customerName.replace(/"/g, '""')}"`,
       `"${o.customerPhone}"`,
       `"${o.city}"`,
