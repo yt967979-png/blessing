@@ -238,7 +238,7 @@ function AdminPageInner() {
     if (!opts?.silent) setOrdersLoading(true);
     setOrdersError(null);
     try {
-      const res = await fetch(`/api/orders?limit=500`, {
+      const res = await fetch(`/api/orders?limit=2000`, {
         headers: authHeaders(user),
         credentials: 'include',
         signal: AbortSignal.timeout(12_000),

@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Database unavailable' }, { status: 503 });
     }
 
-    // Parallel fetch: top 100 recent abandoned carts + entire active catalog books
+    // Fetch all active abandoned carts (up to 2,000) + entire active catalog books
     const [res, booksRes] = await Promise.all([
       client.query(`
         SELECT 
@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
           ) as converted
         FROM abandoned_carts ac
         ORDER BY ac.updated_at DESC
-        LIMIT 100
+        LIMIT 2000
       `),
       client.query(`SELECT id, title, subject, price, discount_price, stock, status, language, is_coming_soon FROM books`),
     ]);

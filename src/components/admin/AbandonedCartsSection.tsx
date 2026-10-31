@@ -13,6 +13,10 @@ import {
   TrendingUp,
   CheckCheck,
   Trash2,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
 } from 'lucide-react';
 
 interface AbandonedCartItem {
@@ -55,6 +59,8 @@ export const AbandonedCartsSection: React.FC<AbandonedCartsSectionProps> = ({
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | 'pending' | 'reminded' | 'converted'>('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState<number | 'all'>(25);
 
   const cartsHashRef = useRef<string>('');
 
@@ -220,6 +226,44 @@ export const AbandonedCartsSection: React.FC<AbandonedCartsSectionProps> = ({
     });
   }, [carts, search, filter]);
 
+  // Reset page when filter or search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, filter, pageSize]);
+
+  const totalPages = useMemo(() => {
+    if (pageSize === 'all') return 1;
+    return Math.max(1, Math.ceil(filteredCarts.length / (typeof pageSize === 'number' ? pageSize : 25)));
+  }, [filteredCarts.length, pageSize]);
+
+  const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
+
+  const paginatedCarts = useMemo(() => {
+    if (pageSize === 'all') return filteredCarts;
+    const start = (safeCurrentPage - 1) * pageSize;
+    return filteredCarts.slice(start, start + pageSize);
+  }, [filteredCarts, safeCurrentPage, pageSize]);
+
+  const startItem = filteredCarts.length === 0 ? 0 : (safeCurrentPage - 1) * (pageSize === 'all' ? filteredCarts.length : pageSize) + 1;
+  const endItem = pageSize === 'all' ? filteredCarts.length : Math.min(safeCurrentPage * (typeof pageSize === 'number' ? pageSize : filteredCarts.length), filteredCarts.length);
+
+  const getPageNumbers = () => {
+    if (totalPages <= 7) {
+      return Array.from({ length: totalPages }, (_, i) => i + 1);
+    }
+    const pages: (number | '...')[] = [1];
+    const left = Math.max(2, safeCurrentPage - 1);
+    const right = Math.min(totalPages - 1, safeCurrentPage + 1);
+
+    if (left > 2) pages.push('...');
+    for (let i = left; i <= right; i++) {
+      pages.push(i);
+    }
+    if (right < totalPages - 1) pages.push('...');
+    pages.push(totalPages);
+    return pages;
+  };
+
   const timeAgo = (dateStr: string) => {
     const diff = Math.max(0, Date.now() - new Date(dateStr).getTime());
     const mins = Math.floor(diff / 60000);
@@ -377,7 +421,7 @@ export const AbandonedCartsSection: React.FC<AbandonedCartsSectionProps> = ({
         </div>
       ) : (
         <div className="space-y-3">
-          {filteredCarts.map((cart) => (
+          {paginatedCarts.map((cart) => (
             <div
               key={cart.id}
               className={`bg-white border rounded-2xl p-4 sm:p-5 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 ${
@@ -496,6 +540,112 @@ export const AbandonedCartsSection: React.FC<AbandonedCartsSectionProps> = ({
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Pagination Footer */}
+      {!loading && filteredCarts.length > 0 && (
+        <div className="bg-white border border-slate-200/90 rounded-2xl p-4 shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-4 text-xs">
+          {/* Left: Summary & Per Page Selector */}
+          <div className="flex flex-wrap items-center gap-3 text-slate-600">
+            <span>
+              Showing <strong className="text-slate-900 font-bold">{startItem}–{endItem}</strong> of{' '}
+              <strong className="text-slate-900 font-bold">{filteredCarts.length}</strong> abandoned carts
+            </span>
+
+            <div className="flex items-center gap-1.5 pl-2 sm:border-l sm:border-slate-200">
+              <span className="text-[11px] text-slate-400 font-semibold">Per page:</span>
+              {([25, 50, 100, 'all'] as const).map((size) => (
+                <button
+                  key={size}
+                  type="button"
+                  onClick={() => setPageSize(size)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    pageSize === size
+                      ? 'bg-[#001B3A] text-white shadow-2xs'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  {size === 'all' ? 'All' : size}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Right: Page Numbers & Navigation */}
+          {pageSize !== 'all' && totalPages > 1 && (
+            <div className="flex items-center gap-1">
+              {/* First Page */}
+              <button
+                type="button"
+                disabled={safeCurrentPage <= 1}
+                onClick={() => setCurrentPage(1)}
+                className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer"
+                title="First Page"
+              >
+                <ChevronsLeft className="w-4 h-4" />
+              </button>
+
+              {/* Prev Page */}
+              <button
+                type="button"
+                disabled={safeCurrentPage <= 1}
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer flex items-center gap-1"
+                title="Previous Page"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                <span className="hidden md:inline font-semibold">Prev</span>
+              </button>
+
+              {/* Page Numbers */}
+              <div className="flex items-center gap-1 px-1">
+                {getPageNumbers().map((p, idx) =>
+                  p === '...' ? (
+                    <span key={`dots-${idx}`} className="px-1 text-slate-400 font-bold select-none">
+                      ...
+                    </span>
+                  ) : (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setCurrentPage(p as number)}
+                      className={`min-w-8 h-8 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        safeCurrentPage === p
+                          ? 'bg-[#001B3A] text-white shadow-xs'
+                          : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200/80'
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  )
+                )}
+              </div>
+
+              {/* Next Page */}
+              <button
+                type="button"
+                disabled={safeCurrentPage >= totalPages}
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer flex items-center gap-1"
+                title="Next Page"
+              >
+                <span className="hidden md:inline font-semibold">Next</span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
+
+              {/* Last Page */}
+              <button
+                type="button"
+                disabled={safeCurrentPage >= totalPages}
+                onClick={() => setCurrentPage(totalPages)}
+                className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer"
+                title="Last Page"
+              >
+                <ChevronsRight className="w-4 h-4" />
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

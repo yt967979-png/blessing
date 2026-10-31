@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Search,
   CheckSquare,
@@ -11,6 +11,9 @@ import {
   X,
   ExternalLink,
   ChevronRight,
+  ChevronLeft,
+  ChevronsLeft,
+  ChevronsRight,
   User,
   Phone,
   MapPin,
@@ -118,6 +121,8 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
 }) => {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState<number | 'all'>(50);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [activeDrawerOrder, setActiveDrawerOrder] = useState<Order | null>(null);
   const [batchActionLoading, setBatchActionLoading] = useState(false);
@@ -207,16 +212,62 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
     });
   }, [orders, search, statusFilter]);
 
+  // Reset page when filter or search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, statusFilter, pageSize]);
+
+  const totalPages = useMemo(() => {
+    if (pageSize === 'all') return 1;
+    return Math.max(1, Math.ceil(filteredOrders.length / (typeof pageSize === 'number' ? pageSize : 50)));
+  }, [filteredOrders.length, pageSize]);
+
+  const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
+
+  const paginatedOrders = useMemo(() => {
+    if (pageSize === 'all') return filteredOrders;
+    const start = (safeCurrentPage - 1) * pageSize;
+    return filteredOrders.slice(start, start + pageSize);
+  }, [filteredOrders, safeCurrentPage, pageSize]);
+
+  const startItem = filteredOrders.length === 0 ? 0 : (safeCurrentPage - 1) * (pageSize === 'all' ? filteredOrders.length : pageSize) + 1;
+  const endItem = pageSize === 'all' ? filteredOrders.length : Math.min(safeCurrentPage * (typeof pageSize === 'number' ? pageSize : filteredOrders.length), filteredOrders.length);
+
+  const getPageNumbers = () => {
+    if (totalPages <= 7) {
+      return Array.from({ length: totalPages }, (_, i) => i + 1);
+    }
+    const pages: (number | '...')[] = [1];
+    const left = Math.max(2, safeCurrentPage - 1);
+    const right = Math.min(totalPages - 1, safeCurrentPage + 1);
+
+    if (left > 2) pages.push('...');
+    for (let i = left; i <= right; i++) {
+      pages.push(i);
+    }
+    if (right < totalPages - 1) pages.push('...');
+    pages.push(totalPages);
+    return pages;
+  };
+
   // ── Multi-select helpers ───────────────────────────────────────────────────
-  const allFilteredSelected =
-    filteredOrders.length > 0 &&
-    filteredOrders.every((o) => selectedIds.has(o.id));
+  const allPageSelected =
+    paginatedOrders.length > 0 &&
+    paginatedOrders.every((o) => selectedIds.has(o.id));
 
   const toggleSelectAll = () => {
-    if (allFilteredSelected) {
-      setSelectedIds(new Set());
+    if (allPageSelected) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        paginatedOrders.forEach((o) => next.delete(o.id));
+        return next;
+      });
     } else {
-      setSelectedIds(new Set(filteredOrders.map((o) => o.id)));
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        paginatedOrders.forEach((o) => next.add(o.id));
+        return next;
+      });
     }
   };
 
@@ -541,7 +592,7 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
                         onClick={toggleSelectAll}
                         className="text-slate-400 hover:text-slate-700 cursor-pointer"
                       >
-                        {allFilteredSelected ? (
+                        {allPageSelected ? (
                           <CheckSquare className="w-4 h-4 text-[#2874f0]" />
                         ) : (
                           <Square className="w-4 h-4" />
@@ -557,7 +608,7 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-sans">
-                  {filteredOrders.map((order) => {
+                  {paginatedOrders.map((order) => {
                     const isSelected = selectedIds.has(order.id);
                     const hasAwb = Boolean(order.trackingNumber && !order.trackingNumber.startsWith('SHP-') && !order.trackingNumber.includes('Pending'));
                     const isCancelled = isRecordCancelled(order);
@@ -713,7 +764,7 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
 
           {/* Mobile Packing Cards */}
           <div className="lg:hidden space-y-3">
-            {filteredOrders.map((order) => {
+            {paginatedOrders.map((order) => {
               const isSelected = selectedIds.has(order.id);
               const hasAwb = Boolean(order.trackingNumber && !order.trackingNumber.startsWith('SHP-') && !order.trackingNumber.includes('Pending'));
               const stampStatus = fulfillmentStatus(order);
@@ -781,6 +832,112 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
               );
             })}
           </div>
+
+          {/* Orders Pagination Footer */}
+          {filteredOrders.length > 0 && (
+            <div className="bg-white border border-slate-200/90 rounded-2xl p-4 shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-4 text-xs">
+              {/* Left: Summary & Per Page Selector */}
+              <div className="flex flex-wrap items-center gap-3 text-slate-600">
+                <span>
+                  Showing <strong className="text-slate-900 font-bold">{startItem}–{endItem}</strong> of{' '}
+                  <strong className="text-slate-900 font-bold">{filteredOrders.length}</strong> orders
+                </span>
+
+                <div className="flex items-center gap-1.5 pl-2 sm:border-l sm:border-slate-200">
+                  <span className="text-[11px] text-slate-400 font-semibold">Per page:</span>
+                  {([25, 50, 100, 'all'] as const).map((size) => (
+                    <button
+                      key={size}
+                      type="button"
+                      onClick={() => setPageSize(size)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        pageSize === size
+                          ? 'bg-[#2874f0] text-white shadow-2xs'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      {size === 'all' ? 'All' : size}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Right: Page Numbers & Navigation */}
+              {pageSize !== 'all' && totalPages > 1 && (
+                <div className="flex items-center gap-1">
+                  {/* First Page */}
+                  <button
+                    type="button"
+                    disabled={safeCurrentPage <= 1}
+                    onClick={() => setCurrentPage(1)}
+                    className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer"
+                    title="First Page"
+                  >
+                    <ChevronsLeft className="w-4 h-4" />
+                  </button>
+
+                  {/* Prev Page */}
+                  <button
+                    type="button"
+                    disabled={safeCurrentPage <= 1}
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer flex items-center gap-1"
+                    title="Previous Page"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                    <span className="hidden md:inline font-semibold">Prev</span>
+                  </button>
+
+                  {/* Page Numbers */}
+                  <div className="flex items-center gap-1 px-1">
+                    {getPageNumbers().map((p, idx) =>
+                      p === '...' ? (
+                        <span key={`dots-${idx}`} className="px-1 text-slate-400 font-bold select-none">
+                          ...
+                        </span>
+                      ) : (
+                        <button
+                          key={p}
+                          type="button"
+                          onClick={() => setCurrentPage(p as number)}
+                          className={`min-w-8 h-8 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                            safeCurrentPage === p
+                              ? 'bg-[#2874f0] text-white shadow-xs'
+                              : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200/80'
+                          }`}
+                        >
+                          {p}
+                        </button>
+                      )
+                    )}
+                  </div>
+
+                  {/* Next Page */}
+                  <button
+                    type="button"
+                    disabled={safeCurrentPage >= totalPages}
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer flex items-center gap-1"
+                    title="Next Page"
+                  >
+                    <span className="hidden md:inline font-semibold">Next</span>
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+
+                  {/* Last Page */}
+                  <button
+                    type="button"
+                    disabled={safeCurrentPage >= totalPages}
+                    onClick={() => setCurrentPage(totalPages)}
+                    className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer"
+                    title="Last Page"
+                  >
+                    <ChevronsRight className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </>
       )}
 
