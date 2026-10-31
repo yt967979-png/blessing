@@ -48,7 +48,7 @@ export function parseTimeInIST(timeStr: string, refDate: Date = new Date()): {
   if (!match) return null;
 
   let h = parseInt(match[1], 10);
-  let m = match[2] ? parseInt(match[2], 10) : 0;
+  const m = match[2] ? parseInt(match[2], 10) : 0;
   const mer = match[3] ? match[3].toLowerCase() : null;
 
   if (isNaN(h) || h < 0 || h > 23 || isNaN(m) || m < 0 || m > 59) return null;

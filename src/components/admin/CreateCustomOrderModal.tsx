@@ -90,21 +90,30 @@ export const CreateCustomOrderModal: React.FC<CreateCustomOrderModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Filter out any books that are "Coming Soon", draft, or archived
-  const availableProducts = products.filter((p) => {
+  // Strictly filter out any books that are "Coming Soon", draft, or archived
+  const availableProducts = (products || []).filter((p) => {
+    const titleLower = String(p.title || '').toLowerCase();
+    const badgeLower = String(p.badge || '').toLowerCase();
+    const statusLower = String(p.status || '').toLowerCase();
     const isSoon = Boolean(
       p.isComingSoon ||
       p.is_coming_soon ||
-      p.status === 'coming_soon' ||
-      p.status === 'draft' ||
-      p.status === 'archived' ||
-      String(p.badge || '').toLowerCase().includes('coming soon')
+      statusLower === 'coming_soon' ||
+      statusLower === 'draft' ||
+      statusLower === 'archived' ||
+      badgeLower.includes('coming soon') ||
+      titleLower.includes('coming soon')
     );
     return !isSoon;
   });
 
   const hasTamilCombo = availableProducts.some(
-    (p) => p.title.toLowerCase().includes('tamil') && p.title.toLowerCase().includes('5 in 1')
+    (p) =>
+      p.title.toLowerCase().includes('tamil') &&
+      p.title.toLowerCase().includes('5 in 1') &&
+      !p.isComingSoon &&
+      !p.is_coming_soon &&
+      p.status === 'published'
   );
 
   const handleAddItem = (productId: string | number) => {
@@ -134,24 +143,33 @@ export const CreateCustomOrderModal: React.FC<CreateCustomOrderModalProps> = ({
           p.title.toLowerCase().includes(medium.toLowerCase()) &&
           p.title.toLowerCase().includes('5 in 1')
       ) ||
-      availableProducts.find((p) => p.title.toLowerCase().includes('5 in 1')) || {
-        id: `combo-${medium.toLowerCase()}`,
-        title: targetTitle,
-        price: 1300,
-      };
+      (medium === 'English'
+        ? availableProducts.find((p) => p.title.toLowerCase().includes('5 in 1'))
+        : null);
+
+    if (!prod && medium === 'Tamil') {
+      onShowToast('ℹ️ 10th Std Tamil Medium is Coming Soon. Currently English Medium is in stock.');
+      return;
+    }
+
+    const finalProd = prod || {
+      id: `combo-${medium.toLowerCase()}`,
+      title: targetTitle,
+      price: 1300,
+    };
 
     setSelectedItems((prev) => {
       const exists = prev.find(
-        (item) => String(item.id) === String(prod.id) || item.title === targetTitle
+        (item) => String(item.id) === String(finalProd.id) || item.title === targetTitle
       );
       if (exists) {
         return prev.map((item) =>
-          String(item.id) === String(prod.id) || item.title === targetTitle
+          String(item.id) === String(finalProd.id) || item.title === targetTitle
             ? { ...item, qty: item.qty + 1 }
             : item
         );
       }
-      return [...prev, { id: prod.id, title: targetTitle, price: prod.price || 1300, qty: 1 }];
+      return [...prev, { id: finalProd.id, title: targetTitle, price: finalProd.price || 1300, qty: 1 }];
     });
     onShowToast(`⚡ Added ${targetTitle} to order!`);
   };

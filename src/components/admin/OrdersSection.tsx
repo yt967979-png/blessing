@@ -752,11 +752,11 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
                           </span>
                           <div className="mt-1">
                             {order.orderSource === 'whatsapp' || String(order.orderId || '').includes('BPG-WA-') ? (
-                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-[#25D366]/20 text-[#075E54] border border-[#25D366]/50 shadow-2xs">
                                 💬 WhatsApp
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-black bg-blue-50 text-blue-700 border border-blue-200">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-blue-50 text-blue-700 border border-blue-200">
                                 🌐 Razorpay
                               </span>
                             )}
@@ -908,11 +908,11 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
                         #{order.orderId}
                       </span>
                       {order.orderSource === 'whatsapp' || String(order.orderId || '').includes('BPG-WA-') ? (
-                        <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-black bg-[#25D366]/20 text-[#075E54] border border-[#25D366]/50">
                           💬 WhatsApp
                         </span>
                       ) : (
-                        <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-black bg-blue-50 text-blue-700 border border-blue-200">
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-black bg-blue-50 text-blue-700 border border-blue-200">
                           🌐 Razorpay
                         </span>
                       )}
@@ -1092,13 +1092,13 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
                   <h3 className="font-bold text-base text-slate-900 font-mono">
                     #{activeDrawerOrder.orderId}
                   </h3>
-                  {activeDrawerOrder.orderSource === 'whatsapp' ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
-                      💬 WhatsApp
+                  {activeDrawerOrder.orderSource === 'whatsapp' || String(activeDrawerOrder.orderId || '').includes('BPG-WA-') ? (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-[#25D366]/20 text-[#075E54] border border-[#25D366]/50 shadow-2xs">
+                      💬 WhatsApp Order
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-blue-50 text-blue-700 border border-blue-200">
-                      🌐 Website
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-blue-50 text-blue-700 border border-blue-200">
+                      🌐 Razorpay Online
                     </span>
                   )}
                 </div>

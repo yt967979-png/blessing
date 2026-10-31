@@ -166,8 +166,7 @@ export function renderCartText(cart: WhatsAppSession['cart']) {
   } else if (isMoqMet) {
     lines.push(`🚚 ST Courier Delivery: *₹${shippingFee}* (Add 1 more book for FREE delivery!)`);
   } else {
-    lines.push(`⚠️ *Minimum Order Requirement*: 4 books OR 1 Combo Pack.`);
-    lines.push(`(Please add ${4 - totalBookCount} more book(s) to checkout)`);
+    lines.push(`💡 *Recommended*: Order our *10th Std 5 in 1 Combo* for *100% FREE DOORSTEP DELIVERY* via ST Courier!`);
   }
 
   lines.push(`💵 *Final Total: ₹${totalAmount}*`);
@@ -652,7 +651,7 @@ export async function handleIncomingWhatsAppMessage(
     if (!totals.isMoqMet) {
       return sendWhatsAppText(
         fromPhone,
-        `⚠️ *Minimum Order Policy*: Our dispatch hub requires a minimum of *4 books* or *1 Combo Pack*.\nCurrently you have ${totals.totalBookCount} book(s).\n\nPlease add more books to proceed to checkout!`
+        `💡 *Recommendation*: Our popular *10th Std 5 in 1 Guide Combo* covers all subjects and includes *100% FREE Doorstep Delivery* via ST Courier!\n\nPlease add the 5 in 1 Combo to proceed to checkout.`
       );
     }
 
@@ -848,7 +847,7 @@ export async function handleIncomingWhatsAppMessage(
       await saveWhatsAppSession(session);
       return sendWhatsAppText(
         fromPhone,
-        `📍 Address saved for *${parsedAddr.name}*!\n\n⚠️ *Minimum Order Notice*: You currently have ${totals.totalBookCount} book(s) in your cart. Please add more books (Minimum 4 books or 1 Combo) to proceed to payment!`
+        `📍 Address saved for *${parsedAddr.name}*!\n\n💡 *Order Tip*: Add our *10th Std 5 in 1 Combo* (₹1,300) to get *100% FREE Doorstep Delivery* anywhere in Tamil Nadu!`
       );
     }
 
@@ -1129,21 +1128,31 @@ export async function handleIncomingWhatsAppMessage(
     );
   }
 
+  // Filter out any books that are Coming Soon or not yet released
+  const availableBooks = booksRes.rows.filter((b: any) => {
+    const isComingSoon = Boolean(b.status === 'coming_soon' || b.is_coming_soon);
+    return !isComingSoon;
+  });
+
+  if (availableBooks.length === 0) {
+    return sendWhatsAppText(
+      fromPhone,
+      `🔍 No books are currently available for immediate order.\n\nPlease type *"menu"* to return to main options!`
+    );
+  }
+
   // Build Interactive List Picker for Found Books
   const sections: WhatsAppListSection[] = [
     {
       title: 'Blessing Power Guides',
-      rows: booksRes.rows.map((b: any) => {
+      rows: availableBooks.map((b: any) => {
         const isOutOfStock = b.status === 'out_of_stock' || (b.stock !== null && b.stock <= 0);
-        const isComingSoon = b.status === 'coming_soon';
         const price = b.discount_price || b.price;
         const isCombo = Boolean(b.is_combo);
 
         let statusText = `₹${price}`;
         if (isCombo) statusText += ' • 🎁 Free Courier';
-        else statusText += ' • 4 Books MOQ';
 
-        if (isComingSoon) statusText = '🚀 Coming Soon';
         if (isOutOfStock) statusText = '⚠️ Out of Stock';
 
         // Direct action depending on book type

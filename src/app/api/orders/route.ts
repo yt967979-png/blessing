@@ -122,7 +122,8 @@ function mapOrderRow(o: any) {
     addrObj?.source === 'whatsapp_custom_order' ||
     String(o.order_number || '').startsWith('BPG-WA-') ||
     String(o.user_id || '').startsWith('wa_') ||
-    String(o.user_id || '').startsWith('wa-');
+    String(o.user_id || '').startsWith('wa-') ||
+    String(o.payment_method || '').toLowerCase().includes('whatsapp');
 
   return {
     id: o.id,
