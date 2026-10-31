@@ -241,7 +241,7 @@ function AdminPageInner() {
       const res = await fetch(`/api/orders?limit=2000`, {
         headers: authHeaders(user),
         credentials: 'include',
-        signal: AbortSignal.timeout(12_000),
+        signal: AbortSignal.timeout(25_000),
       });
       if (res.ok) {
         const data = await res.json();
@@ -314,7 +314,7 @@ function AdminPageInner() {
     try {
       const res = await fetch('/api/admin/users?view=low_stock', {
         headers: authHeaders(user),
-        signal: AbortSignal.timeout(15000),
+        signal: AbortSignal.timeout(25000),
       });
       if (res.ok) {
         const data = await res.json();
@@ -338,7 +338,7 @@ function AdminPageInner() {
       });
       const res = await fetch(`/api/admin/analytics?${q.toString()}`, {
         headers: authHeaders(user),
-        signal: AbortSignal.timeout(15000),
+        signal: AbortSignal.timeout(25000),
       });
       if (res.ok) {
         const data = await res.json();
@@ -366,7 +366,7 @@ function AdminPageInner() {
     try {
       const res = await fetch('/api/health?telemetry=1', {
         headers: authHeaders(user),
-        signal: AbortSignal.timeout(10000),
+        signal: AbortSignal.timeout(20000),
       });
       if (res.ok) {
         const data = await res.json();
