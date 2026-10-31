@@ -236,7 +236,7 @@ export async function GET(req: NextRequest) {
       queryDb(
         `SELECT * FROM support_conversations 
          WHERE status = 'ACTIVE' 
-         ORDER BY last_message_at DESC LIMIT 50`
+         ORDER BY last_message_at DESC LIMIT 250`
       ),
       queryDb(
         `SELECT c.*, f.rating, f.tags as feedback_tags, f.comment as feedback_comment 

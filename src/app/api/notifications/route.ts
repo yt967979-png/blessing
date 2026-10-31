@@ -24,7 +24,7 @@ export async function GET(request: Request) {
        FROM notifications
        WHERE user_id = $1
        ORDER BY created_at DESC
-       LIMIT 50`,
+       LIMIT 100`,
       [session.userId]
     );
 

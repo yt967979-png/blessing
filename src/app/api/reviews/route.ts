@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
         )`;
       }
 
-      adminSql += ` ORDER BY r.created_at DESC LIMIT 200`;
+      adminSql += ` ORDER BY r.created_at DESC LIMIT 2000`;
 
       const res = await queryDb(adminSql, adminParams);
       return NextResponse.json(

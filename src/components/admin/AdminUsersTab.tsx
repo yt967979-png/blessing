@@ -1,7 +1,20 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { Users, Ban, CheckCircle2, Download, AlertTriangle, Package, Shield, Trash2 } from 'lucide-react';
+import {
+  Users,
+  Ban,
+  CheckCircle2,
+  Download,
+  AlertTriangle,
+  Package,
+  Shield,
+  Trash2,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+} from 'lucide-react';
 import { authHeaders } from '@/lib/clientAuth';
 import type { UserData } from '@/context/StoreContext';
 
@@ -37,6 +50,8 @@ export default function AdminUsersTab({
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [pageSize, setPageSize] = useState<25 | 50 | 100 | 'all'>(25);
+  const [currentPage, setCurrentPage] = useState(1);
 
   const isSuperAdmin = user?.role === 'super_admin';
 
@@ -48,7 +63,7 @@ export default function AdminUsersTab({
     setLoading(true);
     try {
       const headers = authHeaders(user);
-      const usersRes = await fetch('/api/admin/users', {
+      const usersRes = await fetch('/api/admin/users?limit=10000', {
         credentials: 'include',
         headers,
         signal: AbortSignal.timeout(20000),
@@ -191,15 +206,46 @@ export default function AdminUsersTab({
     showToast('📥 Users CSV downloaded');
   };
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, pageSize]);
+
   const filtered = customers.filter((c) => {
     const q = search.toLowerCase();
     if (!q) return true;
     return (
       c.name.toLowerCase().includes(q) ||
       c.email.toLowerCase().includes(q) ||
-      c.phone.includes(q)
+      c.phone.includes(q) ||
+      c.role.toLowerCase().includes(q)
     );
   });
+
+  const totalPages = pageSize === 'all' ? 1 : Math.max(1, Math.ceil(filtered.length / pageSize));
+  const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
+  const paginatedCustomers =
+    pageSize === 'all'
+      ? filtered
+      : filtered.slice((safeCurrentPage - 1) * pageSize, safeCurrentPage * pageSize);
+  const startItem =
+    filtered.length === 0
+      ? 0
+      : (safeCurrentPage - 1) * (typeof pageSize === 'number' ? pageSize : filtered.length) + 1;
+  const endItem =
+    pageSize === 'all' ? filtered.length : Math.min(safeCurrentPage * pageSize, filtered.length);
+
+  const getPageNumbers = () => {
+    if (totalPages <= 7) {
+      return Array.from({ length: totalPages }, (_, i) => i + 1);
+    }
+    if (safeCurrentPage <= 4) {
+      return [1, 2, 3, 4, 5, '...', totalPages];
+    }
+    if (safeCurrentPage >= totalPages - 3) {
+      return [1, '...', totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
+    }
+    return [1, '...', safeCurrentPage - 1, safeCurrentPage, safeCurrentPage + 1, '...', totalPages];
+  };
 
   return (
     <div className="space-y-4">
@@ -229,10 +275,10 @@ export default function AdminUsersTab({
             <Users className="w-4 h-4 text-[#2874f0]" />
             User Management
           </h2>
-          <p className="text-xs text-gray-400 mt-0.5">
-            {isSuperAdmin
-              ? `${customers.length} users — Ban, Delete, and Make Admin are Super Admin only`
-              : `${customers.length} users — view only. Only Super Admin can ban, delete, or make admin`}
+          <p className="text-xs text-gray-500 mt-0.5">
+            {search.trim()
+              ? `Found ${filtered.length} of ${customers.length} users matching "${search}"`
+              : `${customers.length} total customer accounts registered`}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -277,7 +323,7 @@ export default function AdminUsersTab({
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {filtered.map((c) => (
+                {paginatedCustomers.map((c) => (
                   <tr key={c.id} className="hover:bg-[#f8f9fa]">
                     <td className="py-3 px-3">
                       <p className="font-semibold text-gray-900">{c.name}</p>
@@ -389,6 +435,107 @@ export default function AdminUsersTab({
           </div>
         )}
       </div>
+
+      {/* Users Pagination Footer */}
+      {!loading && filtered.length > 0 && (
+        <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-4 text-xs">
+          {/* Left: Summary & Per Page Selector */}
+          <div className="flex flex-wrap items-center gap-3 text-slate-600">
+            <span>
+              Showing <strong className="text-slate-900 font-bold">{startItem}–{endItem}</strong> of{' '}
+              <strong className="text-slate-900 font-bold">{filtered.length}</strong> users
+            </span>
+
+            <div className="flex items-center gap-1.5 pl-2 sm:border-l sm:border-slate-200">
+              <span className="text-[11px] text-slate-400 font-semibold">Per page:</span>
+              {([25, 50, 100, 'all'] as const).map((size) => (
+                <button
+                  key={size}
+                  type="button"
+                  onClick={() => setPageSize(size)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    pageSize === size
+                      ? 'bg-[#2874f0] text-white shadow-2xs'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  {size === 'all' ? 'All' : size}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Right: Page Numbers & Navigation */}
+          {pageSize !== 'all' && totalPages > 1 && (
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                disabled={safeCurrentPage <= 1}
+                onClick={() => setCurrentPage(1)}
+                className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer"
+                title="First Page"
+              >
+                <ChevronsLeft className="w-4 h-4" />
+              </button>
+
+              <button
+                type="button"
+                disabled={safeCurrentPage <= 1}
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer flex items-center gap-1"
+                title="Previous Page"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                <span className="hidden md:inline font-semibold">Prev</span>
+              </button>
+
+              <div className="flex items-center gap-1 px-1">
+                {getPageNumbers().map((p, idx) =>
+                  p === '...' ? (
+                    <span key={`dots-${idx}`} className="px-1 text-slate-400 font-bold select-none">
+                      ...
+                    </span>
+                  ) : (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setCurrentPage(p as number)}
+                      className={`min-w-8 h-8 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        safeCurrentPage === p
+                          ? 'bg-[#2874f0] text-white shadow-xs'
+                          : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200/80'
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  )
+                )}
+              </div>
+
+              <button
+                type="button"
+                disabled={safeCurrentPage >= totalPages}
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer flex items-center gap-1"
+                title="Next Page"
+              >
+                <span className="hidden md:inline font-semibold">Next</span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
+
+              <button
+                type="button"
+                disabled={safeCurrentPage >= totalPages}
+                onClick={() => setCurrentPage(totalPages)}
+                className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer"
+                title="Last Page"
+              >
+                <ChevronsRight className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

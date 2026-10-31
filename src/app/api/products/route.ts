@@ -361,7 +361,7 @@ export async function GET(request: Request) {
         FROM books b
         ${where}
         ORDER BY b.created_at DESC
-        LIMIT 200
+        LIMIT 1000
       `;
       return queryDb(sql, params);
     };

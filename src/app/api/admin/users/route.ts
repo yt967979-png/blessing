@@ -46,6 +46,10 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    const limitParam = searchParams.get('limit');
+    const requestedLimit = limitParam ? parseInt(limitParam, 10) : 10000;
+    const limit = Math.min(Math.max(1, requestedLimit || 10000), 20000);
+
     const res = await queryDb(
       `SELECT u.id, u.name, u.email, u.phone, u.role, u.status, u.created_at,
               COUNT(DISTINCT o.id) FILTER (
@@ -59,7 +63,8 @@ export async function GET(request: NextRequest) {
        WHERE COALESCE(u.role, 'customer') != 'super_admin'
        GROUP BY u.id
        ORDER BY u.created_at DESC
-       LIMIT 500`
+       LIMIT $1`,
+      [limit]
     );
 
     return NextResponse.json(
