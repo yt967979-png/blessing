@@ -895,8 +895,14 @@ export async function PATCH(request: NextRequest) {
 
     let timestampUpdate = '';
     const norm = String(newStatus).toLowerCase();
+    let canonicalStatus = newStatus;
+
     if (norm === 'packed') {
+      canonicalStatus = 'PACKED';
       timestampUpdate = ', packed_at = NOW()';
+    } else if (norm === 'unpacked' || norm === 'confirmed' || norm === 'order placed') {
+      canonicalStatus = 'Confirmed';
+      timestampUpdate = ', packed_at = NULL';
     } else if (norm.includes('dispatch') || norm.includes('transit') || norm.includes('handed')) {
       timestampUpdate = ', shipped_at = COALESCE(shipped_at, NOW())';
     } else if (norm === 'delivered') {
@@ -911,8 +917,15 @@ export async function PATCH(request: NextRequest) {
            tracking_url = COALESCE($4, tracking_url), 
            updated_at = NOW() ${timestampUpdate}
        WHERE order_number = $5 OR id = $5`,
-      [newStatus, awbNumber || null, courierName, trackingUrl, orderId]
+      [canonicalStatus, awbNumber || null, courierName, trackingUrl, orderId]
     );
+
+    const isUnpackAction = norm === 'unpacked' || (norm === 'confirmed' && String(currentStatus).toLowerCase().includes('pack'));
+    const timelineRemarks = awbNumber
+      ? `Dispatched via ${courierName} (AWB: ${awbNumber})`
+      : isUnpackAction
+      ? `Admin unpacked parcel (reverted to Confirmed queue)`
+      : `Admin updated status to [${canonicalStatus}]`;
 
     try {
       await client.query(
@@ -921,10 +934,8 @@ export async function PATCH(request: NextRequest) {
         [
           `tl-${Date.now()}`,
           existing.rows[0].id,
-          newStatus,
-          awbNumber
-            ? `Dispatched via ${courierName} (AWB: ${awbNumber})`
-            : `Admin updated status to [${newStatus}]`,
+          canonicalStatus,
+          timelineRemarks,
           awbNumber || existing.rows[0].awb_number || null,
           'Chennai Hub',
         ]
@@ -934,7 +945,7 @@ export async function PATCH(request: NextRequest) {
     const event = {
       type: 'ORDER_UPDATED',
       orderId: existing.rows[0].order_number || orderId,
-      status: newStatus,
+      status: canonicalStatus,
       awbNumber: awbNumber || existing.rows[0].awb_number,
       userId: existing.rows[0].user_id ? String(existing.rows[0].user_id) : null,
       timestamp: Date.now(),
@@ -947,7 +958,7 @@ export async function PATCH(request: NextRequest) {
     logOrderStateTransition({
       orderNumber: existing.rows[0].order_number || orderId,
       fromStatus: currentStatus,
-      toStatus: newStatus,
+      toStatus: canonicalStatus,
       actor: 'admin',
       details: { awbNumber: awbNumber || null },
     });

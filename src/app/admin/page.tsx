@@ -804,10 +804,12 @@ function AdminPageInner() {
               onUpdateStatus={async (orderId, newStatus) => {
                 const o = orders.find((x) => x.orderId === orderId || x.id === orderId);
                 if (o) {
+                  const isUnpack = newStatus.toLowerCase().includes('confirm') || newStatus.toLowerCase().includes('unpack');
+                  const label = isUnpack ? 'Unpacked (Confirmed)' : newStatus;
                   await handleUpdateOrderStatus(
                     o,
-                    newStatus.toUpperCase().replace(/\s+/g, '_'),
-                    newStatus
+                    newStatus,
+                    label
                   );
                 }
               }}

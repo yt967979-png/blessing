@@ -6,6 +6,7 @@ import {
   CheckSquare,
   Square,
   Package,
+  PackageOpen,
   Truck,
   Printer,
   X,
@@ -333,6 +334,8 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
   };
 
   // ── Batch Actions ──────────────────────────────────────────────────────────
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+
   const handleBatchMarkPacked = async () => {
     const selectedOrders = orders.filter((o) => selectedIds.has(o.id) && !isRecordCancelled(o));
     if (selectedOrders.length === 0) {
@@ -355,6 +358,28 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
     }
   };
 
+  const handleBatchMarkUnpacked = async () => {
+    const selectedOrders = orders.filter((o) => selectedIds.has(o.id) && !isRecordCancelled(o));
+    if (selectedOrders.length === 0) {
+      onShowToast('No orders selected to unpack.');
+      return;
+    }
+    setBatchActionLoading(true);
+    let successCount = 0;
+    try {
+      for (const o of selectedOrders) {
+        await onUpdateStatus(o.id, 'Confirmed');
+        successCount++;
+      }
+      onShowToast(`📦 Unpacked ${successCount} order(s) — returned to Unpacked queue`);
+      setSelectedIds(new Set());
+    } catch {
+      onShowToast('❌ Batch unpack encountered an issue');
+    } finally {
+      setBatchActionLoading(false);
+    }
+  };
+
   const handleSelectAllUnpacked = () => {
     const unpacked = filteredOrders.filter(
       (o) => adminFulfillmentBucket(o) === 'pending' && !isRecordCancelled(o)
@@ -365,6 +390,50 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
     }
     setSelectedIds(new Set(unpacked.map((o) => o.id)));
     onShowToast(`Selected ${unpacked.length} unpacked order(s) for batch printing.`);
+  };
+
+  const handleSelectAllPacked = () => {
+    const packed = filteredOrders.filter(
+      (o) => adminFulfillmentBucket(o) === 'packed' && !isRecordCancelled(o)
+    );
+    if (packed.length === 0) {
+      onShowToast('No packed orders found in this view.');
+      return;
+    }
+    setSelectedIds(new Set(packed.map((o) => o.id)));
+    onShowToast(`Selected ${packed.length} packed order(s).`);
+  };
+
+  const handleUnpackSingleOrder = async (order: Order) => {
+    if (actionLoadingId) return;
+    setActionLoadingId(order.id);
+    try {
+      await onUpdateStatus(order.id, 'Confirmed');
+      onShowToast(`📦 Order #${order.orderId} unpacked (moved to Unpacked queue)`);
+      if (activeDrawerOrder?.id === order.id) {
+        setActiveDrawerOrder((prev) => (prev ? { ...prev, orderStatus: 'Confirmed', status: 'Confirmed' } : null));
+      }
+    } catch {
+      onShowToast('❌ Failed to unpack order');
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  const handlePackSingleOrder = async (order: Order) => {
+    if (actionLoadingId) return;
+    setActionLoadingId(order.id);
+    try {
+      await onUpdateStatus(order.id, 'Packed');
+      onShowToast(`✅ Order #${order.orderId} marked as Packed`);
+      if (activeDrawerOrder?.id === order.id) {
+        setActiveDrawerOrder((prev) => (prev ? { ...prev, orderStatus: 'Packed', status: 'Packed' } : null));
+      }
+    } catch {
+      onShowToast('❌ Failed to pack order');
+    } finally {
+      setActionLoadingId(null);
+    }
   };
 
   const handleBatchPrintSlips = (size: 'thermal4x6' | 'a4' = 'thermal4x6') => {
@@ -609,6 +678,52 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
               </div>
             )}
 
+            {/* 3b. Batch Select / Unpack All Packed */}
+            {statusFilter === 'packed' && counts.packed > 0 && selectedIds.size === 0 && (
+              <div className="inline-flex rounded-xl shadow-2xs">
+                <button
+                  type="button"
+                  onClick={handleSelectAllPacked}
+                  className="px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 rounded-l-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                  title="Select all packed orders for batch operations"
+                >
+                  <CheckSquare className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Select All Packed ({counts.packed})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const packed = filteredOrders.filter(
+                      (o) => adminFulfillmentBucket(o) === 'packed' && !isRecordCancelled(o)
+                    );
+                    if (packed.length === 0) {
+                      onShowToast('No packed orders found.');
+                      return;
+                    }
+                    if (!confirm(`Are you sure you want to unpack all ${packed.length} packed orders?`)) return;
+                    setBatchActionLoading(true);
+                    let count = 0;
+                    try {
+                      for (const o of packed) {
+                        await onUpdateStatus(o.id, 'Confirmed');
+                        count++;
+                      }
+                      onShowToast(`📦 Unpacked all ${count} order(s) — returned to Unpacked queue!`);
+                    } catch {
+                      onShowToast('❌ Issue unpacking orders');
+                    } finally {
+                      setBatchActionLoading(false);
+                    }
+                  }}
+                  className="px-2.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border-t border-b border-r border-amber-200 rounded-r-xl text-xs font-bold flex items-center gap-1 transition-all cursor-pointer"
+                  title="Unpack all packed orders in this view"
+                >
+                  <PackageOpen className="w-3.5 h-3.5 text-amber-700" />
+                  <span>Unpack All</span>
+                </button>
+              </div>
+            )}
+
             <button
               type="button"
               onClick={() => setShowCustomOrderModal(true)}
@@ -633,6 +748,15 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
               >
                 <Package className="w-3.5 h-3.5" />
                 <span>Mark Packed</span>
+              </button>
+              <button
+                type="button"
+                disabled={batchActionLoading}
+                onClick={handleBatchMarkUnpacked}
+                className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+              >
+                <PackageOpen className="w-3.5 h-3.5" />
+                <span>Mark Unpacked</span>
               </button>
               <button
                 type="button"
@@ -840,6 +964,32 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
                         {/* Actions */}
                         <td className="p-3.5 text-right">
                           <div className="flex items-center justify-end gap-1.5">
+                            {/* Pack / Unpack action button */}
+                            {adminFulfillmentBucket(order) === 'packed' && !hasAwb && (
+                              <button
+                                type="button"
+                                disabled={actionLoadingId === order.id}
+                                onClick={() => handleUnpackSingleOrder(order)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-lg text-[11px] font-bold transition-all shadow-2xs hover:shadow-xs cursor-pointer"
+                                title={`Unpack Order #${order.orderId} and return to Unpacked queue`}
+                              >
+                                <PackageOpen className="w-3.5 h-3.5 text-amber-700" />
+                                <span>Unpack</span>
+                              </button>
+                            )}
+                            {adminFulfillmentBucket(order) === 'pending' && !isRecordCancelled(order) && (
+                              <button
+                                type="button"
+                                disabled={actionLoadingId === order.id}
+                                onClick={() => handlePackSingleOrder(order)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 rounded-lg text-[11px] font-bold transition-all shadow-2xs hover:shadow-xs cursor-pointer"
+                                title={`Mark Order #${order.orderId} as Packed`}
+                              >
+                                <Package className="w-3.5 h-3.5 text-blue-600" />
+                                <span>Pack</span>
+                              </button>
+                            )}
+
                             <a
                               href={getWhatsAppShareUrl(order)}
                               target="_blank"
@@ -933,6 +1083,30 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
                   <div className="border-t border-slate-100 pt-2 flex items-center justify-between text-xs">
                     <span className="font-mono font-bold text-slate-900">{fmt(order.totalAmount)}</span>
                     <div className="flex items-center gap-1.5">
+                      {adminFulfillmentBucket(order) === 'packed' && !hasAwb && (
+                        <button
+                          type="button"
+                          disabled={actionLoadingId === order.id}
+                          onClick={() => handleUnpackSingleOrder(order)}
+                          className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
+                          title="Unpack Order"
+                        >
+                          <PackageOpen className="w-3.5 h-3.5 text-amber-700" />
+                          <span>Unpack</span>
+                        </button>
+                      )}
+                      {adminFulfillmentBucket(order) === 'pending' && !isRecordCancelled(order) && (
+                        <button
+                          type="button"
+                          disabled={actionLoadingId === order.id}
+                          onClick={() => handlePackSingleOrder(order)}
+                          className="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
+                          title="Mark as Packed"
+                        >
+                          <Package className="w-3.5 h-3.5 text-blue-600" />
+                          <span>Pack</span>
+                        </button>
+                      )}
                       <a
                         href={getWhatsAppShareUrl(order)}
                         target="_blank"
@@ -1309,8 +1483,30 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
                   return (
                     <div className="space-y-2">
                       <div className="p-2.5 bg-blue-50/70 border border-blue-100 rounded-xl text-[11px] text-blue-900 leading-relaxed">
-                        ℹ️ <strong>Pre-Dispatch Window:</strong> ST Courier AWB has not been assigned yet. Order can still be cancelled with a 100% Razorpay refund to the student.
+                        ℹ️ <strong>Pre-Dispatch Window:</strong> ST Courier AWB has not been assigned yet. Order can be packed, unpacked, or cancelled with a 100% Razorpay refund to the student.
                       </div>
+                      {adminFulfillmentBucket(activeDrawerOrder) === 'packed' && (
+                        <button
+                          type="button"
+                          disabled={actionLoadingId === activeDrawerOrder.id}
+                          onClick={() => handleUnpackSingleOrder(activeDrawerOrder)}
+                          className="w-full py-2.5 px-3 bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                        >
+                          <PackageOpen className="w-4 h-4 text-amber-700" />
+                          <span>Unpack Order (Return to Unpacked Queue)</span>
+                        </button>
+                      )}
+                      {adminFulfillmentBucket(activeDrawerOrder) === 'pending' && (
+                        <button
+                          type="button"
+                          disabled={actionLoadingId === activeDrawerOrder.id}
+                          onClick={() => handlePackSingleOrder(activeDrawerOrder)}
+                          className="w-full py-2.5 px-3 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-800 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                        >
+                          <Package className="w-4 h-4 text-blue-600" />
+                          <span>Mark Order as Packed</span>
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => {
